@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- **Проверка плана `file-modified:<path>`.** Шаг-правка существующего файла теперь
+  может требовать проживания: снапшот sha256 контента снимается на `create`/`re-plan`
+  (`PlanStep.checkBaseline`), на `done` контент обязан отличаться — чтение файла
+  `done` не закрывает. Создание с нуля считается изменением, легаси-план без
+  снапшота блокируется с требованием `re-plan`. Спека:
+  `docs/specs/2026-11-08-plan-file-modified-check-design.md`.
+
 ## [0.24.5] - 2026-11-08
 
 ### Added

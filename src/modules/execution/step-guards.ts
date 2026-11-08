@@ -3,7 +3,7 @@ import type { ToolResult, ToolScope } from "../../tools/types";
 import { t } from "../../i18n/index";
 import { getPlanProgress, type PlanStep } from "./planner";
 import type { PlanTracker } from "./tracker";
-import { checkDoneEvidence, parseCheck } from "./plan-checks";
+import { verifyCheckContract } from "./step-check-contract";
 import { stepTypecheckGate } from "./execution-plugin";
 import { switchStepToCreate, switchStepToDelete } from "./plan-steps";
 import type { PlanToolDeps } from "./plan-tool";
@@ -56,48 +56,6 @@ function autoResolveStepKind(
     }
   }
   return null;
-}
-
-/**
- * Проверяет check-контракт шага на done. "file-exists:" верифицируется жёстко
- * здесь (kind=delete инвертирует: файл обязан ОТСУТСТВОВАТЬ); "command:"/"manual:"
- * self-certified с подтверждающей заметкой. Шаги вовсе без check — только из
- * до-чековых планов (back-compat), заметки не дают.
- */
-async function verifyCheckContract(
-  deps: PlanToolDeps,
-  target: PlanStep,
-  stepId: number,
-  scope?: ToolScope,
-): Promise<{ note: string; blocked: ToolResult | null }> {
-  if (!target.check) return { note: "", blocked: null };
-  const parsed = parseCheck(target.check);
-  if (parsed?.kind === "file") {
-    const res = await deps.verifier.checkFileExists(parsed.target, scope);
-    const ok = target.kind === "delete" ? !res.passed : res.passed;
-    if (!ok) {
-      return {
-        note: "",
-        blocked: {
-          success: false,
-          output: `${t("plan.check_failed", {
-            step: String(stepId),
-            check: target.check,
-          })}\n${res.message}`,
-        },
-      };
-    }
-    return { note: "", blocked: null };
-  }
-  if (parsed) {
-    return (
-      (await checkDoneEvidence(parsed, target, stepId, { baseDir: deps.baseDir })) ?? {
-        note: `\n${t("plan.check_self_certified", { check: target.check })}`,
-        blocked: null,
-      }
-    );
-  }
-  return { note: "", blocked: null };
 }
 
 /**

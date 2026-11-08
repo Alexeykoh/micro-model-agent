@@ -15,6 +15,7 @@ import { checkSyntax } from "./syntax-check";
 import type { PathSecurityConfig } from "../../config/types";
 import type { ToolScope } from "../../tools/types";
 import { evaluateCriteria } from "./verifier-criteria";
+import { checkFileModified as checkFileModifiedImpl, snapshotFile as snapshotFileImpl } from "./file-modified-check";
 import type { CriteriaResult, VerificationItem } from "./verifier-criteria";
 
 export type { CriteriaResult, VerificationItem } from "./verifier-criteria";
@@ -67,6 +68,20 @@ export class StepVerifier {
       passed: exists,
       message: exists ? t("verify.file_exists", { path }) : t("verify.file_not_found", { path }),
     };
+  }
+
+  /** Снапшот контента для `file-modified:` на create/re-plan. */
+  async snapshotFile(path: string, scope?: ToolScope): Promise<string | null> {
+    return snapshotFileImpl(this.baseDir, path, scope, this.pathSecurity);
+  }
+
+  /** Жёсткая проверка `file-modified:` на done: контент отличается от снапшота. */
+  async checkFileModified(
+    path: string,
+    baseline: string | null | undefined,
+    scope?: ToolScope,
+  ): Promise<VerificationItem> {
+    return checkFileModifiedImpl(this.baseDir, path, baseline, scope, this.pathSecurity);
   }
 
   /** Запускает `bun run <script>` (60s), возвращает пункт проверки. */
