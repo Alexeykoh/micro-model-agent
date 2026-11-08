@@ -108,7 +108,7 @@ export function applyConfigSideEffects(
     ctx.output.setSuppressInfoLogs?.(!verbose);
     ctx.output.setShowDiagnostics?.(verbose);
   } else if (result.key === "reasoning.mode") {
-    ctx.agent.setReasoningLevel(result.value as "auto" | "default" | "none" | "low" | "medium" | "high" | "max");
+    ctx.agent.setReasoningLevel(result.value as import("../config/types").ReasoningLevel | "auto");
   } else if (result.key === "locale") {
     setLocale(result.value as string);
   }

@@ -92,8 +92,8 @@ describe("buildReasoningView", () => {
     const withAgent = buildReasoningView(config);
     expect(withAgent.strategy).toBe("openai-effort");
     expect(withAgent.reasoningOff).toBe(true);
-    // UI показывает только реальные уровни эндпоинта (xhigh → high).
-    expect(withAgent.levels).toEqual(["none", "low", "medium", "high"]);
+    // UI показывает только реальные уровни эндпоинта — своими именами.
+    expect(withAgent.levels).toEqual(["none", "low", "medium", "xhigh"]);
   });
 
   it("shows only 'none' when the endpoint declares a toggle-only off/on set (LM Studio)", () => {

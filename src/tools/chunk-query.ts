@@ -98,10 +98,10 @@ export const chunkQueryTool: ToolDefinition = {
       maxChunkTokens: typeof args.max_chunk_tokens === "number" ? args.max_chunk_tokens : undefined,
       maxSynthesisTokens:
         typeof args.max_synthesis_tokens === "number" ? args.max_synthesis_tokens : undefined,
-      reasoningEffort: (["none", "low", "medium", "high", "max"] as const).includes(
-        args.reasoning_effort as "none" | "low" | "medium" | "high" | "max",
+      reasoningEffort: (["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const).includes(
+        args.reasoning_effort as "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max",
       )
-        ? (args.reasoning_effort as "none" | "low" | "medium" | "high" | "max")
+        ? (args.reasoning_effort as "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max")
         : undefined,
       logger: ctx.logger,
       sessionId: ctx.sessionId,

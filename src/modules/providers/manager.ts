@@ -280,18 +280,5 @@ export function activeProviderEndpoint(
   return { baseUrl: config?.baseUrl ?? "", apiKey: config?.apiKey, type: config?.type ?? "openai-compat" };
 }
 
-/**
- * Стратегия reasoning АКТИВНОЙ записи провайдера — через ЕДИНЫЙ резолвер
- * capabilities (INV-R2), трёхслойно: оверрайд модели → проба → пресет.
- * Легаси-плоское `type` протухает после hot-swap `/provider use` и давало чужую
- * стратегию; неизвестный тип → "none".
- */
-export function reasoningStrategyForProvider(
-  config?: Pick<ProviderConfig, "entries" | "active" | "type" | "baseUrl" | "apiKey">,
-  probe?: ModelCapabilities,
-  override?: ModelCapabilities,
-): ReasoningStrategy {
-  const type = activeProviderEndpoint(config).type;
-  const spec = BUILTIN_PROVIDERS.find((p) => p.type === type);
-  return resolveModelCapabilities(spec?.capabilities, probe, override).reasoningStrategy ?? "none";
-}
+// Реэкспорт: reasoning-резолв живёт в reasoning-resolve.ts (правило ≤300).
+export { reasoningStrategyForProvider, reasoningLevelsForProvider } from "./reasoning-resolve";

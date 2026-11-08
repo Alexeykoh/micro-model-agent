@@ -5,9 +5,9 @@ import type { ConfigKeyDef } from "./registry";
 import { DEFAULTS } from "./defaults";
 import { bool, enumOf, int, share, str } from "./registry-extra-factories";
 
-type ReasoningBound = "low" | "medium" | "high";
+type ReasoningBound = "minimal" | "low" | "medium" | "high" | "xhigh";
 
-const REASONING_BOUNDS = ["low", "medium", "high"] as const;
+const REASONING_BOUNDS = ["minimal", "low", "medium", "high", "xhigh"] as const;
 
 export const PROVIDER_EXTRA_DEFS: ConfigKeyDef[] = [
   bool("provider.fallback", "provider", false,

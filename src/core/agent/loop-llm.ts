@@ -23,6 +23,7 @@ import { issueDirective, clearDirective } from "./directives";
 import { detectRepeatedToolCall } from "./loop-repeat";
 import { consumeLlmStream, createLlmStreamResult } from "./loop-llm-stream";
 import { buildLlmResponse, finalizeLlmUsage, recordLlmOutput } from "./loop-llm-usage";
+import { reasoningLevelsForProvider } from "../../modules/providers/manager";
 
 /** Мутабельный вид `Agent`, которым владеет фаза LLM. */
 export interface LlmPhaseHost {
@@ -88,12 +89,22 @@ export async function runLlmPhase(
   // Оценка reasoning-effort на итерацию. Сигналы описывают события ПРЕДЫДУЩЕЙ
   // итерации (выставляются на retry-путях перед continue), поэтому политика
   // оценивается ДО очистки сигналов — иначе raise-ветка недостижима.
+  // Уровни — из deps (обновляется на reconfigure), fallback на live-резолв
+  // (background probe мог обновиться после сборки deps в bootstrap).
+  const reasoningLevels =
+    deps.reasoningLevels ??
+    reasoningLevelsForProvider(
+      config.provider,
+      deps.capabilitiesProbeRef?.probe,
+      config.modelCapabilities?.[config.model],
+    );
   const reasoning = reasoningResolver.resolve({
     state,
     policyState: host.policyState,
     reasoningConfig: config.reasoning,
     probePassed: host.probePassed,
     reasoningStrategy: deps.reasoningStrategy,
+    reasoningLevels,
     reasoningState: host.reasoningState,
   });
 

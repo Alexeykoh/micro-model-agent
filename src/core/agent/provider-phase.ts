@@ -14,6 +14,7 @@ import type { Logger } from "../../logger/app-logger";
 import {
   ProviderManager,
   activeProviderEndpoint,
+  reasoningLevelsForProvider,
   reasoningStrategyForProvider,
 } from "../../modules/providers/manager";
 import { buildActiveProvider } from "../../modules/providers/factory";
@@ -198,6 +199,11 @@ function applyReasoningStrategy(host: ProviderPhaseHost, provider: AppConfig["pr
     cfg.modelCapabilities?.[cfg.model],
   );
   host.deps.reasoningStrategy = strategy;
+  host.deps.reasoningLevels = reasoningLevelsForProvider(
+    provider,
+    host.deps.capabilitiesProbeRef?.probe,
+    cfg.modelCapabilities?.[cfg.model],
+  );
   if (strategy === "none") host.probePassed = false;
 }
 

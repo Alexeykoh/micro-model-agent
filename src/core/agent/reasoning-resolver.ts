@@ -4,6 +4,7 @@ import type { PolicyState } from "../../modules/reasoning/policy";
 import type { ReasoningConfig, ReasoningLevel, ReasoningStrategy } from "../../config/types";
 import type { ReasoningState } from "../../tools/set-thinking";
 import type { LoopState } from "./loop-state";
+import { projectLevel } from "../../llm/request-body";
 
 /** Откуда взят текущий уровень reasoning — для логирования и диагностики. */
 export type ReasoningSource = "policy" | "agent_override" | "fixed" | "none";
@@ -45,6 +46,8 @@ export class ReasoningEffortResolver {
     reasoningConfig: ReasoningConfig | undefined;
     probePassed: boolean;
     reasoningStrategy: ReasoningStrategy | undefined;
+    /** Объявленные эндпоинтом уровни — политика клампится на них (их именами). */
+    reasoningLevels?: string[];
     reasoningState: ReasoningState;
   }): ReasoningDecision {
     const { state, reasoningConfig, reasoningState } = deps;
@@ -91,6 +94,15 @@ export class ReasoningEffortResolver {
       );
       level = policyResult.level;
       source = "policy";
+      // Кламп на объявленные сервером (их именами): канонический "high" на
+      // llama.cpp (low/medium/xhigh) — это "xhigh", "low"/baseline — как есть.
+      // Пустой список = granular-уровней нет — политику не применяем.
+      const declared = deps.reasoningLevels;
+      if (declared && declared.length > 0 && level) {
+        level = projectLevel(level, declared) as ReasoningLevel;
+      } else if (declared && declared.length === 0) {
+        level = undefined;
+      }
     } else if (reasoningConfig && reasoningConfig.mode !== "auto") {
       level = reasoningConfig.mode;
       source = "fixed";

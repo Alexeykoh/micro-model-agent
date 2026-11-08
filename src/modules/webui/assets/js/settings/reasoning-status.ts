@@ -15,25 +15,20 @@ export interface ReasoningStatus {
   levels: string[];
 }
 
-const REASONING_LEVELS_FULL = ["auto", "default", "none", "low", "medium", "high", "max"];
-// Backends without granularity (prompt-tag, template-kwarg) collapse
-// medium/max into low/high — show the collapsed set, no duplicates.
-const REASONING_LEVELS_COARSE = ["auto", "default", "none", "low", "high"];
-
 /**
  * `supported === false` значит «проба не подтвердила», а не «бэкенд
  * игнорирует»: меню уровней остаётся, добавляется только честная оговорка.
+ *
+ * Уровни — только объявленные эндпоинтом (INV-R7, свои имена); когда объявлено
+ * ничего (`levels` не массив) — показываем лишь режимные `auto`/`default`,
+ * а не выдуманные усилия. Проба не подтвердила уровень — не значит, что
+ * уровня нет: сервер ничего не объявил, список остаётся пустым.
  */
 export function reasoningStatus(info: ReasoningStatusInfo): ReasoningStatus {
   return {
     noteKey: info.supported === false ? "reasoning.probe_failed" : null,
-    // Объявленные эндпоинтом уровни — единственный источник списка (INV-R7);
-    // без объявления — прежняя эвристика по механизму. Пустой массив — «уже есть
-    // off-switch, но усилий у бэкенда нет»: меню только auto/default/none.
     levels: Array.isArray(info.levels)
       ? ["auto", "default", ...(info.levels ?? [])]
-      : info.strategy === "openai-effort"
-        ? REASONING_LEVELS_FULL
-        : REASONING_LEVELS_COARSE,
+      : ["auto", "default"],
   };
 }
