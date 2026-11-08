@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.24.5] - 2026-11-08
+
+### Added
+
+- **Редактор отложенного сообщения в `mma web`.** Попап редактирования queued-сообщений
+  теперь соответствует UX-спекам 2026-11-07: `maxlength=32768`, счётчик `N / 32768`,
+  кнопки `.btn` / `.btn.primary`, dirty-проверка с confirm «Discard changes?»,
+  обработка `404 not_queued` (закрытие + toast) и отдельная обработка `400`,
+  dim-строка о сохранении вложений и кликабельные только строки с локальным текстом.
+
 ## [0.24.2] - 2026-11-06
 
 ### Added
