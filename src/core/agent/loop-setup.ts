@@ -17,6 +17,7 @@ import { CriticGate } from "./critic-gate";
 import type { CostTracker } from "../../modules/pricing/index";
 import { CriticClient, CRITIC_DEGRADED_PREFIX } from "../../modules/critic/client";
 import { summarizeOldTurns } from "../context/compaction-llm-summary";
+import { restoreLoopState } from "../../modules/session/checkpoint";
 import { join } from "path";
 import { buildCriticProvider } from "../../modules/critic/provider";
 import { CRITIC_READONLY_TOOLS } from "../../modules/critic/tools";
@@ -59,6 +60,26 @@ export function createLoopModules(host: LoopSetupHost, slog: SessionLogger): Loo
     typeof contextManager.beginTurn === "function"
       ? contextManager.beginTurn()
       : contextManager.getActiveHistory().length;
+
+  // Durable resume (checkpoint 2/4): повторный ход той же сессии стартует с
+  // состояния прошлого круга (стрики/кулдауны/память вызовов), а не с нуля.
+  // Fail-open: нет чекпоинта/битый/чужой threadId → пустое состояние.
+  const activeMeta = deps.sessionManager?.getActiveMeta?.() ?? null;
+  if (activeMeta?.id) {
+    try {
+      const loaded = deps.sessionManager?.loadCheckpoint?.(activeMeta.id) ?? null;
+      if (loaded && loaded.threadId === activeMeta.threadId) {
+        restoreLoopState(state, loaded);
+      }
+    } catch (err) {
+      deps.onDiagnostic?.({
+        source: "core",
+        operation: "agent.checkpoint.load",
+        kind: "failed",
+        cause: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 
   const llmProvider = deps.llmProvider;
   const compactionService = new CompactionService({

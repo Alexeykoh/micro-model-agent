@@ -1,6 +1,7 @@
 // Менеджер сессий: создание/удаление/переименование, активная, изоляция, лимиты.
 import type { SessionMeta, SessionMessage } from "./types";
 import type { SessionStore, SessionLogEntry } from "./store";
+import type { TurnCheckpoint } from "./checkpoint";
 import { t } from "../../i18n/index";
 import type {
   SessionIsolationConfig,
@@ -37,6 +38,16 @@ export class SessionManager {
   /** Включено ли шифрование файлов сессий. */
   isEncryptionEnabled(): boolean {
     return this.store.isEncryptionEnabled();
+  }
+
+  /** Сохранить чекпоинт хода (durable state 2/4). */
+  saveCheckpoint(id: string, checkpoint: TurnCheckpoint): void {
+    this.store.saveCheckpoint(id, checkpoint);
+  }
+
+  /** Загрузить чекпоинт хода (нет/битый — null, fail-open). */
+  loadCheckpoint(id: string): TurnCheckpoint | null {
+    return this.store.loadCheckpoint(id);
   }
 
   /** Обновить конфиг шифрования. */

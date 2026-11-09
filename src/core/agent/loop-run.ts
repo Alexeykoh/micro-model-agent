@@ -18,6 +18,7 @@ import { runToolBatchPhase, type BatchHost } from "./loop-batch";
 import { runFinalGates, type GateTimings } from "./loop-gates";
 import { gatherTurnToolEvents } from "./critic-events";
 import { buildLoopResult, type LoopResultHost } from "./loop-result";
+import { snapshotLoopState } from "../../modules/session/checkpoint";
 import { accumulateToolTargets } from "./loop-nudges";
 
 /** Хосты фаз и доступ к мутабельному состоянию агента. */
@@ -130,6 +131,19 @@ export async function executeAgentLoop(
         toolBatch,
       });
       if (outcome === "break") break;
+      // Durable checkpoint (2/4): снимок на границе батча — краш между ходами
+      // продолжает с того же состояния. Синхронная запись, fail-open.
+      const activeMeta = ctx.deps.sessionManager?.getActiveMeta?.() ?? null;
+      if (activeMeta?.id) {
+        try {
+          ctx.deps.sessionManager?.saveCheckpoint?.(
+            activeMeta.id,
+            snapshotLoopState(state, activeMeta.threadId),
+          );
+        } catch (err) {
+          logger.diagnostic("warn", `checkpoint save failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
       continue;
     }
 
