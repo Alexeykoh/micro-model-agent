@@ -105,14 +105,15 @@ export async function runScenario(
       const outcome = checkSandbox(sandbox, scenario.checks, exitCode, output);
       failures = outcome.failures;
       if (res.timedOut) failures.push(`rep ${i} timed out`);
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
       return {
         id: scenario.id,
         title: scenario.title,
         status: "error",
         passed,
         of: reps,
-        error: e.message,
+        error: message,
       };
     }
 
@@ -172,13 +173,14 @@ export function collectDiagnostics(sandbox: string): string {
   const planPath = join(projectMmaDir(sandbox), "plans", "active.json");
   if (existsSync(planPath)) {
     try {
-      const plan = JSON.parse(readFileSync(planPath, "utf-8"));
+      const plan: { steps?: Array<{ id?: unknown; status?: string; description?: unknown }> } =
+        JSON.parse(readFileSync(planPath, "utf-8"));
       const steps = plan.steps ?? [];
-      const done = steps.filter((s: any) => s.status === "done").length;
-      const pending = steps.filter((s: any) => s.status === "pending" || s.status === "in_progress");
+      const done = steps.filter((s) => s.status === "done").length;
+      const pending = steps.filter((s) => s.status === "pending" || s.status === "in_progress");
       lines.push(`  Plan: ${done}/${steps.length} steps done`);
       if (pending.length > 0) {
-        lines.push(`  Pending: ${pending.map((s: any) => `#${s.id} ${s.description}`).join("; ")}`);
+        lines.push(`  Pending: ${pending.map((s) => `#${String(s.id)} ${String(s.description)}`).join("; ")}`);
       }
     } catch {
       /* битый план — пропускаем */
@@ -258,13 +260,12 @@ export const defaultRunner: RepRunner = (env, cwd, args, timeoutMs) =>
     });
   });
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function deepMergeAny(target: any, source: any): any {
+function deepMergeAny(target: unknown, source: unknown): unknown {
   if (!source || typeof source !== "object") return source;
   if (!target || typeof target !== "object") return source;
-  const result = { ...target };
-  for (const key of Object.keys(source)) {
-    const sv = source[key];
+  const result: Record<string, unknown> = { ...(target as Record<string, unknown>) };
+  for (const key of Object.keys(source as Record<string, unknown>)) {
+    const sv = (source as Record<string, unknown>)[key];
     const tv = result[key];
     if (sv && typeof sv === "object" && !Array.isArray(sv) && tv && typeof tv === "object" && !Array.isArray(tv)) {
       result[key] = deepMergeAny(tv, sv);

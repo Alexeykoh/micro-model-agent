@@ -199,7 +199,7 @@ export class ToolExecutor {
         result = await runToolWithTimeout(this.ctx, tool, call, signal, memoHit);
       }
       result.toolCallId = call.id;
-    } catch (e: any) {
+    } catch (e: unknown) {
       // INV-15: исключение хендлера — это деградация исполнения, а не
       // содержательный отказ тула. Сигнал пишем здесь: `tool-batch-calls`
       // исключения уже не увидит, оно превращено в failed-результат.
@@ -207,13 +207,13 @@ export class ToolExecutor {
         source: `tool:${call.name}`,
         operation: "tool.execute",
         kind: "failed",
-        cause: e?.message ?? String(e),
+        cause: e instanceof Error ? e.message : String(e),
         recoverable: true,
         detail: { toolCallId: call.id },
       });
       result = {
         success: false,
-        output: `${t("error.prefix")}${e.message}`,
+        output: `${t("error.prefix")}${e instanceof Error ? e.message : String(e)}`,
         toolCallId: call.id,
       };
     }

@@ -72,7 +72,7 @@ export const STATE_CFG: Record<FaceState, StateCfg> = {
   load: {
     eye: "wake", blink: 0, wave: "float", pose: P(), lean: 0,
     props: [{ type: "bar" }],
-    fx: [{ type: "corners", when: "front", r: 0.46, speed: 0.5, alpha: 0.35 }],
+    fx: [],
   },
   stop: {
     eye: "sleep", blink: 0, wave: null, pose: P({ sy: 0.93, y: 0.02 }), lean: 0,

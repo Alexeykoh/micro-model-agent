@@ -211,11 +211,11 @@ export function createSessionFileEncryptor(
 }
 
 /** Хелпер: зашифровать объект сообщения (для SessionMessage). */
-export function encryptSessionMessage(msg: any): string {
+export function encryptSessionMessage(msg: unknown): string {
   return globalSessionEncryptor.encryptJSON(msg);
 }
 
 /** Хелпер: расшифровать сообщение сессии. */
-export function decryptSessionMessage(encrypted: string): any {
+export function decryptSessionMessage(encrypted: string): unknown {
   return globalSessionEncryptor.decryptJSON(encrypted);
 }

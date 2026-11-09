@@ -16,6 +16,7 @@ export type PrimaryReason =
   | "consecutive"
   | "repetitive"
   | "bash-flailing"
+  | "read-only-streak"
   | null;
 
 /** Первый тул, чей счётчик ошибок достиг порога, или undefined. */
@@ -31,7 +32,8 @@ function errorToolAtThreshold(
  * Единый источник правды приоритета recovery-причины. Общий для
  * `recoveryMessage()` и `hints()`, чтобы не расходились: bullet состояния,
  * которое recovery уже репортит, хинтом НЕ дублируется
- * (приоритет: stuck > tool-errors > bash-flailing > consecutive > repetitive).
+ * (приоритет: stuck > tool-errors > bash-flailing > consecutive > repetitive >
+ * read-only-streak — последний, мягкий nudge без фейлов).
  */
 export function primaryReason(tracker: StuckTracker): PrimaryReason {
   if (tracker.isStuck()) return "stuck";
@@ -39,6 +41,7 @@ export function primaryReason(tracker: StuckTracker): PrimaryReason {
   if (tracker.observations.hasBashFlailing()) return "bash-flailing";
   if (tracker.hasConsecutiveFailures()) return "consecutive";
   if (tracker.hasRepetitiveToolCalls()) return "repetitive";
+  if (tracker.hasReadOnlyStreak()) return "read-only-streak";
   return null;
 }
 
@@ -69,6 +72,7 @@ export function warningKey(tracker: StuckTracker): string {
   if (tracker.observations.hasBashFlailing()) return "bash-flailing";
   if (tracker.hasConsecutiveFailures()) return "consecutive";
   if (tracker.hasRepetitiveToolCalls()) return "repetitive";
+  if (tracker.hasReadOnlyStreak()) return "read-only-streak";
   return "";
 }
 
@@ -100,6 +104,9 @@ export function stuckReason(tracker: StuckTracker): string {
   // warningKey репортил "repetitive", но причина не логгировалась.
   if (tracker.hasRepetitiveToolCalls()) {
     return repetitiveToolMessage(tracker);
+  }
+  if (tracker.hasReadOnlyStreak()) {
+    return t("exec.read_only_streak", { count: String(tracker.getReadOnlyStreak()) });
   }
   return "";
 }
@@ -138,6 +145,9 @@ export function recoveryMessage(tracker: StuckTracker): string {
   if (reason === "repetitive") {
     return repetitiveToolMessage(tracker);
   }
+  if (reason === "read-only-streak") {
+    return t("exec.read_only_streak_recovery", { count: String(tracker.getReadOnlyStreak()) });
+  }
   return "";
 }
 
@@ -169,6 +179,8 @@ export function classifyFailure(
       const fails = tracker.observations.bashRecent.filter((ok) => !ok).length;
       return { type: "bash_flailing", count: fails, iteration };
     }
+    case "read-only-streak":
+      return { type: "read_only_streak", count: tracker.getReadOnlyStreak(), iteration };
   }
 }
 

@@ -884,6 +884,28 @@ max_tokens: 8000</code></pre>
     "everything": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-everything"] }
   }
 }</code></pre>
+          <p>
+            Внешние HTTP-серверы защищены шлюзом: вызовы идут через allowlist
+            (<code>mcp.allowedServers</code>), каждый сервер поддерживает rate-limit
+            (<code>rateLimitMs</code> в записи сервера), DLP-редактирует arguments до сети.
+            <b>OAuth 2.1 (per-user):</b> если запись сервера имеет
+            <code>oauth: { tokenUrl, clientId?, scope?, tokenFile }</code>, транспорт читает
+            access-токен из <code>tokenFile</code>, обновляет его по <code>tokenUrl</code>
+            (refresh grant) и подставляет <code>Authorization: Bearer</code> на каждый вызов;
+            при 401 — один refresh и повтор. Токен файла — локален процессу (silo):
+            per-user OAuth оформляется IdP вне MMA.
+          </p>
+          <p>
+            Целостность скиллов: каталог скиллов может нести
+            <code>skills-manifest.json</code> (sha256 по каждому <code>.skill.md</code>);
+            загрузчик fail-closed (битый/незаписанный файл не грузится).
+            Подпись манифеста: <code>skills-manifest.sig.json</code>
+            (<code>bun scripts/sign-skills-manifest.ts &lt;dir&gt; &lt;privkey.pem&gt;</code>,
+            Ed25519) + <code>skills-manifest.pubkey</code> — неверная подпись
+            отключает весь каталог.
+            Состав поставки — <code>sbom.json</code> (<code>bun run build:sbom</code>,
+            CycloneDX, dev-метки).
+          </p>
 
           <h2 id="plugins">Плагины</h2>
           <p>
@@ -969,6 +991,15 @@ mma security enable-audit</code></pre>
             <li>
               <b>Bash:</b> рабочая директория ограничена, опасные команды блокируются, вывод
               санитизируется.
+            </li>
+            <li>
+              <b>Sandbox-профиль:</b> <code>execution.profile: sandbox</code> запускает shell-команды
+              в отдельном Docker-контейнере (<code>execution.image</code>, по умолчанию
+              <code>oven/bun:1.3.14</code> / <code>mma-sandbox:0.1.0</code> из <code>Dockerfile</code>):
+              rootfs read-only, egress отклонён (<code>--network none</code>), mount только рабочей
+              директории, без секретов провайдера. Если Docker недоступен, ход падает
+              (<code>execution.sandbox_unavailable</code>) и не откатывается на хост.
+              Без Docker пользуйтесь дефолтным <code>local-trusted</code> — поведение прежнее.
             </li>
             <li><b>SSRF:</b> приватные адреса и метаданные облака недоступны сетевым тулам.</li>
           </ul>

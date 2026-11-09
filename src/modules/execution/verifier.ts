@@ -15,6 +15,7 @@ import { checkSyntax } from "./syntax-check";
 import type { PathSecurityConfig } from "../../config/types";
 import type { ToolScope } from "../../tools/types";
 import { evaluateCriteria } from "./verifier-criteria";
+import { checkFileModified as checkFileModifiedImpl, snapshotFile as snapshotFileImpl } from "./file-modified-check";
 import type { CriteriaResult, VerificationItem } from "./verifier-criteria";
 
 export type { CriteriaResult, VerificationItem } from "./verifier-criteria";
@@ -69,15 +70,30 @@ export class StepVerifier {
     };
   }
 
+  /** Снапшот контента для `file-modified:` на create/re-plan. */
+  async snapshotFile(path: string, scope?: ToolScope): Promise<string | null> {
+    return snapshotFileImpl(this.baseDir, path, scope, this.pathSecurity);
+  }
+
+  /** Жёсткая проверка `file-modified:` на done: контент отличается от снапшота. */
+  async checkFileModified(
+    path: string,
+    baseline: string | null | undefined,
+    scope?: ToolScope,
+  ): Promise<VerificationItem> {
+    return checkFileModifiedImpl(this.baseDir, path, baseline, scope, this.pathSecurity);
+  }
+
   /** Запускает `bun run <script>` (60s), возвращает пункт проверки. */
   async runScript(scriptName: string): Promise<VerificationItem> {
     try {
       await this.runAsync(`bun run ${scriptName}`, this.baseDir, 60_000);
       return { passed: true, message: t("verify.script_passed", { script: scriptName }) };
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
       return {
         passed: false,
-        message: t("verify.script_failed", { script: scriptName, message: e.message }),
+        message: t("verify.script_failed", { script: scriptName, message }),
       };
     }
   }
@@ -101,8 +117,10 @@ export class StepVerifier {
     try {
       await this.runAsync(`${tsc} --noEmit`, root, 60_000);
       return { passed: true, message: t("verify.typecheck_passed") };
-    } catch (e: any) {
-      const stderr = e.stderr?.toString() || e.stdout?.toString() || e.message;
+    } catch (e: unknown) {
+      const rec = e as { stderr?: unknown; stdout?: unknown } | null | undefined;
+      const fallback = e instanceof Error ? e.message : String(e);
+      const stderr = String(rec?.stderr ?? "") || String(rec?.stdout ?? "") || fallback;
       return {
         passed: false,
         message: t("verify.typecheck_failed", { error: stderr.slice(0, 500) }),
@@ -126,8 +144,10 @@ export class StepVerifier {
     try {
       await this.runAsync(`${tsc} --noEmit --skipLibCheck`, projectRoot, 60_000);
       return { passed: true, message: t("verify.typecheck_passed") };
-    } catch (e: any) {
-      const stderr = e.stderr?.toString() || e.stdout?.toString() || e.message;
+    } catch (e: unknown) {
+      const rec = e as { stderr?: unknown; stdout?: unknown } | null | undefined;
+      const fallback = e instanceof Error ? e.message : String(e);
+      const stderr = String(rec?.stderr ?? "") || String(rec?.stdout ?? "") || fallback;
       return {
         passed: false,
         message: t("verify.typecheck_failed", { error: stderr.slice(0, 500) }),

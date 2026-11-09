@@ -92,6 +92,9 @@ export const DEFAULTS: AppConfig = {
   // Авто-детект окна у провайдера включён: проба на старте/смене модели
   // уточняет настроенное значение (см. contextAuto в types.ts).
   contextAuto: true,
+  cost: { maxRunUsd: 0 },
+  hitl: { killSwitch: false, autoApproveLow: false },
+  compliance: { enabled: false, retentionDays: 180 },
   memory: {
     validator: {
       enabled: true,
@@ -99,6 +102,7 @@ export const DEFAULTS: AppConfig = {
       minWords: 3,
       similarityThreshold: 0.8,
     },
+    retentionDays: 0,
   },
   contextBudget: {
     systemPrompt: 0.1,
@@ -140,6 +144,13 @@ export const DEFAULTS: AppConfig = {
   autoPlan: true,
   execution: {
     autoAdvance: true,
+    profile: "local-trusted",
+    image: "oven/bun:1.3.14",
+  },
+  otel: {
+    enabled: false,
+    endpoint: "",
+    serviceName: "mma",
   },
   showReasoning: true,
   logLevel: "info",
@@ -202,7 +213,7 @@ export const DEFAULTS: AppConfig = {
     theme: "console",
     themeMode: "auto",
     // Мастер выключен: звук не появляется сам после апгрейда (quiet by default).
-    sounds: { enabled: true, done: true, question: true, failed: true },
+    sounds: { enabled: true, done: true, question: true, failed: true, volume: 50 },
   },
   mcpServers: {},
   security: DEFAULT_SECURITY_CONFIG,

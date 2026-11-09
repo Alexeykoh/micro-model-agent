@@ -11,9 +11,11 @@ export const REASONING_LEVELS = [
   "auto",
   "default",
   "none",
+  "minimal",
   "low",
   "medium",
   "high",
+  "xhigh",
   "max",
 ] as const;
 

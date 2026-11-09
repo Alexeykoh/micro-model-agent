@@ -26,3 +26,12 @@ function randomSuffix(): string {
 export function newSessionId(now = Date.now()): string {
   return `ses_${now.toString(36).padStart(8, "0")}_${randomSuffix()}`;
 }
+
+/**
+ * Стабильный бизнес-ID потока (durable state, P0): `thr_` + 16 hex.
+ * Хarness-generated, не сырой текст; переживает resume (round-trip в meta).
+ * < 255 символов (равно 20). Hex-суффикс безопасен для логов/трейсов.
+ */
+export function newThreadId(): string {
+  return `thr_${randomBytes(8).toString("hex")}`;
+}

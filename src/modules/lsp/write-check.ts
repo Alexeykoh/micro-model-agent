@@ -33,6 +33,15 @@ export interface WriteCheckDeps {
   log(event: string, meta?: Record<string, unknown>): void;
 }
 
+/** Ошибки вида «модуль не найден» по alias-путям (@/, ~/, ./) на холодном индексе. */
+const ALIAS_MODULE_NOT_FOUND_PATTERN =
+  /Cannot find module ['"](?:@\/|~\/|\.\/|\.\.\/)[^'"]+['"] or its corresponding type declarations/;
+
+/** Алиас-ошибки резолва не блокируют запись (INV-H4): индекс ещё холодный. */
+export function isAliasModuleError(message: string): boolean {
+  return ALIAS_MODULE_NOT_FOUND_PATTERN.test(message);
+}
+
 /**
  * Pre-write gate: check the DRAFT through a warm LSP before the file changes.
  * Returns a block message for `onBeforeTool`, or null to allow the write.
@@ -72,14 +81,19 @@ export async function runPreWriteCheck(
     );
     deps.health.reset(key);
     const errors = check.diagnostics.filter(isErrorDiagnostic);
+    // INV-H4: ошибки резолва alias-модулей на холодном индексе не настоящие —
+    // разрешаем запись как unverified, верификация после прогрева индекса.
+    const aliasErrors = errors.filter((d) => isAliasModuleError(d.message));
+    const hardErrors = errors.filter((d) => !isAliasModuleError(d.message));
     deps.log(
-      `LSP pre-write check: ${fullPath} in ${Date.now() - started}ms (${errors.length} error(s))`,
+      `LSP pre-write check: ${fullPath} in ${Date.now() - started}ms (${errors.length} error(s)` +
+        `${aliasErrors.length > 0 ? `, ${aliasErrors.length} unverified` : ""})`,
       { op: "pre_write_check", server: key, file: fullPath, durMs: Date.now() - started, errors: errors.length },
     );
-    if (errors.length === 0) return null;
+    if (hardErrors.length === 0) return null;
     return t("lsp.draft_blocked", {
       path: filePath,
-      problems: formatOneFileDiagnostics(errors, fullPath),
+      problems: formatOneFileDiagnostics(hardErrors, fullPath),
     });
   } catch (e) {
     deps.health.warn(deps.logger, fullPath, errMsg(e));

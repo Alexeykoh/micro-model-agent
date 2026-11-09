@@ -186,6 +186,7 @@ export async function bootstrap(
       execModule: modules.execModule,
       toolCtx: session.toolCtx,
       contextProbePromise: provider.contextProbePromise,
+      capabilitiesProbeRef: provider.capabilitiesRef,
     },
     workspace.toolRegistry,
   );

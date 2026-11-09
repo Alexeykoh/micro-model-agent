@@ -24,6 +24,35 @@ export interface ReasoningView {
   supported: boolean | null;
   /** Текущий `config.reasoning.mode` (дефолт `"auto"`). */
   mode: string;
+  /** Уровни, реально доступные у провайдера+модели (INV-R7); null = не объявлены. */
+  levels: string[] | null;
+}
+
+/** Признанные имена усилий эндпоинтов (зеркало EFFORT_OPTION из provider-context). */
+const EFFORT_NAMES = new Set(["minimal", "low", "medium", "high", "xhigh", "max"]);
+
+/**
+ * Список уровней для селектора: только то, что объявил эндпоинт (INV-R7),
+ * своими именами и в серверном порядке. `none` — выключатель (когда он
+ * вообще выразим: off-switch или тег/kwarg). Никаких канонических алиасов
+ * (`xhigh → high`): показываем ровно то, что отдаёт сервер. Не-усилия
+ * (`off`/`on` из LM Studio) усилий не несут — только выключатель.
+ */
+function visibleLevels(
+  declared: string[] | undefined,
+  strategy: ReasoningStrategy,
+  reasoningOff: boolean,
+): string[] | null {
+  if (declared === undefined) return null;
+  const canOff = reasoningOff || strategy === "prompt-tag" || strategy === "template-kwarg";
+  const offered: string[] = [];
+  if (canOff) offered.push("none");
+  for (const value of declared) {
+    if (EFFORT_NAMES.has(value) && !offered.includes(value)) offered.push(value);
+  }
+  // Пустой массив — declared but no granular effort levels (LM Studio off/on).
+  if (offered.length === 0) return canOff ? ["none"] : [];
+  return offered;
 }
 
 /**
@@ -51,5 +80,10 @@ export function buildReasoningView(config: AppConfig): ReasoningView {
     reasoningOff,
     supported: cached === undefined ? null : cached,
     mode: config.reasoning?.mode ?? "auto",
+    levels: visibleLevels(
+      remembered?.levels ?? preset.reasoningLevels,
+      strategy,
+      reasoningOff,
+    ),
   };
 }

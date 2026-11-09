@@ -109,18 +109,29 @@ export interface AppConfig {
    */
   contextAuto?: boolean;
   contextBudget: ContextBudget;
+  /** Per-run бюджет стоимости в USD (0 = без лимита). Cost/LLM-gateway MVP. */
+  cost?: { maxRunUsd?: number };
+  /** Глобальный kill-switch (HITL): при true ход стопится на границе итерации. */
+  hitl?: { killSwitch?: boolean; autoApproveLow?: boolean };
+  /** Compliance (P2): audit-лог, high-risk артефакты, retention ≥6 мес. */
+  compliance?: { enabled?: boolean; retentionDays?: number };
   /** Детерминированный гейт качества записей памяти (TODO §1.6, Phase A). */
-  memory?: { validator?: Partial<MemoryValidatorConfig> };
+  memory?: { validator?: Partial<MemoryValidatorConfig>; retentionDays?: number };
   instructions: InstructionsConfig;
   modelLoad: ModelLoadConfig;
   retry: RetryConfig;
   maxToolIterations: number;
   stuckThreshold: number;
   autoPlan: boolean;
-  /** Настройки execution-модуля: autoAdvance — автопометка done по файлам (дефолт true). */
+  /** Настройки execution-модуля: autoAdvance — автопометка done по файлам (дефолт true).
+   * + профиль исполнения (P0 изоляция): profile — local-trusted = хост, sandbox = Docker. */
   execution?: {
     autoAdvance?: boolean;
+    profile?: "local-trusted" | "sandbox";
+    image?: string;
   };
+  /** OTel наблюдаемость (P0): адаптер gen_ai.* + OTLP-экспорт. */
+  otel?: { enabled?: boolean; endpoint?: string; serviceName?: string };
   showReasoning: boolean;
   logLevel: string;
   locale: string;

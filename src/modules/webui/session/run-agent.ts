@@ -5,6 +5,7 @@ import type { AgentResult, ToolEvent } from "../../../core/types";
 import type { ToolCall, ToolResult } from "../../../tools/types";
 import type { ExecutionModule } from "../../execution/module";
 import {
+  activeUsage,
   broadcast,
   type UsageSnapshot,
   type SessionStore,
@@ -64,7 +65,10 @@ function recordTurnUsage(
   contextWindow: number | undefined,
   owner: string,
 ): UsageSnapshot {
-  const usage = captureUsage(result, contextWindow);
+  // База тоталов — предыдущий снимок сессии (activeUsage лениво поднимет его
+  // с диска после reload), иначе счёт обновился бы с нуля.
+  const prev = activeUsage(state, owner);
+  const usage = captureUsage(result, contextWindow, prev);
   state.usage = usage;
   state.sessionUsage[owner] = usage;
   const dir = state.sessionManager?.getSessionDirectory?.(owner);

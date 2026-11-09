@@ -50,6 +50,16 @@ export const OPERATIONS: SpecOperation[] = [
   },
   {
     method: "get",
+    path: "/v1/oversight",
+    operationId: "getOversight",
+    tag: "ops",
+    summary: "HITL oversight: kill-switch, compliance trail",
+    description:
+      "Требует bearer. Состояние kill-switch, pending-вопросов, валидность audit-лога и хвост adversarial-лога.",
+    responses: { "200": ok("Oversight снапшот", "OversightResponse") },
+  },
+  {
+    method: "get",
     path: "/v1/openapi.json",
     operationId: "getOpenApiDocument",
     tag: "ops",

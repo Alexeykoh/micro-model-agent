@@ -15,6 +15,7 @@ import {
 } from "../modules/security/policy-i18n";
 import { globalAuditNotifier } from "../modules/security/audit-notifier";
 import { DEFAULT_SECURITY_CONFIG } from "../config/security";
+import type { SecurityConfig } from "../config/types-security";
 import { t } from "../i18n/index";
 import { getDefaultChannel } from "../output";
 import { globalConfigFile } from "../config/paths";
@@ -24,22 +25,19 @@ import { globalConfigFile } from "../config/paths";
  * пофайловых флага), СОХРАНЯЯ уже лежащие в конфиге юзер-поля (keyPath и др.).
  * Мутирует переданный объект security.
  */
-export function toggleSessionEncryption(security: Record<string, any>, enabled: boolean): void {
-  const enc = (security.sessionEncryption ?? {}) as Record<string, any>;
+export function toggleSessionEncryption(security: SecurityConfig, enabled: boolean): void {
+  const enc = security.sessionEncryption;
   enc.enabled = enabled;
   enc.encryptHistory = enabled;
   enc.encryptSessionLog = enabled;
-  security.sessionEncryption = enc;
 }
 
 /**
  * Переключает аудит-нотификации на месте: флипает только `enabled`, сохраняя
  * юзерские webhookUrl / filePath / minSeverity / eventTypes.
  */
-export function toggleAuditNotifier(security: Record<string, any>, enabled: boolean): void {
-  const notifier = (security.auditNotifier ?? {}) as Record<string, any>;
-  notifier.enabled = enabled;
-  security.auditNotifier = notifier;
+export function toggleAuditNotifier(security: SecurityConfig, enabled: boolean): void {
+  security.auditNotifier.enabled = enabled;
 }
 
 /**

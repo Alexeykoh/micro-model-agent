@@ -79,6 +79,81 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Read-only git-контур в `mma web`.** Состояние репозитория (ветка, число
   изменений) показывается бейджем в строке футера и git-чипами в ленте;
   отображение только для чтения — веб не выполняет git-операции.
+## [0.25.0] - 2026-11-09
+
+### Removed
+
+- **Learning Phase B вычеркнута из очереди (2026-11-09).** Удалены пункт §1.6
+  (`src/modules/learning/**`, `mma learn`, `LearningModule`) и раздел 2 «Действия
+  пользователя» (`contextWindow 64000`) из `TODO.md`; план памяти
+  (`docs/plans/2026-08-12-memory-quality-and-learning.md`) помечен закрытым,
+  Phase B — отменённой. Phase A/C уже закрыты ранее.
+
+### Fixed
+
+- **Входящие/исходящие токены сессии в сайдбаре `mma web`.** Сессии, шедшие
+  вне веба (REPL/one-shot), показывали прочерки вместо тоталов, а после
+  первого веб-хода счёт начинался с нуля: тоталы брались только из
+  `web-usage.json`, который пишется лишь веб-раннером. Теперь тоталы —
+  покомпонентный максимум персиста и журнала `session.jsonl`
+  (`llm_usage`, та же сумма, что считает `mma session show`); для шифрованных
+  сессий журнал берётся через `SessionManager.loadSessionLog`
+  (`session-usage.ts`, `usage-cache.ts`). Живая сессия `ses_mw88khb4`:
+  было «—» / 223 010, стало 2 760 466 / 55 156 / 2 513 727.
+- **`fmtTokens` для миллионов.** Накопленные числа печатались как
+  «2760.5K» (читается как буквальные 2760000): добавлены единицы M/B
+  с округлением на границе тира (999 999 → «1.0M»), теперь строка токенов
+  читается как «↓ 2.8M ↑ 55.2K ↺ 2.5M» (`assets/js/format.ts`,
+  тест `tests/webui-fmt-tokens.test.ts`).
+
+### Added
+
+- **Честные `health()` у шести подсистем (оплата долга).** `lsp`/`mcp`/`browser`/
+  `indexer`/`skills`/`memory` отдают `health()` из реального сигнала (паузы LSP,
+  упавшие MCP, проба Chromium, ошибка стройки/перескана, читаемость стора);
+  `ModuleHost.health()` больше не врёт `ok` по умолчанию для них. Гейт
+  `tests/arch/health-coverage.test.ts` + `tests/modules/health-coverage.test.ts`.
+  Спека: `docs/specs/2026-11-09-observability-health-coverage-design.md`.
+- **`git push` под egress-гейтом (оплата долга).** Перед `push` тул резолвит
+  адресат и проверяет его `checkOutboundUrl` (приватные/denied блокируются),
+  незапушенный дифф сканируется `detectSecrets()`. Спека:
+  `docs/specs/2026-11-09-git-push-egress-design.md`; гвард
+  `tests/tools/git-push-egress.test.ts`.
+- **`verify browser:` под SSRF-политикой (оплата долга).** `runBrowserCheck` и
+  `checkDoneEvidence` принимают `networkSecurity` и вызывают `isUrlAllowedAsync`
+  до запуска браузера; `ExecutionModule` пробрасывает `config.security.network`
+  из bootstrap. Приватные URL блокируются без запуска, loopback разрешён при
+  `allowLoopback`. Гварды: `tests/execution/browser-check.test.ts`.
+- **Вложенный `AGENTS.md` + ленивый `.mma/` (F-01/F-06).** `agentsMdPaths()`
+  теперь ищет вложенные `AGENTS.md` (`nestedAgentsMdPaths()`: обход до глубины 4,
+  скип `node_modules`/`.git`/`.next`/`.mma`/`dist`/`.cache`, кап 5, приоритет
+  корень → `.mma` → вложенные → глобальный); вложенные prompt-блоки помечаются
+  относительным путём (`instructions (site/)`). `IndexCache.save()` не создаёт
+  `.mma/` на пустом индексе — пустой workspace не ломает `create-next-app .`.
+  Спека: `docs/specs/2026-11-09-nested-agents-md-design.md`; гварды
+  `tests/agents-md-nested.test.ts`, `tests/indexer/lazy-mma.test.ts`.
+- **Проверка плана `file-modified:<path>`.** Шаг-правка существующего файла теперь
+  может требовать проживания: снапшот sha256 контента снимается на `create`/`re-plan`
+  (`PlanStep.checkBaseline`), на `done` контент обязан отличаться — чтение файла
+  `done` не закрывает. Создание с нуля считается изменением, легаси-план без
+  снапшота блокируется с требованием `re-plan`. Спека:
+  `docs/specs/2026-11-08-plan-file-modified-check-design.md`.
+- **Read-only стрик-гард: 16 чтений подряд без правки.** `StuckDetector` считает
+  серию read-only вызовов (`read_file`/`grep`/`glob`/…) без единой правки,
+  запуска или вопроса; на пороге 16 инжектится мягкая recovery-директива
+  «редактируй файл или задай вопрос». Раньше успешные чтения гасили stuck-счётчик,
+  и петля разведки была невидима (сессия `ses_mw7z4mav`). Спека:
+  `docs/specs/2026-11-08-read-only-streak-guard-design.md`.
+
+## [0.24.5] - 2026-11-08
+
+### Added
+
+- **Редактор отложенного сообщения в `mma web`.** Попап редактирования queued-сообщений
+  теперь соответствует UX-спекам 2026-11-07: `maxlength=32768`, счётчик `N / 32768`,
+  кнопки `.btn` / `.btn.primary`, dirty-проверка с confirm «Discard changes?»,
+  обработка `404 not_queued` (закрытие + toast) и отдельная обработка `400`,
+  dim-строка о сохранении вложений и кликабельные только строки с локальным текстом.
 
 ## [0.24.2] - 2026-11-06
 

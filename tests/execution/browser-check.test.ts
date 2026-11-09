@@ -155,6 +155,42 @@ describe("browser-проверка шага", () => {
     expect(String(r.reason)).toContain("playwright install chromium");
   });
 
+  it("SSRF-политика: приватный URL блокируется до запуска", async () => {
+    let launched = false;
+    const r = await runBrowserCheck("http://192.168.1.1/", {
+      launcher: async () => {
+        launched = true;
+        return fakeProbe();
+      },
+      networkSecurity: {
+        enabled: true,
+        deniedDomains: [],
+        allowedDomains: [],
+        requestTimeout: 10000,
+        maxResponseSize: 1024,
+      },
+    });
+    expect(r.ok).toBe(false);
+    expect(String(r.reason)).toContain("Private address");
+    expect(launched).toBe(false);
+  });
+
+  it("SSRF-политика: loopback разрешён при allowLoopback", async () => {
+    const probe = fakeProbe({ visibleText: async () => "ok" });
+    const r = await runBrowserCheck("http://127.0.0.1:5173/", {
+      launcher: launcherReturning(probe),
+      networkSecurity: {
+        enabled: true,
+        deniedDomains: ["localhost", "127.0.0.1", "::1"],
+        allowedDomains: [],
+        requestTimeout: 10000,
+        maxResponseSize: 1024,
+        allowLoopback: true,
+      },
+    });
+    expect(r.ok).toBe(true);
+  });
+
   it("checkDoneEvidence: browser: проходит и блокирует шаг", async () => {
     const target = { description: "Сделай страницу каталога", check: "browser:http://x/~Каталог" };
     const ok = await checkDoneEvidence(parseCheck("browser:http://x/~Каталог")!, target, 1, {

@@ -6,7 +6,7 @@ import { existsSync, readdirSync, rmSync, type Dirent } from "node:fs";
 import { join } from "node:path";
 import { getMessageText } from "../../llm/provider";
 import type { SessionStore } from "./store";
-import type { SessionMessage } from "./types";
+import type { SessionMeta, SessionMessage } from "./types";
 
 /**
  * Пустая ли сессия (нет user-сообщения с текстом).
@@ -48,6 +48,61 @@ export function pruneEmptySessions(
       }
     } catch {
       // fail-open: нечитаемые пропускаем
+    }
+  }
+  return deleted;
+}
+
+/**
+ * Ротация старых сессий: истории старше 30 дней → `.jsonl.gz`, мета marked.
+ * Loop live in SessionStore (public API) — delegates here.
+ */
+export function rotateSessions(store: {
+  listSessions(): SessionMeta[];
+  loadMeta(id: string): SessionMeta | null;
+  saveMeta(id: string, meta: SessionMeta): void;
+  archiveHistory(id: string): boolean;
+}): void {
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  for (const session of store.listSessions().slice()) {
+    if (new Date(session.updatedAt) >= thirtyDaysAgo) continue;
+    if (!store.archiveHistory(session.id)) continue;
+    // Пометить мету, чтобы сессия не выглядела «живой» в списках —
+    // иначе gz-сессия рекламирует messageCount > 0.
+    const meta = store.loadMeta(session.id);
+    if (meta) {
+      meta.messageCount = 0;
+      meta.rotated = true;
+      store.saveMeta(session.id, meta);
+    }
+  }
+}
+
+/**
+ * Retention-prune: удалить сессии с `updatedAt` старше `retentionDays`
+ * (активную, `excludeId`, не удаляет). Ротация (>30d → .gz) архивирует
+ * историю; retention — безвозвратное удаление старых сессий.
+ */
+export function pruneSessionsByRetention(
+  store: SessionStore,
+  retentionDays: number,
+  excludeId: string | undefined,
+  remove: (id: string) => void,
+): string[] {
+  if (!Number.isFinite(retentionDays) || retentionDays <= 0) return [];
+  const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+  const deleted: string[] = [];
+  for (const s of store.listSessions()) {
+    if (s.id === excludeId) continue;
+    try {
+      if (new Date(s.updatedAt).getTime() < cutoff) {
+        remove(s.id);
+        deleted.push(s.id);
+      }
+    } catch {
+      // fail-open: пропускаем
     }
   }
   return deleted;

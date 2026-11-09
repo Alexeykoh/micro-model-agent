@@ -9,6 +9,10 @@ export interface MCPServerConfig {
   url?: string;
   headers?: Record<string, string>;
   timeout?: number;
+  /** Rate-limit gateway: мин. мс между вызовами сервера (0 — без лимита). */
+  rateLimitMs?: number;
+  /** OAuth 2.1: токен файла per-user (spec 2026-11-09-mcp-oauth-design). */
+  oauth?: import("./oauth").OAuthConfig;
 }
 
 /** Реестр конфигов MCP-серверов по именам. */

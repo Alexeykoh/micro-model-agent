@@ -66,14 +66,14 @@ function harness(opts: { overflowAllowed?: () => boolean } = {}) {
 }
 
 describe("gate: compaction cooldown across trigger families (W4)", () => {
-  it("never fires two compactions closer than the cooldown, and never above ceil(N/cooldown)", () => {
+  it("never fires two compactions closer than the cooldown, and never above ceil(N/cooldown)", async () => {
     const { svc, fires } = harness();
     const state = createLoopState();
     const N = 30;
     for (let i = 1; i <= N; i++) {
       state.iteration = i;
       state.pendingCompaction = true; // после каждого тула
-      svc.compactIfNeeded(state);
+      await svc.compactIfNeeded(state);
     }
     expect(fires.length, "гейт вакууозен: ни одной компакции").toBeGreaterThan(0);
     const iterations = fires.map((f) => f.iteration);
@@ -89,7 +89,7 @@ describe("gate: compaction cooldown across trigger families (W4)", () => {
     ).toBeLessThanOrEqual(ceiling);
   });
 
-  it("blocks a different family from firing right after another one", () => {
+  it("blocks a different family from firing right after another one", async () => {
     // Overflow «должен» только на итерации 1; дальше не проходит safety-check, но
     // качество низкое и pending стоит. Без общего кулдауна quality сработала бы
     // на итерации 2 (интервал 1) — именно это и есть дефект.
@@ -100,7 +100,7 @@ describe("gate: compaction cooldown across trigger families (W4)", () => {
       state.iteration = i;
       state.pendingCompaction = true;
       allowed.v = i === 1;
-      svc.compactIfNeeded(state);
+      await svc.compactIfNeeded(state);
     }
     const reasons = fires.map((f) => f.reason);
     expect(reasons[0], "первым обязан сработать overflow").toContain("overflow");
@@ -116,7 +116,7 @@ describe("gate: compaction cooldown across trigger families (W4)", () => {
     ).toBeGreaterThanOrEqual(cooldown);
   });
 
-  it("keeps the per-family cooldowns as well (they are not replaced)", () => {
+  it("keeps the per-family cooldowns as well (they are not replaced)", async () => {
     // Общий кулдаун — дополнение, не замена: два overflow не ближе
     // overflow-кулдауна. Прямая проверка предиката на частном случае.
     const { svc, fires } = harness();
@@ -124,7 +124,7 @@ describe("gate: compaction cooldown across trigger families (W4)", () => {
     for (let i = 1; i <= 12; i++) {
       state.iteration = i;
       state.pendingCompaction = true;
-      svc.compactIfNeeded(state);
+      await svc.compactIfNeeded(state);
     }
     const overflowDrops = fires.filter((f) => f.reason.includes("overflow"));
     expect(overflowDrops.length).toBeGreaterThan(1);

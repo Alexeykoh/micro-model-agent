@@ -63,13 +63,20 @@ export type PluginPermission =
   | "network"
   | "session:write";
 
-/** Что плагин добавляет в харнесс (для UI и `mma plugins list`). */
+/* Что плагин добавляет в харнесс (для UI и `mma plugins list`). */
 export interface PluginProvides {
   /** Имена тулов, которые плагин отдал через `getToolDefinitions()`. */
   tools?: string[];
   /** Имена реализованных хуков; вычисляется ядром при регистрации. */
   hooks?: string[];
 }
+
+/**
+ * Контекстный пакет хук-контекста плагинов. Поля задают вызывающие стороны
+ * (агент и диспетчер ядра), плагин читает известные ему ключи через
+ * структурные подтипы (напр. execution'а `ExecutionThinkContext`).
+ */
+export type PluginHookContext = Record<string, unknown>;
 
 export interface AgentPlugin {
   name: string;
@@ -119,30 +126,30 @@ export interface AgentPlugin {
    * Вернуть `false`, чтобы заблокировать вызов тула до исполнения, или строку —
    * заблокировать с явной причиной, видимой модели.
    */
-  onBeforeTool?(ctx: any, call: ToolCall): boolean | string | Promise<boolean | string>;
+  onBeforeTool?(ctx: PluginHookContext, call: ToolCall): boolean | string | Promise<boolean | string>;
   /** Выполняется после тула; может мутировать `result.output`. */
-  onAfterTool?(ctx: any, call: ToolCall, result: ToolResult): void | Promise<void>;
+  onAfterTool?(ctx: PluginHookContext, call: ToolCall, result: ToolResult): void | Promise<void>;
   /** Перед каждым вызовом LLM. */
-  onBeforeThink?(ctx: any): void;
+  onBeforeThink?(ctx: PluginHookContext): void;
   /** После ответа LLM; получает распарсенный ответ. */
-  onAfterThink?(ctx: any, response: LLMResponse | null): void;
+  onAfterThink?(ctx: PluginHookContext, response: LLMResponse | null): void;
   /** Когда LLM вернула вызов тула. */
-  onToolCall?(ctx: any): void;
-  onError?(ctx: any, error: Error): void;
-  onSessionStart?(ctx: any): void;
-  onSessionEnd?(ctx: any): void;
+  onToolCall?(ctx: PluginHookContext): void;
+  onError?(ctx: PluginHookContext, error: Error): void;
+  onSessionStart?(ctx: PluginHookContext): void;
+  onSessionEnd?(ctx: PluginHookContext): void;
   /** Жизненный цикл спиннера thinking: 'thinking' | 'done'. */
-  onPhase?(ctx: any, phase: AgentPhase): void;
+  onPhase?(ctx: PluginHookContext, phase: AgentPhase): void;
   /** Карточка тула открыта (до исполнения). */
-  onToolStart?(ctx: any, call: ToolCall): void;
+  onToolStart?(ctx: PluginHookContext, call: ToolCall): void;
   /** Карточка тула закрыта (после исполнения, с длительностью). */
-  onToolEnd?(ctx: any, call: ToolCall, result: ToolResult, durationMs: number): void;
+  onToolEnd?(ctx: PluginHookContext, call: ToolCall, result: ToolResult, durationMs: number): void;
   /** Трансформация/фильтр стримленного текста модели; строка — замена, undefined — пропустить. */
-  onText?(ctx: any, chunk: string): string | undefined;
+  onText?(ctx: PluginHookContext, chunk: string): string | undefined;
   /** Трансформация/фильтр стримленной меты (reasoning + вывод тулов); строка — замена, undefined — пропустить. */
-  onMeta?(ctx: any, chunk: string): string | undefined;
+  onMeta?(ctx: PluginHookContext, chunk: string): string | undefined;
   /** Вызывается один раз по завершении `run()` агента (финальный ответ, ошибка или прерывание). */
-  onTurnEnd?(ctx: any, summary: TurnSummary): void;
+  onTurnEnd?(ctx: PluginHookContext, summary: TurnSummary): void;
   /**
    * Вызывается при выгрузке плагина (перезагрузка каталога, `/reload`) —
    * освободить ресурсы: закрыть серверы, снять таймеры.
@@ -150,5 +157,5 @@ export interface AgentPlugin {
    * Без этого хука перезагрузка течёт: `examples/plugins/web-ui` поднимает
    * HTTP-сервер в `onSessionStart`, и копии накапливаются.
    */
-  onUnload?(ctx?: any): void | Promise<void>;
+  onUnload?(ctx?: PluginHookContext): void | Promise<void>;
 }

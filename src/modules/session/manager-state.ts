@@ -14,7 +14,7 @@ import type { SessionStore } from "./store";
 import type { SessionMeta, SessionMessage } from "./types";
 import { normalizeSecurityOverrides } from "./security-overrides";
 import { autoPruneSessions, scheduleAutoPrune } from "./auto-prune";
-import { isEmptySession, pruneEmptySessions, pruneOrphanSessionDirs } from "./prune";
+import { isEmptySession, pruneEmptySessions, pruneOrphanSessionDirs, pruneSessionsByRetention } from "./prune";
 import { t } from "../../i18n/index";
 
 /** Подписчики переименования: свой список, у сиблинга — ещё и главный менеджер. */
@@ -119,10 +119,29 @@ export class ManagerState {
     return isEmptySession(this.store, id, history);
   }
 
+  /** Durable-interrupt паузы: пишет `{paused, pausedAt}` (`interrupt.json`). */
+  saveInterrupt(id: string, paused: boolean): void {
+    this.store.saveInterrupt(id, paused ? { paused: true, pausedAt: new Date().toISOString() } : { paused: false });
+  }
+
+  /** Durable-interrupt паузы: чтение (нет/битый — null). */
+  loadInterrupt(id: string): { paused: boolean } | null {
+    return this.store.loadInterrupt(id);
+  }
+
   /** Удалить все пустые сессии, кроме `excludeId`. Не бросает. */
   pruneEmpty(excludeId: string | undefined, remove: (id: string) => void): string[] {
     this.pruneOrphanDirs();
     return pruneEmptySessions(this.store, excludeId, remove);
+  }
+
+  /** Retention-prune: удалить сессии старше `retentionDays` (кроме `excludeId`). */
+  pruneByRetention(
+    retentionDays: number,
+    excludeId: string | undefined,
+    remove: (id: string) => void,
+  ): string[] {
+    return pruneSessionsByRetention(this.store, retentionDays, excludeId, remove);
   }
 
   /**

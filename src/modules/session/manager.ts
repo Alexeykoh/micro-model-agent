@@ -1,15 +1,17 @@
 // Менеджер сессий: создание/удаление/переименование, активная, изоляция, лимиты.
 import type { SessionMeta, SessionMessage } from "./types";
 import type { SessionStore, SessionLogEntry } from "./store";
+import type { TurnCheckpoint } from "./checkpoint";
 import { t } from "../../i18n/index";
 import type {
   SessionIsolationConfig,
   SessionContext,
 } from "../../modules/security/session-isolation";
 import type { SessionEncryptionConfig } from "../../config/types";
-import { newSessionId } from "./id";
+import { newSessionId, newThreadId } from "./id";
 import type { SessionManagerOptions } from "./manager-options";
 import { ManagerState, RenameHub } from "./manager-state";
+import { applyEffectiveContext, touchActiveSession, getActiveMetaOf, activateSession, readSessionLog, readSessionLogWithStatus } from "./manager-lifecycle";
 
 export type { SessionManagerOptions } from "./manager-options";
 
@@ -39,6 +41,23 @@ export class SessionManager {
     return this.store.isEncryptionEnabled();
   }
 
+  /** Сохранить чекпоинт хода (durable state 2/4). */
+  saveCheckpoint(id: string, checkpoint: TurnCheckpoint): void { this.store.saveCheckpoint(id, checkpoint); }
+
+  /** Загрузить чекпоинт хода (нет/битый — null, fail-open). */
+  loadCheckpoint(id: string): TurnCheckpoint | null { return this.store.loadCheckpoint(id); }
+
+  /** Сохранить durable-interrupt паузы (`Agent.pause/resume`). */
+  saveInterrupt(id: string, paused: boolean): void { this.state.saveInterrupt(id, paused); }
+
+  /** Прочитать durable-interrupt паузы. */
+  loadInterrupt(id: string): { paused: boolean } | null { return this.state.loadInterrupt(id); }
+
+  /** Retention-prune: удалить сессии старше `retentionDays` (кроме активной). */
+  pruneByRetention(retentionDays: number): string[] {
+    return this.state.pruneByRetention(retentionDays, this.activeId ?? undefined, (sid) => this.delete(sid));
+  }
+
   /** Обновить конфиг шифрования. */
   updateEncryption(config: SessionEncryptionConfig): void {
     this.store.updateEncryption(config);
@@ -58,6 +77,7 @@ export class SessionManager {
       id,
       name: sessionName,
       nameSource: name ? "manual" : "default",
+      threadId: newThreadId(),
       createdAt: now,
       updatedAt: now,
       messageCount: 0,
@@ -122,16 +142,7 @@ export class SessionManager {
    * дефолты новых (`create()` берёт их из `options`, а не из конфига). Fail-open.
    */
   setEffectiveContext(contextWindow: number, model?: string): void {
-    // Дефолты новых сессий: без этого они записывали стартовую модель.
-    this.options.contextWindow = contextWindow;
-    if (model) this.options.model = model;
-    if (!this.activeId) return;
-    const meta = this.store.loadMeta(this.activeId);
-    if (!meta) return;
-    meta.contextWindow = contextWindow;
-    if (model) meta.model = model;
-    meta.updatedAt = new Date().toISOString();
-    this.store.saveMeta(this.activeId, meta);
+    applyEffectiveContext(this.store, this.options, this.activeId, contextWindow, model);
   }
 
   /**
@@ -141,11 +152,7 @@ export class SessionManager {
    * Fail-open: нет активной сессии — no-op.
    */
   touch(): void {
-    if (!this.activeId) return;
-    const meta = this.store.loadMeta(this.activeId);
-    if (!meta) return;
-    meta.updatedAt = new Date().toISOString();
-    this.store.saveMeta(this.activeId, meta);
+    touchActiveSession(this.store, this.activeId);
   }
 
   /** Пустая ли сессия (нет user-сообщения с текстом). Fail-open: ошибки чтения — непустая. */
@@ -165,16 +172,12 @@ export class SessionManager {
 
   /** Мета активной сессии (null — нет). */
   getActiveMeta(): SessionMeta | null {
-    if (!this.activeId) return null;
-    return this.store.loadMeta(this.activeId);
+    return getActiveMetaOf(this.store, this.activeId);
   }
 
   /** Сделать сессию активной (нет такой — ошибка). */
   setActive(id: string): void {
-    if (!this.store.sessionExists(id)) {
-      throw new Error(t("session.not_found", { id }));
-    }
-    this.activeId = id;
+    activateSession(this.store, (next) => { this.activeId = next; }, id);
   }
 
   /**
@@ -225,22 +228,14 @@ export class SessionManager {
    * Прочитать session.jsonl сессии (для `session show`); с `since` — только хвост.
    */
   loadSessionLog(id: string, opts: { since?: string } = {}): SessionLogEntry[] {
-    try {
-      return this.store.loadSessionLog(id, opts);
-    } catch {
-      return [];
-    }
+    return readSessionLog(this.store, id, opts);
   }
 
   loadSessionLogWithStatus(
     id: string,
     opts: { since?: string } = {},
   ): import("./read-status").SessionRead<SessionLogEntry[]> {
-    try {
-      return this.store.loadSessionLogWithStatus(id, opts);
-    } catch (err) {
-      return { status: "unreadable", cause: err instanceof Error ? err.message : String(err) };
-    }
+    return readSessionLogWithStatus(this.store, id, opts);
   }
   /** История активной сессии ([] — нет активной). */
   loadHistory(): SessionMessage[] {

@@ -23,12 +23,18 @@ export interface LoadResult {
 // реэкспорт отсюда, чтобы существующие импорты не ломать.
 export {
   probeModel,
+  probeNativeCapabilities,
   getLoadedContextLength,
   probeProviderContext,
   type ContextProbeResult,
   type ModelProbeResult,
+  type NativeProbeResult,
   type ProviderContextOpts,
 } from "./provider-context";
+export {
+  probeLlamaCppReasoning,
+  type LlamaCppReasoningCaps,
+} from "./native-context";
 
 interface LmStudioLoadResponse {
   load_time_seconds?: number;
@@ -72,9 +78,10 @@ export class ModelLoader {
       }
 
       return await this.loadModel(config);
-    } catch (err: any) {
-      this.logger.error(`Model loader failed: ${err.message}`);
-      return { success: false, error: err.message };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Model loader failed: ${message}`);
+      return { success: false, error: message };
     }
   }
 

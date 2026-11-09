@@ -15,8 +15,21 @@ import { extractProviderErrorText } from "./provider-error";
  * `{"error": "..."}` — это ошибка, а не пустой ответ модели.
  * @throws при mid-stream/provider ошибке и обрезке до ответа.
  */
+interface CompletionPayload {
+  error?: unknown;
+  choices?: Array<{
+    finish_reason?: string;
+    message?: {
+      content?: string;
+      reasoning_content?: string;
+      reasoning?: string;
+      tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }>;
+    };
+  }>;
+}
+
 export function completionToChunks(
-  data: any,
+  data: CompletionPayload,
   cacheReport: CacheReportFormat,
   maxTokens: number,
 ): Chunk[] {
@@ -28,7 +41,7 @@ export function completionToChunks(
     return [];
   }
 
-  const msg = choice.message || {};
+  const msg: NonNullable<CompletionPayload["choices"]>[number]["message"] = choice.message ?? {};
   const chunks: Chunk[] = [];
 
   const reasoning = msg.reasoning_content ?? msg.reasoning;

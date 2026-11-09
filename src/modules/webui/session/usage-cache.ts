@@ -1,13 +1,16 @@
 // Ленивый подъём usage-снимка с диска для сайдбара `mma web`.
 // Вынесено из `state.ts` (правило 6): файл состояния уже на потолке.
 import type { UsageSnapshot } from "../../../core/host-state";
-import { loadSessionUsage } from "./session-usage";
+import type { SessionLogEntry } from "../../session/store";
+import { loadSessionUsage, mergeJournalTotals, usageFromLogEntries } from "./session-usage";
 
 /** Узкий вход: метрики сессий + менеджер (без импорта `WebUiState` — без цикла). */
 export interface UsageCacheState {
   sessionManager?: {
     getActive?(): string | null;
     getSessionDirectory?(id: string): string;
+    /** Журнал с расшифровкой — путь фолбэка для шифрованных сессий. */
+    loadSessionLog?(id: string): SessionLogEntry[];
   };
   sessionUsage: Record<string, UsageSnapshot>;
   activeSessionId?: string;
@@ -30,7 +33,14 @@ export function activeUsage(s: UsageCacheState, sessionId?: string): UsageSnapsh
       // (каталог сессии) и кэшируем, чтобы не читать файл на каждый полл.
       const dir = s.sessionManager?.getSessionDirectory?.(active);
       if (dir) {
-        const persisted = loadSessionUsage(dir);
+        const fromDisk = loadSessionUsage(dir);
+        // Сырой файл не читает шифрованные `session.jsonl` — для них тоталы
+        // считаются через журнал менеджера (расшифровка внутри стора) и
+        // вливаются максимумом, как и файловый фолбэк.
+        const persisted = mergeJournalTotals(
+          fromDisk,
+          usageFromLogEntries(s.sessionManager?.loadSessionLog?.(active) ?? []),
+        );
         if (persisted) {
           // Кэш usage ограничен: сессий за день открывается много (аудит §6.12).
           const keys = Object.keys(s.sessionUsage);

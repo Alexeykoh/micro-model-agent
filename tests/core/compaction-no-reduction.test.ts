@@ -41,23 +41,23 @@ function makeDeps(overflowAllowed: boolean) {
 }
 
 describe("overflow compaction without reduction", () => {
-  it("does not arm the overflow cooldown when nothing can be reduced", () => {
+  it("does not arm the overflow cooldown when nothing can be reduced", async () => {
     const { service, compactions, contextManager } = makeDeps(true);
     const state = createLoopState();
     state.iteration = 5;
-    service.compactIfNeeded(state);
+    await service.compactIfNeeded(state);
 
     expect(state.lastOverflowCompactionIteration).toBeLessThan(0);
     expect(compactions).toContain("skipped_no_reduction");
 
     // Следующая попытка (после общего кулдауна) снова честно сообщает о скипе.
     state.iteration = 9;
-    service.compactIfNeeded(state);
+    await service.compactIfNeeded(state);
     expect(compactions.filter((r) => r === "skipped_no_reduction").length).toBe(2);
     expect(contextManager.compactAdaptive).toBeDefined();
   });
 
-  it("arms the cooldown only when the compaction really reduced the context", () => {
+  it("arms the cooldown only when the compaction really reduced the context", async () => {
     const { service, contextManager } = makeDeps(true);
     (contextManager as { compactAdaptive: unknown }).compactAdaptive = () => ({
       reducedBy: 5000,
@@ -74,7 +74,7 @@ describe("overflow compaction without reduction", () => {
     });
     const state = createLoopState();
     state.iteration = 5;
-    service.compactIfNeeded(state);
+    await service.compactIfNeeded(state);
     expect(state.lastOverflowCompactionIteration).toBe(5);
   });
 });

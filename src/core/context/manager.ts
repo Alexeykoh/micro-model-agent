@@ -21,8 +21,11 @@ import {
   addMessage as addMessageToState, clearState, resetUserTurn, updateSystemPrompt,
 } from "./manager-history";
 import { compact as compactState, pruneStaleToolResults } from "./manager-compaction";
+import { computeCutoff } from "./manager-compaction-block";
+import { buildOldTurnsText } from "./compaction-llm-summary";
 import { compactAdaptive, hardDropOldest } from "./manager-compaction-stages";
 import { snapshot } from "./manager-snapshot";
+import { KEEP_LAST_N } from "./manager-types";
 import type {
   CompactOptions, CompactResult, ContextBudget, ContextEstimateDiagnostics, ContextSnapshot,
 } from "./manager-types";
@@ -90,6 +93,22 @@ export class ContextManager {
 
   /** Политика компакции (v2/legacy). */
   getPolicy(): "legacy" | "v2" { return this.s.policy; }
+
+  /** Режим сводки компакции (нужен вызывающему для LLM-суммаризации). */
+  getCompactionSummaryMode(): "off" | "ledger" | "llm" {
+    return this.s.compactionSummaryMode;
+  }
+
+  /**
+   * Плоский текст turns, которые уплотнит `compact()` (та же граница
+   * `computeCutoff`) — вход для `summarizeOldTurns`. Пусто, если компактить нечего.
+   */
+  getOldTurnsText(keepLastN?: number): string {
+    const keep = keepLastN ?? KEEP_LAST_N;
+    if (this.s.messages.length <= keep * 2) return "";
+    const cutoff = computeCutoff(this.s.messages, keep);
+    return buildOldTurnsText(this.s.messages.slice(0, cutoff));
+  }
 
   /** Мин. итераций между overflow-компакциями (v2). */
   getOverflowCooldown(): number { return this.s.overflowCooldown; }

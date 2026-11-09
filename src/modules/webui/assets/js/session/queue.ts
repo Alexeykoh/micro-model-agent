@@ -70,10 +70,17 @@ function updatePendingText(tab: Dict | null, id: string, text: string): boolean 
 
 /** Opens the edit popup for a queued row and syncs the local copy on save. */
 function editRow(tab: Dict, id: string, current: string): void {
-  openQueueEdit(tab, id, current, (_sid, _id, text) => {
-    updatePendingText(tab, _id, text);
-    renderQueueStrip();
-  });
+  const item = pendingQueue(tab).find((m) => m.id === id);
+  openQueueEdit(
+    tab,
+    id,
+    current,
+    (_sid, _id, text) => {
+      updatePendingText(tab, _id, text);
+      renderQueueStrip();
+    },
+    item ? item.images || [] : [],
+  );
 }
 
 /** Moves a local pending message to the head; false — unknown id. */
@@ -198,7 +205,9 @@ async function runAction(kind: QueueAction, tab: Dict, id: string): Promise<void
   renderQueueStrip();
 }
 
-const strip = document.getElementById("queueStrip");
+function strip(): HTMLElement | null {
+  return document.getElementById("queueStrip");
+}
 
 /**
  * Renders the pinned queue strip for the active tab: one row per pending
@@ -206,27 +215,37 @@ const strip = document.getElementById("queueStrip");
  * has no text for (another tab, or a reload mid-turn).
  */
 export function renderQueueStrip(): void {
-  if (!strip) return;
+  const stripEl = strip();
+  if (!stripEl) return;
   const tab = activeTab();
   if (!tab) {
-    strip.hidden = true;
-    strip.replaceChildren();
+    stripEl.hidden = true;
+    stripEl.replaceChildren();
     return;
   }
   const rows = buildRows(tab);
   if (rows.length === 0) {
-    strip.hidden = true;
-    strip.replaceChildren();
+    stripEl.hidden = true;
+    stripEl.replaceChildren();
     return;
   }
   const nodes: HTMLElement[] = [];
   rows.forEach((row, i) => {
     const line = el("div", "queue-item");
     line.appendChild(el("span", "qi-g", "↳"));
-    line.appendChild(el("span", "qi-text", row.item ? row.item.text : t("web.queue.unknown")));
+    const textEl = el("span", "qi-text", row.item ? row.item.text : t("web.queue.unknown"));
+    if (!row.item) {
+      // No local copy (another tab / reload mid-turn): text arrives with the
+      // server queue later, so there is nothing to edit — dim the row.
+      textEl.classList.add("qi-dim");
+      textEl.title = t("web.queue.no_text");
+    }
+    line.appendChild(textEl);
     if (row.id) {
-      // Click the row text to edit the queued message (text is the source).
-      line.addEventListener("click", () => editRow(tab, row.id, row.item ? row.item.text : ""));
+      if (row.item) {
+        // Click the row text to edit the queued message (text is the source).
+        line.addEventListener("click", () => editRow(tab, row.id, row.item?.text || ""));
+      }
       const actions = el("span", "qi-actions");
       actions.append(actionButton("start", tab, row.id), actionButton("cancel", tab, row.id));
       line.appendChild(actions);
@@ -234,8 +253,8 @@ export function renderQueueStrip(): void {
     line.appendChild(el("span", "qi-pos", t("web.input.queued", { n: i + 1 })));
     nodes.push(line);
   });
-  strip.replaceChildren(...nodes);
-  strip.hidden = false;
+  stripEl.replaceChildren(...nodes);
+  stripEl.hidden = false;
 }
 
 /**

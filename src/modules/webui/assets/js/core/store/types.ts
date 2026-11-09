@@ -19,6 +19,10 @@ export interface ThinkState {
   head: HTMLElement;
   body: HTMLElement;
   startedAt: number;
+  /** Streamed reasoning chars accumulated for the tok/s header. */
+  chars: number;
+  // biome-ignore lint/suspicious/noExplicitAny: opaque timer handle.
+  timer?: any;
 }
 
 // Per-tool-call DOM bookkeeping used during a turn.

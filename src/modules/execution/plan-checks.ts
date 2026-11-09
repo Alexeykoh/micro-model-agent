@@ -1,10 +1,12 @@
-// Контракты верификации шагов: file-exists/command/manual/http/browser/web-build + парсер.
+// Контракты верификации шагов: file-exists/file-modified/command/manual/http/browser/web-build + парсер.
 /**
  * Контракты верификации шагов ("checks").
  *
  * Check — однострочный контракт на шаг, объявляется при create/re-plan.
  * Префиксы:
  * - "file-exists:<path>" — жёстко проверяет StepVerifier на done;
+ * - "file-modified:<path>" — жёстко: контент обязан отличаться от снапшота
+ *   на create/re-plan (`checkBaseline`); чтение файла правкой не считается;
  * - "command:<cmd>" — точная команда-доказательство шага (self-certified);
  * - "manual:<text>" — проверка глазами для UI/визуалки (self-certified);
  * - "http:<url>[~<подстрока>]" — GET-проба, исполняется на done;
@@ -22,6 +24,7 @@
  */
 import { t } from "../../i18n/index";
 import type { ToolResult } from "../../tools/types";
+import type { NetworkSecurityConfig } from "../../config/types";
 import { runHttpCheck } from "./http-check";
 import {
   runBrowserCheck,
@@ -30,7 +33,7 @@ import {
 import { checkWebBuild } from "./web-build-check";
 
 /** Вид контракта: файл, команда, ручная проверка, http/browser-проба, сборка. */
-export type CheckKind = "file" | "command" | "manual" | "http" | "browser" | "web-build";
+export type CheckKind = "file" | "file-modified" | "command" | "manual" | "http" | "browser" | "web-build";
 
 /** Класс доказательства: статика (компилируется) или поведение (работает). */
 export type EvidenceClass = "static" | "behavioral";
@@ -44,6 +47,7 @@ export interface ParsedCheck {
 
 const PREFIXES: Array<{ prefix: string; kind: CheckKind }> = [
   { prefix: "file-exists:", kind: "file" },
+  { prefix: "file-modified:", kind: "file-modified" },
   { prefix: "command:", kind: "command" },
   { prefix: "manual:", kind: "manual" },
   { prefix: "http:", kind: "http" },
@@ -115,6 +119,7 @@ function commandCandidates(command: string): string[] {
 export function classifyCheck(parsed: ParsedCheck): EvidenceClass {
   switch (parsed.kind) {
     case "file":
+    case "file-modified":
       return "static";
     case "command":
       return commandCandidates(parsed.target).some((w) => BUILD_COMMANDS.has(w))
@@ -163,6 +168,8 @@ export async function checkDoneEvidence(
     browserLauncher?: BrowserProbeLauncher;
     /** База для `web-build:`: каталог сборки резолвится внутри неё. */
     baseDir?: string;
+    /** Сетевая политика для `browser:` (SSRF/deny до запуска). */
+    networkSecurity?: NetworkSecurityConfig;
   } = {},
 ): Promise<{ note: string; blocked: ToolResult | null } | null> {
   if (parsed.kind === "web-build") {
@@ -222,6 +229,7 @@ export async function checkDoneEvidence(
   if (parsed.kind === "browser") {
     const res = await runBrowserCheck(parsed.target, {
       ...(opts.browserLauncher ? { launcher: opts.browserLauncher } : {}),
+      ...(opts.networkSecurity ? { networkSecurity: opts.networkSecurity } : {}),
     });
     if (res.ok) {
       return {

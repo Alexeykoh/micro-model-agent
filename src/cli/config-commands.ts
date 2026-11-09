@@ -32,10 +32,12 @@ export function buildConfigCommands(program: Command): void {
       const { config } = await bootstrap();
       if (opts.force) {
         const keys = key.split(".");
-        let obj: any = config;
+        let obj = config as unknown as Record<string, unknown>;
         for (let i = 0; i < keys.length - 1; i++) {
-          if (!(keys[i] in obj)) obj[keys[i]] = {};
-          obj = obj[keys[i]];
+          if (!(keys[i] in obj) || typeof obj[keys[i]] !== "object" || obj[keys[i]] === null) {
+            obj[keys[i]] = {};
+          }
+          obj = obj[keys[i]] as Record<string, unknown>;
         }
         const lastKey = keys[keys.length - 1];
         if (value === "true") obj[lastKey] = true;

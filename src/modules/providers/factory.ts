@@ -6,6 +6,8 @@ import type { LLMProvider } from "../../llm/provider";
 import type { Diagnostic } from "../../output/types";
 import { ProviderManager } from "./manager";
 import { FallbackProvider } from "./fallback";
+import { createOtelAdapter } from "../otel/adapter";
+import { OtelProvider } from "../otel/decorate";
 import { sharedRateLimiter } from "../../llm/shared-rate-limiter";
 
 /** Сигнал успешного failover: ход продолжился, но уже на другом провайдере. */
@@ -67,6 +69,15 @@ export function buildActiveProvider(
       // и разбор сессии обязан это показать.
       opts?.onDiagnostic?.(failoverDiagnostic(from, to, error));
     });
+  }
+  // OTel-спаны `llm.chat` (P0, 1/2): декоратор no-op при выключенном включённости.
+  createOtelAdapter({
+    enabled: config.otel?.enabled ?? false,
+    endpoint: config.otel?.endpoint ?? "",
+    serviceName: config.otel?.serviceName ?? "mma",
+  });
+  if (config.otel?.enabled) {
+    provider = new OtelProvider(provider);
   }
   return { manager, provider };
 }

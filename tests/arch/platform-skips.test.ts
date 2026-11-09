@@ -187,6 +187,11 @@ export const SKIP_MANIFEST: Array<{ file: string; key: string; reason: string }>
     key: "spawns a .cmd shim through the shell on win32 (no EINVAL)",
     reason: ".cmd-шим и shell-путь spawn существуют только на win32",
   },
+  {
+    file: "tests/bash-docker-live.test.ts",
+    key: "sandbox docker live (cert acceptance)",
+    reason: "live-интеграция sandbox требует Docker daemon; без него — skip",
+  },
 ];
 
 describe("gate: platform-conditional skips are declared with a reason (W6)", () => {

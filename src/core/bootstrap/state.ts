@@ -7,8 +7,8 @@
  * разделяемые примитивы, чтобы фазы не дублировали их друг у друга.
  */
 import { estimateTokens } from "../../llm/token-counter";
-import { existsSync, readFileSync } from "fs";
-import { join } from "path";
+import { existsSync, readFileSync, readdirSync } from "fs";
+import { join, relative, sep } from "path";
 import type { Logger, LogLevel } from "../../logger/app-logger";
 import type { AgentPlugin } from "../../modules/types";
 import type { PromptBlock } from "../types";
@@ -110,13 +110,58 @@ export function normalizeLogLevel(value: string | undefined): LogLevel {
   return value && VALID_LOG_LEVELS.includes(value) ? (value as LogLevel) : "info";
 }
 
-/** Кандидаты AGENTS.md по приоритету: проект, проектный `.mma`, глобальный. */
+/** Каталоги, в которые обход вложенных AGENTS.md не заходит. */
+const AGENTS_SKIP_DIRS = new Set(["node_modules", ".git", ".next", ".mma", "dist", ".cache"]);
+
+/** Максимальная глубина обхода вложенных AGENTS.md (каталогов от baseDir). */
+const AGENTS_MAX_DEPTH = 4;
+
+/** Максимальное число вложенных AGENTS.md в промпте. */
+const AGENTS_MAX_NESTED = 5;
+
+/**
+ * Ищет вложенные AGENTS.md под `baseDir` (F-01, Next 16): обход до глубины 4,
+ * скип служебных каталогов. Не падает на нечитаемых каталогах.
+ * @param baseDir workspace; @returns найденные пути, отсортированные по пути.
+ */
+export function nestedAgentsMdPaths(baseDir: string): string[] {
+  const found: Array<{ path: string; depth: number }> = [];
+  const walk = (dir: string, depth: number): void => {
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (AGENTS_SKIP_DIRS.has(entry)) continue;
+      const full = join(dir, entry);
+      if (entry === "AGENTS.md") {
+        if (depth < AGENTS_MAX_DEPTH) found.push({ path: full, depth });
+        continue;
+      }
+      if (depth + 1 < AGENTS_MAX_DEPTH) walk(full, depth + 1);
+    }
+  };
+  walk(baseDir, 0);
+  found.sort((a, b) => a.depth - b.depth || a.path.localeCompare(b.path));
+  return found.slice(0, AGENTS_MAX_NESTED).map((f) => f.path);
+}
+
+/**
+ * Кандидаты AGENTS.md по приоритету: проект, проектный `.mma`, вложенные,
+ * глобальный. Вложенные (F-01) — до 5 шт, от корня к глубине.
+ */
 export function agentsMdPaths(baseDir: string, configDir: string): string[] {
-  return [
+  const explicit: string[] = [
     join(baseDir, "AGENTS.md"),
     join(projectMmaDir(baseDir), "AGENTS.md"),
-    join(configDir, "AGENTS.md"),
   ];
+  // Nested-обход тоже находит корневой AGENTS.md (depth 0) — без фильтра он
+  // попадался в промпт дважды (2× токены, дубль варнингов dry-run).
+  const explicitSet = new Set(explicit);
+  const nested = nestedAgentsMdPaths(baseDir).filter((p) => !explicitSet.has(p));
+  return [...explicit, ...nested, join(configDir, "AGENTS.md")];
 }
 
 /**
@@ -132,14 +177,19 @@ export function loadAgentsMdBlocks(
 ): PromptBlock[] {
   if (skip) return [];
   const blocks: PromptBlock[] = [];
-  const candidates = agentsMdPaths(baseDir, dir);
+  // Дедпу: один файл — один блок, даже если каталог Союза путей его повторил.
+  const candidates = [...new Set(agentsMdPaths(baseDir, dir))];
   for (const p of candidates) {
     if (existsSync(p)) {
       const content = readFileSync(p, "utf-8").trim();
       if (content) {
+        // Вложенные (F-01) помечаем относительным путём, чтобы модель видела
+        // поддерево, к которому относится правило.
+        const rel = relative(baseDir, p).split(sep).join("/");
+        const label = rel.includes("/") ? `instructions (${rel.replace(/\/AGENTS\.md$/, "/")})` : "instructions";
         blocks.push({
           source: "agents-md",
-          label: "instructions",
+          label,
           content,
           priority: "high",
           essential: false,

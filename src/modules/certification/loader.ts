@@ -92,8 +92,9 @@ export function loadScenarios(userDir?: string): LoadResult {
         const errs = validateScenario(parsed);
         if (errs.length > 0) errors.push(...errs);
         else scenarios.push(parsed);
-      } catch (e: any) {
-        errors.push(`[${file}] failed to parse: ${e.message}`);
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        errors.push(`[${file}] failed to parse: ${message}`);
       }
     }
   }

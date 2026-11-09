@@ -189,7 +189,7 @@ export class ToolBatchExecutor {
           // 4. Финализация serial, в порядке — детерминированный порядок
           //    role:"tool" сообщений и UI-событий.
           for (let k = 0; k < group.length; k++) {
-            runner.finalize(group[k], execs[k]);
+            await runner.finalize(group[k], execs[k]);
           }
           index = end;
           continue;
@@ -201,7 +201,7 @@ export class ToolBatchExecutor {
       // сразу — без рендера, логов и обновления контекста для результата,
       // который никто не увидит.
       if (exec.shutdown) break;
-      runner.finalize(first, exec);
+      await runner.finalize(first, exec);
       index++;
     }
 

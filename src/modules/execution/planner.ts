@@ -22,11 +22,15 @@ export interface PlanStep {
   kind?: StepKind;
   /** Машиночитаемый контракт верификации шага, объявляется при
    *  create/re-plan: "file-exists:<path>" (жёстко проверяется на done),
+   *  "file-modified:<path>" (жёстко: контент отличается от checkBaseline),
    *  "command:<cmd>", "http:<url>[~маркер]", "browser:<url>[~маркер]" или
    *  "web-build:<dir>" (исполняются на done), "manual:<что проверить глазами>"
    *  (self-certified).
    *  Отсутствует только у планов, созданных до checks (back-compat). */
   check?: string;
+  /** Снапшот контента для "file-modified:": sha256 на create/re-plan.
+   *  null — файла не было; undefined — легаси-план без снапшота (done блокируется). */
+  checkBaseline?: string | null;
   note?: string;
   subtasks?: Subtask[];
 }
@@ -79,6 +83,7 @@ export class PlanCreator {
     baseDir: string,
     kinds?: StepKind[],
     checks?: (string | undefined)[],
+    baselines?: (string | null | undefined)[],
   ): Plan {
     const stepCount = stepDescriptions.length;
     return {
@@ -90,6 +95,7 @@ export class PlanCreator {
         status: "pending" as StepStatus,
         kind: kinds?.[i] ?? "create",
         ...(checks?.[i] ? { check: checks[i] } : {}),
+        ...(baselines?.[i] !== undefined ? { checkBaseline: baselines[i] ?? null } : {}),
       })),
       createdAt: new Date().toISOString(),
       baseDir,
@@ -97,7 +103,7 @@ export class PlanCreator {
   }
 
   /** Re-plan: сохраняет done/skipped шаги, заменяет остальные новыми. */
-  static replan(plan: Plan, newSteps: string[], title?: string, newChecks?: (string | undefined)[]): Plan {
+  static replan(plan: Plan, newSteps: string[], title?: string, newChecks?: (string | undefined)[], newBaselines?: (string | null | undefined)[]): Plan {
     const kept = plan.steps.filter((s) => s.status === "done" || s.status === "skipped");
     const baseTitle = plan.title.replace(/^\[\d+[^]]*\]\s*/, "");
     const newTitle = title || baseTitle;
@@ -108,6 +114,7 @@ export class PlanCreator {
       status: "pending" as StepStatus,
       kind: "create",
       ...(newChecks?.[i] ? { check: newChecks[i] } : {}),
+      ...(newBaselines?.[i] !== undefined ? { checkBaseline: newBaselines[i] ?? null } : {}),
     }));
     // Перенумеровываем все шаги (сохранённые + новые) подряд. Сохранённые держат
     // статус и kind, но их id могут коллизить с новыми, если исходный план

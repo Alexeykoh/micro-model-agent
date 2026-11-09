@@ -28,6 +28,13 @@ describe("service submit: подсказка про поле", () => {
     expect(detail).toContain("prompt");
   });
 
+  it("неизвестный mode отклоняется, а не молча становится job", () => {
+    const r = parseSubmitBody({ input: "ok", mode: "bogus" });
+
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.problem.status).toBe(400);
+  });
+
   it("корректное тело по-прежнему принимается", () => {
     const r = parseSubmitBody({ input: "ok" });
 

@@ -4,6 +4,7 @@
 // `checkboxes`/`table`) live in `./editors.js`. Never uses innerHTML — all user
 // or config data goes through `textContent` (XSS rule).
 import { el, makeToggle } from "../dom.js";
+import { playCue } from "../sounds.js";
 import type { Dict } from "../core/store/types.js";
 import { tagsEditor, checkboxEditor, tableEditor } from "./editors.js";
 
@@ -100,6 +101,26 @@ export function controlFor(def: Dict, value: unknown, ctx: Dict): HTMLElement {
     sel.addEventListener("change", () => ctx.post(sel.value));
     return sel;
   }
+  if (def.key === "ui.sounds.volume") {
+    const wrap = el("div", "volume-ctl");
+    const minus = el("button", "btn volume-btn", "-");
+    const input = textInput(ctx.label, value == null ? "50%" : String(value) + "%");
+    input.type = "text";
+    input.readOnly = true;
+    const plus = el("button", "btn volume-btn", "+");
+    const postVal = (n: number): void => {
+      const clamped = Math.max(0, Math.min(100, Math.round(n / 10) * 10));
+      input.value = clamped + "%";
+      ctx.post(clamped);
+      try { playCue("done", clamped); } catch { /* ignore */ }
+    };
+    minus.addEventListener("click", () => postVal(Number(String(input.value).replace("%", "")) - 10));
+    plus.addEventListener("click", () => postVal(Number(String(input.value).replace("%", "")) + 10));
+    wrap.appendChild(minus);
+    wrap.appendChild(input);
+    wrap.appendChild(plus);
+    return wrap;
+  }
   if (def.valueType === "int") {
     const input = textInput(ctx.label, value == null ? "" : String(value));
     input.type = "number";
@@ -176,7 +197,7 @@ export function controlFor(def: Dict, value: unknown, ctx: Dict): HTMLElement {
 export const PANEL_SECTIONS: Record<string, Dict[]> = {
   general: [
     { id: "general.interface", titleKey: "web.settings.sec.general.interface", keys: ["locale", "ui.verbosity"] },
-    { id: "general.agent", titleKey: "web.settings.sec.general.agent", descKey: "web.settings.sec.general.agent.desc", keys: ["maxToolIterations", "stuckThreshold", "autoPlan", "execution.autoAdvance"] },
+    { id: "general.agent", titleKey: "web.settings.sec.general.agent", descKey: "web.settings.sec.general.agent.desc", keys: ["maxToolIterations", "stuckThreshold", "autoPlan", "execution.autoAdvance", "execution.profile", "execution.image", "cost.maxRunUsd"] },
     { id: "general.provider", titleKey: "web.settings.sec.general.provider", keys: ["provider.fallback"] },
     { id: "general.update", titleKey: "web.settings.sec.general.update", descKey: "web.settings.sec.general.update.desc", keys: ["updater.enabled", "updater.autoInstall", "updater.intervalMs"] },
   ],
@@ -198,7 +219,7 @@ export const PANEL_SECTIONS: Record<string, Dict[]> = {
   agent: [
     { id: "agent.experts", titleKey: "web.settings.sec.agent.experts", descKey: "web.settings.sec.agent.experts.desc", keys: ["experts"] },
     { id: "agent.critic", titleKey: "web.settings.sec.agent.critic", descKey: "web.settings.sec.agent.critic.desc", keys: ["critic.enabled", "critic.model", "critic.provider", "critic.tools", "critic.maxCalls", "critic.maxRepairCycles", "critic.timeoutMs", "critic.maxTokens"] },
-    { id: "agent.tools", titleKey: "web.settings.sec.agent.tools", descKey: "web.settings.sec.agent.tools.desc", keys: ["tools.enableOnDemand", "tools.defaultTags", "tools.grepEngine", "skills.budget", "memory.validator", "memory.validator.minChars", "memory.validator.minWords", "memory.validator.similarityThreshold"] },
+    { id: "agent.tools", titleKey: "web.settings.sec.agent.tools", descKey: "web.settings.sec.agent.tools.desc", keys: ["tools.enableOnDemand", "tools.defaultTags", "tools.grepEngine", "skills.budget", "memory.validator", "memory.validator.minChars", "memory.validator.minWords", "memory.validator.similarityThreshold", "memory.retentionDays", "hitl.killSwitch", "hitl.autoApproveLow", "compliance.enabled", "compliance.retentionDays"] },
     { id: "agent.subagent", titleKey: "web.settings.sec.agent.subagent", descKey: "web.settings.sec.agent.subagent.desc", keys: ["subagent.resultMode", "subagent.maxSummaryChars", "subagent.maxParallelChunkQueries", "subagent.stableSystemPrompt", "subagent.timeoutMs", "subagent.maxDurationMs"] },
     { id: "agent.hallucination", titleKey: "web.settings.sec.agent.hallucination", descKey: "web.settings.sec.agent.hallucination.desc", keys: ["hallucination.judge.enabled"] },
   ],
@@ -218,7 +239,7 @@ export const PANEL_SECTIONS: Record<string, Dict[]> = {
   ],
   ui: [
     { id: "ui.chat", titleKey: "web.settings.sec.ui.chat", descKey: "web.settings.sec.ui.chat.desc", keys: ["ui.fontSize", "ui.activityRail", "ui.spinner", "ui.showContextStats", "ui.showCompaction"] },
-    { id: "ui.sounds", titleKey: "web.settings.sec.ui.sounds", descKey: "web.settings.sec.ui.sounds.desc", keys: ["ui.sounds.enabled", "ui.sounds.done", "ui.sounds.question", "ui.sounds.failed"] },
+    { id: "ui.sounds", titleKey: "web.settings.sec.ui.sounds", descKey: "web.settings.sec.ui.sounds.desc", keys: ["ui.sounds.enabled", "ui.sounds.done", "ui.sounds.question", "ui.sounds.failed", "ui.sounds.volume"] },
     { id: "ui.images", titleKey: "web.settings.sec.ui.images", descKey: "web.settings.sec.ui.images.desc", keys: ["images.maxCount", "images.maxBytes"] },
   ],
   security: [
@@ -235,7 +256,7 @@ export const PANEL_SECTIONS: Record<string, Dict[]> = {
   advanced: [
     { id: "advanced.diagnostics", titleKey: "web.settings.sec.advanced.diagnostics", descKey: "web.settings.sec.advanced.diagnostics.desc", keys: ["logLevel", "version"] },
     { id: "advanced.retry", titleKey: "web.settings.sec.advanced.retry", descKey: "web.settings.sec.advanced.retry.desc", keys: ["retry.maxRetries", "retry.baseDelay", "retry.maxDelay", "retry.maxStreamRetries", "retry.noDataTimeoutMs"] },
-    { id: "advanced.service", titleKey: "web.settings.sec.advanced.service", descKey: "web.settings.sec.advanced.service.desc", keys: ["pricing.enabled", "pricing.overrides"] },
+    { id: "advanced.service", titleKey: "web.settings.sec.advanced.service", descKey: "web.settings.sec.advanced.service.desc", keys: ["pricing.enabled", "pricing.overrides", "otel.enabled", "otel.endpoint", "otel.serviceName"] },
   ],
   plugins: [
     { id: "plugins.registry", titleKey: "web.settings.sec.plugins.registry", descKey: "web.settings.sec.plugins.registry.desc", keys: ["plugins.disabled", "plugins.maxDrafts"] },

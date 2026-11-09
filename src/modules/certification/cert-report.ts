@@ -79,7 +79,8 @@ export function writeReport(entry: CertificationEntry, projectDir: string): void
   try {
     writeFileSync(reportPath, JSON.stringify(report, null, 2), "utf-8");
     getDefaultChannel().writeLine(pc.dim(`\nReport: ${reportPath}`));
-  } catch (e: any) {
-    getDefaultChannel().writeLine(pc.yellow(`  Failed to write report: ${e.message}`), "stderr");
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : String(e);
+    getDefaultChannel().writeLine(pc.yellow(`  Failed to write report: ${message}`), "stderr");
   }
 }

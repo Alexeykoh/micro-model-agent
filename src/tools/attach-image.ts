@@ -129,11 +129,12 @@ export const attachImageTool: ToolDefinition = {
         output: t("image.attached", { source, size: `${sizeKb} KB` }),
         images: [{ type: "image_url", image_url: { url: dataUrl } }],
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
       const code = err instanceof ImageDownloadError ? err.code : undefined;
+      const message = err instanceof Error ? err.message : String(err);
       return {
         success: false,
-        output: t("image.error", { message: err.message }),
+        output: t("image.error", { message }),
         ...(code ? { errorMeta: { code, retryable: false } } : {}),
       };
     }

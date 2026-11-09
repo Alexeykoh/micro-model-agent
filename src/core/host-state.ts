@@ -29,6 +29,12 @@ export interface UsageSnapshot {
   compactionCount?: number;
   cacheHitRate?: number;
   cacheSaved?: number;
+  /** Накопленные входящие токены за сессию (prompt). Персистится. */
+  promptTokensTotal?: number;
+  /** Накопленные исходящие токены за сессию (completion, с reasoning). Персистится. */
+  completionTokensTotal?: number;
+  /** Накопленные кэшированные токены за сессию. Персистится. */
+  cachedTokensTotal?: number;
   contextQuality?: number;
   contextQualityBreakdown?: ContextQualityBreakdown;
   contextBreakdown?: ContextBreakdown;
@@ -70,7 +76,11 @@ export interface HostStateInput {
  * Undefined-поля опускаются, чтобы частичный результат не затирал известное
  * значение пустой ячейкой.
  */
-export function captureUsage(result: AgentResult, fallbackLimit?: number): UsageSnapshot {
+export function captureUsage(
+  result: AgentResult,
+  fallbackLimit?: number,
+  prev?: UsageSnapshot,
+): UsageSnapshot {
   const usage: UsageSnapshot = {};
   if (typeof result.contextUsed === "number") usage.contextUsed = result.contextUsed;
   const limit = typeof result.contextLimit === "number" ? result.contextLimit : fallbackLimit;
@@ -85,6 +95,19 @@ export function captureUsage(result: AgentResult, fallbackLimit?: number): Usage
   if (result.contextQualityBreakdown) usage.contextQualityBreakdown = result.contextQualityBreakdown;
   if (result.contextBreakdown) usage.contextBreakdown = result.contextBreakdown;
   if (result.llmSpeed) usage.llmSpeed = result.llmSpeed;
+  // Накопленные токены сессии: per-turn дельты (из AgentResult) + база сессии.
+  // База — предыдущий снимок той же сессии (включая поднятый с диска после
+  // reload), чтобы счёт не обнулялся. Нет дельты — поле опускается.
+  const inDelta = typeof result.promptTokens === "number" ? result.promptTokens : undefined;
+  const outDelta = typeof result.completionTokens === "number" ? result.completionTokens : undefined;
+  const cachedDelta = typeof result.cache?.cachedTokens === "number" ? result.cache.cachedTokens : undefined;
+  if (inDelta !== undefined) usage.promptTokensTotal = (prev?.promptTokensTotal ?? 0) + inDelta;
+  if (outDelta !== undefined) usage.completionTokensTotal = (prev?.completionTokensTotal ?? 0) + outDelta;
+  if (cachedDelta !== undefined) usage.cachedTokensTotal = (prev?.cachedTokensTotal ?? 0) + cachedDelta;
+  // Нет дельт — сохраняем базу, чтобы частичный вход не гасил тоталы.
+  if (inDelta === undefined && typeof prev?.promptTokensTotal === "number") usage.promptTokensTotal = prev.promptTokensTotal;
+  if (outDelta === undefined && typeof prev?.completionTokensTotal === "number") usage.completionTokensTotal = prev.completionTokensTotal;
+  if (cachedDelta === undefined && typeof prev?.cachedTokensTotal === "number") usage.cachedTokensTotal = prev.cachedTokensTotal;
   return usage;
 }
 
@@ -156,6 +179,9 @@ export function buildHostState(deps: HostStateInput, busy: boolean): HostStateSn
     costUsd: deps.usage?.costUsd,
     compactionCount: deps.usage?.compactionCount,
     cacheHitRate: deps.usage?.cacheHitRate,
+    promptTokensTotal: deps.usage?.promptTokensTotal,
+    completionTokensTotal: deps.usage?.completionTokensTotal,
+    cachedTokensTotal: deps.usage?.cachedTokensTotal,
     contextQuality: deps.usage?.contextQuality,
     contextQualityBreakdown: deps.usage?.contextQualityBreakdown,
     contextBreakdown: deps.usage?.contextBreakdown,

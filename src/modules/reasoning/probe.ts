@@ -44,6 +44,8 @@ const memCache = new Map<string, { result: boolean; ts: number }>();
 export interface RememberedReasoningMechanism {
   strategy: ReasoningStrategy;
   reasoningOff: boolean;
+  /** Объявленные эндпоинтом уровни effort (INV-R7). */
+  levels?: string[];
 }
 
 const mechanismCache = new Map<string, RememberedReasoningMechanism>();
@@ -206,9 +208,10 @@ export async function probeReasoningSupportCached(
   reasoningOff: boolean,
   baseUrl: string,
   model: string,
+  levels?: string[],
   signal?: AbortSignal,
 ): Promise<boolean | null> {
-  rememberReasoningMechanism(baseUrl, model, { strategy, reasoningOff });
+  rememberReasoningMechanism(baseUrl, model, { strategy, reasoningOff, levels });
   const key = cacheKey(baseUrl, model, strategy, reasoningOff);
   const cached = getCachedProbeResult(key);
   if (cached !== undefined) return cached;

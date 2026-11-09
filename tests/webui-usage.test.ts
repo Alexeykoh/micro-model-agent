@@ -55,6 +55,7 @@ describe("webui usage metrics", () => {
       cacheHitRate: 0.5,
       cacheSaved: 0.004,
       contextQuality: 91,
+      cachedTokensTotal: 100,
     });
   });
 
@@ -288,6 +289,37 @@ describe("webui usage metrics", () => {
       expect(body.state.instructions?.disabled).toBe(true);
       expect(body.state.projectMap?.indexed).toBe(false);
     });
+  });
+
+  it("captureUsage accumulates session token totals over turns", () => {
+    const first = captureUsage(
+      { success: true, text: "", iterationCount: 1, promptTokens: 100, completionTokens: 50, cache: { cachedTokens: 30, uncachedTokens: 70, cacheWriteTokens: 0 } },
+      32768,
+    );
+    expect(first).toMatchObject({ promptTokensTotal: 100, completionTokensTotal: 50, cachedTokensTotal: 30 });
+    // Reload: база поднята из web-usage.json; второй ход наращивает её, а не с нуля.
+    const second = captureUsage(
+      { success: true, text: "", iterationCount: 1, promptTokens: 200, completionTokens: 80, cache: { cachedTokens: 60, uncachedTokens: 140, cacheWriteTokens: 0 } },
+      32768,
+      first,
+    );
+    expect(second).toMatchObject({ promptTokensTotal: 300, completionTokensTotal: 130, cachedTokensTotal: 90 });
+    // Частичный вход без дельт не гасит базе.
+    const partial = captureUsage({ success: true, text: "", iterationCount: 1 }, 32768, second);
+    expect(partial).toMatchObject({ promptTokensTotal: 300, completionTokensTotal: 130, cachedTokensTotal: 90 });
+  });
+
+  it("buildHostState surfaces session token totals", () => {
+    const snapshot = buildHostState(
+      {
+        config: structuredClone(DEFAULTS),
+        usage: { contextUsed: 100, promptTokensTotal: 300, completionTokensTotal: 130, cachedTokensTotal: 90 },
+      },
+      false,
+    );
+    expect(snapshot.promptTokensTotal).toBe(300);
+    expect(snapshot.completionTokensTotal).toBe(130);
+    expect(snapshot.cachedTokensTotal).toBe(90);
   });
 
   it("passes a full ProjectMapInfo through to the snapshot", () => {

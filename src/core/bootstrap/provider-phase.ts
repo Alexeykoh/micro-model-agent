@@ -6,11 +6,16 @@
  * общую фабрику (с ленивым session id) → reasoning-стратегия + фоновая
  * reasoning-probe. Тяжёлые пробы — фоном, старт не блокируют.
  */
-import { ModelLoader, probeModel, probeProviderContext } from "../../llm/model-loader";
+import {
+  ModelLoader,
+  probeNativeCapabilities,
+  probeProviderContext,
+} from "../../llm/model-loader";
 import { join as joinDir } from "path";
 import type { ContextProbeResult } from "../../llm/model-loader";
 import { buildActiveProvider } from "../../modules/providers/factory";
 import { activeProviderEndpoint, reasoningStrategyForProvider } from "../../modules/providers/manager";
+import { rememberReasoningMechanism } from "../../modules/reasoning/probe";
 import { syncProviderModelMemory } from "../../modules/providers/memory";
 import { setProviderMemoryApplier } from "../../config/registry";
 /** Эндпоинт активной записи (резолв из entries, фолбэк — легаси-плоские поля). */
@@ -22,56 +27,9 @@ import { t } from "../../i18n/index";
 import type { AppConfig, ModelCapabilities, ReasoningStrategy } from "../../config/types";
 import type { Logger } from "../../logger/app-logger";
 import type { SessionManager } from "../../modules/session/index";
-import type { SilentLogger } from "./state";
 
-/**
- * Позднее применение резолвнутой context-probe. Проба приземляется фоном ПОСЛЕ
- * сборки ContextManager/провайдера под стартовое окно — одна запись значения в
- * `config` оставит бюджеты протухшими, поэтому нужен reconfigure (ресайз +
- * пересборка провайдера).
- *
- * Пропуск, когда применять нечего (`config` больше не несёт значение пробы —
- * совпало сразу или переопределено вручную) или ход уже был (ресайз посреди
- * истории ломает бюджеты). Не бросает никогда.
- */
-export async function applyProbedContext(
-  agent: Pick<{ currentIteration: number; reconfigure(cfg: AppConfig): Promise<void> }, "currentIteration" | "reconfigure">,
-  config: AppConfig,
-  probe: ContextProbeResult,
-  logger: SilentLogger,
-  sessionManager?: { setEffectiveContext(contextWindow: number, model?: string): void },
-): Promise<boolean> {
-  if (config.contextWindow !== probe.actual) return false;
-  if (agent.currentIteration !== 0) {
-    logger.logSilent(
-      "debug",
-      `Context probe: keeping startup contextWindow ${config.contextWindow} — a turn already ran`,
-    );
-    return false;
-  }
-  try {
-    await agent.reconfigure(config);
-    // Мета сессии фиксирует окно из `SessionManager.create()` (стартовое
-    // значение, ДО пробы). Наблюдалось: проба авто-подставила 262144 в живой
-    // конфиг, а `session_start` и `meta.json` продолжали показывать 65536 —
-    // расхождение не диагностировалось нигде. Синхронизируем явно (идемпотентно)
-    // и проверяем результат.
-    sessionManager?.setEffectiveContext(config.contextWindow, config.model);
-    logger.logSilent(
-      "info",
-      `Context probe: applied provider context ${probe.actual} tokens (model "${probe.model}")`,
-    );
-    return true;
-  } catch (e) {
-    // INV-15: не удалось применить пробу контекста — конфиг и лог сессии
-    // разойдутся, если это не записать.
-    logger.logSilent(
-      "warn",
-      `Context probe apply FAILED: ${e instanceof Error ? e.message : String(e)}`,
-    );
-    return false;
-  }
-}
+// Применение context-probe вынесено (правило 6); реэкспорт — старый импорт-путь.
+export { applyProbedContext } from "./provider-probe-apply";
 
 /** Итог фазы провайдера: эндпоинт, пробы, профиль, менеджер и живой LLM-провайдер. */
 export interface ProviderPhase {
@@ -153,8 +111,13 @@ export async function setupProviderPhase(
   // резолвит итог при каждом обращении, поэтому смена модели/провайдера
   // через reconfigure видна тулам без пересборки контекста.
   const capabilitiesRef: { probe?: ModelCapabilities } = {};
-  // Native discovery ДО сборки: механизм reasoning нужен экземпляру сразу (INV-R2).
-  const nativeProbe = await probeModel(probeEndpoint.baseUrl, config.model);
+  // Native discovery ДО сборки: механизм reasoning нужен экземпляру сразу (INV-R2/R6).
+  const nativeProbe = await probeNativeCapabilities(
+    probeEndpoint.baseUrl,
+    config.model,
+    3000,
+    probeEndpoint.type,
+  );
   if (nativeProbe?.capabilities) capabilitiesRef.probe = nativeProbe.capabilities;
 
   // Значение на старте. Проба резолвится фоном — если пользователь успел
@@ -164,8 +127,10 @@ export async function setupProviderPhase(
 
   const contextProbePromise: Promise<ContextProbeResult | null> = (async () => {
     try {
-      const lmProbe = nativeProbe;
-      const lmContext = lmProbe ? { model: lmProbe.model, actual: lmProbe.contextLength } : null;
+      const lmContext =
+        nativeProbe?.contextLength !== undefined
+          ? { model: nativeProbe.model, actual: nativeProbe.contextLength }
+          : null;
       const detected =
         lmContext ??
         (await probeProviderContext(probeEndpoint.baseUrl, config.model, {
@@ -237,6 +202,13 @@ export async function setupProviderPhase(
   // `/provider use` и давало чужую стратегию — напр. prompt-tag при opencode-go).
   const modelOverride = config.modelCapabilities?.[config.model];
   const reasoningStrategy = reasoningStrategyForProvider(config.provider, capabilitiesRef.probe, modelOverride);
+  // UI читает механизм даже когда проба не гоняется (`mode: none`): запоминаем
+  // резолвнутые данные сразу, иначе селектор показал бы пресет вместо discovery.
+  rememberReasoningMechanism(probeEndpoint.baseUrl, config.model, {
+    strategy: reasoningStrategy,
+    reasoningOff: capabilitiesRef.probe?.reasoningOff ?? modelOverride?.reasoningOff === true,
+    levels: capabilitiesRef.probe?.reasoningLevels ?? modelOverride?.reasoningLevels,
+  });
 
   // Reasoning-проба — ФОНОМ (B2). Раньше блокировала bootstrap лишним LLM
   // round-trip на каждый запуск; теперь агент потребляет её лениво перед первым
@@ -254,6 +226,7 @@ export async function setupProviderPhase(
           capabilitiesRef.probe?.reasoningOff === true,
           probeEndpoint.baseUrl ?? "",
           config.model,
+          capabilitiesRef.probe?.reasoningLevels,
         );
         logger.logSilent(
           "info",

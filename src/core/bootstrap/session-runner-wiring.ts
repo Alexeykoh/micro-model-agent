@@ -125,6 +125,7 @@ interface AssembleRunnerAgentInput {
   toolCtx: ToolContext;
   contextProbePromise: Promise<ContextProbeResult | null>;
   registry: ToolRegistry;
+  capabilitiesProbeRef: { probe?: ModelCapabilities };
 }
 
 /**
@@ -159,6 +160,7 @@ export function assembleRunnerAgent(input: AssembleRunnerAgentInput): Agent {
     toolCtx,
     contextProbePromise,
     registry,
+    capabilitiesProbeRef,
   } = input;
   const agentDeps: AgentDeps = {
     config,
@@ -185,6 +187,7 @@ export function assembleRunnerAgent(input: AssembleRunnerAgentInput): Agent {
     contextLogger,
     reasoningProbe: () => reasoningProbePromise,
     reasoningStrategy,
+    capabilitiesProbeRef,
     planSummary: () => runnerExec.getPlanSummary(),
     toolCtx,
     onDiagnostic: admissionDiagnosticSink(sessionManager),

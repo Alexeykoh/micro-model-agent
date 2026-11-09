@@ -11,13 +11,17 @@ import {
 import { join } from "path";
 import { gzipSync } from "zlib";
 import type { SessionMeta, SessionMessage } from "./types";
+import type { TurnCheckpoint } from "./checkpoint";
+import { loadCheckpointFile, saveCheckpointFile } from "./checkpoint-io";
 import type { SessionEncryptionConfig } from "../../config/types";
 import { SessionFileEncryptor } from "../security/session-encryption";
 import { readHistoryFile, readRotatedHistory } from "./history-io";
 import { appendLogEntry, readLogEntries, readLogEntriesResult } from "./log-file";
-import { readCause, type SessionRead } from "./read-status";
+import { readCause, parseMetaContent, type SessionRead } from "./read-status";
 import type { SessionLogEntry } from "./log-types";
-import { SessionListCache } from "./list-cache";
+import { SessionListCache, scanSessionList } from "./list-cache";
+import { loadInterruptFile, saveInterruptFile, type InterruptState } from "./interrupt";
+import { rotateSessions } from "./prune";
 export type { SessionLogEntry, OnboardingEvent } from "./log-types";
 
 /** Файловое хранилище сессий: meta.json, history.jsonl, session.jsonl. */
@@ -70,25 +74,21 @@ export class SessionStore {
     mkdirSync(this.baseDir, { recursive: true, mode: 0o700 });
   }
 
-  private sessionDir(id: string): string {
-    return join(this.baseDir, id);
-  }
-
   private metaPath(id: string): string {
-    return join(this.sessionDir(id), "meta.json");
+    return join(this.getSessionDir(id), "meta.json");
   }
 
   private historyPath(id: string): string {
-    return join(this.sessionDir(id), "history.jsonl");
+    return join(this.getSessionDir(id), "history.jsonl");
   }
 
   private sessionLogPath(id: string): string {
-    return join(this.sessionDir(id), "session.jsonl");
+    return join(this.getSessionDir(id), "session.jsonl");
   }
 
   /** Хвост session-лога: последние строки для инкрементального чтения (Trace). */
   private sessionLogTailPath(id: string): string {
-    return join(this.sessionDir(id), "session.log.tail");
+    return join(this.getSessionDir(id), "session.log.tail");
   }
 
   /** Есть ли сессия (по meta.json). */
@@ -101,17 +101,11 @@ export class SessionStore {
     this._metaCache.set(id, meta);
     this.listCache.forget(id);
     this.listCache.invalidate();
-    const dir = this.sessionDir(id);
+    const dir = this.getSessionDir(id);
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     const content = JSON.stringify(meta, null, 2);
-    if (this.encryptor) {
-      writeFileSync(this.metaPath(id), this.encryptor.encryptFileContent(content), {
-        encoding: "utf-8",
-        mode: 0o600,
-      });
-    } else {
-      writeFileSync(this.metaPath(id), content, { encoding: "utf-8", mode: 0o600 });
-    }
+    const body = this.encryptor ? this.encryptor.encryptFileContent(content) : content;
+    writeFileSync(this.metaPath(id), body, { encoding: "utf-8", mode: 0o600 });
   }
 
   /**
@@ -129,9 +123,7 @@ export class SessionStore {
       return null;
     }
     try {
-      const raw = readFileSync(path, "utf-8");
-      const content = this.encryptor ? this.encryptor.decryptFileContent(raw) : raw;
-      const meta = JSON.parse(content) as SessionMeta;
+      const meta = this.parseMetaFile(path);
       this._metaCache.set(id, meta);
       this.listCache.forget(id);
       return meta;
@@ -145,12 +137,13 @@ export class SessionStore {
   loadMetaWithStatus(id: string): SessionRead<SessionMeta> {
     const cached = this._metaCache.get(id);
     const path = this.metaPath(id);
-    if (cached) return { status: "ok", value: cached };
-    if (!existsSync(path)) return { status: "missing" };
+    if (cached || !existsSync(path)) {
+      return cached
+        ? { status: "ok", value: cached }
+        : { status: "missing" };
+    }
     try {
-      const raw = readFileSync(path, "utf-8");
-      const content = this.encryptor ? this.encryptor.decryptFileContent(raw) : raw;
-      const meta = JSON.parse(content) as SessionMeta;
+      const meta = this.parseMetaFile(path);
       this._metaCache.set(id, meta);
       this.listCache.forget(id);
       return { status: "ok", value: meta };
@@ -158,14 +151,19 @@ export class SessionStore {
       return { status: "unreadable", cause: readCause(err) };
     }
   }
+  /** Парсинг meta.json (шифр/открыт); битая — throw. */
+  private parseMetaFile(path: string): SessionMeta {
+    return parseMetaContent(readFileSync(path, "utf-8"), (raw) =>
+      this.encryptor ? this.encryptor.decryptFileContent(raw) : raw,
+    ) as SessionMeta;
+  }
+
   /** Мета строго с диска, мимо _metaCache (там, где важнее точность счётчика). */
   private readMetaFromDisk(id: string): SessionMeta | null {
     const path = this.metaPath(id);
     if (!existsSync(path)) return null;
     try {
-      const raw = readFileSync(path, "utf-8");
-      const content = this.encryptor ? this.encryptor.decryptFileContent(raw) : raw;
-      return JSON.parse(content) as SessionMeta;
+      return this.parseMetaFile(path);
     } catch {
       return null;
     }
@@ -173,7 +171,7 @@ export class SessionStore {
 
   /** Добавить сообщение в историю; мету инкрементить с диска (защита от гонки процессов). */
   appendMessage(id: string, msg: SessionMessage): void {
-    const dir = this.sessionDir(id);
+    const dir = this.getSessionDir(id);
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     const line = JSON.stringify(msg);
     if (this.encryptor?.isEnabled()) {
@@ -210,7 +208,7 @@ export class SessionStore {
 
   /** Добавить запись в session-лог. */
   appendSessionLog(id: string, entry: SessionLogEntry): void {
-    const dir = this.sessionDir(id);
+    const dir = this.getSessionDir(id);
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     appendLogEntry(this.sessionLogPath(id), this.sessionLogTailPath(id), entry, this.encryptor);
   }
@@ -221,6 +219,18 @@ export class SessionStore {
     const path = opts.since ? this.sessionLogTailPath(id) : this.sessionLogPath(id);
     return readLogEntries(path, this.encryptor) ?? [];
   }
+
+  /** Сохранить чекпоинт хода (атомарно; шифр при включённой опции). */
+  saveCheckpoint(id: string, checkpoint: TurnCheckpoint): void { saveCheckpointFile(this.getSessionDir(id), checkpoint, this.encryptor); }
+
+  /** Загрузить чекпоинт хода; нет/битая/чужая версия — null (fail-open). */
+  loadCheckpoint(id: string): TurnCheckpoint | null { return loadCheckpointFile(this.getSessionDir(id), this.encryptor); }
+
+  /** Записать durable-interrupt паузы (`interrupt.json`). */
+  saveInterrupt(id: string, state: InterruptState): void { saveInterruptFile(this.getSessionDir(id), state); }
+
+  /** Прочитать durable-interrupt паузы; нет/битый — null. */
+  loadInterrupt(id: string): InterruptState | null { return loadInterruptFile(this.getSessionDir(id)); }
   /** session-лог с причиной: «нет файла» ≠ «не прочитан» (INV-15). */
   loadSessionLogWithStatus(
     id: string,
@@ -244,15 +254,12 @@ export class SessionStore {
     const now = Date.now();
     const cached = this.listCache.peek(now);
     if (cached) return cached.slice();
-    const sessions: SessionMeta[] = [];
-    if (existsSync(this.baseDir)) {
-      for (const entry of readdirSync(this.baseDir, { withFileTypes: true })) {
-        if (!entry.isDirectory()) continue;
-        const meta = this.loadMeta(entry.name);
-        if (meta) sessions.push(meta);
-      }
-      sessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-    }
+    const names = existsSync(this.baseDir)
+      ? readdirSync(this.baseDir, { withFileTypes: true })
+          .filter((e) => e.isDirectory())
+          .map((e) => e.name)
+      : [];
+    const sessions = scanSessionList((id) => this.loadMeta(id), names);
     this.listCache.remember(sessions, now);
     return sessions.slice();
   }
@@ -262,7 +269,7 @@ export class SessionStore {
     this._metaCache.delete(id);
     this.listCache.forget(id);
     this.listCache.invalidate();
-    const dir = this.sessionDir(id);
+    const dir = this.getSessionDir(id);
     if (existsSync(dir)) {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -270,31 +277,19 @@ export class SessionStore {
 
   /** Ротация: истории старше 30 дней — в .jsonl.gz, мета помечается rotated. */
   rotateOldSessions(): void {
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    rotateSessions(this);
+  }
 
-    const sessions = this.listSessions().slice();
-
-    for (const session of sessions) {
-      const updatedAt = new Date(session.updatedAt);
-      if (updatedAt < thirtyDaysAgo) {
-        const historyPath = this.historyPath(session.id);
-        if (existsSync(historyPath)) {
-          const content = readFileSync(historyPath, "utf-8");
-          const compressed = gzipSync(content);
-          const gzPath = join(this.baseDir, `${session.id}.jsonl.gz`);
-          writeFileSync(gzPath, compressed);
-          rmSync(historyPath);
-          // Пометить мету, чтобы сессия не выглядела «живой» в списках —
-          // иначе gz-сессия рекламирует messageCount > 0.
-          const meta = this.loadMeta(session.id);
-          if (meta) {
-            meta.messageCount = 0;
-            meta.rotated = true;
-            this.saveMeta(session.id, meta);
-          }
-        }
-      }
-    }
+  /**
+   * Сжимает history.jsonl в `<id>.jsonl.gz` и удаляет исходник (ротация).
+   * Возвращает true, если архив создан.
+   */
+  archiveHistory(id: string): boolean {
+    const historyPath = this.historyPath(id);
+    if (!existsSync(historyPath)) return false;
+    const compressed = gzipSync(readFileSync(historyPath, "utf-8"));
+    writeFileSync(join(this.baseDir, `${id}.jsonl.gz`), compressed);
+    rmSync(historyPath);
+    return true;
   }
 }

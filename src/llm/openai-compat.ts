@@ -43,6 +43,7 @@ export class OpenAICompatProvider implements LLMProvider {
   private cacheReport: CacheReportFormat;
   private reasoningStrategy: ReasoningStrategy;
   private reasoningOff: boolean;
+  private reasoningLevels?: string[];
 
   constructor(config: OpenAICompatConfig) {
     this.config = config;
@@ -52,6 +53,7 @@ export class OpenAICompatProvider implements LLMProvider {
     this.cache = config.cache;
     this.reasoningStrategy = config.reasoningStrategy ?? "openai-effort"; // INV-R1
     this.reasoningOff = config.reasoningOff === true;
+    this.reasoningLevels = config.reasoningLevels;
     // Без capability всё равно читаем OpenAI-совместимые поля: это не меняет
     // запрос и работает для локальных/кастомных серверов.
     this.cacheReport = config.cache?.report ?? "openai";
@@ -149,6 +151,7 @@ export class OpenAICompatProvider implements LLMProvider {
       reasoningEffort: input.options?.reasoningEffort,
       reasoningStrategy: this.reasoningStrategy,
       reasoningOff: this.reasoningOff,
+      reasoningLevels: this.reasoningLevels,
       ...this.cacheHints(input.options?.sessionId),
     });
   }

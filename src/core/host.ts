@@ -51,6 +51,12 @@ export interface HostStateSnapshot {
   compactionCount?: number;
   /** Хитрейт промпт-кэша за последний ход (0..1); нет, если неизвестен. */
   cacheHitRate?: number;
+  /** Накопленные входящие токены сессии (prompt). */
+  promptTokensTotal?: number;
+  /** Накопленные исходящие токены сессии (completion). */
+  completionTokensTotal?: number;
+  /** Накопленные кэшированные токены сессии. */
+  cachedTokensTotal?: number;
   /** Оценка качества контекста за последний ход (0..100); нет, если неизвестна. */
   contextQuality?: number;
   /** Разбор оценки качества: составляющие и веса (для поп-апа в UI). */

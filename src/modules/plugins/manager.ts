@@ -1,7 +1,7 @@
 // Фасад реестра плагинов: гейт вкл/выкл, плоские записи и публичный API.
 // Состояние набора живёт в `manager-catalog.ts`, вклад тулов — в `manager-tools.ts`,
 // хуки — в `manager-hooks.ts`, перезагрузка — в `manager-reload.ts`.
-import type { AgentPlugin } from "../types";
+import type { AgentPlugin, PluginHookContext } from "../types";
 import type { ToolRegistry } from "../../tools/registry";
 import type { PluginToolSyncResult } from "./tools";
 import type { PluginLoadFailure, PluginRecord } from "./records";
@@ -165,7 +165,7 @@ export class PluginManager extends PluginHooks {
   }
 
   /** Выгрузить внешние плагины внутри каталога с вызовом `onUnload`. */
-  unloadByDir(dir: string, ctx?: unknown): string[] {
+  unloadByDir(dir: string, ctx?: PluginHookContext): string[] {
     return this.catalog.unloadByDir(dir, ctx);
   }
 

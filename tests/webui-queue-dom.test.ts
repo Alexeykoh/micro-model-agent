@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { setupHappyDom } from "./helpers/happy-dom";
 
 const win = setupHappyDom(
-  `<div id="msgs" class="msgs"></div><div id="queueStrip" hidden></div>`,
+  `<div id="msgs" class="msgs"></div><div id="queueStrip" hidden></div><span class="saved" id="saveIndicator"></span>`,
 );
 
 const i18n = await import("../src/modules/webui/assets/js/i18n.js");

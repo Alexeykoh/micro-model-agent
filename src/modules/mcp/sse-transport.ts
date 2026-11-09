@@ -95,9 +95,10 @@ export class SseTransport {
           }
         }
       }
-    } catch (err: any) {
-      if (err.name !== "AbortError") {
-        this.handleError(err);
+    } catch (err: unknown) {
+      if (!(err instanceof Error && err.name === "AbortError")) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        this.handleError(error);
       }
     }
     this.connected = false;

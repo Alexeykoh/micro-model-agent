@@ -30,9 +30,10 @@ export async function checkSyntax(filePath: string, deps: SyntaxDeps): Promise<b
     try {
       await deps.run(adapter.command(filePath), deps.baseDir, adapter.timeoutMs);
       return true;
-    } catch (err: any) {
-      const msg = String(err?.message ?? err);
-      if (err?.status === 127 || /not found|ENOENT|not recognized/i.test(msg)) {
+    } catch (err: unknown) {
+      const rec = err as { status?: unknown; stderr?: unknown; stdout?: unknown } | null | undefined;
+      const msg = err instanceof Error ? err.message : String(err);
+      if (rec?.status === 127 || /not found|ENOENT|not recognized/i.test(msg)) {
         deps.degrade(
           "verify.syntax",
           `syntax check could not run for ${filePath}: ${msg.slice(0, 200)}`,
@@ -55,23 +56,25 @@ export async function checkSyntax(filePath: string, deps: SyntaxDeps): Promise<b
     try {
       await deps.run(`${tsc} --noEmit --skipLibCheck "${filePath}"`, deps.baseDir, 20_000);
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const rec = err as { status?: unknown; stderr?: unknown; stdout?: unknown } | null | undefined;
+      const msg = err instanceof Error ? err.message : String(err);
       if (
-        err.status === 127 ||
-        err.message.includes("not found") ||
-        err.message.includes("ENOENT")
+        rec?.status === 127 ||
+        msg.includes("not found") ||
+        msg.includes("ENOENT")
       ) {
         deps.degrade(
           "verify.syntax",
-          `syntax check could not run for ${filePath}: ${String(err.message).slice(0, 200)}`,
+          `syntax check could not run for ${filePath}: ${msg.slice(0, 200)}`,
         );
         return true;
       }
-      const stderr = err.stderr?.toString() || "";
+      const stderr = String(rec?.stderr ?? "");
       if (stderr.includes("error TS") && !stderr.includes("Cannot find module")) return false;
       deps.degrade(
         "verify.syntax",
-        `syntax check inconclusive for ${filePath}: ${stderr.slice(0, 200) || err.message}`,
+        `syntax check inconclusive for ${filePath}: ${stderr.slice(0, 200) || msg}`,
       );
       return true;
     }

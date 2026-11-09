@@ -207,6 +207,9 @@ export function relTime(ts: string | number | null | undefined): string {
 }
 
 export function fmtTokens(n: number): string {
+  // Пороги — с округлением: 999 999 → «1.0M», а не «1000.0K».
+  if (n >= 999_950_000) return (n / 1_000_000_000).toFixed(1) + "B";
+  if (n >= 999_950) return (n / 1_000_000).toFixed(1) + "M";
   return n >= 1000 ? (n / 1000).toFixed(1) + "K" : String(n);
 }
 // Human byte size for download progress (`3.1 MB`).

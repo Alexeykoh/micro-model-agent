@@ -4,8 +4,8 @@
  */
 import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { isLoopback, BodyTooLargeError } from "../../webui/util";
-import { readJsonBody } from "../../webui/http/body";
+import { isLoopback, BodyTooLargeError, readBody } from "../../webui/util";
+import { parseJsonBody } from "../../webui/http/body";
 import type { ProblemDetails } from "../runtime/problem";
 import { problem } from "../runtime/problem";
 
@@ -33,12 +33,13 @@ export function sendProblem(
 
 /**
  * Читает JSON-тело, превращая провал чтения в Problem Details: переполнение →
- * `413`, обрыв/ошибка сокета → `400`. Возвращает `undefined`, когда ответ уже
- * отправлен — вызывающий обязан выйти.
+ * `413`, битый JSON/обрыв → `400 invalid JSON`. Возвращает `undefined`, когда
+ * ответ уже отправлен — вызывающий обязан выйти.
  *
  * Без этого реджект из `readBody` улетал бы из хендлера в диспатчер, и
  * интегратор получал бы обрыв сокета вместо кода ответа (а в Node — ещё и
- * unhandled rejection, который валит процесс на очереди).
+ * unhandled rejection, который валит процесс на очереди). Битый JSON раньше
+ * превращался в `{}`: клиент получал ложное «input required» вместо «bad JSON».
  */
 export async function readJsonBodyOrProblem(
   req: IncomingMessage,
@@ -46,7 +47,25 @@ export async function readJsonBodyOrProblem(
   cap: number,
 ): Promise<Record<string, unknown> | undefined> {
   try {
-    return (await readJsonBody(req, cap)) ?? {};
+    const raw = await readBody(req, cap);
+    // Пустое тело — отсутствие полей (`{}`): у точек со всеми опциональными
+    // полями это валидно, `null` здесь врал бы («invalid JSON» на пустой POST).
+    if (!raw.trim()) return {};
+    const parsed = parseJsonBody(raw);
+    if (parsed === null) {
+      sendProblem(
+        res,
+        problem({
+          type: "validation",
+          title: "invalid JSON",
+          status: 400,
+          detail: "request body is not valid JSON",
+        }),
+        () => req.destroy(),
+      );
+      return undefined;
+    }
+    return parsed;
   } catch (err) {
     if (err instanceof BodyTooLargeError) {
       sendProblem(

@@ -6,6 +6,9 @@ import { DATA_POLICY_DEFS } from "./registry-data-policy";
 import { SERVICE_DEFS } from "./registry-service";
 import { SOUND_DEFS } from "./registry-sounds";
 import { MEMORY_VALIDATOR_DEFS } from "./registry-memory";
+import { EXECUTION_DEFS } from "./registry-execution";
+import { OTEL_DEFS } from "./registry-otel";
+import { COST_DEFS } from "./registry-cost";
 import { PROVIDER_EXTRA_DEFS } from "./registry-extra-provider";
 import { AGENT_EXTRA_DEFS } from "./registry-extra-agent";
 import { FEATURE_DEFS } from "./registry-extra-features";
@@ -19,6 +22,9 @@ export const EXTRA_DEFS: ConfigKeyDef[] = [
   ...DATA_POLICY_DEFS,
   ...SOUND_DEFS,
   ...MEMORY_VALIDATOR_DEFS,
+  ...EXECUTION_DEFS,
+  ...OTEL_DEFS,
+  ...COST_DEFS,
   ...PROVIDER_EXTRA_DEFS,
   ...AGENT_EXTRA_DEFS,
   ...FEATURE_DEFS,

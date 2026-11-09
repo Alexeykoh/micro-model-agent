@@ -20,6 +20,7 @@ export interface SoundPrefs {
   done: boolean;
   question: boolean;
   failed: boolean;
+  volume: number;
 }
 
 /** Дефолты совпадают с `DEFAULTS.ui.sounds` (см. src/config/defaults.ts). */
@@ -28,6 +29,7 @@ export const DEFAULT_SOUND_PREFS: SoundPrefs = {
   done: true,
   question: true,
   failed: true,
+  volume: 50,
 };
 
 // Троттлинг: несколько вкладок завершаются одновременно — сигналы не должны
@@ -47,13 +49,18 @@ export interface SoundClock {
  */
 export function resolveSoundPrefs(sounds: unknown): SoundPrefs {
   const src = isRecord(sounds) ? sounds : {};
-  const pick = (key: keyof SoundPrefs): boolean =>
+  const pick = (key: Exclude<keyof SoundPrefs, "volume">): boolean =>
     typeof src[key] === "boolean" ? (src[key] as boolean) : DEFAULT_SOUND_PREFS[key];
+  const volume =
+    typeof src.volume === "number" && Number.isFinite(src.volume)
+      ? Math.max(0, Math.min(100, src.volume))
+      : DEFAULT_SOUND_PREFS.volume;
   return {
     enabled: pick("enabled"),
     done: pick("done"),
     question: pick("question"),
     failed: pick("failed"),
+    volume,
   };
 }
 
@@ -101,7 +108,7 @@ const TONES: Record<SoundCue, ReadonlyArray<readonly [number, number, number]>> 
   ],
 };
 
-const CUE_GAIN = 0.05;
+const CUE_GAIN = 0.12;
 
 let audio: AudioContext | null = null;
 let unlockArmed = false;
@@ -134,7 +141,7 @@ function armUnlock(): void {
 }
 
 /** Играет сигнал; недоступный звук — тихий no-op (INV-S4). */
-export function playCue(cue: SoundCue): void {
+export function playCue(cue: SoundCue, volume: number = 50): void {
   armUnlock();
   const ac = audioContext();
   if (!ac) return;
@@ -152,7 +159,7 @@ export function playCue(cue: SoundCue): void {
     osc.frequency.value = freq;
     // Плавная огибающая: без неё на краях слышны щелчки.
     gain.gain.setValueAtTime(0.0001, at);
-    gain.gain.exponentialRampToValueAtTime(CUE_GAIN, at + 0.01);
+    gain.gain.exponentialRampToValueAtTime(CUE_GAIN * (volume / 100), at + 0.01);
     gain.gain.exponentialRampToValueAtTime(0.0001, at + dur);
     osc.connect(gain);
     gain.connect(ac.destination);
@@ -176,6 +183,6 @@ export function notifyTabStatus(from: unknown, to: unknown): SoundCue | null {
   const now = Date.now();
   if (!shouldEmit(now, lastCue, cue)) return null;
   lastCue = { at: now, cue };
-  playCue(cue);
+  playCue(cue, prefs.volume);
   return cue;
 }

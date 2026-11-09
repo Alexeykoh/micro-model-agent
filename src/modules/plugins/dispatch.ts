@@ -4,7 +4,7 @@
 // дедуп/вкл-выкл/записи, а хуков — пятнадцать. Активные плагины и host-мост
 // приходят провайдерами, поэтому менеджер может менять набор в рантайме, не
 // пересоздавая диспетчер.
-import type { AgentPlugin, HostBridge, TurnSummary } from "../types";
+import type { AgentPlugin, HostBridge, PluginHookContext, TurnSummary } from "../types";
 import type { ToolCall, ToolResult } from "../../tools/types";
 import type { AgentPhase, LLMResponse } from "../../core/types";
 import type { PluginLog } from "./log";
@@ -70,7 +70,7 @@ export class PluginDispatcher {
    * Рассылка простого хука. Изоляция — `safeInvoke`, поэтому девять однотипных
    * циклов сводятся к одной строке на хук.
    */
-  private fanout(rawCtx: any, hook: string, invoke: (plugin: AgentPlugin, ctx: any) => void): void {
+  private fanout(rawCtx: PluginHookContext, hook: string, invoke: (plugin: AgentPlugin, ctx: PluginHookContext) => void): void {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.active()) {
       safeInvoke(this.log, plugin, hook, () => invoke(plugin, ctx));
@@ -90,7 +90,7 @@ export class PluginDispatcher {
    * Хук перед тулом. False (любой плагин против) — не выполнять.
    * Возвращает false при блокировке, true при разрешении.
    */
-  async runOnBeforeTool(rawCtx: any, call: ToolCall): Promise<boolean> {
+  async runOnBeforeTool(rawCtx: PluginHookContext, call: ToolCall): Promise<boolean> {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.active()) {
       if (plugin.onBeforeTool) {
@@ -111,7 +111,7 @@ export class PluginDispatcher {
   }
 
   /** Хук после тула: отдаёт вызов и результат всем плагинам. */
-  async runOnAfterTool(rawCtx: any, call: ToolCall, result: ToolResult): Promise<void> {
+  async runOnAfterTool(rawCtx: PluginHookContext, call: ToolCall, result: ToolResult): Promise<void> {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.active()) {
       if (plugin.onAfterTool) {
@@ -127,7 +127,7 @@ export class PluginDispatcher {
   }
 
   /** Хук ошибки агента: рассылает ошибку всем плагинам. */
-  async runOnError(rawCtx: any, error: Error): Promise<void> {
+  async runOnError(rawCtx: PluginHookContext, error: Error): Promise<void> {
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.active()) {
       if (plugin.onError) {
@@ -142,40 +142,40 @@ export class PluginDispatcher {
     }
   }
 
-  runOnSessionStart(rawCtx: any): void {
+  runOnSessionStart(rawCtx: PluginHookContext): void {
     this.fanout(rawCtx, "onSessionStart", (p, ctx) => p.onSessionStart?.(ctx));
   }
 
-  runOnBeforeThink(rawCtx: any): void {
+  runOnBeforeThink(rawCtx: PluginHookContext): void {
     this.fanout(rawCtx, "onBeforeThink", (p, ctx) => p.onBeforeThink?.(ctx));
   }
 
-  runOnAfterThink(rawCtx: any, response: LLMResponse | null): void {
+  runOnAfterThink(rawCtx: PluginHookContext, response: LLMResponse | null): void {
     this.fanout(rawCtx, "onAfterThink", (p, ctx) => p.onAfterThink?.(ctx, response));
   }
 
-  runOnSessionEnd(rawCtx: any): void {
+  runOnSessionEnd(rawCtx: PluginHookContext): void {
     this.fanout(rawCtx, "onSessionEnd", (p, ctx) => p.onSessionEnd?.(ctx));
   }
 
-  runOnToolCall(rawCtx: any): void {
+  runOnToolCall(rawCtx: PluginHookContext): void {
     this.fanout(rawCtx, "onToolCall", (p, ctx) => p.onToolCall?.(ctx));
   }
 
-  runOnPhase(rawCtx: any, phase: AgentPhase): void {
+  runOnPhase(rawCtx: PluginHookContext, phase: AgentPhase): void {
     this.fanout(rawCtx, "onPhase", (p, ctx) => p.onPhase?.(ctx, phase));
   }
 
-  runOnToolStart(rawCtx: any, call: ToolCall): void {
+  runOnToolStart(rawCtx: PluginHookContext, call: ToolCall): void {
     this.fanout(rawCtx, "onToolStart", (p, ctx) => p.onToolStart?.(ctx, call));
   }
 
-  runOnToolEnd(rawCtx: any, call: ToolCall, result: ToolResult, durationMs: number): void {
+  runOnToolEnd(rawCtx: PluginHookContext, call: ToolCall, result: ToolResult, durationMs: number): void {
     this.fanout(rawCtx, "onToolEnd", (p, ctx) => p.onToolEnd?.(ctx, call, result, durationMs));
   }
 
   /** Прогоняет текстовый чанк через трансформы; возвращает (возможно заменённый) чанк. */
-  runOnText(rawCtx: any, chunk: string): string {
+  runOnText(rawCtx: PluginHookContext, chunk: string): string {
     let out = chunk;
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.active()) {
@@ -188,7 +188,7 @@ export class PluginDispatcher {
   }
 
   /** Прогоняет мета-чанк через трансформы; возвращает (возможно заменённый) чанк. */
-  runOnMeta(rawCtx: any, chunk: string): string {
+  runOnMeta(rawCtx: PluginHookContext, chunk: string): string {
     let out = chunk;
     const ctx = this.withHost(rawCtx);
     for (const plugin of this.active()) {
@@ -200,7 +200,7 @@ export class PluginDispatcher {
     return out;
   }
 
-  runOnTurnEnd(rawCtx: any, summary: TurnSummary): void {
+  runOnTurnEnd(rawCtx: PluginHookContext, summary: TurnSummary): void {
     this.fanout(rawCtx, "onTurnEnd", (p, ctx) => p.onTurnEnd?.(ctx, summary));
   }
 }

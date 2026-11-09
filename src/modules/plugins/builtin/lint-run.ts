@@ -29,11 +29,12 @@ export function markLintBinaryMissing(baseDir: string, lintScript: string): void
 const MISSING_BINARY_RE =
   /command not found|not recognized|не является внутренней|не распознан|не є внутрішньою|".+?" не является/i;
 
-export function isMissingBinaryError(err: any, combinedOutput: string): boolean {
+export function isMissingBinaryError(err: unknown, combinedOutput: string): boolean {
   // 127 = POSIX sh "command not found"; 9009 = Windows cmd.exe "is not
   // recognized" — оба авторитетны независимо от кодировки вывода.
-  if (err.status === 127 || err.status === 9009) return true;
-  if (err.code === "ENOENT") return true;
+  const rec = err as { status?: unknown; code?: unknown } | null | undefined;
+  if (rec?.status === 127 || rec?.status === 9009) return true;
+  if (rec?.code === "ENOENT") return true;
   return MISSING_BINARY_RE.test(combinedOutput);
 }
 

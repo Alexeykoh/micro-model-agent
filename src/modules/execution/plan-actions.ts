@@ -2,6 +2,7 @@
 import type { ToolResult, ToolContext } from "../../tools/types";
 import { t } from "../../i18n/index";
 import { PlanCreator } from "./planner";
+import { parseCheck } from "./plan-checks";
 import { checkPlanCoverage } from "./plan-coverage";
 import type { PlanToolDeps } from "./plan-tool";
 import { updatePlanStep } from "./step-update";
@@ -35,7 +36,21 @@ function actionList(deps: PlanToolDeps): ToolResult {
   };
 }
 
-function actionRePlan(deps: PlanToolDeps, _ctx: ToolContext, args: Record<string, unknown>): ToolResult {
+/** Снапшоты контента для шагов с `file-modified:<path>` (остальным — undefined). */
+async function snapshotBaselines(
+  deps: PlanToolDeps,
+  checks: string[],
+): Promise<(string | null | undefined)[]> {
+  return Promise.all(
+    checks.map(async (c) => {
+      const parsed = parseCheck(c);
+      if (parsed?.kind !== "file-modified") return undefined;
+      return deps.verifier.snapshotFile(parsed.target);
+    }),
+  );
+}
+
+async function actionRePlan(deps: PlanToolDeps, _ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
   if (!deps.trackerRef.current) {
     return { success: false, output: deps.noActivePlanMessage() };
   }
@@ -49,11 +64,13 @@ function actionRePlan(deps: PlanToolDeps, _ctx: ToolContext, args: Record<string
   if (checked.error) {
     return { success: false, output: checked.error };
   }
+  const baselines = await snapshotBaselines(deps, checked.checks ?? []);
   const replanned = PlanCreator.replan(
     oldPlan,
     newSteps,
     args.title ? String(args.title) : undefined,
     checked.checks ?? [],
+    baselines,
   );
   const keptCount = replanned.steps.length - newSteps.length;
   deps.setPlan(replanned);
@@ -68,7 +85,7 @@ function actionRePlan(deps: PlanToolDeps, _ctx: ToolContext, args: Record<string
   };
 }
 
-function actionCreate(deps: PlanToolDeps, ctx: ToolContext, args: Record<string, unknown>): ToolResult {
+async function actionCreate(deps: PlanToolDeps, ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
   const title = String(args.title || "Task Plan");
   const steps = Array.isArray(args.steps) ? args.steps.map(String) : [];
   if (steps.length === 0) {
@@ -128,7 +145,8 @@ function actionCreate(deps: PlanToolDeps, ctx: ToolContext, args: Record<string,
   }
 
   deps.preserveActive();
-  const plan = PlanCreator.createPlan(title, steps, deps.baseDir, parsed.kinds ?? [], checked.checks ?? []);
+  const baselines = await snapshotBaselines(deps, checked.checks ?? []);
+  const plan = PlanCreator.createPlan(title, steps, deps.baseDir, parsed.kinds ?? [], checked.checks ?? [], baselines);
   deps.setPlan(plan);
   const display = PlanCreator.toPromptBlock(plan, 0);
   let output = t("plan.created", {

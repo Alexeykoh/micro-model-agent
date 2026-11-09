@@ -5,9 +5,9 @@ import type { ConfigKeyDef } from "./registry";
 import { DEFAULTS } from "./defaults";
 import { bool, enumOf, int, share, str } from "./registry-extra-factories";
 
-type ReasoningBound = "low" | "medium" | "high";
+type ReasoningBound = "minimal" | "low" | "medium" | "high" | "xhigh";
 
-const REASONING_BOUNDS = ["low", "medium", "high"] as const;
+const REASONING_BOUNDS = ["minimal", "low", "medium", "high", "xhigh"] as const;
 
 export const PROVIDER_EXTRA_DEFS: ConfigKeyDef[] = [
   bool("provider.fallback", "provider", false,
@@ -32,9 +32,9 @@ export const PROVIDER_EXTRA_DEFS: ConfigKeyDef[] = [
   enumOf("contextBudget.policy", "budget", ["legacy", "v2"] as const, true,
     (c) => c.contextBudget.policy ?? DEFAULTS.contextBudget.policy,
     (c, v) => { c.contextBudget.policy = v as "legacy" | "v2"; }),
-  enumOf("contextBudget.compactionSummary", "budget", ["off", "ledger"] as const, true,
+  enumOf("contextBudget.compactionSummary", "budget", ["off", "ledger", "llm"] as const, true,
     (c) => c.contextBudget.compactionSummary ?? DEFAULTS.contextBudget.compactionSummary,
-    (c, v) => { c.contextBudget.compactionSummary = v as "off" | "ledger"; }),
+    (c, v) => { c.contextBudget.compactionSummary = v as "off" | "ledger" | "llm"; }),
   int("contextBudget.overflowCooldown", "budget", 1, 20, 1, true,
     (c) => c.contextBudget.overflowCooldown ?? DEFAULTS.contextBudget.overflowCooldown,
     (c, v) => { c.contextBudget.overflowCooldown = v as number; }),

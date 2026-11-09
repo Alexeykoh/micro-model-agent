@@ -1,219 +1,183 @@
 # TODO — Micro Models Agent
 
-> **Актуально на 2026-11-04** (`dev` @ 0.24.0).
+> **Актуально на 2026-11-09** (сверено с кодом; `dev`).
 >
 > Здесь только **открытая** работа. Закрытые пункты с обоснованиями и ссылками на
-> гейты сохранены снимком в [`docs/archive/todo-2026-11-04.md`](./docs/archive/todo-2026-11-04.md).
+> гейты сохранены снимками в [`docs/archive/`](./docs/archive/) — последний
+> полный снимок [`todo-2026-11-04.md`](./docs/archive/todo-2026-11-04.md);
+> архивы закрытых 1.1–1.14 (вкл. webui-UX 1.13 и harness 1.14, закрыты 2026-11-09)
+> — в git-истории TODO.md и по спеке
+> [`2026-11-06-webui-pause-resume`](./docs/specs/2026-11-06-webui-pause-resume-design.md) /
+> [`2026-11-08-agent-harness`](./docs/specs/2026-11-08-agent-harness-design.md) /
+> [`2026-11-09-nested-agents-md`](./docs/specs/2026-11-09-nested-agents-md-design.md).
 > Долгосрочная история — `CHANGELOG.md` и [`docs/agents/feature-history.md`](./docs/agents/feature-history.md).
 > Отложенные решения — [`docs/agents/debt.md`](./docs/agents/debt.md) (правило 9, pay-once).
+>
+> **Проверка 2026-11-09:** все пункты ниже сверены с кодом. Частично сделанное
+> отмечено (`уже есть: … / осталось: …`), чтобы не делать дважды.
 
 ---
 
 ## 1. Открыто сейчас
 
-> Разделы 1.1–1.4 и 1.7–1.11 закрыты и перенесены в архивный снимок. Нумерация
-> оставшихся разделов сохранена, чтобы не ломать ссылки вида `TODO §1.12` в коде,
-> спеках и тестах.
+> Ранее 1.1–1.4, 1.6 (Learning Phase B — удалена решением пользователя 2026-11-09),
+> 1.7–1.11, 1.12 (mma web хвосты), 1.13 (mma web UX), 1.14 (harness) — закрыты и
+> убраны в архив 2026-11-09. Нумерация `§1.5` сохранена, чтобы не ломать ссылки
+> вида `TODO §1.12` в коде/спеках/тестах (старые ссылки ищите в архиве).
 
 ### 1.5 Мелкие хвосты исполненных планов
 
-- [ ] Режим компакции `llm`: `contextBudget.compactionSummary` допускает только
-      `off|ledger` (`src/config/registry-extra.ts:182`). Файл
-      `src/core/compaction-summary.ts` **есть и используется** в `ledger`-режиме —
-      не хватает именно LLM-режима (сводка моделью) и его проводки в конфиг.
-- [ ] Живая приёмка леджера контекста: повторный прогон `hard-multi-extreme` с acceptance
-      «`NEEDLE_A_111`/`B_222`/`C_333`, decoy 0, `exit=0`, notes-файл с `path:line`, блок
-      с `[Notes:`» (план [`2026-10-14-context-ledger`](./docs/archive/plans/2026/2026-10-14-context-ledger.md), Task 6).
-
-### 1.6 Качество памяти и самообучение (план [`docs/plans/2026-08-12-memory-quality-and-learning.md`](./docs/plans/2026-08-12-memory-quality-and-learning.md))
-
-План **в работе**: Phase A (валидатор памяти) и Phase C (языковые адаптеры) закрыты
-2026-11-03, Phase B (обучение) открыта.
-
-- [ ] **Фаза 2 — обучение:** `src/modules/learning/**` (`types/trace/validator/generator/cli/module`),
-      подкоманда `mma learn`, регистрация `LearningModule` в bootstrap.
-
-### 1.12 mma web — хвосты тестовых прогонов 2026-11-02
-
-Отчёт: [`docs/archive/reports/web-agent-test-report-2026-11-02.md`](./docs/archive/reports/web-agent-test-report-2026-11-02.md).
-Остальные находки прогонов (MCP-теги, path-гейт, pre-write LSP, post-build, финальный
-typecheck, loopback, `--isolated`, локальные заглушки) закрыты и перенесены в архив.
-
-- [ ] **Вложенный `AGENTS.md` и `.mma/`** — mma не читает `site/AGENTS.md` Next 16, а
-      `.mma/` в корне ломает `create-next-app .`. Долг F-01/F-06.
-
-### 1.13 mma web — UX-задачи (добавлено 2026-11-04)
-
-- [x] **Пауза агента с возобновлением по кнопке** — остановить ход агента и
-      продолжить его по нажатию кнопки в интерфейсе. Реализовано на ветке
-      `feat/webui-ux-1-13` по спеке
-      [`docs/specs/2026-11-06-webui-pause-resume-design.md`](./docs/specs/2026-11-06-webui-pause-resume-design.md):
-      гейт на границе итераций (`loop-run.ts`), `POST /api/pause`, проекция
-      `pausedIds` в SSE `state`, кнопка в композере перед стоп/отправкой
-      (`#pauseBtn`, иконки pause/play — как у send-кнопки). Тесты:
-      `tests/core/agent-pause.test.ts`, `tests/webui-pause.test.ts`,
-      `tests/webui-pause-dom.test.ts`. Не-durable (в памяти процесса) —
-      durable `interrupt()` остаётся в P1 дорожной карты.
-- [x] **Цепочка базовых веток в чипе `⎇` (строка под полем ввода)** — чип ветки
-      в футере (`footer.ts:buildGitChips`) теперь показывает путь наследования
-      суxo, стрелками: `⎇ main → dev → feat/x`; полная цепочка дублируется в
-      title чипа (`from: …`). Источник — reflog создания ветки
-      (`branch: Created from <ref>`, фолбэк `Created from HEAD` — первый вход
-      в ветку из reflog HEAD): модуль `src/modules/webui/git/base-branch.ts`,
-      цепочка строится рекурсивно (кап глубины 6, защита от цикла) и
-      мемоизируется в кеше снимков (`snapshot-cache.ts:baseMemo`) — запись
-      создания неизменна, git не спрашивается каждый тик. Невестно/не-репо/
-      detached — чип остаётся `⎇ feat` без выдумывания. Гварды —
-      `tests/modules/webui/git-base-branch.test.ts` (реальный git во временном
-      репозитории) + кейсы чипа в `tests/webui-workspace-footer.test.ts`.
-- [x] **Заголовок вкладки браузера — имя текущего чата** — `mma web` держал
-      статичный `<title>MMA Web</title>`. Теперь `document.title` следует за
-      активной сессионной вкладкой: `<имя чата> · MMA`, без активной сессии /
-      для мёртвой вкладки — базовый `MMA Web`. Точка синхронизации одна —
-      `renderTabstrip` (`src/modules/webui/assets/js/session/tabs-strip.ts`,
-      чистая функция `pageTitle`): через неё проходят и переключение вкладок,
-      и переименование (автонейминг сервера приходит в `updateTabName`).
-      Гвард — `tests/webui-doc-title-dom.test.ts`.
-- [x] **Звуки уведомлений — включить по умолчанию + пункт в первой настройке** —
-      сейчас `ui.sounds.enabled` выключен по умолчанию: дефолт в
-      `src/config/defaults.ts:205` (`sounds: { enabled: false, done: true,
-      question: true, failed: true }`) и fallback в
-      `src/config/registry-sounds.ts:17` (`key !== "enabled"`); зеркало дефолтов —
-      `src/modules/webui/assets/js/sounds.ts:25`, гвард —
-      `tests/webui-sounds.test.ts`. Сделать `enabled: true` во всех четырёх местах
-      (и обновить гвард/тесты, сверяющие дефолт). Дополнительно: вынести выбор
-      звуков уведомлений в первую настройку агента (onboarding/meet —
-      `src/modules/onboarding/`), чтобы пользователь при старте явно решал,
-      включать ли звуки; ответ пишется в `ui.sounds.enabled` через ConfigStore.
-      Проверка — живой прогон `mma web` (звук по завершении хода/вопросу) и
-      `bun test tests/webui-sounds.test.ts`.
-- [x] **Вкладка «Изменения»: не подтягивает свежий git-стейт** — после фактических
-      изменений рабочего дерева (правки/`git add`/commit) открытая вкладка Changes
-      показывает устаревший список, пока не переключить вкладку. Причина: прирост
-      `filesRevision` на клиенте вызывает только `sidebarFilesChanged()`
-      (`src/modules/webui/assets/app-state.ts:58`), а предопределённый
-      `sidebarGitChanged()` (`src/modules/webui/assets/js/sidebar/git.ts:167`,
-      перечитывает `/api/git/changes`) нигде не вызывается — мёртвый код. Сервер
-      снимок инвалидирует по той же ревизии (`src/modules/webui/module.ts:150`,
-      `gitPeek`), т.е. свежий стейт доступен — клиент не запрашивает. Починить
-      реактивность: вызывать `sidebarGitChanged()` на рост `filesRevision` (как
-      `sidebarFilesChanged`), обновлять и индикатор вкладки
-      (`sidebarGitIndicator`, `core.ts:126`). Нужен живой прогон в `mma web`.
-- [x] **Сайдбар: компактный набор вкладок** — видимыми оставить вкладки
-      «Сессия», «Файлы», «Изменения», «Субагенты»; остальные спрятать за кнопкой со
-      «стрелочками вправо»: клик показывает все вкладки, кнопка переворачивается
-      «влево», повторный клик скрывает раскрытое.
-- [x] **Адаптивные табы сайдбара (подписи по контейнеру)** — `.sb-tabs` стал
-      size-контейнером (`container: sbtabs / inline-size`, `flex-wrap:nowrap`);
-      подписи `.sb-lab` скрыты по умолчанию и включаются `@container`-порогами:
-      свёрнутый набор — от 450px, раскрытый — от 880px (класс `sb-expanded`
-      навешивает `sidebar/compact-tabs.ts`). Без ellipsis и переноса: не
-      хватает места — только иконки, не влазятся и они — горизонтальный
-      скролл полосы. Правка канона U7 («labels always visible») по явному
-      требованию; активная вкладка подпись не теряет (`.sb-name`). Гвард —
-      `tests/webui-sidebar-tabs-css.test.ts`.
-- [x] **Вкладка «Файлы»: предпросмотр в основном окне** — перенести просмотр
-      файлов из сайдбара в основное окно как вкладку (как в IDE).
-- [x] **Адаптивность заголовка блока критика** — свёрнутая строка проверки
-      (`.think.critic-block > button.think-h`, `src/modules/webui/assets/styles.css:307`,
-      рендер `src/modules/webui/assets/js/feed/critic-block.ts:onCritic`) ломается на
-      узкой ширине: `.think-h` — `display:flex; gap:8px` без `flex-wrap`, а `.lab`
-      (длинная строка `web.feed.critic_head` + статус «замечание/критично») без
-      `min-width:0`/`overflow`, поэтому наезжает на `.tog`. Сделать адаптивным:
-      `min-width:0` + ellipsis на `.lab`, `flex: 0 0 auto` на глиф/тоггл, либо
-      перенос на узких экранах.
-- [x] **Попап `@`: релевантный файл не первый в списке** — при вводе `@` в
-      композере (`src/modules/webui/assets/js/session/mentions.ts`) список
-      строится из `/api/search?names=1`, а сервер отдаёт пути в алфавитном
-      порядке обхода (`src/modules/webui/file/search.ts:148` —
-      `entries.sort(localeCompare)` по имени), без ранжирования по релевантности
-      совпадения. Самый подходящий файл оказывается внизу списка, а Tab/Enter
-      вставляет первый (`acceptMention(index)`, `index = 0` по умолчанию).
-      Нужно сортировать/ограничивать выдачу по релевантности (префикс имени >
-      подстрока имени > подстрока пути, кратчайший путь — выше) хотя бы для
-      `namesOnly`-режима, чтобы первым шёл наиболее вероятный выбор.
-- [x] **После обновления чат не форматируется в Markdown** — сообщения в ленте
-      выводятся «сырым» текстом, хотя разметка (заголовки, списки, код)
-      присутствует. Проверить рендер потока (`src/modules/webui/assets/js/feed/stream.ts`
-      — `mountMarkdown`, `feed/core.ts`, нормализация `md-normalize.ts`):
-      регресс после обновления — вероятно, ответ перестал проходить через
-      `renderMarkdown`/`mountMarkdown` (например, вставляется как `textContent`
-      или `mountMarkdown` падает молча). Нужен живой прогон в `mma web` для
-      воспроизведения. **Итог проверки:** статически путь цел — `onText` рендерит
-      через `mountMarkdown`, история через `renderMarkdown`, `md.js`/`smd.js`
-      доставляются настоящими. Контракт зафиксирован e2e-тестом
-      `tests/webui-md-feed-e2e.test.ts` (4/4). Дефект в живом прогоне не
-      воспроизведён; если повторится — начинать с журнала консоли браузера
-      (падает ли ESM-граф).
-- [x] **Редактирование запланированных сообщений в поп-апе** — очередь сейчас
-      только показывает строки с кнопками «▶ запустить» и «× отменить»
-      (`src/modules/webui/assets/js/session/queue.ts:renderQueueStrip`), текста
-      сообщения изменить нельзя. Нужен поп-ап по клику на строку очереди: поле с
-      текстом (и приложенными картинками) + «Сохранить/Отмена». Сервер действия
-      не имеет — есть только `POST /api/queue/cancel` и `POST /api/queue/start`
-      (`src/modules/webui/session/queue-api.ts`), значит нужен третий эндпоинт
-      `POST /api/queue/edit {sessionId, id, text}` + обновление локального
-      `PendingMessage` (и текста серверной записи, иначе после `turn_end` в ленту
-      уйдёт старый текст).
-
----
-
-## 2. Действия пользователя (не задачи для агента)
-
-- [ ] Вернуть `contextWindow 64000` в реальном конфиге (`~/.mma`) — сейчас 32768
-      (проверено 2026-10-30): `/config contextWindow 64000`.
+- [x] Режим компакции `llm` — **закрыто 2026-11-09** веткой `feat/compaction-llm`
+      (спека [`2026-11-09-compaction-llm-design`](./docs/specs/2026-11-09-compaction-llm-design.md)):
+      `contextBudget.compactionSummary: off|ledger|llm` (default `ledger`),
+      helper `summarizeOldTurns` (`src/core/context/compaction-llm-summary.ts`, bounded
+      256 tok, timeout 8000мс, кэш `compaction-summaries` по sha256, fail-open → ledger-only),
+      инъекция `[LLM summary]` в блок компакции, async-проводка через `CompactionService`
+      (пролог/финалайзер `await`). Гварды — `tests/compaction-llm-summary.test.ts` (6),
+      `tests/arch/double-honesty.test.ts` (записи новых методов).
+- [x] Живая приёмка леджера контекста — **закрыто 2026-11-09** прогоном
+      `hard-multi-extreme` (`_testing/live/ctx-probe/`, opencode-go `deepseek-v4.1-flash`,
+      `exit=0`, 368с, 14 компакций, сессия `ses_mw98i03e_wpgaphgvmfngbcso`):
+      агент вернул `NEEDLE_A_111` (hard-a:1800), `NEEDLE_B_222` (hard-b:3300),
+      `NEEDLE_C_333` (hard-c:900), heading `# Quarterly Infrastructure Report …`,
+      decoy count 0 (заодно верно отделил `corpus/decoy.md` от настоящего
+      `PIN_ALPHA_9F3` в big-needle:2500); `.mma/NOTES.md` содержит `path:line`
+      находки, блок компакции несёт `[Notes:` ×14 (не сырой контент).
 
 ---
 
 ## 3. Дорожная карта до продакшена
 
 > Полный gap-анализ: [`docs/archive/specs/2026/2026-09-28-production-readiness-design.md`](./docs/archive/specs/2026/2026-09-28-production-readiness-design.md).
-> Пункты — отдельные ветки от `master`; каждый требует зелёных `bun test` + `bun run quality`.
+> Пункты — отдельные ветки от `dev`; каждый требует зелёных `bun test` + `bun run quality`.
+> `master` не коммитим/не пушим (ветка релиза).
 
 ### P0 — без этого в прод нельзя
 
-- [ ] **Изоляция исполнения.** Enforcement уже в одной точке (`ToolExecutor.execute()`,
-      W2: allowlist, protected-пути, SSRF, теги, rate-limit; `bash` — `manual` + jail).
-      **Осталось:** профиль исполнения `local-trusted | sandbox` (Docker: deny-by-default
-      egress, `--read-only`, лимиты, фиксированный образ), файловые тулы под jail,
-      egress-правила для web-тулов, cert-сценарии приёмки.
-      При `sandbox` и недоступном Docker ход **падает**, а не деградирует.
-- [ ] **Durable state.** `session.jsonl` не переживает краш посреди хода:
-      опциональный checkpointer, стабильный `thread_id` <255, prune по retention,
-      long-term store с TTL.
-- [ ] **Observability (OTel).** GenAI-спаны (`gen_ai.*` v1.41), OTLP-экспорт,
-      метрики faithfulness/drift/bypass, связка trace↔session↔cost↔approvals.
-- [ ] **Evals в контуре + staged rollout.** Eval-набор с trajectory-оценкой,
-      ensemble-судья + human-gold, eval-gate в CI, shadow→canary→percentage→full,
-      скоркард (success/cost/p95/safety).
+- [x] **Изоляция исполнения.** **Закрыто 2026-11-09** двумя ветками
+      (спека [`2026-11-09-execution-sandbox-design`](./docs/specs/2026-11-09-execution-sandbox-design.md)):
+      `execution.profile: local-trusted|sandbox` (дефолт прежний) + `execution.image`
+      (`oven/bun:1.3.14`); bash в sandbox → `docker run --read-only`
+      `--network none --cap-drop ALL -u 1000:1000`, mount только baseDir→`/work`,
+      без ключей провайдера; fail-closed при недоступном Docker
+      (`execution.sandbox_unavailable`); файловые тулы — за существующим jail;
+      `Dockerfile` в корне + cert-acceptance живьём
+      (`tests/bash-docker-live.test.ts`: mount виден хосту, запись вне mount
+      запрещена, egress запрещён).
+- [x] **Durable state.** **Закрыто 2026-11-09** четырьмя ветками:
+      (1) `thread_id` (`thr_<16 hex>` в `SessionMeta`, спека
+      [`2026-11-09-thread-id-design`](./docs/specs/2026-11-09-thread-id-design.md));
+      (2) чекпоинтер хода `checkpoint.json` — снимок/восстановление `LoopState`
+      на границе батча, атомарный write, fail-open (спека
+      [`2026-11-09-checkpoint-design`](./docs/specs/2026-11-09-checkpoint-design.md),
+      `src/modules/session/checkpoint{,-io}.ts`);
+      (3) retention-prune `pruneByRetention(retentionDays)` (кроме активной);
+      (4) long-term TTL `memory.retentionDays` (0 = без срока;
+      `filterExpiredEntries`/`pruneExpired`, at-rest шифрование не трогается).
+      Плюс честные сплиты ради потолка 300 строк
+      (`checkpoint-io.ts`, `manager-lifecycle.ts`). Гварды — `tests/session/*`.
+- [x] **Observability (OTel).** **Закрыто 2026-11-09** двумя ветками + fix
+      (speки [`2026-11-09-otel-design`](./docs/specs/2026-11-09-otel-design.md)):
+      адаптер `gen_ai.*` (`src/modules/otel/adapter.ts`), OTLP-JSON-экспорт
+      (`fetchOutbound`-политика, fail-silent), декораторы `llm.chat`/`tool.call`,
+      workflow-спаны `agent.run`, метрики `tool.execute`/`llm.chats`/
+      `executor.denied` (bypass), `gen_ai.faithfulness.judge` (pass/contradiction/
+      degraded), drift контекстного окна vs конфигурации (context-probe);
+      связка `threadId`+`sessionId` на каждом спане. W5/W6-сигналы остаются
+      отдельным долгом `observability-w5-w6`.
+- [x] **Evals в контуре + staged rollout.** **Закрыто 2026-11-09** тремя ветками:
+      скоpковер + trajectory-чекер + eval-gate в CI (спека
+      [`2026-11-09-evals-design`](./docs/specs/2026-11-09-evals-design.md),
+      bundled-манифест, gate ≥80%/safety=0),
+      human-gold фикстуры (`tests/evals/gold-v1.json` по живому прогону
+      hard-multi-extreme), staged-бакет (`rollout.ts`:
+      shadow→canary→percentage→full при живом применении
+      `applyStagedRollout` в session-runner), ensemble-судья
+      (`EnsembleJudge`: большинство голосов, fail-open degraded).
 
 ### P1 — управляемость
 
-- [ ] **Cost/LLM-gateway.** Per-run бюджет, `max_turns` hard-stop, per-tenant caps
-      до вызова модели, intent-routing, cache-anchoring промпта.
-- [ ] **MCP/plugin supply-chain.** OAuth 2.1 per-user, gateway с allowlist/rate-limit,
-      signed skill-манифесты/SBOM, актуализация спеки MCP.
-- [ ] **HITL + kill-switch.** Durable `interrupt()`, escalation по impact,
-      oversight-панель, глобальный kill-switch (`question`/`approve` не переживают рестарт).
-- [ ] **Поставка и эксплуатация.** Dockerfile/`K8s`/`/healthz`, релиз-артефакт,
-      манифест (prompt+model+tools+evals), откат одной командой, RBAC/тенанты,
-      SLO + runbook.
+> ⚠️ **Ограничитель: монолит UI + runtime в одном процессе.**
+> Сейчас `CLI/REPL/WebHost` и `Agent` общаются in-process через `Host`
+> (`src/core/host.ts`). Пока UI (терминал/веб) живёт в том же процессе,
+> что и исполнитель, недоступны: control plane с подписанной политикой,
+> thin-режим, отзыв доступа, централизованный аудит и разные клиенты
+> одного демона. **Разделение — блокер для дальнейшего развития**
+> (см. идею [`2026-11-09-mma-enterprise-separate-version.md`](./docs/ideas/2026-11-09-mma-enterprise-separate-version.md)
+> §3.5, волна -1 в §13). Без сетевого контракта `Host`/`HostStateSnapshot`/
+> `OutputEvent` нельзя строить Enterprise поверх монолита — любой
+> «enterprise-флаг» в монолите локально пропатчится.
+
+- [x] **Разделение монолита UI / runtime (блокер).**
+      **Закрыто 2026-11-09** веткой `feat/daemon-wire` (спека
+      [`2026-11-09-daemon-wire-design`](./docs/specs/2026-11-09-daemon-wire-design.md),
+      волна -1): wire-транспорт `mma serve` (Agent Service API `/v1`+SSE,
+      daemon переживает рестарт UI через `session.jsonl`/`checkpoint.json`/
+      `interrupt.json` + SSE pull-resume), версионирование протокола
+      (`PROTOCOL_VERSION="1"`, `/v1/health.protocol`, клиент отвергает чужой
+      major), токен в файле `~/.mma/daemon.token` (0600, fallback OS keychain),
+      thin-клиент `DaemonClient` (`src/modules/daemon/protocol.ts`).
+      Полное разделение REPL/TUI в thin-клиенты — вне волны -1 (web уже thin).
+- [x] **Cost/LLM-gateway.** **MVP закрыт 2026-11-09**: per-run hard-stop
+      `cost.maxRunUsd` (целые USD; `stopReason=cost_budget` через форс-финал,
+      `src/core/agent/cost-budget.ts` + проверка в loop-run). `max_turns`
+      hard-stop уже был (`maxToolIterations`), intent-routing кодовая
+      (`ProviderManager.pickFor`), cache-anchoring — prefix-monitor (был),
+      per-tenant — процессом (silo).
+- [x] **MCP/plugin supply-chain.**
+      **Закрыто 2026-11-09** тремя ветками: (1) gateway rate-limit
+      (`rateLimitMs`, `tool.mcp_rate_limited`) + integrity-манифест скиллов
+      (sha256, fail-closed) + SBOM; (2) OAuth 2.1 per-user
+      (`src/modules/mcp/oauth.ts`: tokenFile, refresh grant, 401-retry,
+      спека `2026-11-09-mcp-oauth-design`); (3) signed-манифесты скиллов
+      (Ed25519 `skills-manifest.sig.json` + pubkey, `scripts/sign-skills-manifest.ts`,
+      fail-closed при неверной подписи) + spec-синк (`docs/plugins.md`,
+      сайт `#mcp`). Disable плагина ≠ sandbox (зафиксировано в `AGENTS.md`).
+- [x] **HITL + kill-switch.**
+      **Закрыто 2026-11-09** двумя ветками: (1) durable `interrupt()`
+      (`interrupt.json` в каталоге сессии, `Agent.pause/resume` персистят,
+      рестарт восстанавливает паузу) + глобальный kill-switch
+      (`hitl.killSwitch`, стоп на границе итерации); (2) escalation по impact
+      (`src/modules/hitl/escalation.ts`: `approve(impact=low|medium|high|critical)`,
+      `hitl.autoApproveLow`) + oversight-панель (`GET /v1/oversight`:
+      kill-switch, pending-вопросы, audit-валидность, adversarial-хвост;
+      регистрация в OpenAPI + гвард `openapi.test.ts`).
+- [x] **Поставка и эксплуатация.**
+      **Закрыто 2026-11-09** веткой `feat/deployment-ops`: Dockerfile сервиса
+      (`deploy/Dockerfile.service`, `mma serve`, HEALTHCHECK), K8s-манифест
+      (`deploy/k8s.yaml`: RollingUpdate, probes `/healthz`+`/readyz`,
+      least-privilege RBAC Role), `/healthz`+`/readyz` алиасы
+      (`/v1/health` остаётся), манифест релиза
+      (`bun run build:release-manifest`), откат одной командой
+      (`kubectl rollout undo`), SLO + runbook (`deploy/RUNBOOK.md`),
+      RBAC/тенанты — silo-процессы + K8s RBAC (silo: 1 процесс = 1 тенант).
 
 ### P2 — зрелость
 
-- [ ] **Compliance (EU AI Act).** Append-only логи + подпись, high-risk артефакты
-      (risk file, lineage, oversight-панель, adversarial-лог Art.15), retention ≥6 мес.
-- [ ] **Внутренние хвосты.** `noExplicitAny` warn-ratchet → error; coverage-threshold
-      в CI; остаток раздутых файлов (allowlist пуст с 2026-11-03).
+- [x] **Compliance (EU AI Act).**
+      **Закрыто 2026-11-09** веткой `feat/compliance-audit`:
+      tamper-evident audit-лог (append-only JSONL + hash-chain + HMAC-ключ,
+      `src/modules/compliance/audit-log.ts`, верификация `verifyAudit`),
+      high-risk артефакты (risk-файл на сессию с tools/approvals/denied,
+      lineage model+promptHash, adversarial-лог Art.15 —
+      `src/modules/compliance/risk.ts`, oversight-панель читает их через
+      `/v1/oversight`), retention ≥6 мес. (`compliance.retentionDays=180`).
+      Итого P1+P2 дорожной карты закрыты; открыт только бэклог долгов.
+- [x] **Внутренние хвосты.** **Закрыто 2026-11-09**:
+      `noExplicitAny` warn→error ratchet'ом (144→0 в `src/`,
+      `PlatformHookContext`-контракт + `ctx: any` убраны;
+      baseline кастов поднят 36→45→47 осознанно по правилам гейта),
+      coverage-threshold в CI (`scripts/coverage-check.ts`, funcs ≥87, lines ≥90),
+      остаток раздутых файлов закрыт (`.arch-allowlist.json` пуст).
 
 ---
 
 ## 4. Бэклог
 
-- [ ] Подобрать литературу по верификации/критикам (вторая половина пункта
-      «контр-агент для проверки работы»; сам контр-агент сделан — `src/modules/critic/`).
 - [ ] Долги из [`docs/agents/debt.md`](./docs/agents/debt.md) — каждый оплачивается
-      по своему триггеру (правило 9).
+      по своему триггеру (правило 9). Активных сейчас ~22 записи (реестр сверялся
+      2026-10-20; оплата — только вместе с якорем `DEBT(<id>)` и выполненным
+      критерием выхода).
 
 ---
 
@@ -221,5 +185,5 @@ typecheck, loopback, `--isolated`, локальные заглушки) закр
 
 - Публикация — **только через GitHub Releases** (npm publish не используется).
 - Версии в бете — только `0.x.y` (`1.0.0` запрещён, гвард `tests/version-beta.test.ts`).
-- Релиз = обновление `CHANGELOG.md` + `package.json` → тег `vX.Y.Z` → GitHub Actions.
-
+- Релиз = обновление `CHANGELOG.md` + `package.json` → тег `vX.Y.Z` → GitHub Actions
+  (`.github/workflows/release.yml`, артефакты на 5 платформ).

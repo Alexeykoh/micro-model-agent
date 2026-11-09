@@ -2,9 +2,8 @@
  * Контракт браузер-модуля для `ModuleHost` (INV-2/5/7).
  *
  * Не критичен (без браузера агент работает, веб-тулы деградируют). Держит
- * внешний процесс-бридж и сессию, поэтому объявляет `teardown`. `health()` пока
- * не реализован: дешёвой пробы Chromium нет (проверка playwright живёт в фазе
- * окружения), а подделывать «ok» хуже отсутствия.
+ * внешний процесс-бридж и сессию, поэтому объявляет `teardown`. `health()` —
+ * проба Chromium в `setup()` (`probe()`): не установлен → degraded с командой.
  */
 import type { ModuleDef } from "../../core/module-host";
 import { closeBrowserSession } from "../../tools/browser";
@@ -15,7 +14,9 @@ export function browserModuleDef(browser: BrowserModule): ModuleDef {
   return {
     name: "browser",
     critical: false,
+    setup: () => browser.probe(),
     teardown: () => closeBrowserSession(),
+    health: () => browser.health(),
     tools: () => browser.getToolDefinitions(),
     promptBlocks: () => {
       const block = browser.getSystemPromptBlock();

@@ -26,9 +26,6 @@ export function settleChildClose(
     resolve({ stdout, stderr });
     return;
   }
-  const err: any = new Error(message);
-  err.stdout = stdout;
-  err.stderr = stderr;
-  err.status = code;
+  const err = Object.assign(new Error(message), { stdout, stderr, status: code });
   reject(err);
 }

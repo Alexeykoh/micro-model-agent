@@ -102,6 +102,10 @@ export interface MCPServerConfigEntry {
   headers?: MCPHeader;
   enabled?: boolean;
   timeout?: number;
+  /** Rate-limit gateway: мин. мс между вызовами одного сервера (0 — без лимита). */
+  rateLimitMs?: number;
+  /** OAuth 2.1 per-user (spec 2026-11-09-mcp-oauth-design). */
+  oauth?: import("../modules/mcp/oauth").OAuthConfig;
 }
 
 export interface BrowserToolConfig {
@@ -156,7 +160,7 @@ export interface UiConfig {
   /** Режим оформления веб-UI: `dark` | `light` | системный `auto`. */
   themeMode?: ThemeMode;
   /** Звуки веб-UI: мастер и флаги событий (spec 2026-10-31-webui-sounds). */
-  sounds?: { enabled?: boolean; done?: boolean; question?: boolean; failed?: boolean };
+  sounds?: { enabled?: boolean; done?: boolean; question?: boolean; failed?: boolean; volume?: number };
 }
 
 /** Мастер-выключатель веб-поиска: при false web_search отвечает "disabled". */

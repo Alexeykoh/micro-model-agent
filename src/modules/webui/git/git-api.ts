@@ -1,4 +1,3 @@
-// DEBT(git-push-egress-ungated): push не под outbound-политикой (как bash);
 // DEBT(git-actions-ui-v2): stage/commit из веб-вкладки — следующая итерация
 // (read-only v1, спека git-workflow §6.1/§11).
 // Git-роуты веба (спека git-workflow §6.1): **только чтение**, только GET.

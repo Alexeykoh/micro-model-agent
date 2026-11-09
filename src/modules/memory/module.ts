@@ -109,6 +109,19 @@ export class MemoryModule implements AgentModule {
     };
   }
 
+  /** Честный health: нечитаемый стор → degraded с причиной (INV-6). */
+  health(): { status: "ok" | "degraded" | "failed"; reason?: string } {
+    try {
+      this.store.getPreferences();
+      return { status: "ok" };
+    } catch (err) {
+      return {
+        status: "degraded",
+        reason: `memory store unreadable: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  }
+
   /** Доступ к underlying-хранилищу (для команд `/memory`, тестов). */
   getStore(): MemoryStore {
     return this.store;

@@ -72,7 +72,8 @@ describe("gate: test locale does not leak across files", () => {
     expect(resetsLocale(clean)).toBe(true);
   });
 
-  it("every file that sets a non-default locale resets it in the same file", () => {
+  // Чтение 800+ тестовых файлов на Windows — дефолтные 5с не хватает.
+  it("every file that sets a non-default locale resets it in the same file", { timeout: 30000 }, () => {
     const offenders: string[] = [];
     for (const f of files) {
       const text = readFileSync(f, "utf-8");

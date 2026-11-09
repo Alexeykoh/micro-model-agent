@@ -28,7 +28,7 @@ export class LspModule implements AgentModule {
   private config: LspConfig;
   private client: LspClient;
   /** Здоровье серверов: падения, пауза восстановления, прогрев в фоне. */
-  private health = new LspHealth();
+  private healthState = new LspHealth();
   private logger: LspClientLogger | null = null;
   /** Корень проекта для фонового прогрева на старте сессии. */
   private readonly baseDir: string;
@@ -68,6 +68,17 @@ export class LspModule implements AgentModule {
     return { enabled: this.config.enabled !== false, offline: this.config.offline === true };
   }
 
+  /** Честный health: серверы на паузе восстановления → degraded с ключами (INV-6). */
+  health(): { status: "ok" | "degraded" | "failed"; reason?: string } {
+    if (this.config.enabled === false) return { status: "ok" };
+    const blocked = this.healthState.blocked();
+    if (blocked.length > 0) {
+      const keys = blocked.map((b) => `${b.key} (+${Math.round(b.retryInMs / 1000)}s)`).join(", ");
+      return { status: "degraded", reason: `lsp servers blocked: ${keys}` };
+    }
+    return { status: "ok" };
+  }
+
   /** Поиск символов (`workspace/symbol`); без сервера — пустой список. */
   async workspaceSymbol(
     query: string,
@@ -88,7 +99,7 @@ export class LspModule implements AgentModule {
 
   /** Сбросить паузы восстановления (напр. после /lsp restart). */
   resetDisabledServers(): void {
-    this.health.resetAll();
+    this.healthState.resetAll();
   }
 
   /**
@@ -116,17 +127,17 @@ export class LspModule implements AgentModule {
 
   /** Серверы на паузе восстановления: ключ и сколько ждать (для `/lsp status`). */
   getBlockedServers(): Array<{ key: string; retryInMs: number }> {
-    return this.health.blocked();
+    return this.healthState.blocked();
   }
 
   /** Список ключей серверов на паузе (совместимость с `/lsp status`). */
   getDisabledServers(): string[] {
-    return this.health.disabledKeys();
+    return this.healthState.disabledKeys();
   }
 
   /** Счётчики падений по серверам. */
   getFailureCounts(): Map<string, number> {
-    return this.health.counts();
+    return this.healthState.counts();
   }
 
   /**
@@ -144,12 +155,12 @@ export class LspModule implements AgentModule {
 
   /** Тест-хук: есть ли серверы на паузе восстановления. */
   isLspDisabled(): boolean {
-    return this.health.disabledKeys().length > 0;
+    return this.healthState.disabledKeys().length > 0;
   }
 
   /** Тест-хук: стоит ли сервер на паузе восстановления. */
   isServerDisabled(key: string): boolean {
-    return this.health.isDisabled(key);
+    return this.healthState.isDisabled(key);
   }
 
   /** Прогрев применимых серверов проекта в фоне (старт сессии). */
@@ -160,7 +171,7 @@ export class LspModule implements AgentModule {
       config: this.config,
       baseDir: this.baseDir,
       client: this.client,
-      health: this.health,
+      health: this.healthState,
       logger: this.logger,
       log: (msg, meta) => this.log(msg, meta),
       scanTimeoutMs: 5000,
@@ -178,8 +189,8 @@ export class LspModule implements AgentModule {
       onSessionEnd: () => {
         void this.client.close();
       },
-      onBeforeTool: (ctx, call) => this.checkBeforeWrite(ctx, call),
-      onAfterTool: (ctx, call, result) => this.checkAfterWrite(ctx, call, result),
+      onBeforeTool: (ctx, call) => this.checkBeforeWrite(ctx as unknown as ToolContext, call),
+      onAfterTool: (ctx, call, result) => this.checkAfterWrite(ctx as unknown as ToolContext, call, result),
     };
   }
 
@@ -197,7 +208,7 @@ export class LspModule implements AgentModule {
     return {
       config: this.config,
       client: this.client,
-      health: this.health,
+      health: this.healthState,
       logger: this.logger,
       log: (msg, meta) => this.log(msg, meta),
     };
@@ -223,7 +234,7 @@ export class LspModule implements AgentModule {
     return {
       config: this.config,
       client: this.client,
-      health: this.health,
+      health: this.healthState,
       logger: this.logger,
       log: (msg: string, meta?: Record<string, unknown>) => this.log(msg, meta),
     };
@@ -244,10 +255,11 @@ export class LspModule implements AgentModule {
       baseDir,
       config: this.config,
       client: this.client,
-      health: this.health,
+      health: this.healthState,
       logger: this.logger,
       failureNote: (key, serverConfig, message, file) =>
-        lspFailureNote(this.health, key, serverConfig, message, file),
+        lspFailureNote(this.healthState, key, serverConfig, message, file),
     };
   }
 }
+

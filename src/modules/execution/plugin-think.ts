@@ -8,12 +8,13 @@ import {
   STUCK_RECOVERY_COOLDOWN,
   STUCK_WARN_REPEAT_EVERY,
   type ExecutionPluginDeps,
+  type ExecutionThinkContext,
   resetPlanState,
   resetStepFlags,
 } from "./plugin-state";
 import { nudgePlanIfNeeded } from "./plugin-plan";
 
-export function runBeforeThink(deps: ExecutionPluginDeps, ctx: any): void {
+export function runBeforeThink(deps: ExecutionPluginDeps, ctx: ExecutionThinkContext): void {
   // Идентификатор хода (монотонный маркер из ContextManager.beginTurn()).
   const turnSeq = typeof ctx?.turnSeq === "number" ? ctx.turnSeq : 0;
   // Отложенные <system-summary> флашим первыми: видны следующему вызову
@@ -94,7 +95,8 @@ export function runBeforeThink(deps: ExecutionPluginDeps, ctx: any): void {
     deps.stuckDetector.isStuck() ||
     deps.stuckDetector.hasRepetitiveToolCalls() ||
     deps.stuckDetector.hasBashFlailing() ||
-    deps.stuckDetector.hasConsecutiveFailures()
+    deps.stuckDetector.hasConsecutiveFailures() ||
+    deps.stuckDetector.hasReadOnlyStreak()
   ) {
     const currentIter = typeof ctx.iteration === "number" ? ctx.iteration : 0;
     // Кулдаун recovery — внутри хода: прошлый ход на 30 итераций не должен

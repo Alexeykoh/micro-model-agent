@@ -10,6 +10,8 @@
 // необработанный `TypeError` в рантайме даёт `pageerror`/`console.error`.
 import type { ConsoleEntry } from "../browser/types";
 import { DEFAULT_BROWSER_CONFIG } from "../browser/types";
+import { isUrlAllowedAsync } from "../security/network-validator";
+import type { NetworkSecurityConfig } from "../../config/types";
 
 /** Бюджет одной пробы: запуск + навигация + чтение DOM. */
 export const BROWSER_CHECK_TIMEOUT_MS = 7000;
@@ -164,7 +166,11 @@ async function defaultLauncher(): Promise<BrowserProbe> {
  */
 export async function runBrowserCheck(
   target: string,
-  opts: { timeoutMs?: number; launcher?: BrowserProbeLauncher } = {},
+  opts: {
+    timeoutMs?: number;
+    launcher?: BrowserProbeLauncher;
+    networkSecurity?: NetworkSecurityConfig;
+  } = {},
 ): Promise<BrowserCheckResult> {
   const parsed = parseBrowserTarget(target);
   if (!parsed) {
@@ -173,6 +179,17 @@ export async function runBrowserCheck(
       consoleErrors: 0,
       line: line(false, 0, undefined, false),
       reason: "invalid url (expect http:// or https://)",
+    };
+  }
+
+  // SSRF/deny-политика до запуска браузера (DEBT verify-browser-url-policy).
+  const check = await isUrlAllowedAsync(parsed.url, opts.networkSecurity);
+  if (!check.allowed) {
+    return {
+      ok: false,
+      consoleErrors: 0,
+      line: line(false, 0, parsed.marker, false),
+      reason: check.reason || "URL not allowed",
     };
   }
 

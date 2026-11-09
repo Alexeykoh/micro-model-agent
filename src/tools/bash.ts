@@ -18,6 +18,8 @@ import {
 } from "./bash-parse";
 import { isMemoizableCommand, memoClear, memoRead } from "./bash-memo";
 import { runBashCommand } from "./bash-process";
+import { runDockerBash, checkSandboxProfile } from "./bash-docker";
+import { decorateCommandOutput, detectTestResults } from "./bash-output";
 
 // Публичные ре-экспорты: тесты и смежные модули импортируют их из `bash`.
 export { BASH_GRACE_MS, setBashGraceMs } from "./bash-process";
@@ -189,12 +191,19 @@ export const bashTool: ToolDefinition = {
       );
     }
 
+    // Enforcement скаффолда (INV-H6): долгие генераторы (create-next-app/vite,
+    // shadcn init, npm/bun install) принудительно уходят в фон, иначе
+    // foreground-ожидание сгорает на одном шаге (замер veloman: 52с скаффолда
+    // в fg, затем повтор того же скаффолда с другим флагом версии).
+    const isScaffold = /(?:create-next-app|create-vite|shadcn\s+(?:init|add|latest)|npm\s+(?:install|i)\b|bun\s+(?:install|add)\b)/.test(originalCommand);
+    const explicitBackground = args.background === true || (isScaffold && args.background !== false);
+
     // Мемо результата (manualMemo, после security-гейта, чтобы блок никогда не
     // маскировался stored-результатом): одиночные read-only отдаются из мемо
     // исполнителя; всё остальное его сбрасывает. Фоновые запуски не мемоизируются
     // (process id одноразовые).
     const memoKey = { command, workdir };
-    const memoizable = args.background !== true && isMemoizableCommand(command);
+    const memoizable = !explicitBackground && isMemoizableCommand(command);
     if (memoizable) {
       const hit = memoRead(ctx, memoKey);
       if (hit) return { ...hit };
@@ -202,16 +211,56 @@ export const bashTool: ToolDefinition = {
       memoClear(ctx);
     }
 
+    // Sandbox-профиль (P0 изоляция): bash уходит в Docker-контейнер; фон не
+    // поддерживается — команда идёт foreground (честно, без фейкового фона).
+    if (ctx.config.execution?.profile === "sandbox") {
+      return runSandboxBash({ ctx, command, originalCommand, workdir, securityConfig });
+    }
+
     return runBashCommand({
       ctx,
       command,
       originalCommand,
       workdir,
-      explicitBackground: args.background === true,
+      explicitBackground,
       force: args.force === true,
       securityConfig,
-      memoizable,
+      memoizable: !explicitBackground && isMemoizableCommand(command),
       memoKey,
     });
   },
 };
+
+/** Sandbox-ветка bash (P0 изоляция): bash → Docker, local-trusted — не вызывается. */
+export async function runSandboxBash(opts: {
+  ctx: ToolContext;
+  command: string;
+  originalCommand: string;
+  workdir: string;
+  securityConfig: BashSecurityConfig;
+}): Promise<import("./types").ToolResult> {
+  const { ctx, command, originalCommand, workdir, securityConfig } = opts;
+  const chk = checkSandboxProfile(ctx);
+  if (!chk.ok) {
+    logSecurityBlock(ctx.sessionId, "bash_command", `docker unavailable (image ${chk.image})`, sanitizeCommandForLog(command));
+    return { success: false, output: t("execution.sandbox_unavailable", { image: chk.image }) };
+  }
+  const res = await runDockerBash({
+    command,
+    workdir,
+    baseDir: ctx.baseDir,
+    image: chk.image,
+    signal: ctx.abortSignal,
+  });
+  const output = decorateCommandOutput({
+    ctx,
+    command,
+    originalCommand,
+    code: res.success ? 0 : 1,
+    output: res.output,
+    testRun: detectTestResults(res.output),
+    workdir,
+    securityConfig,
+  });
+  return { success: res.success, output };
+}

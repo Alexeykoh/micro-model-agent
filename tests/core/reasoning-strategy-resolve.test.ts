@@ -45,6 +45,27 @@ describe("reasoning strategy resolves in three layers (W3.2/D1)", () => {
     resolveModelCapabilities(preset, undefined, { reasoningStrategy: "none" });
     expect(preset.reasoningStrategy).toBe("prompt-tag");
   });
+
+  it("declared effort levels resolve in the same three layers (INV-R7)", () => {
+    const withOff = {
+      ...preset,
+      reasoningStrategy: "openai-effort" as const,
+      reasoningOff: true,
+      reasoningLevels: ["low", "medium", "xhigh"],
+    };
+    expect(resolveModelCapabilities(withOff, undefined, undefined).reasoningLevels).toEqual([
+      "low",
+      "medium",
+      "xhigh",
+    ]);
+    expect(
+      resolveModelCapabilities(withOff, { reasoningLevels: ["low", "medium", "high"] }, undefined)
+        .reasoningLevels,
+    ).toEqual(["low", "medium", "high"]);
+    expect(
+      resolveModelCapabilities(withOff, undefined, { reasoningLevels: ["low"] }).reasoningLevels,
+    ).toEqual(["low"]);
+  });
 });
 
 describe("provider build injects the RESOLVED strategy (W3.2/D1)", () => {

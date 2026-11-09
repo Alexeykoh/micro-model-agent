@@ -206,8 +206,9 @@ async function validateWithCompiler(
     await runCommand(command, args(tmpFile), dirname(filePath), 5000);
     SYNTAX_CACHE.set(filePath, { hash, error: null });
     return { valid: true };
-  } catch (err: any) {
-    const stderr = err.stderr || (useStdout ? err.stdout || "" : "");
+  } catch (err: unknown) {
+    const rec = err as { stderr?: unknown; stdout?: unknown } | null | undefined;
+    const stderr = (typeof rec?.stderr === "string" ? rec.stderr : "") || (useStdout && typeof rec?.stdout === "string" ? rec.stdout : "");
     const firstError =
       stderr.split("\n").find((line: string) => line.trim()) || fallbackError;
     const error = firstError.trim();
@@ -235,12 +236,12 @@ function validateJsonContent(content: string): SyntaxValidationResult {
   try {
     JSON.parse(content);
     return { valid: true };
-  } catch (e: any) {
+  } catch (e: unknown) {
     try {
       JSON.parse(stripJsonComments(content));
       return { valid: true };
     } catch {
-      return { valid: false, error: e.message };
+      return { valid: false, error: e instanceof Error ? e.message : String(e) };
     }
   }
 }

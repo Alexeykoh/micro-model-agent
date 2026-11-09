@@ -34,7 +34,16 @@ export function mutationTargetKey(name: string, rawArgs: unknown): string | null
     return `write:${a.path.replace(/\\/g, "/").toLowerCase()}`;
   }
   if (name === "bash" && typeof a.command === "string") {
-    const cmd = a.command.replace(/\s+/g, " ").trim().slice(0, 80).toLowerCase();
+    // Нормализация версий: `npx shadcn@4.22.0 add` / `@4.21.0` / `@latest` —
+    // одна цель для перфекционизм-цикла, иначе thrashing по версиям не
+    // набирает порог (сессия veloman: 10 shadcn-вызовов с разными версиями).
+    const cmd = a.command
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase()
+      .replace(/@[\w.-]+(?=\s|$)/g, "@VER")
+      .replace(/npx\s+--yes\s+/g, "npx ")
+      .slice(0, 80);
     return cmd ? `bash:${cmd}` : null;
   }
   // Bookkeeping-churn: повторы plan/todo над тем же действием с чуть разными
@@ -53,9 +62,17 @@ export function mutationTargetKey(name: string, rawArgs: unknown): string | null
 /**
  * Учитывает цели мутаций батча: прогресс артефактов, счётчики повторов и
  * `mutationsSinceCritic`. Возвращает цели, достигшие порога «перфекционизма».
+ * Также считает подряд одиночные `question`-вызовы для батчинг-nudge (INV-H6).
  */
 export function accumulateToolTargets(state: LoopState, toolCalls: ToolCall[]): string[] {
   const cycleNudges: string[] = [];
+  if (toolCalls.length === 1 && toolCalls[0].name === "question") {
+    state.consecutiveSingleQuestions++;
+  } else if (toolCalls.some((tc) => tc.name === "question")) {
+    state.consecutiveSingleQuestions = 0;
+  } else if (toolCalls.length > 0) {
+    state.consecutiveSingleQuestions = 0;
+  }
   for (const tc of toolCalls) {
     // Прогресс тест/спек-артефактов (обобщённо, по пути файла).
     if (
@@ -98,6 +115,21 @@ export function applyBatchNudges(
       contextManager,
       "cycle",
       `You have already modified or re-run the same target many times (e.g. ${cycleNudges[0]}). If the latest output is correct, STOP polishing and answer with a final text response. More identical edits will not change the result.`,
+    );
+  }
+
+  // Question-batching (INV-H6): два одиночных вопроса подряд — нudge собрать
+  // следующее в один вызов `question` с несколькими questions.
+  if (state.consecutiveSingleQuestions >= 2 && !state.questionBatchNudged) {
+    state.questionBatchNudged = true;
+    logger.diagnostic(
+      "info",
+      `Consecutive single-question calls (${state.consecutiveSingleQuestions}) — nudging to batch questions`,
+    );
+    issueDirective(
+      contextManager,
+      "question_batch",
+      "You have asked questions one by one. Batch the remaining questions into a SINGLE `question` call with multiple `questions` — separate single-question calls cost a full turn each.",
     );
   }
 

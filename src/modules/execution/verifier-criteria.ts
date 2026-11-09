@@ -75,10 +75,11 @@ export async function evaluateCriteria(
       try {
         await deps.run(rest, deps.baseDir, 30_000);
         details.push({ passed: true, message: `command ok: ${rest}` });
-      } catch (e: any) {
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
         const item = {
           passed: false,
-          message: `command failed: ${rest} (${String(e.message).slice(0, 200)})`,
+          message: `command failed: ${rest} (${message.slice(0, 200)})`,
         };
         details.push(item);
         errors.push(`[${owner.id}] ${item.message}`);

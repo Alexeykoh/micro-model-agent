@@ -226,11 +226,12 @@ export class PluginLoader {
         pluginManager,
         logger,
       );
-    } catch (e: any) {
-      logger?.warn(t("plugin.skipped", { entry: label, message: e.message }));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      logger?.warn(t("plugin.skipped", { entry: label, message }));
       // Раньше сломанный плагин просто исчезал: отличить «нет такого» от
       // «есть, но падает» было нельзя. Теперь причина попадает в UI.
-      pluginManager.noteFailure(label, fullPath, e?.message ?? String(e));
+      pluginManager.noteFailure(label, fullPath, message);
       return "failed";
     }
   }

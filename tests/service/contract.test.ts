@@ -550,6 +550,11 @@ describe("error contract stays RFC 9457", () => {
       body: "{not json",
     });
     expect(malformed.status).toBe(400);
+    // Деталь честная: «плох JSON», а не «нет поля input» (тело не читалось).
+    expect(String(malformed.headers["content-type"])).toContain("application/problem+json");
+    const malformedProblem = JSON.parse(malformed.body) as { title?: string; detail?: string };
+    expect(String(malformedProblem.title ?? "")).toMatch(/json/i);
+    expect(String(malformedProblem.title ?? "")).not.toContain("input required");
 
     // Сервис жив и продолжает принимать работу.
     const alive = await httpJson(`${url}/v1/health`);

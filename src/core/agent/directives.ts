@@ -20,6 +20,7 @@ export type DirectiveId =
   | "tool_disabled"
   | "cycle"
   | "artifact_churn"
+  | "question_batch"
   | "consecutive_failures"
   | "narration"
   | "truncated"

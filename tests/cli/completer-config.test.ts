@@ -47,9 +47,11 @@ describe("config key/value completion", () => {
       "auto",
       "default",
       "none",
+      "minimal",
       "low",
       "medium",
       "high",
+      "xhigh",
       "max",
     ]);
   });

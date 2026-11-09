@@ -43,6 +43,8 @@ export const UNCOVERED_CONTEXT_METHODS: Record<string, string> = {
     "ёмкость истории для порогов компакции (2026-11-01-capacity); покрыта tests/core/compaction-tool-budget.test.ts, в дубле overflow не срабатывает",
   hardDropOldest:
     "stage C жёсткого дропа (вынесен в manager-compaction-stages): в цикле зовётся только из compactAdaptive, напрямую — тест tests/security/taint-t4.test.ts",
+  getCompactionSummaryMode: "режим сводки для LLM-суммаризации; покрыт tests/compaction-llm-summary.test.ts с реальным менеджером",
+  getOldTurnsText: "текст старых turns для LLM-суммаризации; покрыт tests/compaction-llm-summary.test.ts с реальным менеджером",
   getKnownFiles: "список известных файлов для factual-проверки; пустой список не меняет вердикт теста",
   getOverflowCooldown: "кулдаун after-tool (W4); проверяется отдельным инвариантным тестом",
   getPolicy: "режим контекста legacy|v2; переключается конфигом, в дефолтных тестах один путь",

@@ -81,7 +81,9 @@ describe("debt register (rule 9, pay-once)", () => {
     );
   });
 
-  it("every DEBT(id) resolves to a register row, and every row is anchored", () => {
+  // Скан всего репозитория в один поток на Windows (800+ файлов) — дефолтные
+  // 5с не хватает даже после исключения архива.
+  it("every DEBT(id) resolves to a register row, and every row is anchored", { timeout: 30000 }, () => {
     const ids = new Set(parseRegister(readFileSync(REGISTER, "utf-8")).map((r) => r.id));
     const files: { path: string; text: string }[] = [];
     for (const root of SCAN_ROOTS) walk(join(REPO_ROOT, root), files);

@@ -19,6 +19,8 @@ export interface ProviderCapabilities {
   reasoningStrategy: ReasoningStrategy;
   /** Эндпоинт умеет выключать reasoning (`reasoning_effort: "none"` легитимен). */
   reasoningOff?: boolean;
+  /** Объявленные значения `reasoning_effort` (INV-R7). */
+  reasoningLevels?: string[];
   listModels: boolean;
   requiresKey: boolean;
   auth?: "bearer" | "header";

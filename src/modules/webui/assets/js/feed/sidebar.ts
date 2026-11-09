@@ -162,6 +162,7 @@ export function renderUsage(h: Dict): void {
   const cfg = settings.config || {};
   const sig = JSON.stringify([
     h.sessionId, h.model, h.contextUsed, h.contextLimit, h.contextWindow, h.cacheHitRate, h.costUsd,
+    h.promptTokensTotal, h.completionTokensTotal, h.cachedTokensTotal,
     h.compactionCount, h.contextQuality, h.contextQualityBreakdown, h.contextProbe, h.contextBreakdown, cfg.model, cfg.contextWindow,
     I18N.locale,
   ]);
@@ -185,6 +186,33 @@ export function renderUsage(h: Dict): void {
     usageEl.appendChild(contextSegBar(h, used, limit));
     usageEl.appendChild(contextLegend(h));
   }
+  // Накопленные токены сессии (входящие/исходящие/кэшированные). Персистятся
+  // на сервере (web-usage.json), переживают reload/restart; здесь только вид:
+  // одна строка `↓ вх · ↑ вых · ↺ кэш`, полные названия — в tooltip.
+  const tokIn = typeof h.promptTokensTotal === "number" ? fmtTokens(h.promptTokensTotal) : "—";
+  const tokOut = typeof h.completionTokensTotal === "number" ? fmtTokens(h.completionTokensTotal) : "—";
+  const tokCache = typeof h.cachedTokensTotal === "number" ? fmtTokens(h.cachedTokensTotal) : "—";
+  const tokensRow = usageRow(
+    t("web.usage.tokens"),
+    `↓${tokIn} ↑${tokOut} ↺${tokCache}`,
+    tokIn === "—" && tokOut === "—" && tokCache === "—" ? "dim" : "",
+  );
+  attachTooltip(tokensRow, () => {
+    const frag = el("div", "qtip");
+    const lines: Array<[string, string]> = [
+      [t("web.usage.tokens_in"), tokIn],
+      [t("web.usage.tokens_out"), tokOut],
+      [t("web.usage.tokens_cached"), tokCache],
+    ];
+    for (const [label, value] of lines) {
+      const line = el("div", "qtip-row");
+      line.appendChild(el("span", "ctip-label", label));
+      line.appendChild(el("b", "", value));
+      frag.appendChild(line);
+    }
+    return frag;
+  });
+  usageEl.appendChild(tokensRow);
   // Перегрузка окна: процент обрезан на 100 %, поэтому показываем явно.
   if (h.contextBreakdown && h.contextBreakdown.overcommitted) {
     usageEl.appendChild(usageRow(t("web.usage.context_overcommitted"), "⚠", "wn"));
@@ -236,44 +264,4 @@ export function renderWorkspace(h: Dict): void {
   paintGitChips(h);
 }
 
-// Environment (sidebar): stacked name/value items — AGENTS.md sources, map size.
-function envItem(label: string, values: string[]): HTMLElement {
-  const item = el("div", "env-item");
-  item.appendChild(el("div", "env-k", label));
-  values.forEach((val) => {
-    const v = el("div", "env-v", val);
-    v.title = val;
-    item.appendChild(v);
-  });
-  return item;
-}
-
-export function renderEnvironment(h: Dict): void {
-  const disabled = !!(h.instructions && h.instructions.disabled);
-  const files = h.instructions && !disabled ? h.instructions.files || [] : [];
-  const map = h.projectMap || null;
-  const sig = JSON.stringify([disabled, files, map, I18N.locale]);
-  if (sig === feed.lastEnvSig) return;
-  feed.lastEnvSig = sig;
-  envEl.textContent = "";
-  envEl.appendChild(
-    envItem(
-      t("web.env.agents"),
-      disabled ? [t("web.env.agents_disabled")] : files.length ? files : [t("web.env.agents_none")],
-    ),
-  );
-  envEl.appendChild(
-    envItem(
-      t("web.env.map"),
-      map && map.indexed
-        ? [
-            [
-              pluralCount("web.env.files", map.files),
-              pluralCount("web.env.symbols", map.symbols),
-              pluralCount("web.env.tokens", map.tokens),
-            ].join(" · "),
-          ]
-        : [t("web.env.map_not_indexed")],
-    ),
-  );
-}
+export { renderEnvironment } from "./sidebar-env.js";

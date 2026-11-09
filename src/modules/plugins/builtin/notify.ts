@@ -7,7 +7,7 @@
 import { spawn } from "node:child_process";
 import { platform } from "node:os";
 import { t } from "../../../i18n/index";
-import type { AgentPlugin, TurnSummary } from "../../types";
+import type { AgentPlugin, PluginHookContext, TurnSummary } from "../../types";
 import type { ToolContext } from "../../../tools/types";
 
 /** Injectable notifier (tests never touch the real OS). */
@@ -75,7 +75,8 @@ export class NotifyPlugin implements AgentPlugin {
 
   constructor(private readonly notifier: DesktopNotifier = sendDesktopNotification) {}
 
-  onTurnEnd(ctx: ToolContext, summary: TurnSummary): void {
+  onTurnEnd(ctx: PluginHookContext, summary: TurnSummary): void {
+    const tctx = ctx as unknown as ToolContext;
     const status = summary.interrupted
       ? t("plugin.notify_interrupted")
       : summary.success
@@ -88,16 +89,17 @@ export class NotifyPlugin implements AgentPlugin {
     });
     try {
       this.notifier("MMA", body, (err) => {
-        ctx.logger?.debug?.(`notify failed: ${err.message}`);
+        tctx.logger?.debug?.(`notify failed: ${err.message}`);
       });
     } catch (err) {
-      ctx.logger?.debug?.(`notify failed: ${err instanceof Error ? err.message : String(err)}`);
+      tctx.logger?.debug?.(`notify failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
-  onSessionEnd(ctx: ToolContext): void {
-    const id = ctx.sessionId ?? "?";
-    ctx.logger.debug?.(`Session ended: ${id}`);
+  onSessionEnd(ctx: PluginHookContext): void {
+    const tctx = ctx as unknown as ToolContext;
+    const id = tctx.sessionId ?? "?";
+    tctx.logger.debug?.(`Session ended: ${id}`);
   }
 }
 

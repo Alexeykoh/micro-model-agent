@@ -2,7 +2,7 @@
 // dispatch and open/close/escape. Extracted from `settings.js`. Also registers
 // the render callbacks the write funnel (`settings/write.js`) calls back into.
 import { hooks, settings } from "../store.js";
-import { closeConfirm, confirmOverlay, trapTab } from "../dialog.js";
+import { closeConfirm, getConfirmOverlay, trapTab } from "../dialog.js";
 import {
   renderPanel, renderUiPanel, renderMemoryPanel, renderSkillsPanel,
   renderPluginsPanel, renderSecurityPanel,
@@ -128,7 +128,7 @@ overlay.addEventListener("keydown", (e) => trapTab(overlay, e));
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   if (isSubDialogOpen()) closeSubDialog();
-  else if (confirmOverlay && confirmOverlay.classList.contains("open")) closeConfirm();
+  else if (getConfirmOverlay()?.classList.contains("open")) closeConfirm();
   else if (overlay.classList.contains("open")) closeSettings();
 });
 
