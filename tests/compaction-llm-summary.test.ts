@@ -3,6 +3,8 @@ import { mkdtempSync, readdirSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { ContextManager } from "../src/core/context/manager";
+import { CompactionService } from "../src/core/agent/compaction";
+import { createLoopState } from "../src/core/agent/loop-state";
 import { DEFAULTS } from "../src/config/defaults";
 import {
   buildOldTurnsText,
@@ -102,5 +104,46 @@ describe("compaction llm summary", () => {
     for (let i = 0; i < 20; i++) mgr.addMessage({ role: "assistant", content: `step ${i}` });
     expect(mgr.getOldTurnsText(2)).toContain("step 0");
     expect(mgr.getCompactionSummaryMode()).toBe("llm");
+  });
+
+  it("service wires summarizer in llm mode and fails open without it", async () => {
+    const budget = {
+      systemPrompt: 0.1,
+      responseReserve: 0.1,
+      compactionThreshold: 0.75,
+      compactionMinLoad: 0.5,
+      policy: "v2" as const,
+      compactionSummary: "llm" as const,
+      overflowCooldown: 5,
+    };
+    const make = (withSummarizer: boolean) => {
+      const cm = new ContextManager(1200, budget);
+      for (let i = 0; i < 40; i++) {
+        cm.addMessage({ role: "assistant", content: `step ${i}` });
+        cm.addMessage({ role: "tool", content: "Q".repeat(3000), name: "t" });
+      }
+      const svc = new CompactionService({
+        contextManager: cm,
+        logger: { debug: () => {}, diagnostic: () => {}, info: () => {}, warn: () => {}, error: () => {} } as never,
+        slog: { logCompaction: () => {} } as never,
+        hallucinationDetector: { addKnownFiles: () => {} } as never,
+        llmSummarizer: withSummarizer ? async () => "- wire bullets" : null,
+      });
+      return { cm, svc };
+    };
+
+    const { cm, svc } = make(true);
+    const state = createLoopState();
+    state.iteration = 1;
+    await svc.compactIfNeeded(state);
+    expect(cm.getCompactionBlock()).toContain("[LLM summary]");
+    expect(cm.getCompactionBlock()).toContain("wire bullets");
+
+    // без суммаризатора — ledger-only, без падений
+    const bare = make(false);
+    const state2 = createLoopState();
+    state2.iteration = 1;
+    await bare.svc.compactIfNeeded(state2);
+    expect(bare.cm.getCompactionBlock() ?? "").not.toContain("[LLM summary]");
   });
 });
