@@ -7,7 +7,7 @@ import type {
   SessionContext,
 } from "../../modules/security/session-isolation";
 import type { SessionEncryptionConfig } from "../../config/types";
-import { newSessionId } from "./id";
+import { newSessionId, newThreadId } from "./id";
 import type { SessionManagerOptions } from "./manager-options";
 import { ManagerState, RenameHub } from "./manager-state";
 
@@ -58,6 +58,7 @@ export class SessionManager {
       id,
       name: sessionName,
       nameSource: name ? "manual" : "default",
+      threadId: newThreadId(),
       createdAt: now,
       updatedAt: now,
       messageCount: 0,

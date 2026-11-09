@@ -5,6 +5,8 @@ import type { ContentPart } from "../../llm/provider";
 export interface SessionMeta {
   id: string;
   name: string;
+  /** Стабильный бизнес-ID потока (`thr_…`, < 255, не сырой текст). P0 durable state. */
+  threadId?: string;
   /** Происхождение `name`: дефолтное по дате, авто или ручное. */
   nameSource?: "default" | "auto" | "manual";
   createdAt: string;
