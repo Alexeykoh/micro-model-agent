@@ -237,24 +237,27 @@ async function interrupt(): Promise<void> {
   await api("/api/interrupt", { method: "POST", body: sessionId ? { sessionId } : {} });
 }
 
-inp.addEventListener("keydown", (e) => {
-  // Ignore keys that confirm an IME composition (CJK/RU input methods):
-  // sending on that Enter would submit a half-composed message.
-  if (e.isComposing || e.keyCode === 229) return;
-  // Slash-command and `@`-mention autocomplete own arrows/Enter/Tab/Esc while open.
-  if (cmdkKeydown(e)) return;
-  if (mentionKeydown(e)) return;
-  // ▲/▼ на границах текста — история отправленных ходов (в середине
-  // многострочного черновика остаются обычной навигацией).
-  if (browseHistory(e)) return;
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    void send();
-  } else if (e.key === "Escape") {
-    e.preventDefault();
-    void interrupt();
-  }
-});
+// Guard: импорт без #inp в DOM не роняет модуль (см. webui-doc-title-dom).
+if (inp) {
+  inp.addEventListener("keydown", (e) => {
+    // Ignore keys that confirm an IME composition (CJK/RU input methods):
+    // sending on that Enter would submit a half-composed message.
+    if (e.isComposing || e.keyCode === 229) return;
+    // Slash-command and `@`-mention autocomplete own arrows/Enter/Tab/Esc while open.
+    if (cmdkKeydown(e)) return;
+    if (mentionKeydown(e)) return;
+    // ▲/▼ на границах текста — история отправленных ходов (в середине
+    // многострочного черновика остаются обычной навигацией).
+    if (browseHistory(e)) return;
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      void send();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      void interrupt();
+    }
+  });
+}
 
 if (sendBtn) {
   sendBtn.addEventListener("click", () => {

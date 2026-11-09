@@ -33,12 +33,26 @@ function assertValidPairing(messages: Message[]): void {
       j++;
     }
     for (const id of declared) {
-      expect(answered.has(id), `call ${id} must be answered by a contiguous tool message`).toBe(true);
+      expect(answered.has(id), `call ${id} must be answered by a contiguous tool message`).toBe(
+        true,
+      );
     }
   }
 }
 
 describe("repairToolCallPairing", () => {
+  it("drops a tool message with an empty tool_call_id (provider 400: expected a non-empty string)", () => {
+    const out = repairToolCallPairing([
+      { role: "user", content: "hi" },
+      asst(["A"]),
+      toolMsg("A"),
+      { role: "tool", content: "orphan", tool_call_id: "" },
+      { role: "user", content: "next" },
+    ]);
+    expect(out.some((m) => m.role === "tool" && !m.tool_call_id)).toBe(false);
+    assertValidPairing(out);
+  });
+
   it("keeps a valid sequence unchanged", () => {
     const input: Message[] = [
       { role: "user", content: "hi" },
@@ -111,7 +125,12 @@ describe("repairToolCallPairing", () => {
   });
 
   it("is idempotent on already-repaired input", () => {
-    const once = repairToolCallPairing([asst(["A", "B"]), toolMsg("A"), { role: "user", content: "x" }, toolMsg("B")]);
+    const once = repairToolCallPairing([
+      asst(["A", "B"]),
+      toolMsg("A"),
+      { role: "user", content: "x" },
+      toolMsg("B"),
+    ]);
     const twice = repairToolCallPairing(once);
     expect(twice).toEqual(once);
   });
