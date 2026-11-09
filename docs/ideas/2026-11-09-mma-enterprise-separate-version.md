@@ -386,6 +386,142 @@ CLI показывает ссылку и код → пользователь о�
 
 ---
 
+## 8.1. Обвязка вокруг MMA Enterprise
+
+Вокруг enterprise-версии есть два слоя: инфраструктура организации
+и сам MMA Enterprise. MMA не заменяет обвязку и не владеет ею —
+она ходит с ней по стандартным протоколам.
+
+### Слои обвязки
+
+```mermaid
+%%{init: {'flowchart': {'curve': 'stepBefore', 'htmlLabels': true}}}%%
+flowchart TB
+    subgraph ORG["Организация: инфраструктура (не MMA)"]
+        direction TB
+        subgraph MACHINE["Машина и ОС"]
+            EDR["Антивирус / EDR"]
+            MDM["MDM: GPO / Intune"]
+            DISK["Шифрование диска"]
+        end
+        subgraph NET["Сеть"]
+            DNS["DNS + TLS (AD CS)"]
+            NTP["NTP: время"]
+            WAF["WAF + firewall"]
+        end
+        subgraph DIR["Каталог и вход"]
+            AD["Active Directory"]
+            IDP["IdP: Entra ID / Keycloak / AD FS"]
+        end
+        subgraph DATA["Данные и секреты"]
+            SHARE["Файловая шара: SMB / Samba / NFS"]
+            PG["Postgres"]
+            S3["S3 / MinIO"]
+            VAULT["Vault / KMS"]
+        end
+        subgraph OPS["Эксплуатация"]
+            REG["Harbor / Nexus: registry"]
+            SIEM["SIEM"]
+            MON["Prometheus / Grafana / OTel"]
+            BACKUP["Backup / DR: Veeam / restic"]
+            ITSM["ITSM: ServiceNow / Jira"]
+        end
+    end
+
+    subgraph MMA["MMA Enterprise: поставка MMA"]
+        direction TB
+        ING["ingress: TLS, OIDC, маршруты"]
+        CTRL["control plane: люди, роли, политика, лимиты"]
+        RUN["runtime: агент, инструменты, DLP"]
+        GW["model gateway: модели, бюджет"]
+        BROKER["credential broker: пропуска к шарам и MCP"]
+        ING --> CTRL
+        CTRL --> RUN
+        RUN --> GW
+        RUN --> BROKER
+    end
+
+    USER["Пользователь: браузер / CLI / API"]
+    USER --> ING
+
+    AD --> IDP
+    IDP --> CTRL
+    MDM --> USER
+    EDR --> SIEM
+    RUN --> MON
+    CTRL --> SIEM
+    BROKER --> SHARE
+    CTRL --> PG
+    CTRL --> S3
+    GW --> VAULT
+    REG --> MMA
+```
+
+### Потоки доверия и данных
+
+```mermaid
+%%{init: {'flowchart': {'curve': 'stepBefore', 'htmlLabels': true}}}%%
+flowchart LR
+    subgraph CLIENT["Клиент пользователя"]
+        CLI["CLI / браузер"]
+    end
+
+    subgraph EDGE["Вход"]
+        ING["ingress"]
+    end
+
+    subgraph CORE["MMA Enterprise"]
+        CTRL["control plane"]
+        RUN["runtime + DLP"]
+        GW["model gateway"]
+        BROKER["credential broker"]
+    end
+
+    subgraph OUT["Внешние системы"]
+        IDP["IdP"]
+        MODEL["Модели: внешние / локальные"]
+        SHARE["Файловые шары"]
+        SIEM["SIEM"]
+        MON["Prometheus / Grafana"]
+    end
+
+    CLI --> ING
+    ING --> CTRL
+    CTRL --> RUN
+    IDP --> CTRL
+    RUN --> GW
+    GW --> MODEL
+    BROKER --> SHARE
+    RUN --> SIEM
+    CTRL --> SIEM
+    RUN --> MON
+    CTRL --> MON
+```
+
+### Кто чем владеет
+
+| Компонент | Владелец | Протокол / связь | Зачем |
+| --- | --- | --- | --- |
+| Антивирус / EDR, MDM, шифрование диска | Организация | Агент на устройстве, MDM API | Устройство управляемое; MMA знает факт, а не настраивает ОС |
+| DNS, TLS, NTP, WAF | Организация | DNS, TLS, NTP, WAF перед ingress | Имена, сертификаты, время для подписей и TTL |
+| AD → IdP | Организация | SCIM, OIDC, SAML, LDAP | Люди и группы; MMA читает из IdP, а не из AD напрямую |
+| Файловая шара | Организация | SMB, NFS, API | Права даёт файловый сервер (ACL), MMA — только пропуск |
+| Postgres, S3/MinIO | Организация (ресурс), MMA (схема, миграции) | SQL, S3 API | Данные control plane, артефакты, аудит, backup |
+| Vault/KMS | Организация | HTTPS | Ключи провайдеров и секреты, ротация |
+| Harbor/Nexus, CI/CD, GitOps | Организация + MMA | OCI Registry, Git | Образы из внутреннего registry, а не с GitHub в прод |
+| SIEM, Prometheus/Grafana/OTel | Организация (приём), MMA (отправка) | OTLP, JSON, CEF, HTTP | События аудита и метрики; SIEM — независимый наблюдатель |
+| Backup/DR, ITSM, уведомления | Организация | Veeam/restic, HTTP API, Teams/Slack/SMTP | Восстановление, заявки на доступ, алерты |
+| ingress, control plane, runtime, gateway, broker | MMA Enterprise | HTTPS, `/v1`, OIDC | Сама поставка: один релиз, несколько процессов |
+| DLP | MMA runtime (встроенный) | На границе провайдера; внешний DLP — API | Не отдельный DLP-сервер в базовой схеме |
+
+Главный принцип: MMA не решает, что разрешено данным, и не владеет
+ОС, каталогом, шарой и секретами. Она получает от обвязки факты
+(кто вошёл, какое устройство, какой пропуск к шаре, куда слать
+события) по стандартным протоколам — поэтому под каждый продукт
+отдельный коннектор не пишется.
+
+---
+
 ## 9. Что общее, а что разное
 
 ### Общее (одно ядро)
@@ -651,5 +787,9 @@ proxy, строгий профиль, инструменты только на �
 - Тонкие места — на стыках: отзыв против TTL, клиент против токена,
   OBO/Kerberos, учёт против контроля в gateway, квоты посреди хода,
   аудит против приватности, backup против отозванных прав (§13.1).
+- Обвязка — два слоя: инфраструктура организации (EDR/MDM, DNS/TLS/NTP,
+  AD→IdP, шара, Postgres/S3, Vault, registry, SIEM/monitoring, backup)
+  и сам MMA Enterprise (ingress → control plane → runtime → gateway
+  → broker); DLP — встроенный в runtime, а не отдельный сервер (§8.1).
 - Пока это идея: контракты, схемы данных и проверки появятся
   в спеках по `docs/specs/` до кода, а не после.
