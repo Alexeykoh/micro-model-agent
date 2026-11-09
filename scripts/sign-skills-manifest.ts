@@ -11,12 +11,12 @@ import { createHash } from "node:crypto";
 
 const [dir, privPath] = process.argv.slice(2);
 if (!dir || !privPath) {
-  console.error("usage: bun scripts/sign-skills-manifest.ts <dir> <privateKeyPemPath>");
+  process.stderr.write("usage: bun scripts/sign-skills-manifest.ts <dir> <privateKeyPemPath>\n");
   process.exit(2);
 }
 const manifestPath = join(dir, "skills-manifest.json");
 if (!existsSync(manifestPath)) {
-  console.error(`no manifest at ${manifestPath}`);
+  process.stderr.write(`no manifest at ${manifestPath}\n`);
   process.exit(1);
 }
 const privPem = readFileSync(privPath, "utf-8");
@@ -27,4 +27,4 @@ writeFileSync(join(dir, "skills-manifest.sig.json"), JSON.stringify({ manifestSh
 // Export the matching public key for the loader's verifier.
 const pubPem = createPublicKey(createPrivateKey(privPem)).export({ type: "spki", format: "pem" }) as string;
 writeFileSync(join(dir, "skills-manifest.pubkey"), pubPem, "utf-8");
-console.log(`[sign] ${manifestPath} -> skills-manifest.sig.json`);
+process.stdout.write(`[sign] ${manifestPath} -> skills-manifest.sig.json\n`);
