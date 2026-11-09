@@ -1,14 +1,13 @@
 # Memory Quality Gate + Self-Learning — Unified Implementation Plan
 
-> **Статус:** **в работе** (сверка 2026-11-04) — Phase A (валидатор памяти) и
-> Phase C (языковые адаптеры) закрыты 2026-11-03, см.
+> **Статус:** **закрыт** (2026-11-09, решение пользователя) — Phase A (валидатор
+> памяти) и Phase C (языковые адаптеры) закрыты 2026-11-03, см.
 > [`2026-11-03-memory-validator-design.md`](../specs/2026-11-03-memory-validator-design.md)
 > и [`2026-11-03-language-adapters-design.md`](../specs/2026-11-03-language-adapters-design.md).
-> Открыта Phase B (обучение): `src/modules/learning/**`
-> (`types/trace/validator/generator/cli/module`), подкоманда `mma learn`,
-> регистрация `LearningModule` в bootstrap. Ранее из плана выполнен
+> Phase B (обучение: `src/modules/learning/**`, `mma learn`, `LearningModule`)
+> **отменена** — удалена из рабочей очереди по решению пользователя 2026-11-09
+> (см. `TODO.md`, раздел 1.6 удалён). Ранее из плана выполнен
 > `SessionManager.loadSessionLog`.
-> Список открытых пунктов — в [`TODO.md`](../../TODO.md) §1.6.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -109,7 +108,9 @@ Existing entries are read from `<memoryDir>/<category>.md` lines starting with `
 
 ---
 
-## Phase B — Self-Learning (Phase 1: Skills)
+## Phase B — Self-Learning (Phase 1: Skills) — ОТМЕНЕНА 2026-11-09
+
+> Удалена из очереди решением пользователя; задачи ниже — исторические, не выполняются.
 
 > **Spec:** `docs/archive/specs/2026/2026-08-11-self-learning-design.md` (Phase 2 — gated error learning — design-only, NOT implemented).
 
