@@ -41,6 +41,7 @@
     "typecheck:frontend": "tsc -p tsconfig.frontend.json",
     "test": "bun test",
     "test:coverage": "bun test --coverage",
+    "evals:check": "bun scripts/evals-check.ts",
     "test:watch": "bun test --watch",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
