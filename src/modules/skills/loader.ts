@@ -1,7 +1,30 @@
 // Загрузчик скиллов: рекурсивный скан .md-файлов с frontmatter-метаданными.
 import { readdirSync, readFileSync, existsSync, statSync, type Stats } from "fs";
 import { join } from "path";
-import { createHash } from "node:crypto";
+import { createHash, verify as cryptoVerify } from "node:crypto";
+
+/**
+ * Подписанный манифест (P1 supply-chain): `skills-manifest.sig.json` —
+ * `{manifestSha256, sig}` (Ed25519 по сырым байтам манифеста),
+ * публичный ключ — `skills-manifest.pubkey` (PEM). Нет sig-файла — только
+ * sha-проверка; есть sig, но неверен или нет ключа — fail-closed.
+ */
+export function skillManifestSignatureOk(dirPath: string): boolean {
+  const sigPath = join(dirPath, "skills-manifest.sig.json");
+  if (!existsSync(sigPath)) return true;
+  const manifestPath = join(dirPath, "skills-manifest.json");
+  const pubPath = join(dirPath, "skills-manifest.pubkey");
+  if (!existsSync(manifestPath) || !existsSync(pubPath)) return false;
+  try {
+    const manifestRaw = readFileSync(manifestPath);
+    const sig = JSON.parse(readFileSync(sigPath, "utf-8")) as { manifestSha256?: string; sig?: string };
+    if (!sig.manifestSha256 || !sig.sig) return false;
+    if (createHash("sha256").update(manifestRaw).digest("hex") !== sig.manifestSha256) return false;
+    return cryptoVerify(null, manifestRaw, readFileSync(pubPath, "utf-8"), Buffer.from(sig.sig, "base64"));
+  } catch {
+    return false;
+  }
+}
 
 /** Манифест целостности: имя файла → sha256 контента. */
 export function skillManifestIntegrityOk(dirPath: string, fileName: string, content: string): boolean {
@@ -32,6 +55,8 @@ export class SkillsLoader {
   /** Рекурсивно грузит все скиллы из каталога; нет каталога — пусто. */
   loadFromDir(dirPath: string): SkillMeta[] {
     if (!existsSync(dirPath)) return [];
+    // Подпись манифеста: неверная подпись = каталог не грузится целиком.
+    if (!skillManifestSignatureOk(dirPath)) return [];
 
     const skills: SkillMeta[] = [];
     this.scanDir(dirPath, skills);

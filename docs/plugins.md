@@ -147,6 +147,19 @@ mma plugins enable my-plugin
 Плагин, который не загрузился, не исчезает: он виден как отказ с причиной в одну строку
 (`mma plugins list`, вкладка Plugins, `GET /api/plugins` → `failures`).
 
+## MCP supply-chain (P1)
+
+- **Allowlist:** `mcp.allowedServers` — внешние HTTP-серверы вне списка не вызываются.
+- **Rate-limit:** `rateLimitMs` в записи сервера — мин. мс между вызовами.
+- **OAuth 2.1 per-user:** запись сервера `oauth: { tokenUrl, clientId?, tokenFile }` —
+  транспорт читает access-токен из файла, обновляет по `tokenUrl` (refresh grant),
+  при 401 — один refresh и повтор. Токен локален процессу (silo).
+- **Скиллы:** `skills-manifest.json` (sha256, fail-closed); подпись —
+  `skills-manifest.sig.json` + `skills-manifest.pubkey` (Ed25519,
+  `bun scripts/sign-skills-manifest.ts <dir> <privkey.pem>`); неверная подпись
+  отключает весь каталог. Состав поставки — `sbom.json`
+  (`bun run build:sbom`, CycloneDX).
+
 ## Черновики capabilities: агент пишет себе тул
 
 Агент может дописать себе инструмент — тул `define_capability`. Ключевое правило:
