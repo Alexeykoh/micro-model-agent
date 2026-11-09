@@ -21,8 +21,9 @@ jobs:
         include:
           - runner: windows-latest
             key: win-x64
-          - runner: macos-15
-            key: mac-arm64
+          # Временно без mac-arm64: fleet-wide capacity у GitHub-hosted macOS arm64
+          # pull (ноябрь 2026, actions/runner#4833): джоб 15 мин ждёт раннера и
+          # отменяется до checkout. Возврат — при нормализации пула.
           - runner: macos-15-intel
             key: mac-x64
           - runner: ubuntu-latest
