@@ -158,19 +158,24 @@ typecheck, loopback, `--isolated`, локальные заглушки) закр
 
 ---
 
-### 1.14 Harness — бюджеты, честный план и LSP-tolerance (добавлено 2026-11-08)
+### 1.14 Harness — бюджеты, честный план и LSP-tolerance (добавлено 2026-11-08) ✅ реализовано на `feat/agent-harness-budgets`
 
 Сессия веломагазина `ses_mw88khb4_tegctnqtvjfcogha` (qwen3.8-27b, 60 мин, 110 LLM-вызовов,
 142 тул-вызовов, 2.8M токенов): три обрыва на `8192`, фейковые 7/10 шагов при реальном
 ~4.5/10 (`page.tsx` шаблонный, `Helmet` не существует), 4 ложных LSP-блока `@/`, bash-thrashing
 shadcn (`--help`/`init` 10+ раз). Спека:
-[`docs/specs/2026-11-08-agent-harness-design.md`](./docs/specs/2026-11-08-agent-harness-design.md)
-(на ветке `feat/agent-harness-budgets`). Волны: (1) раздельные reasoning/completion
-бюджеты + динамический `max_tokens` для `write_file`; (2) запрет `write_file > 6–8k`
-одним вызовом, писать через `append_file`; (3) честный `done` — наличие
-`tool_result.success=false`/typecheck-fail блокирует auto-complete; (4) LSP-tolerance
-для новых/`@/`-файлов — пропуск с `unverified`, верификация после индекса; (5) bash-loop
-детект (3 повтора команды+ошибки = стоп); (6) приоритет скаффолда/`process_wait`.
+[`docs/specs/2026-11-08-agent-harness-design.md`](./docs/specs/2026-11-08-agent-harness-design.md).
+Реализовано: (2) запрет `write_file > 8k` + подсказка `append_file` (`src/tools/write-file.ts`,
+ключ `file.write_too_large`); (3) честный `done` — `stepTypecheckGate` в auto-advance
+(`src/modules/execution/step-advance.ts` + `module-hosts.ts`); (4) alias-tolerance в
+pre-write LSP (`isAliasModuleError`, `src/modules/lsp/write-check.ts`); (5) нормализация
+версий bash-ключа (`@VER`) — thrashing по версиям ловится перфекционизм-циклом;
+(1) bump бюджета `iterMaxTokensOverride=16384` на следующий вызов после chunk-фейла
+(`tool-batch-effects.ts`). Тесты: `tests/harness-budgets.test.ts` (7). Проверка-diff:
+`bun test` — только предсуществующий file-size fail (`sidebar.ts` 307) + флейки-таймауты,
+`typecheck` зелёный; quality красный на предсуществующих (file-size/lint), дельта ветки чистая.
+
+---
 
 ---
 
