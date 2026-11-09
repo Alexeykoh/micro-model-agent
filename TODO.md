@@ -27,21 +27,19 @@
 
 ### 1.5 Мелкие хвосты исполненных планов
 
-- [ ] Режим компакции `llm`: `contextBudget.compactionSummary` допускает только
-      `off|ledger` (`src/config/registry-extra-provider.ts:35`,
-      `src/config/types-budget.ts:50`). Файл
-      `src/core/compaction-summary.ts` **есть и используется** в `ledger`-режиме
-      (`src/core/session-log-telemetry.ts:9`) — не хватает именно LLM-режима
-      (сводка моделью) и его проводки в конфиг.
-      ⚠️ **Застряло:** план LLM-суммаризации описан ещё в
-      [`2026-10-06-harness-reliability-fixes`](./docs/plans/2026-10-06-harness-reliability-fixes.md)
-      (`off|ledger|llm`, кэш по hash), но не реализован за месяц. Нужна отдельная
-      ветка по правилу 3, а не «попутно».
+- [x] Режим компакции `llm` — **закрыто 2026-11-09** веткой `feat/compaction-llm`
+      (спека [`2026-11-09-compaction-llm-design`](./docs/specs/2026-11-09-compaction-llm-design.md)):
+      `contextBudget.compactionSummary: off|ledger|llm` (default `ledger`),
+      helper `summarizeOldTurns` (`src/core/context/compaction-llm-summary.ts`, bounded
+      256 tok, timeout 8000мс, кэш `compaction-summaries` по sha256, fail-open → ledger-only),
+      инъекция `[LLM summary]` в блок компакции, async-проводка через `CompactionService`
+      (пролог/финалайзер `await`). Гварды — `tests/compaction-llm-summary.test.ts` (6),
+      `tests/arch/double-honesty.test.ts` (записи новых методов).
 - [ ] Живая приёмка леджера контекста: повторный прогон `hard-multi-extreme` с acceptance
       «`NEEDLE_A_111`/`B_222`/`C_333`, decoy 0, `exit=0`, notes-файл с `path:line`, блок
       с `[Notes:`» (план [`2026-10-14-context-ledger`](./docs/archive/plans/2026/2026-10-14-context-ledger.md), Task 6).
-      ⚠️ **Ручная задача, не код:** нечего проверить в репозитории, нужен живой прогон;
-      без него пункт не закроется.
+      ⚠️ **Ручная задача, не код:** нечего проверить в репозитории, нужен живой прогон
+      (`bun run mma` в песочнице с настроенным провайдером); без него пункт не закроется.
 
 ---
 
