@@ -33,6 +33,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **`git push` под egress-гейтом (оплата долга).** Перед `push` тул резолвит
+  адресат и проверяет его `checkOutboundUrl` (приватные/denied блокируются),
+  незапушенный дифф сканируется `detectSecrets()`. Спека:
+  `docs/specs/2026-11-09-git-push-egress-design.md`; гвард
+  `tests/tools/git-push-egress.test.ts`.
 - **`verify browser:` под SSRF-политикой (оплата долга).** `runBrowserCheck` и
   `checkDoneEvidence` принимают `networkSecurity` и вызывают `isUrlAllowedAsync`
   до запуска браузера; `ExecutionModule` пробрасывает `config.security.network`
