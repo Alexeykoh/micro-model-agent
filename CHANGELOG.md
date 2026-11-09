@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-11-09
+
 ### Removed
 
 - **Learning Phase B вычеркнута из очереди (2026-11-09).** Удалены пункт §1.6
