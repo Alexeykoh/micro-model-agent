@@ -93,6 +93,12 @@ export interface ProviderConfig {
   models?: Record<string, string>;
   /** Автофейловер на следующий провайдер при 429/5xx (дефолт false). */
   fallback?: boolean;
+  /**
+   * Staged rollout (Evals 2/2): при percentage > 0 потоки с бакетом < percentage
+   * (`inRollout(threadId)`) переключаются на запись `candidate` уже при старте
+   * сессии. `candidate` обязан существовать в entries; нет кандидата — игнор.
+   */
+  rollout?: { candidate?: string; percentage?: number };
   // Legacy-плоские поля одного провайдера — продолжают работать (зеркалят активную запись).
   type: string;
   baseUrl: string;
