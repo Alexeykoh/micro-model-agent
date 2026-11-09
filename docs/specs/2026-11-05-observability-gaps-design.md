@@ -363,8 +363,8 @@ W0–W4 и часть W1/W2 смержены в `dev`. Остаток зарег
 
 - **DEBT(observability-w5-w6)** — сигналы W5 и W6 из §4.
 - **DEBT(observability-false-success)** — пять поведенческих фиксов из §2.5.
-- **DEBT(observability-health-coverage)** — §3.6/§5.4 (`health()` у шести модулей
-  и гейт `tests/arch/health-coverage.test.ts`): кода нет, пункт числился закрытым.
+- §3.6/§5.4 (`health()` у шести модулей и гейт `tests/arch/health-coverage.test.ts`) —
+  оплачено 2026-11-09 веткой `fix/observability-health-coverage`.
 
 Критерий выхода и триггер — в реестре. Долг оплачивается один раз: при
 наступлении триггера остаток закрывается тестами, падающими без правки.

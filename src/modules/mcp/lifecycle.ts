@@ -14,6 +14,7 @@ export function mcpModuleDef(mcp: MCPModule): ModuleDef {
     name: "mcp",
     critical: false,
     setup: () => mcp.initialize(),
+    health: () => mcp.health(),
     tools: () => mcp.getToolDefinitions(),
     promptBlocks: () => {
       const block = mcp.getSystemPromptBlock();

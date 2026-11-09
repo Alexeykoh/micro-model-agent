@@ -66,23 +66,25 @@ export class IndexerModule implements AgentModule {
       logger: opts.logger,
     });
     this.watcher = new IndexWatch(this.indexer, () => this.refresh());
-    // Кэш привязан к корню проекта + сигнатуре дерева: совпала — отдаём индекс
-    // без обхода. На расхождении `walk(prev)` делает инкрементальный пересбор
-    // (совпавшие `size`/`mtimeMs` не читаются, изменённые — перечитываются),
-    // поэтому «правка одного файла» не перечитывает весь проект.
+    // Кэш по сигнатуре дерева: совпала — без обхода; иначе walk(prev) инкрементально.
     this.cache = new IndexCache(opts.cacheDir, {
       root: opts.baseDir,
       signature: () => this.indexer.scanSignature(),
     });
   }
 
-  /**
-   * Подключает внешний источник определений (LSP `workspace/symbol`).
-   * Вызывается только когда индекс не нашёл совпадений — так спавн языкового
-   * сервера не платится на каждый `symbol`-запрос. null — отключить.
-   */
+  /** Внешний источник определений (LSP); null — отключить. */
   setSymbolProvider(provider: SymbolProvider | null): void {
     this.symbolProvider = provider;
+  }
+
+  private lastBuildError: string | null = null;
+  /** Честный health: ошибка стройки → degraded (INV-6). */
+  health(): { status: "ok" | "degraded" | "failed"; reason?: string } {
+    if (this.lastBuildError) {
+      return { status: "degraded", reason: `index build failed: ${this.lastBuildError}` };
+    }
+    return { status: "ok" };
   }
 
   /** Строит индекс (кэш → обход), null при неустранимой ошибке. */
@@ -106,8 +108,10 @@ export class IndexerModule implements AgentModule {
         this.cache.save(result);
         this.index = result;
         this.builtAt = Date.now();
+        this.lastBuildError = null;
         return result;
-      } catch {
+      } catch (err) {
+        this.lastBuildError = err instanceof Error ? err.message : String(err);
         return null;
       } finally {
         this.indexing = false;
@@ -117,14 +121,7 @@ export class IndexerModule implements AgentModule {
     return this.buildPromise;
   }
 
-  /**
-   * Перестраивает индекс с ПЕРЕИСПОЛЬЗОВАНИЕМ кэша: неизменённые файлы не
-   * перечитываются. Явная пересборка с нуля — `reindex()`.
-   *
-   * Индекс НЕ гасим: во время пересборки карта проекта остаётся доступной
-   * (промпт не остаётся без карты) — предыдущий индекс заменяется по
-   * завершении сборки (аудит §8.7).
-   */
+  /** Перестройка с переиспользованием кэша; индекс не гасится до завершения. */
   async refresh(): Promise<IndexResult | null> {
     this.rankCache = null;
     this.builtAt = null;

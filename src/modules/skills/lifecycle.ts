@@ -13,6 +13,7 @@ export function skillsModuleDef(skills: SkillsModule): ModuleDef {
   return {
     name: "skills",
     critical: false,
+    health: () => skills.health(),
     hooks: () => skills.getPlugin(),
   };
 }
