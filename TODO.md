@@ -117,12 +117,12 @@
       токен в OS keychain, daemon как сервис), клиент как тонкий UI,
       версионирование протокола, daemon переживает рестарт UI без потери хода
       (pull/SSE resume). Критерий закрытия — волна -1 из идеи выше.
-- [ ] **Cost/LLM-gateway.**
-      **Уже есть:** `CostTracker` (+per-provider breakdown), `mma usage` (OpenRouter),
-      prompt-cache capability/resolver, prefix-monitor, `iterMaxTokensOverride=16384`.
-      **Осталось:** per-run бюджет, `max_turns` hard-stop, per-tenant caps до вызова
-      модели, intent-routing. Cache-anchoring: кэш-метрики есть, стабильного
-      префикса как enforcement нет (только диагностика `prefix-monitor`).
+- [x] **Cost/LLM-gateway.** **MVP закрыт 2026-11-09**: per-run hard-stop
+      `cost.maxRunUsd` (целые USD; `stopReason=cost_budget` через форс-финал,
+      `src/core/agent/cost-budget.ts` + проверка в loop-run). `max_turns`
+      hard-stop уже был (`maxToolIterations`), intent-routing кодовая
+      (`ProviderManager.pickFor`), cache-anchoring — prefix-monitor (был),
+      per-tenant — процессом (silo).
 - [ ] **MCP/plugin supply-chain.**
       **Уже есть:** allowlist серверов (`mcp.allowedServers`, гвард
       `tests/arch/outbound-policy.test.ts`), DLP-egress на MCP, plugin-permissions как
