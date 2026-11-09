@@ -83,12 +83,13 @@ export class Agent extends AgentBase {
   /**
    * Пауза хода на границе итераций: текущая итерация (LLM-стрим и батч
    * тулов) доходит до конца целиком, следующий вызов модели не начнётся до
-   * resume(). Не durable — рестарт процесса теряет паузу (спека
-   * docs/specs/2026-11-06-webui-pause-resume-design.md §1).
+   * resume(). Durable (HITL, спека 2026-11-06 §1): флаг переживает рестарт
+   * процесса (`interrupt.json` в каталоге сессии).
    */
   pause(): void {
     if (this.shutdownRequested) return;
     this.pauseRequested = true;
+    this.persistInterrupt(true);
   }
 
   /** Снимает паузу и будит ждущий гейт; идемпотентна. */
@@ -98,6 +99,31 @@ export class Agent extends AgentBase {
     this.pauseResolve = null;
     this.pauseWait = null;
     if (resolve) resolve();
+    this.persistInterrupt(false);
+  }
+
+  /** Durable-флаг паузы (fail-open: нет стора/id — no-op). */
+  private persistInterrupt(paused: boolean): void {
+    const id = this.deps.sessionManager?.getActiveMeta?.()?.id;
+    if (id) {
+      try {
+        this.deps.sessionManager?.saveInterrupt?.(id, paused);
+      } catch {
+        // fail-open: пауза всё равно активна в памяти
+      }
+    }
+  }
+
+  /** Восстановить паузу из interrupt.json (начало хода, durable). */
+  private restoreInterrupt(): void {
+    const id = this.deps.sessionManager?.getActiveMeta?.()?.id;
+    if (!id) return;
+    try {
+      const st = this.deps.sessionManager?.loadInterrupt?.(id);
+      if (st?.paused) this.pauseRequested = true;
+    } catch {
+      // fail-open: старт без паузы
+    }
   }
 
   /** Приостановлен ли ход сейчас (проект `pausedIds` в SSE `state`). */
@@ -145,6 +171,8 @@ export class Agent extends AgentBase {
     onReasoning?: (reasoning: string) => void,
   ): Promise<AgentResult> {
     this.abortController = new AbortController();
+    // Durable interrupt (HITL): рестарт при активной паузе стартует паузой.
+    this.restoreInterrupt();
     const view = this.hostView();
     return executeAgentLoop(
       {

@@ -111,6 +111,8 @@ export interface AppConfig {
   contextBudget: ContextBudget;
   /** Per-run бюджет стоимости в USD (0 = без лимита). Cost/LLM-gateway MVP. */
   cost?: { maxRunUsd?: number };
+  /** Глобальный kill-switch (HITL): при true ход стопится на границе итерации. */
+  hitl?: { killSwitch?: boolean };
   /** Детерминированный гейт качества записей памяти (TODO §1.6, Phase A). */
   memory?: { validator?: Partial<MemoryValidatorConfig>; retentionDays?: number };
   instructions: InstructionsConfig;

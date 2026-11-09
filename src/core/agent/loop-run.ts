@@ -103,6 +103,12 @@ export async function executeAgentLoop(
     // перечитываем shutdown: стоп будит гейт (INV-P3), цикл обязан выйти.
     await ctx.waitWhilePaused();
     if (ctx.isShutdownRequested()) break;
+    // Глобальный kill-switch (HITL): мгновенный стоп хода на границе
+    // итерации (текущий LLM-вызов/батч доходят до конца).
+    if (config.hitl?.killSwitch) {
+      logger.diagnostic("warn", "hitl kill-switch: turn stopped");
+      break;
+    }
     state.iteration++;
     ctx.setIteration(state.iteration);
     contextManager.noteIteration();

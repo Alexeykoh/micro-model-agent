@@ -42,20 +42,20 @@ export class SessionManager {
   }
 
   /** Сохранить чекпоинт хода (durable state 2/4). */
-  saveCheckpoint(id: string, checkpoint: TurnCheckpoint): void {
-    this.store.saveCheckpoint(id, checkpoint);
-  }
+  saveCheckpoint(id: string, checkpoint: TurnCheckpoint): void { this.store.saveCheckpoint(id, checkpoint); }
 
   /** Загрузить чекпоинт хода (нет/битый — null, fail-open). */
-  loadCheckpoint(id: string): TurnCheckpoint | null {
-    return this.store.loadCheckpoint(id);
-  }
+  loadCheckpoint(id: string): TurnCheckpoint | null { return this.store.loadCheckpoint(id); }
+
+  /** Сохранить durable-interrupt паузы (`Agent.pause/resume`). */
+  saveInterrupt(id: string, paused: boolean): void { this.state.saveInterrupt(id, paused); }
+
+  /** Прочитать durable-interrupt паузы. */
+  loadInterrupt(id: string): { paused: boolean } | null { return this.state.loadInterrupt(id); }
 
   /** Retention-prune: удалить сессии старше `retentionDays` (кроме активной). */
   pruneByRetention(retentionDays: number): string[] {
-    return this.state.pruneByRetention(retentionDays, this.activeId ?? undefined, (sid) =>
-      this.delete(sid),
-    );
+    return this.state.pruneByRetention(retentionDays, this.activeId ?? undefined, (sid) => this.delete(sid));
   }
 
   /** Обновить конфиг шифрования. */

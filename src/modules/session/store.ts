@@ -20,6 +20,7 @@ import { appendLogEntry, readLogEntries, readLogEntriesResult } from "./log-file
 import { readCause, parseMetaContent, type SessionRead } from "./read-status";
 import type { SessionLogEntry } from "./log-types";
 import { SessionListCache, scanSessionList } from "./list-cache";
+import { loadInterruptFile, saveInterruptFile, type InterruptState } from "./interrupt";
 import { rotateSessions } from "./prune";
 export type { SessionLogEntry, OnboardingEvent } from "./log-types";
 
@@ -88,11 +89,6 @@ export class SessionStore {
   /** Хвост session-лога: последние строки для инкрементального чтения (Trace). */
   private sessionLogTailPath(id: string): string {
     return join(this.getSessionDir(id), "session.log.tail");
-  }
-
-  /** Путь чекпоинтера хода (durable state 2/4). */
-  private checkpointPath(id: string): string {
-    return join(this.getSessionDir(id), "checkpoint.json");
   }
 
   /** Есть ли сессия (по meta.json). */
@@ -225,14 +221,16 @@ export class SessionStore {
   }
 
   /** Сохранить чекпоинт хода (атомарно; шифр при включённой опции). */
-  saveCheckpoint(id: string, checkpoint: TurnCheckpoint): void {
-    saveCheckpointFile(this.getSessionDir(id), checkpoint, this.encryptor);
-  }
+  saveCheckpoint(id: string, checkpoint: TurnCheckpoint): void { saveCheckpointFile(this.getSessionDir(id), checkpoint, this.encryptor); }
 
   /** Загрузить чекпоинт хода; нет/битая/чужая версия — null (fail-open). */
-  loadCheckpoint(id: string): TurnCheckpoint | null {
-    return loadCheckpointFile(this.getSessionDir(id), this.encryptor);
-  }
+  loadCheckpoint(id: string): TurnCheckpoint | null { return loadCheckpointFile(this.getSessionDir(id), this.encryptor); }
+
+  /** Записать durable-interrupt паузы (`interrupt.json`). */
+  saveInterrupt(id: string, state: InterruptState): void { saveInterruptFile(this.getSessionDir(id), state); }
+
+  /** Прочитать durable-interrupt паузы; нет/битый — null. */
+  loadInterrupt(id: string): InterruptState | null { return loadInterruptFile(this.getSessionDir(id)); }
   /** session-лог с причиной: «нет файла» ≠ «не прочитан» (INV-15). */
   loadSessionLogWithStatus(
     id: string,
