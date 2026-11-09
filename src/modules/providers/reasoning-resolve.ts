@@ -3,7 +3,7 @@
 import type { ProviderConfig, ReasoningStrategy, ModelCapabilities } from "../../config/types";
 import { BUILTIN_PROVIDERS } from "./presets";
 import { resolveModelCapabilities } from "./capabilities";
-import { activeProviderEndpoint } from "./manager";
+import { activeProviderEndpoint } from "./endpoint";
 
 type ProviderRef = Pick<ProviderConfig, "entries" | "active" | "type" | "baseUrl" | "apiKey">;
 
