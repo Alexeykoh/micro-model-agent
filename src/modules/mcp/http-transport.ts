@@ -3,6 +3,7 @@
 import type { MCPServerConfig } from "./registry";
 import { MCP_HTTP_TIMEOUT_MS as HTTP_TIMEOUT_MS } from "../../config/timeouts";
 import { MCP_ACCEPT_HEADER, type MCPToolInfo } from "./protocol";
+import { oauthHeaders, refreshToken, resolveTokenFile } from "./oauth";
 
 /** HTTP-транспорт одного MCP-сервера: listTools/callTool через POST. */
 export class HttpTransport {
@@ -25,6 +26,30 @@ export class HttpTransport {
     this.connected = false;
   }
 
+  /** POST JSON-RPC с OAuth-заголовками: 401 → refresh 1 раз → повтор. */
+  private async post(request: Record<string, unknown>): Promise<Response> {
+    const headers: Record<string, string> = {
+      Accept: MCP_ACCEPT_HEADER,
+      "Content-Type": "application/json",
+      ...this.config.headers,
+      ...(await oauthHeaders(this.config, process.cwd())),
+    };
+    const init = {
+      method: "POST",
+      headers,
+      body: JSON.stringify(request),
+      signal: AbortSignal.timeout(this.config.timeout || HTTP_TIMEOUT_MS),
+    };
+    const first = await fetch(this.config.url!, init);
+    if (first.status !== 401 || !this.config.oauth?.tokenUrl) return first;
+    const filePath = resolveTokenFile(this.config, process.cwd());
+    if (!filePath) return first;
+    const fresh = await refreshToken(filePath, this.config.oauth.tokenUrl, this.config.oauth.clientId ?? "");
+    if (!fresh) return first;
+    headers.Authorization = `Bearer ${fresh}`;
+    return fetch(this.config.url!, init);
+  }
+
   /** Список тулов через HTTP POST. */
   async listTools(): Promise<MCPToolInfo[]> {
     const request = {
@@ -33,16 +58,7 @@ export class HttpTransport {
       method: "tools/list",
     };
 
-    const response = await fetch(this.config.url!, {
-      method: "POST",
-      headers: {
-        Accept: MCP_ACCEPT_HEADER,
-        "Content-Type": "application/json",
-        ...this.config.headers,
-      },
-      body: JSON.stringify(request),
-      signal: AbortSignal.timeout(this.config.timeout || HTTP_TIMEOUT_MS),
-    });
+    const response = await this.post(request);
 
     if (!response.ok) {
       const text = await response.text().catch(() => "");
@@ -68,16 +84,7 @@ export class HttpTransport {
       },
     };
 
-    const response = await fetch(this.config.url!, {
-      method: "POST",
-      headers: {
-        Accept: MCP_ACCEPT_HEADER,
-        "Content-Type": "application/json",
-        ...this.config.headers,
-      },
-      body: JSON.stringify(request),
-      signal: AbortSignal.timeout(this.config.timeout || HTTP_TIMEOUT_MS),
-    });
+    const response = await this.post(request);
 
     if (!response.ok) {
       const text = await response.text().catch(() => "");

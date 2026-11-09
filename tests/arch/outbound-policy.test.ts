@@ -41,6 +41,7 @@ export const OUTBOUND_FETCH_ALLOWLIST: Record<string, string> = {
   "src/modules/mcp/sse-transport.ts": "MCP server URL from user config; separate allowlist (mcp.allowedServers)",
   "src/modules/updater/checker.ts": "GitHub releases URL, hardcoded",
   "src/modules/updater/archive.ts": "GitHub release asset URL from latest.json (manifest-validated)",
+  "src/modules/mcp/oauth.ts": "IdP token URL from user MCP server config (oauth.tokenUrl)",
   "src/modules/service/runtime/webhook.ts": "Validated by checkCallbackUrl (https/SSRF) before fetch; redirect: manual",
   "src/modules/setup/discovery.ts": "local setup probe: localhost ports and provider URLs from config",
   "src/tools/web-search.ts": "search API URL from config; ToolExecutor validates urlArgs (INV-10)",

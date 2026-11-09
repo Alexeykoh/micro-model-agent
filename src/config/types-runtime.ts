@@ -104,6 +104,8 @@ export interface MCPServerConfigEntry {
   timeout?: number;
   /** Rate-limit gateway: мин. мс между вызовами одного сервера (0 — без лимита). */
   rateLimitMs?: number;
+  /** OAuth 2.1 per-user (spec 2026-11-09-mcp-oauth-design). */
+  oauth?: import("../modules/mcp/oauth").OAuthConfig;
 }
 
 export interface BrowserToolConfig {
