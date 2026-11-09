@@ -194,7 +194,7 @@ export interface ContextQualityBreakdown {
  * Причина принудительного завершения хода харнессом: дубль-петля,
  * серия провальных пакетов или исчерпание итераций.
  */
-export type StopReason = "duplicate" | "failed_batches" | "max_iters" | "silent" | "stalled";
+export type StopReason = "duplicate" | "failed_batches" | "max_iters" | "silent" | "stalled" | "cost_budget";
 
 /** Скорость одного LLM-вызова: completion-токены за время декодирования. */
 export interface LlmCallSpeed {

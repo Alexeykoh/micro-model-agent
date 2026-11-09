@@ -109,6 +109,8 @@ export interface AppConfig {
    */
   contextAuto?: boolean;
   contextBudget: ContextBudget;
+  /** Per-run бюджет стоимости в USD (0 = без лимита). Cost/LLM-gateway MVP. */
+  cost?: { maxRunUsd?: number };
   /** Детерминированный гейт качества записей памяти (TODO §1.6, Phase A). */
   memory?: { validator?: Partial<MemoryValidatorConfig>; retentionDays?: number };
   instructions: InstructionsConfig;
