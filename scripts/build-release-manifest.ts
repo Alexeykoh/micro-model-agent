@@ -39,4 +39,4 @@ const manifest = {
 
 const out = process.argv[2] ?? join(root, "release-manifest.json");
 writeFileSync(out, JSON.stringify(manifest, null, 2), "utf-8");
-console.log(`[manifest] ${out} version=${manifest.version} sha=${manifest.gitSha.slice(0, 12)}`);
+process.stdout.write(`[manifest] ${out} version=${manifest.version} sha=${manifest.gitSha.slice(0, 12)}\n`);
