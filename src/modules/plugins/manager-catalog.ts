@@ -1,7 +1,7 @@
 // Каталог плагинов: набор, дедуп по версии, загрузка/выгрузка и отказы.
 // Вынесен из `manager.ts` (правило 6): здесь только состояние реестра плагинов,
 // а гейт, тулы, записи и хуки остаются у фасада `PluginManager`.
-import type { AgentPlugin } from "../types";
+import type { AgentPlugin, PluginHookContext } from "../types";
 import { semverGt } from "../updater/checker";
 import { firstLine, validatePluginMeta, type PluginLoadFailure } from "./records";
 import type { PluginLog } from "./log";
@@ -114,7 +114,7 @@ export class PluginCatalog {
    * `onUnload` — без него перезагрузка течёт сокетами (встроенные плагины из
    * реестра не трогаем: их код не перечитывается).
    */
-  unloadByDir(dir: string, ctx?: unknown): string[] {
+  unloadByDir(dir: string, ctx?: PluginHookContext): string[] {
     const names: string[] = [];
     for (const plugin of [...this.plugins]) {
       if (!plugin.path || !isInsideDir(plugin.path, dir)) continue;
@@ -178,7 +178,7 @@ export class PluginCatalog {
 }
 
 /** Вызов `onUnload` с той же изоляцией ошибок, что и у остальных хуков. */
-function safeUnload(log: PluginLog, plugin: AgentPlugin, ctx?: unknown): void {
+function safeUnload(log: PluginLog, plugin: AgentPlugin, ctx?: PluginHookContext): void {
   if (!plugin.onUnload) return;
   try {
     const out = plugin.onUnload(ctx);

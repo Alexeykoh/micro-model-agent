@@ -6,8 +6,8 @@
 // (`mma plugins enable angular11`, `/plugins`, тумблер в вебе).
 //
 // Спека: `docs/specs/2026-10-16-angular11-plugin-design.md`.
-import type { AgentPlugin, PluginPermission } from "../../../types";
-import type { ToolCall, ToolContext, ToolDefinition, ToolResult } from "../../../../tools/types";
+import type { AgentPlugin, PluginHookContext, PluginPermission } from "../../../types";
+import type { ToolCall, ToolDefinition, ToolResult } from "../../../../tools/types";
 import { ANGULAR11_KNOWLEDGE } from "./knowledge";
 import { angularTools } from "./tools";
 import { runWriteCheck } from "./write-check";
@@ -34,8 +34,8 @@ export class Angular11Plugin implements AgentPlugin {
   }
 
   /** Проверка идиом Angular 11 после записи `.ts`/`.html` в воркспейсе (F3). */
-  onAfterTool(ctx: ToolContext, call: ToolCall, result: ToolResult): void {
-    runWriteCheck(ctx, call, result);
+  onAfterTool(ctx: PluginHookContext, call: ToolCall, result: ToolResult): void {
+    runWriteCheck(ctx as { baseDir: string }, call, result);
   }
 }
 

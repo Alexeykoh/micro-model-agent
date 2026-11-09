@@ -1,6 +1,7 @@
 // Контракт плагинов тулов: хуки до/после выполнения. Вынесено из `types.ts`
 // (правило ≤300); реэкспортируется оттуда для совместимости.
-import type { ToolCall, ToolContext, ToolResult } from "./types";
+import type { PluginHookContext } from "../modules/types";
+import type { ToolCall, ToolResult } from "./types";
 
 /** Хук плагина: перехват до/после выполнения тула. */
 export interface PluginHook {
@@ -11,8 +12,8 @@ export interface PluginHook {
    * Вернуть `false` — блокировать тул, строку — блокировать с причиной
    * (видит модель), `true` — разрешить.
    */
-  onBeforeTool?(ctx: ToolContext, call: ToolCall): boolean | string | Promise<boolean | string>;
-  onAfterTool?(ctx: ToolContext, call: ToolCall, result: ToolResult): void | Promise<void>;
+  onBeforeTool?(ctx: PluginHookContext, call: ToolCall): boolean | string | Promise<boolean | string>;
+  onAfterTool?(ctx: PluginHookContext, call: ToolCall, result: ToolResult): void | Promise<void>;
 }
 
 /** Менеджер плагинов: доступ к зарегистрированным хукам. */

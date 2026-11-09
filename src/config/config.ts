@@ -184,8 +184,9 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
     // в stripEnvOverrides по-прежнему сходился с загруженным конфигом.
     const providerOverride = overrides.find((o) => o.key === "provider");
     if (providerOverride) providerOverride.envValue = config.provider;
-  } catch (e: any) {
-    defaultOutputBus.log("warn", "module:config", t("config.decryption_warning", { error: e.message }));
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : String(e);
+    defaultOutputBus.log("warn", "module:config", t("config.decryption_warning", { error: message }));
   }
 
   if (overrides.length > 0) rememberEnvOverrides(config, overrides);
@@ -234,8 +235,9 @@ export function saveConfig(config: AppConfig, configPath: string, configDir?: st
       ...toWrite,
     } as unknown as Record<string, unknown>);
     writeFileSync(configPath, JSON.stringify(encryptedConfig, regexReplacer, 2), "utf-8");
-  } catch (e: any) {
-    defaultOutputBus.log("warn", "module:config", t("config.encryption_warning", { error: e.message }));
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : String(e);
+    defaultOutputBus.log("warn", "module:config", t("config.encryption_warning", { error: message }));
     writeFileSync(configPath, JSON.stringify(toWrite, regexReplacer, 2), "utf-8");
   }
 }

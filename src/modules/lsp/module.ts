@@ -189,8 +189,8 @@ export class LspModule implements AgentModule {
       onSessionEnd: () => {
         void this.client.close();
       },
-      onBeforeTool: (ctx, call) => this.checkBeforeWrite(ctx, call),
-      onAfterTool: (ctx, call, result) => this.checkAfterWrite(ctx, call, result),
+      onBeforeTool: (ctx, call) => this.checkBeforeWrite(ctx as unknown as ToolContext, call),
+      onAfterTool: (ctx, call, result) => this.checkAfterWrite(ctx as unknown as ToolContext, call, result),
     };
   }
 

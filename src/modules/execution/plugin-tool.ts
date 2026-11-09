@@ -2,7 +2,7 @@
 // правило 6): план-варнинги, журнал вызовов для stuck-детектора, пофайловый
 // typecheck, bash-фейлы, автопродвижение и автопоиск ошибки. Логика перенесена
 // дословно.
-import type { ToolCall } from "../../tools/types";
+import type { ToolCall, ToolContext, ToolResult } from "../../tools/types";
 import { t } from "../../i18n/index";
 import { detectTestResults } from "../../tools/bash";
 import { forbiddenWindowsCommand } from "./windows-commands";
@@ -11,6 +11,7 @@ import {
   FS_MUTATING_TOOLS,
   MAX_PLAN_WARNINGS_BEFORE_BLOCK,
   type ExecutionPluginDeps,
+  type ExecutionToolContext,
 } from "./plugin-state";
 import { autoMarkDeletedStep, recordPlanMutation, recordTypecheckOutcome } from "./plugin-plan";
 
@@ -40,16 +41,16 @@ export function runBeforeTool(deps: ExecutionPluginDeps, call: ToolCall): true |
   return true;
 }
 
-export function runToolCall(deps: ExecutionPluginDeps, ctx: any): void {
-  const toolName = ctx?.toolName as string;
-  const args = ctx?.args as Record<string, unknown>;
+export function runToolCall(deps: ExecutionPluginDeps, ctx: ExecutionToolContext): void {
+  const toolName = typeof ctx?.toolName === "string" ? ctx.toolName : undefined;
+  const args = ctx?.args as Record<string, unknown> | undefined;
   if (toolName && args) {
     deps.stuckDetector.recordToolCall(toolName, args);
     recordPlanMutation(deps, toolName, args);
   }
 }
 
-export function runAfterTool(deps: ExecutionPluginDeps, ctx: any, call: any, result: any): void {
+export function runAfterTool(deps: ExecutionPluginDeps, ctx: ToolContext & { onMeta?: (text: string) => void }, call: ToolCall, result: ToolResult): void {
   // Файловая мутация хода → финальному аудиту есть что ломать тестами.
   // bash/browser/mcp считаются консервативно: успех мог писать на диск.
   if (result.success && FS_MUTATING_TOOLS.has(call.name)) deps.state.mutatedThisTurn = true;

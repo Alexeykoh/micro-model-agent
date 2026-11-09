@@ -89,14 +89,11 @@ export class BrowserSession {
       }
 
       return result;
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (err instanceof BrowserUnavailableError) {
         return { success: false, output: err.message };
       }
-      return {
-        success: false,
-        output: t("browser.error", { message: err.message }),
-      };
+      return { success: false, output: t("browser.error", { message: err instanceof Error ? err.message : String(err) }) };
     }
   }
 
@@ -153,10 +150,11 @@ export class BrowserSession {
 
     try {
       await this.driver.goto(url, this.config.navigationTimeout);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
       return {
         success: false,
-        output: t("browser.nav_failed", { message: err.message }),
+        output: t("browser.nav_failed", { message }),
       };
     }
 
@@ -181,10 +179,11 @@ export class BrowserSession {
       const snapshot = await this.takeSnapshot();
       await this.saveCookies();
       return { success: true, output: snapshot };
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
       return {
         success: false,
-        output: t("browser.click_failed", { message: err.message }),
+        output: t("browser.click_failed", { message }),
       };
     }
   }
@@ -205,10 +204,11 @@ export class BrowserSession {
       await this.driver.evaluate(buildTypeScript(target, text));
       const snapshot = await this.takeSnapshot();
       return { success: true, output: snapshot };
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
       return {
         success: false,
-        output: t("browser.type_failed", { message: err.message }),
+        output: t("browser.type_failed", { message }),
       };
     }
   }
@@ -228,10 +228,11 @@ export class BrowserSession {
       await new Promise((r) => setTimeout(r, 300));
       const snapshot = await this.takeSnapshot();
       return { success: true, output: snapshot };
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
       return {
         success: false,
-        output: t("browser.scroll_failed", { message: err.message }),
+        output: t("browser.scroll_failed", { message }),
       };
     }
   }

@@ -237,8 +237,8 @@ export class SkillsModule implements AgentModule {
     return {
       name: "skills",
       description: "discovers and loads agent skills",
-      onSessionStart: (_ctx: any) => {},
-      onBeforeThink: (_ctx: any) => {},
+      onSessionStart: () => {},
+      onBeforeThink: () => {},
     };
   }
 

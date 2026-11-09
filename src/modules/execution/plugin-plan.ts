@@ -6,7 +6,12 @@ import { extractFileLikeTokens, stripUrls } from "../../core/hallucination/js-id
 import { bashMutatesFiles } from "./bash-mutation";
 import { extractBrokenFiles, normalizeBrokenPath } from "./broken-files";
 import { switchStepToDelete } from "./plan-steps";
-import { PLAN_NUDGE_THRESHOLD, type ExecutionPluginDeps } from "./plugin-state";
+import {
+  PLAN_NUDGE_THRESHOLD,
+  type ExecutionPluginDeps,
+  type ExecutionThinkContext,
+} from "./plugin-state";
+import type { ToolCall, ToolResult } from "../../tools/types";
 
 /**
  * Гейт для `plan update status=done`: реджектит, пока последний write/edit
@@ -38,7 +43,7 @@ export function stepTypecheckGate(
  * без keyword-классификации задач): только когда агент реально сделал
  * файл-мутирующие вызовы (write/edit/bash/download) без плана, ему нужен план.
  */
-export function nudgePlanIfNeeded(deps: ExecutionPluginDeps, ctx: any): void {
+export function nudgePlanIfNeeded(deps: ExecutionPluginDeps, ctx: ExecutionThinkContext): void {
   const mutations = deps.state.mutationsWithoutPlan;
   if (mutations >= PLAN_NUDGE_THRESHOLD && !deps.state.planNudgeSent && ctx.contextManager) {
     deps.state.planNudgeSent = true;
@@ -85,8 +90,8 @@ export function recordPlanMutation(
  */
 export function recordTypecheckOutcome(
   deps: ExecutionPluginDeps,
-  call: any,
-  result: any,
+  call: ToolCall,
+  result: ToolResult,
   toolText: string,
 ): void {
   if (call.name !== "write_file" && call.name !== "edit_file") return;
@@ -120,8 +125,8 @@ export function recordTypecheckOutcome(
  */
 export function autoMarkDeletedStep(
   deps: ExecutionPluginDeps,
-  call: any,
-  result: any,
+  call: ToolCall,
+  result: ToolResult,
 ): void {
   if (call.name !== "delete_file" || !result.success || !deps.trackerRef.current) return;
   const deletedPath = String(call.arguments?.path ?? "");

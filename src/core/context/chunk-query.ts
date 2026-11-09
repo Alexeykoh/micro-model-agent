@@ -148,7 +148,7 @@ export async function runChunkQuery(
           signal,
           opts.sessionId,
         );
-      } catch (err: any) {
+      } catch (err: unknown) {
         // Один упавший чанк не должен убивать весь запрос. Кладём ошибку,
         // остальные чанки + синтез идут дальше.
         const msg = errMsg(err);

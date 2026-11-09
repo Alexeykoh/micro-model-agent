@@ -119,10 +119,10 @@ export class MCPModule implements AgentModule {
               );
             }),
           ]);
-        } catch (e: any) {
+        } catch (e: unknown) {
           timedOut = true;
           this.failedServers.add(serverName);
-          this.logger?.warn(`MCP server "${serverName}" init failed: ${e.message}`);
+          this.logger?.warn(`MCP server "${serverName}" init failed: ${e instanceof Error ? e.message : String(e)}`);
           await client.disconnect().catch((err: unknown) => {
             this.logger?.warn(`cleanup disconnect for "${serverName}" failed`, {
               error: String(err),
@@ -171,9 +171,9 @@ export class MCPModule implements AgentModule {
         }
       }
       return client;
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.failedServers.add(serverName);
-      this.logger?.warn(`MCP connect failed for "${serverName}": ${e.message}`);
+      this.logger?.warn(`MCP connect failed for "${serverName}": ${e instanceof Error ? e.message : String(e)}`);
       await client.disconnect().catch(() => {});
       return null;
     }
@@ -234,8 +234,8 @@ export class MCPModule implements AgentModule {
               success: true,
               output: typeof result === "string" ? result : JSON.stringify(result, null, 2),
             };
-          } catch (e: any) {
-            return { success: false, output: `MCP call failed: ${e.message}` };
+          } catch (e: unknown) {
+            return { success: false, output: `MCP call failed: ${e instanceof Error ? e.message : String(e)}` };
           }
         },
       });
@@ -285,11 +285,11 @@ export class MCPModule implements AgentModule {
         for (const [serverName, client] of this.connections) {
           try {
             await client.disconnect();
-          } catch (e: any) {
+          } catch (e: unknown) {
             // Best-effort cleanup на конце сессии: упавший disconnect не
             // должен ронять shutdown, но обязан остаться в диагностике.
             this.logger?.warn(`disconnect from "${serverName}" failed`, {
-              error: String(e?.message ?? e),
+              error: e instanceof Error ? e.message : String(e),
             });
           }
         }

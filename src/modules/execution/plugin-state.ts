@@ -3,6 +3,32 @@
 import type { StuckDetector } from "./stuck-detector";
 import type { PlanTracker } from "./tracker";
 import type { PlanStore } from "./plan-store";
+import type { ToolCall, ToolContext } from "../../tools/types";
+
+/**
+ * Структурный контекст `onBeforeThink` execution-плагина. Поля — только те,
+ * которые хук реально читает (по builtThinkCtx в agent.ts); остальное —
+ * неизвестный пакет плагинного диспетчера (см. debt: контракт плагинов).
+ */
+export interface ExecutionThinkContext {
+  turnSeq?: unknown;
+  iteration?: unknown;
+  contextManager?: { addMessage(message: { role: "user"; content: string }): void };
+  logger?: {
+    warn(message: string): void;
+    diagnostic?(level: string, message: string): void;
+  };
+  sessionLog?: {
+    directive(event: string, detail: string, iteration?: number): void;
+  };
+  onMeta?: (text: string) => void;
+}
+
+/** Контекст `onToolCall` execution-плагина (toolName + args из диспетчера). */
+export interface ExecutionToolContext {
+  toolName?: unknown;
+  args?: unknown;
+}
 
 /**
  * Кулдаун (в итерациях) между инжектами stuck-восстановления. Экспортируется,
@@ -88,13 +114,13 @@ export interface ExecutionPluginDeps {
   forbiddenBashFailures: Map<string, number>;
   state: ExecutionPluginState;
   store: PlanStore;
-  checkPlanAlignment(call: any): string | null;
+  checkPlanAlignment(call: ToolCall): string | null;
   advancePlanIfStepComplete(sessionLog?: {
     plan(event: string, detail: string, iteration?: number): void;
   }): void;
   /** Архивирует завершённый план на границе хода (onTurnEnd). */
   archiveCompletedPlan(): void;
-  maybeSearchError: (ctx: any, call: any) => void;
+  maybeSearchError: (ctx: ToolContext, call: ToolCall) => void;
 }
 
 /** Начальное состояние плагина: сидирует кулдауны теми же офсетами, с которыми плагин сравнивает. */

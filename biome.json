@@ -31,7 +31,7 @@
         "noEmptyCharacterClassInRegex": "off"
       },
       "suspicious": {
-        "noExplicitAny": "warn",
+        "noExplicitAny": "error",
         "noConsole": "error",
         "noAssignInExpressions": "off",
         "noExportsInTest": "off",

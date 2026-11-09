@@ -75,13 +75,14 @@ export async function* runStream(
       if (sawDone || emitted) return;
       // Стрим закрылся до [DONE] с нулевым контентом — ретраябельная обрезка.
       if (attempt >= streamRetries) return;
-    } catch (err: any) {
-      if (err?.name === "AbortError" || (err instanceof LlmError && err.terminal) || signal?.aborted) throw err;
+    } catch (err: unknown) {
+      if ((err instanceof Error && err.name === "AbortError") || (err instanceof LlmError && err.terminal) || signal?.aborted) throw err;
 
       // Stall буферизованного SSE после tool_call-дельт: один раз переспрашиваем
       // non-stream. Стрим тут — битый путь, повтор тем же способом снова
       // встанет; а tool_call агент получить обязан.
-      if (err?.stalledAfterToolCall === true && !usedNonStreamingFallback) {
+      const stalled = (err as { stalledAfterToolCall?: unknown } | null)?.stalledAfterToolCall;
+      if (stalled === true && !usedNonStreamingFallback) {
         usedNonStreamingFallback = true;
         host.debug?.(
           "LLM stream stalled after tool_call — falling back to non-streaming request",
@@ -152,13 +153,13 @@ async function* streamOnce(
       body: JSON.stringify(body),
       signal: abortSignal,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     // Fetch-сбои уже HTTP-ретраятся внутри fetchWithRetry —
     // на уровне стрима повторно не ретраим.
     // Аборт по total-дедлайну до headers — честный llm_timeout, а не голый
     // AbortError (иначе причина «ждали коннект 120с» теряется).
     // Пользовательский abort (isTimeout() === false) — пробрасываем как был.
-    if (err?.name === "AbortError") {
+    if (err instanceof Error && err.name === "AbortError") {
       if (isTimeout()) {
         throw new Error(t("error.llm_timeout", { timeout: REQUEST_TIMEOUT_MS }));
       }

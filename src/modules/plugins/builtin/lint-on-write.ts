@@ -1,5 +1,5 @@
 // Встроенный плагин: синтаксис-проверка записи, проектный lint и дебаунснутый typecheck.
-import type { AgentPlugin } from "../../types";
+import type { AgentPlugin, PluginHookContext } from "../../types";
 import type { ToolContext, ToolCall, ToolResult } from "../../../tools/types";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { resolve, extname, join } from "path";
@@ -23,6 +23,17 @@ import {
 // Пофайловые синтаксис-проверки кешируются по (путь, хеш содержимого): перезапись
 // файла с тем же содержимым скипает (дорогую) проверку. Смена контента →
 // промах кеша → свежая проверка.
+/** Ошибка дочернего процесса (settleChildClose): статус + захваченные потоки. */
+type ChildProcessError = Error & {
+  status?: number;
+  stdout?: unknown;
+  stderr?: unknown;
+};
+
+function childErr(err: unknown): ChildProcessError {
+  return err instanceof Error ? err as ChildProcessError : new Error(String(err)) as ChildProcessError;
+}
+
 const syntaxCache = new Map<string, { hash: string; error: string | null }>();
 
 function contentHash(content: string): string {
@@ -43,7 +54,8 @@ export class LintOnWritePlugin implements AgentPlugin {
   private _checks = new Map<string, { at: number; promise: Promise<string | null> }>();
 
   /** После записи/правки: синтаксис файла, затем проектные lint и typecheck. */
-  async onAfterTool(ctx: ToolContext, call: ToolCall, result: ToolResult): Promise<void> {
+  async onAfterTool(ctx: PluginHookContext, call: ToolCall, result: ToolResult): Promise<void> {
+    const tctx = ctx as unknown as ToolContext;
     if (call.name !== "write_file" && call.name !== "edit_file") {
       return;
     }
@@ -55,14 +67,14 @@ export class LintOnWritePlugin implements AgentPlugin {
     const path = String(call.arguments.path || "");
     if (!path) return;
 
-    const fullPath = resolve(ctx.baseDir, path);
+    const fullPath = resolve(tctx.baseDir, path);
     if (!existsSync(fullPath)) return;
 
     const signal = (ctx as { signal?: AbortSignal }).signal;
     if (signal?.aborted) return;
 
     const ext = extname(fullPath);
-    const syntaxError = await this.checkSyntax(fullPath, ext, ctx.baseDir, signal);
+    const syntaxError = await this.checkSyntax(fullPath, ext, tctx.baseDir, signal);
     if (signal?.aborted) return;
 
     if (syntaxError) {
@@ -70,9 +82,9 @@ export class LintOnWritePlugin implements AgentPlugin {
       return;
     }
 
-    await this.runProjectLint(ctx, result, signal);
+    await this.runProjectLint(tctx, result, signal);
     if (signal?.aborted) return;
-    await this.runProjectTypeCheck(fullPath, ctx.baseDir, result, signal);
+    await this.runProjectTypeCheck(fullPath, tctx.baseDir, result, signal);
   }
 
   private async checkSyntax(
@@ -107,7 +119,8 @@ export class LintOnWritePlugin implements AgentPlugin {
         if (signal?.aborted) return null;
         syntaxCache.set(filePath, { hash, error: null });
         return null;
-      } catch (err: any) {
+      } catch (rawErr: unknown) {
+        const err = childErr(rawErr);
         if (
           err.status === 127 ||
           err.message.includes("not found") ||
@@ -115,7 +128,7 @@ export class LintOnWritePlugin implements AgentPlugin {
         ) {
           return null;
         }
-        const stderr = err.stderr?.toString() || err.stdout?.toString() || "";
+        const stderr = String(err.stderr ?? "") || String(err.stdout ?? "");
         const firstError =
           stderr.split("\n").find((line: string) => line.trim()) || "TypeScript syntax error";
         syntaxCache.set(filePath, { hash, error: firstError.trim() });
@@ -127,8 +140,9 @@ export class LintOnWritePlugin implements AgentPlugin {
       try {
         await runAsync({ file: "node", args: ["--check", filePath] }, baseDir, 5000, signal);
         return null;
-      } catch (err: any) {
-        const stderr = err.stderr?.toString() || "";
+      } catch (rawErr: unknown) {
+        const err = childErr(rawErr);
+        const stderr = String(err.stderr ?? "");
         const firstError =
           stderr.split("\n").find((line: string) => line.trim()) || "JavaScript syntax error";
         return firstError.trim();
@@ -169,9 +183,10 @@ export class LintOnWritePlugin implements AgentPlugin {
       ctx.logger.debug(`Running lint: ${lintScript}`);
       await runAsync(lintScript, ctx.baseDir, 30_000, signal);
       ctx.logger.debug("Lint passed");
-    } catch (err: any) {
-      const stderr = (err.stderr?.toString?.() || "").trim();
-      const stdout = (err.stdout?.toString?.() || "").trim();
+    } catch (rawErr: unknown) {
+      const err = childErr(rawErr);
+      const stderr = String(err.stderr ?? "").trim();
+      const stdout = String(err.stdout ?? "").trim();
       const combined = `${stderr}\n${stdout}`;
       if (lintScript && isMissingBinaryError(err, combined)) {
         markLintBinaryMissing(ctx.baseDir, lintScript);
@@ -258,7 +273,8 @@ export class LintOnWritePlugin implements AgentPlugin {
     try {
       await runAsync(`${tsc} --noEmit --skipLibCheck`, baseDir, 30000, signal);
       return null;
-    } catch (err: any) {
+    } catch (rawErr: unknown) {
+      const err = childErr(rawErr);
       if (
         err.status === 127 ||
         err.message.includes("not found") ||
@@ -266,7 +282,7 @@ export class LintOnWritePlugin implements AgentPlugin {
       ) {
         return null;
       }
-      const stderr = err.stderr?.toString() || err.stdout?.toString() || "";
+      const stderr = String(err.stderr ?? "") || String(err.stdout ?? "");
       if (stderr.includes("error TS")) {
         const firstError =
           stderr.split("\n").find((line: string) => line.includes("error TS")) ||

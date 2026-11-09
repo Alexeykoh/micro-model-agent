@@ -71,8 +71,8 @@ export async function fetchCompletion(
 
     const data = await response.json();
     return completionToChunks(data, host.cacheReport, maxTokens);
-  } catch (err: any) {
-    if (isTimeout() && err?.name === "AbortError") {
+  } catch (err: unknown) {
+    if (isTimeout() && err instanceof Error && err.name === "AbortError") {
       throw new Error(t("error.llm_timeout", { timeout: totalTimeoutMs }));
     }
     throw err instanceof Error ? err : new Error(String(err));

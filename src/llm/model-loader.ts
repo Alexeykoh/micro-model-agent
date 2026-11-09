@@ -78,9 +78,10 @@ export class ModelLoader {
       }
 
       return await this.loadModel(config);
-    } catch (err: any) {
-      this.logger.error(`Model loader failed: ${err.message}`);
-      return { success: false, error: err.message };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Model loader failed: ${message}`);
+      return { success: false, error: message };
     }
   }
 

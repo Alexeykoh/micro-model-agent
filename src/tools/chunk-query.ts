@@ -74,10 +74,11 @@ export const chunkQueryTool: ToolDefinition = {
       const resolvedInput = resolve(ctx.baseDir, inputPath);
       try {
         content = readFileSync(resolvedInput, "utf8");
-      } catch (e: any) {
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
         return {
           success: false,
-          output: t("tool.chunk_query_read_failed", { path: inputPath, error: e.message }),
+          output: t("tool.chunk_query_read_failed", { path: inputPath, error: message }),
         };
       }
     }
