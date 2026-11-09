@@ -89,10 +89,11 @@ export class StepVerifier {
     try {
       await this.runAsync(`bun run ${scriptName}`, this.baseDir, 60_000);
       return { passed: true, message: t("verify.script_passed", { script: scriptName }) };
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
       return {
         passed: false,
-        message: t("verify.script_failed", { script: scriptName, message: e.message }),
+        message: t("verify.script_failed", { script: scriptName, message }),
       };
     }
   }
@@ -116,8 +117,10 @@ export class StepVerifier {
     try {
       await this.runAsync(`${tsc} --noEmit`, root, 60_000);
       return { passed: true, message: t("verify.typecheck_passed") };
-    } catch (e: any) {
-      const stderr = e.stderr?.toString() || e.stdout?.toString() || e.message;
+    } catch (e: unknown) {
+      const rec = e as { stderr?: unknown; stdout?: unknown } | null | undefined;
+      const fallback = e instanceof Error ? e.message : String(e);
+      const stderr = String(rec?.stderr ?? "") || String(rec?.stdout ?? "") || fallback;
       return {
         passed: false,
         message: t("verify.typecheck_failed", { error: stderr.slice(0, 500) }),
@@ -141,8 +144,10 @@ export class StepVerifier {
     try {
       await this.runAsync(`${tsc} --noEmit --skipLibCheck`, projectRoot, 60_000);
       return { passed: true, message: t("verify.typecheck_passed") };
-    } catch (e: any) {
-      const stderr = e.stderr?.toString() || e.stdout?.toString() || e.message;
+    } catch (e: unknown) {
+      const rec = e as { stderr?: unknown; stdout?: unknown } | null | undefined;
+      const fallback = e instanceof Error ? e.message : String(e);
+      const stderr = String(rec?.stderr ?? "") || String(rec?.stdout ?? "") || fallback;
       return {
         passed: false,
         message: t("verify.typecheck_failed", { error: stderr.slice(0, 500) }),

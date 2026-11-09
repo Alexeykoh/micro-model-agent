@@ -104,13 +104,14 @@ export async function performWebBrowse(
         truncated,
       }),
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (err instanceof BlockedRedirectError) {
       logSecurityBlock(sessionId, "network_request", err.reason, sanitizeUrl(url));
       return { success: false, output: `[SECURITY BLOCKED] redirect: ${err.reason}` };
     }
-    logNetworkRequest(sessionId, sanitizeUrl(url), false, `Error: ${err.message}`);
-    return networkError(url, err.message);
+    const message = err instanceof Error ? err.message : String(err);
+    logNetworkRequest(sessionId, sanitizeUrl(url), false, `Error: ${message}`);
+    return networkError(url, message);
   }
 }
 

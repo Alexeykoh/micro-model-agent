@@ -260,13 +260,12 @@ export const defaultRunner: RepRunner = (env, cwd, args, timeoutMs) =>
     });
   });
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function deepMergeAny(target: any, source: any): any {
+function deepMergeAny(target: unknown, source: unknown): unknown {
   if (!source || typeof source !== "object") return source;
   if (!target || typeof target !== "object") return source;
-  const result = { ...target };
-  for (const key of Object.keys(source)) {
-    const sv = source[key];
+  const result: Record<string, unknown> = { ...(target as Record<string, unknown>) };
+  for (const key of Object.keys(source as Record<string, unknown>)) {
+    const sv = (source as Record<string, unknown>)[key];
     const tv = result[key];
     if (sv && typeof sv === "object" && !Array.isArray(sv) && tv && typeof tv === "object" && !Array.isArray(tv)) {
       result[key] = deepMergeAny(tv, sv);

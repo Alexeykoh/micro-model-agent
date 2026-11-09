@@ -1,5 +1,5 @@
 // Тулы плана: plan / plan_step / todo / verify + зависимости через deps-замыкания.
-import type { ToolDefinition } from "../../tools/types";
+import type { ToolContext, ToolDefinition } from "../../tools/types";
 import type { NetworkSecurityConfig } from "../../config/types";
 import { t } from "../../i18n/index";
 import type { Plan, StepKind } from "./planner";
@@ -39,7 +39,7 @@ export interface PlanToolDeps {
     args: Record<string, unknown>,
     steps: string[],
   ): { checks: string[] | null; error: string | null };
-  getTaskText(ctx: any): string;
+  getTaskText(ctx: ToolContext | undefined): string;
   /** Модельно-видимое actionable-сообщение «нет активного плана». */
   noActivePlanMessage(): string;
   /** Файлы, которые последний write/edit пометил компиляторно-битыми (из

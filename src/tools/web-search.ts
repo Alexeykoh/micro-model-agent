@@ -119,8 +119,8 @@ export async function performWebSearch(
       });
     }
     return { success: true, results };
-  } catch (err: any) {
-    return { success: false, results: [], error: err.message };
+  } catch (err: unknown) {
+    return { success: false, results: [], error: err instanceof Error ? err.message : String(err) };
   }
 }
 

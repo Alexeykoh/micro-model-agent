@@ -2,7 +2,7 @@
 import { spawn, } from "child_process";
 import { resolve } from "path";
 import { t } from "../i18n/index";
-import type { ToolDefinition, ToolResult } from "./types";
+import type { ToolContext, ToolDefinition, ToolResult } from "./types";
 import { logBashCommand } from "../modules/security/audit-log";
 import { MAX_PREVIEW_LINES } from "./preview";
 import { searchWithJs } from "./grep-js";
@@ -69,18 +69,19 @@ export function runSearch(
  * сам резолвит пустую строку на exit code 1. Ветку оставляем для вызывающих,
  * которые могут прийти с готовым процессным статусом.
  */
-export function classifySearchError(e: any): ToolResult | null {
-  const msg = String(e?.message ?? "");
+export function classifySearchError(e: unknown): ToolResult | null {
+  const rec = e as { message?: unknown; status?: unknown; code?: unknown } | null | undefined;
+  const msg = String(rec?.message ?? "");
   if (/timed out/.test(msg)) {
     return { success: false, output: t("error.grep_failed", { message: msg }) };
   }
-  if (e?.status === 1) return { success: true, output: t("file.no_matches") };
-  if (e?.code === "ENOENT") return null;
+  if (rec?.status === 1) return { success: true, output: t("file.no_matches") };
+  if (rec?.code === "ENOENT") return null;
   // Шелл-ошибка шима (npm `.cmd`/`.ps1` под Bun идёт через cmd.exe): внешний
   // движок фактически недоступен — не роняем поиск, падаем на JS-движок.
   // `status` 255/9009 — cmd.exe «команда не найдена» через шим, независимо от
   // локали; текстовая проверка страхует англоязычные сборки/execFileSync.
-  if (e?.status === 255 || e?.status === 9009) return null;
+  if (rec?.status === 255 || rec?.status === 9009) return null;
   if (/is not recognized|command not found/i.test(msg)) return null;
   return { success: false, output: t("error.grep_failed", { message: msg }) };
 }
@@ -98,7 +99,7 @@ async function runExternalEngine(
   try {
     const output = await runSearch(bin, argv, ctx.baseDir);
     return { success: true, output: truncateLines(output || t("file.no_matches")) };
-  } catch (e: any) {
+  } catch (e: unknown) {
     return classifySearchError(e);
   }
 }
@@ -121,7 +122,7 @@ function buildSearchArgs(
 
 /** Встроенный JS-поиск как финальный фолбэк. */
 function runJsEngine(
-  ctx: any,
+  ctx: ToolContext,
   pattern: string,
   searchPath: string,
   include: string | undefined,
@@ -132,14 +133,15 @@ function runJsEngine(
       maxFiles: ctx.config?.indexer?.maxFiles,
     });
     return { success: true, output: truncateLines(output || t("file.no_matches")) };
-  } catch (e: any) {
-    return { success: false, output: t("error.grep_failed", { message: e?.message }) };
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : String(e);
+    return { success: false, output: t("error.grep_failed", { message }) };
   }
 }
 
 /** Оркестрация движков: rg → grep → встроенный JS (или принудительно один). */
 async function runGrepEngines(
-  ctx: any,
+  ctx: ToolContext,
   pattern: string,
   searchPath: string,
   include: string | undefined,

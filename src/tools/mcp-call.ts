@@ -77,8 +77,9 @@ export const mcpCallTool: ToolDefinition = {
         success: true,
         output: `MCP call result:\n${JSON.stringify(result, null, 2)}`,
       };
-    } catch (e: any) {
-      return { success: false, output: t("tool.mcp_call_failed", { error: e.message }) };
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { success: false, output: t("tool.mcp_call_failed", { error: message }) };
     } finally {
       // Клиент закрывать всегда: раньше ошибка/таймаут в callTool пропускала
       // disconnect и сиротила stdio-дочерний процесс на сессию.

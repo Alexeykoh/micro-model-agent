@@ -60,8 +60,8 @@ async function runStep(
         return { ok: true, output: result.text };
       }
       lastError = result.error || "no output";
-    } catch (e: any) {
-      lastError = e.message;
+    } catch (e: unknown) {
+      lastError = e instanceof Error ? e.message : String(e);
     }
     await new Promise((r) => setTimeout(r, 500 * attempt));
   }
@@ -185,8 +185,9 @@ export const pipelineRunTool: ToolDefinition = {
           logs: logs.join("\n"),
         }),
       };
-    } catch (e: any) {
-      return { success: false, output: t("tool.pipeline_error", { error: e.message }) };
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      return { success: false, output: t("tool.pipeline_error", { error: message }) };
     } finally {
       executor?.setRecursionDepth?.(currentDepth);
     }

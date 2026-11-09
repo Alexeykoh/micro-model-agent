@@ -22,9 +22,9 @@ export class PipelineParser {
   /** Разбирает YAML в `Pipeline`; бросает с локализованной ошибкой. */
   static parse(yaml: string): Pipeline {
     const lines = yaml.split("\n").filter((l) => l.trim());
-    const result: any = {};
+    const result: { name?: string } & Record<string, string> = {};
     let currentSection: string | null = null;
-    const currentSteps: any[] = [];
+    const currentSteps: Array<Partial<PipelineStep> & Record<string, unknown>> = [];
 
     for (const line of lines) {
       if (line.match(/^\w+:/) && !line.startsWith(" ") && !line.startsWith("  -")) {
@@ -45,10 +45,10 @@ export class PipelineParser {
           const kvMatch = line.match(/^\s+(\w+):\s*(.+)$/);
           if (kvMatch) {
             const key = kvMatch[1];
-            let val: any = kvMatch[2].trim();
+            let val: unknown = kvMatch[2].trim();
             if (val === "true") val = true;
             else if (val === "false") val = false;
-            else if (val.startsWith("[") && val.endsWith("]")) {
+            else if (typeof val === "string" && val.startsWith("[") && val.endsWith("]")) {
               val = val
                 .slice(1, -1)
                 .split(",")
@@ -70,6 +70,6 @@ export class PipelineParser {
       }
     }
 
-    return { name: result.name, steps: currentSteps };
+    return { name: result.name as string, steps: currentSteps as PipelineStep[] };
   }
 }

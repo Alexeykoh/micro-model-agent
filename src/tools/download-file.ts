@@ -121,13 +121,14 @@ export const downloadFileTool: ToolDefinition = {
           type: contentType,
         }),
       };
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (e instanceof BlockedRedirectError) {
         logSecurityBlock(ctx.sessionId, "network_request", e.reason, sanitizeUrl(url));
         return { success: false, output: `[SECURITY BLOCKED] redirect: ${e.reason}` };
       }
-      logNetworkRequest(ctx.sessionId, sanitizeUrl(url), false, `Error: ${e.message}`);
-      return networkError(url, e.message);
+      const message = e instanceof Error ? e.message : String(e);
+      logNetworkRequest(ctx.sessionId, sanitizeUrl(url), false, `Error: ${message}`);
+      return networkError(url, message);
     }
   },
 };

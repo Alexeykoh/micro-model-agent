@@ -8,12 +8,13 @@ import {
   STUCK_RECOVERY_COOLDOWN,
   STUCK_WARN_REPEAT_EVERY,
   type ExecutionPluginDeps,
+  type ExecutionThinkContext,
   resetPlanState,
   resetStepFlags,
 } from "./plugin-state";
 import { nudgePlanIfNeeded } from "./plugin-plan";
 
-export function runBeforeThink(deps: ExecutionPluginDeps, ctx: any): void {
+export function runBeforeThink(deps: ExecutionPluginDeps, ctx: ExecutionThinkContext): void {
   // Идентификатор хода (монотонный маркер из ContextManager.beginTurn()).
   const turnSeq = typeof ctx?.turnSeq === "number" ? ctx.turnSeq : 0;
   // Отложенные <system-summary> флашим первыми: видны следующему вызову

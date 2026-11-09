@@ -82,9 +82,10 @@ class ProcessRegistry {
         detached: platform() !== "win32",
         stdio: ["ignore", "pipe", "pipe"],
       });
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
       entry.status = "killed";
-      entry.spawnError = e?.message || String(e);
+      entry.spawnError = message;
       entry.log.push(`[process error] ${entry.spawnError}`);
       return entry;
     }

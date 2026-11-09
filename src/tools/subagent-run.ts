@@ -294,7 +294,8 @@ export async function runSubagent(
       ctx.recursionDepth = currentDepth;
       executor?.setRecursionDepth?.(currentDepth);
     }
-  } catch (e: any) {
-    return { success: false, output: t("tool.subagent_error", { error: e.message }) };
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : String(e);
+    return { success: false, output: t("tool.subagent_error", { error: message }) };
   }
 }

@@ -66,8 +66,10 @@ export class SkillsLoader {
 
     return {
       name: String(frontmatter.name).trim(),
-      description: frontmatter.description || "",
-      keywords: frontmatter.keywords || [],
+      description: typeof frontmatter.description === "string" ? frontmatter.description : "",
+      keywords: Array.isArray(frontmatter.keywords)
+        ? frontmatter.keywords.map((k) => String(k))
+        : [],
       content: match[2].trim(),
       sourcePath,
     };
@@ -77,8 +79,8 @@ export class SkillsLoader {
    * Фронтматтер: `key: value`, списки `[a, b]` и YAML-блочные скаляры
    * (`description: >` / `|` / `>-`) с многострочным значением.
    */
-  private parseFrontmatter(yaml: string): Record<string, any> {
-    const result: Record<string, any> = {};
+  private parseFrontmatter(yaml: string): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
     const lines = yaml.split("\n");
     for (let i = 0; i < lines.length; i++) {
       const kvMatch = lines[i].match(/^(\w+):\s*(.*)$/);

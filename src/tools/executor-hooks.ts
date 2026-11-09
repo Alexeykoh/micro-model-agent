@@ -3,6 +3,7 @@
  * гоняются под общим `AsyncLock` форков (см. `executor.ts`).
  */
 import type { ToolContext, ToolResult, ToolCall, PluginHook } from "./types";
+import type { PluginHookContext } from "../modules/types";
 import { t } from "../i18n/index";
 
 /**
@@ -17,7 +18,7 @@ export async function runBeforeToolPlugins(
   for (const plugin of plugins) {
     if (!plugin.onBeforeTool) continue;
     try {
-      const proceed = await plugin.onBeforeTool(ctx, call);
+      const proceed = await plugin.onBeforeTool(ctx as unknown as PluginHookContext, call);
       if (proceed === false || typeof proceed === "string") {
         const pluginName =
           (plugin as { name?: string }).name || plugin.constructor?.name || "unknown";
@@ -31,8 +32,9 @@ export async function runBeforeToolPlugins(
           toolCallId: call.id,
         };
       }
-    } catch (e: any) {
-      ctx.logger.warn(`Plugin onBeforeTool error: ${e.message}`);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      ctx.logger.warn(`Plugin onBeforeTool error: ${message}`);
     }
   }
   return null;
@@ -50,9 +52,10 @@ export async function runAfterToolPlugins(
   for (const plugin of plugins) {
     if (!plugin.onAfterTool) continue;
     try {
-      await plugin.onAfterTool(pluginCtx, call, result);
-    } catch (e: any) {
-      ctx.logger.warn(`Plugin onAfterTool error: ${e.message}`);
+      await plugin.onAfterTool(pluginCtx as unknown as PluginHookContext, call, result);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      ctx.logger.warn(`Plugin onAfterTool error: ${message}`);
     }
   }
 }
