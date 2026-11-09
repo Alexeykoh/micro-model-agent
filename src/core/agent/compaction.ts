@@ -34,6 +34,12 @@ export class CompactionService {
       logger: Logger;
       slog: SessionLogger;
       hallucinationDetector: HallucinationDetector;
+      /**
+       * Опциональный LLM-суммаризатор старых turns. Задаётся только при
+       * `compactionSummary === "llm"` (собирается в `loop-setup` из
+       * активного провайдера). Null → ledger-only (fail-open).
+       */
+      llmSummarizer?: ((text: string) => Promise<string | null>) | null;
     },
   ) {}
 
@@ -42,23 +48,33 @@ export class CompactionService {
     return this.deps.contextManager.getPolicy?.() === "v2";
   }
 
+  /** LLM-сводка удалённых turns; при ошибке/отсутствии — null (fail-open). */
+  private async summarizeOldTurns(): Promise<string | null> {
+    const cm = this.deps.contextManager;
+    if (cm.getCompactionSummaryMode?.() !== "llm") return null;
+    if (!this.deps.llmSummarizer) return null;
+    const text = cm.getOldTurnsText ? cm.getOldTurnsText() : "";
+    if (!text) return null;
+    return this.deps.llmSummarizer(text);
+  }
+
   /**
    * Пре-итерационные проверки. В legacy порядок сохранён из оригинала
    * (интервал → качество → переполнение). В v2 выполняется не более одного
    * триггера за итерацию с приоритетом overflow.
    */
-  compactIfNeeded(state: LoopState): void {
+  async compactIfNeeded(state: LoopState): Promise<void> {
     if (!this.isV2()) {
-      this.compactOnInterval(state.iteration);
-      this.compactOnQuality(state);
-      this.compactOnOverflow(state.iteration);
+      await this.compactOnInterval(state.iteration);
+      await this.compactOnQuality(state);
+      await this.compactOnOverflow(state.iteration);
       return;
     }
-    this.compactIfNeededV2(state);
+    await this.compactIfNeededV2(state);
   }
 
   /** Проверка после добавления результата тула в контекст. */
-  compactAfterTool(state: LoopState): void {
+  async compactAfterTool(state: LoopState): Promise<void> {
     const { contextManager } = this.deps;
     if (this.isV2()) {
       // Лёгкий pre-check: не компактим здесь, только выставляем флаг на старт
@@ -67,7 +83,8 @@ export class CompactionService {
       return;
     }
     if (!contextManager.needsCompaction()) return;
-    const result = contextManager.compact();
+    const llmSummary = await this.summarizeOldTurns();
+    const result = contextManager.compact(llmSummary ? { llmSummary } : undefined);
     if (!result) return;
     this.deps.logger.debug("Context compacted after tool result");
     this.deps.slog.logCompaction({ reason: "after_tool", iteration: state.iteration, ...result });
@@ -76,7 +93,7 @@ export class CompactionService {
 
   // ── v2 ────────────────────────────────────────────────────────────────────
 
-  private compactIfNeededV2(state: LoopState): void {
+  private async compactIfNeededV2(state: LoopState): Promise<void> {
     // 0) Общий кулдаун поперёк семейств: ни одной компакции ближе кулдауна,
     //    независимо от того, какое семейство её просит. Без него overflow и
     //    quality с независимыми клоками чередовались через итерацию (интервал 1
@@ -84,9 +101,9 @@ export class CompactionService {
     if (state.iteration - state.lastCompactionIteration < FORCED_COMPACTION_COOLDOWN) return;
     // 1) Overflow — канонический порог по истории (калиброванная оценка),
     //    cooldown и safety-clamp от неправдоподобного скачка.
-    if (this.tryOverflowV2(state) !== "") return;
+    if ((await this.tryOverflowV2(state)) !== "") return;
     // 2) Один из оставшихся триггеров: pending (после тула), качество, интервал.
-    this.tryFallbackV2(state);
+    await this.tryFallbackV2(state);
   }
 
   /**
@@ -99,7 +116,7 @@ export class CompactionService {
    * сокращении: иначе overflow, который нельзя ужать, повторялся каждые
    * `cooldown` итераций без прогресса (§3.7 аудита).
    */
-  private tryOverflowV2(state: LoopState): string {
+  private async tryOverflowV2(state: LoopState): Promise<string> {
     const { contextManager } = this.deps;
     const cooldown = contextManager.getOverflowCooldown();
     if (state.iteration - state.lastOverflowCompactionIteration < cooldown) return "";
@@ -113,7 +130,7 @@ export class CompactionService {
     }
     if (!check.allowed) return "";
     state.lastCompactionIteration = state.iteration;
-    const compacted = this.compactV2(
+    const compacted = await this.compactV2(
       state,
       `overflow (${check.calibrated} > ${contextManager.getHistoryLimit()})`,
     );
@@ -133,13 +150,13 @@ export class CompactionService {
   }
 
   /** Fallback-триггеры v2: pending/качество/интервал. */
-  private tryFallbackV2(state: LoopState): void {
+  private async tryFallbackV2(state: LoopState): Promise<void> {
     const trigger = this.fallbackTrigger(state);
     if (!trigger) return;
     state.lastCompactionIteration = state.iteration;
     if (trigger.qualityDue) state.lastForcedCompactionIteration = state.iteration;
     if (trigger.pendingDue) state.lastPendingCompactionIteration = state.iteration;
-    this.compactV2(state, trigger.reason);
+    await this.compactV2(state, trigger.reason);
   }
 
   /** Решает, есть ли fallback-причина компакции, и какова она. */
@@ -196,15 +213,17 @@ export class CompactionService {
    * v2-компакция с гарантией прогресса. No-op (reducedBy ≤ порога значимости,
    * см. `computeMinReduction`) не логируется и не инкрементит счётчик.
    */
-  private compactV2(state: LoopState, reason: string): { compacted: boolean; reducedBy: number } {
+  private async compactV2(state: LoopState, reason: string): Promise<{ compacted: boolean; reducedBy: number }> {
     const { contextManager } = this.deps;
     const minReduction = computeMinReduction(
       contextManager.getBudget().history,
       contextManager.getContextTokens(),
     );
+    const llmSummary = await this.summarizeOldTurns();
     const result = contextManager.compactAdaptive({
       toolResultKeep: contextManager.getToolResultKeep(),
       minReduction,
+      ...(llmSummary ? { llmSummary } : {}),
     });
     if (!result || result.reducedBy <= minReduction) {
       return { compacted: false, reducedBy: result?.reducedBy ?? 0 };
@@ -217,17 +236,18 @@ export class CompactionService {
 
   // ── legacy ────────────────────────────────────────────────────────────────
 
-  private compactOnInterval(iteration: number): void {
+  private async compactOnInterval(iteration: number): Promise<void> {
     const { contextManager } = this.deps;
     if (!contextManager.needsCompaction()) return;
-    const result = contextManager.compact();
+    const llmSummary = await this.summarizeOldTurns();
+    const result = contextManager.compact(llmSummary ? { llmSummary } : undefined);
     if (!result) return;
     this.deps.logger.debug("Context compacted");
     this.deps.slog.logCompaction({ reason: "interval", iteration, ...result });
     this.deps.hallucinationDetector.addKnownFiles(contextManager.getKnownFiles());
   }
 
-  private compactOnQuality(state: LoopState): void {
+  private async compactOnQuality(state: LoopState): Promise<void> {
     const { contextManager } = this.deps;
     const iteration = state.iteration;
     const quality = contextManager.getQuality();
@@ -239,7 +259,8 @@ export class CompactionService {
       cooldownElapsed
     ) {
       state.lastForcedCompactionIteration = iteration;
-      const result = contextManager.compact();
+      const llmSummary = await this.summarizeOldTurns();
+      const result = contextManager.compact(llmSummary ? { llmSummary } : undefined);
       if (!result) return;
       this.deps.logger.diagnostic(
         "warn",
@@ -254,12 +275,13 @@ export class CompactionService {
     }
   }
 
-  private compactOnOverflow(iteration: number): void {
+  private async compactOnOverflow(iteration: number): Promise<void> {
     const { contextManager } = this.deps;
     const currentTokens = contextManager.getEstimatedTokens();
     const budget = contextManager.getBudget();
     if (currentTokens <= budget.history) return;
-    const result = contextManager.compact();
+    const llmSummary = await this.summarizeOldTurns();
+    const result = contextManager.compact(llmSummary ? { llmSummary } : undefined);
     if (!result) return;
     this.deps.logger.diagnostic(
       "warn",

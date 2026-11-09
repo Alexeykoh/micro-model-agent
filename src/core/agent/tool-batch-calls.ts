@@ -154,7 +154,7 @@ export class ToolCallRunner {
   }
 
   /** После выполнения: плагины/UI/контекст/учёт. Всегда serial, в порядке вызовов. */
-  finalize(call: ToolCall, exec: ToolCallExecution): void {
+  async finalize(call: ToolCall, exec: ToolCallExecution): Promise<void> {
     const { deps } = this.init;
     const { config, pluginManager, contextManager, logger } = deps;
     const { iteration, slog, onTool, onMeta, boundedToolNames, summaries, digestMode } = this.init;
@@ -240,7 +240,7 @@ export class ToolCallRunner {
     if (config.session.autoSave) {
       slog?.logToolResult(call, result, duration, iteration, result.imageRefs);
     }
-    deps.compactionService.compactAfterTool(this.init.state);
+    await deps.compactionService.compactAfterTool(this.init.state);
     recordRepeatedToolFailure(this.init.state, call, result, {
       memoryStore: deps.memoryStore,
       contextManager: deps.contextManager,

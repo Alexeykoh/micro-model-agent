@@ -94,7 +94,7 @@ describe("ContextManager v2 compaction", () => {
 });
 
 describe("CompactionService v2 overflow cooldown", () => {
-  it("triggers overflow at most once per cooldown window", () => {
+  it("triggers overflow at most once per cooldown window", async () => {
     const cm = new ContextManager(1200, budget({ overflowCooldown: 5 }));
     // Переполняем историю.
     for (let i = 0; i < 40; i++) {
@@ -105,16 +105,16 @@ describe("CompactionService v2 overflow cooldown", () => {
     const svc = makeService(cm, logs);
     const state = createLoopState();
     state.iteration = 1;
-    svc.compactIfNeeded(state);
+    await svc.compactIfNeeded(state);
     const afterFirst = logs.length;
     state.iteration = 2; // внутри cooldown
-    svc.compactIfNeeded(state);
+    await svc.compactIfNeeded(state);
     expect(logs.length).toBe(afterFirst);
   });
 });
 
 describe("CompactionService v2 pending (after-tool) cooldown", () => {
-  it("does not compact again within the cooldown window", () => {
+  it("does not compact again within the cooldown window", async () => {
     const cm = new ContextManager(100000, budget());
     for (let i = 0; i < 20; i++) cm.addMessage({ role: "user", content: `m${i}` });
     let calls = 0;
@@ -128,17 +128,17 @@ describe("CompactionService v2 pending (after-tool) cooldown", () => {
 
     state.iteration = 1;
     state.pendingCompaction = true;
-    svc.compactIfNeeded(state);
+    await svc.compactIfNeeded(state);
     expect(calls).toBe(1);
 
     state.iteration = 2; // внутри cooldown
     state.pendingCompaction = true;
-    svc.compactIfNeeded(state);
+    await svc.compactIfNeeded(state);
     expect(calls).toBe(1);
 
     state.iteration = 5; // cooldown истёк (>= 3)
     state.pendingCompaction = true;
-    svc.compactIfNeeded(state);
+    await svc.compactIfNeeded(state);
     expect(calls).toBe(2);
   });
 });
@@ -164,7 +164,7 @@ describe("compaction progress threshold", () => {
     expect(res!.reducedBy).toBeGreaterThan(0);
   });
 
-  it("overflow attempt consumes the iteration even when it is a no-op (one trigger)", () => {
+  it("overflow attempt consumes the iteration even when it is a no-op (one trigger)", async () => {
     const cm = new ContextManager(1200, budget({ overflowCooldown: 3 }));
     for (let i = 0; i < 40; i++) {
       cm.addMessage({ role: "assistant", content: `step ${i}` });
@@ -181,7 +181,7 @@ describe("compaction progress threshold", () => {
     const state = createLoopState();
     state.iteration = 1;
     state.pendingCompaction = true; // был бы fallback-триггер
-    svc.compactIfNeeded(state);
+    await svc.compactIfNeeded(state);
     // Overflow попытан (1 вызов), fallback в том же ходу НЕ запускается.
     expect(calls).toBe(1);
   });
