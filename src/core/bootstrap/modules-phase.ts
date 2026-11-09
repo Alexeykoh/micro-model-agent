@@ -124,6 +124,7 @@ async function registerCoreModules(
     undefined,
     config.security?.paths,
     input.logger.child("execution"),
+    config.security?.network,
   );
   execModule.setAutoAdvance(config.execution?.autoAdvance ?? true);
   // План следует за сессией: стартовая грузит СВОЙ слот, не чужой active.json.

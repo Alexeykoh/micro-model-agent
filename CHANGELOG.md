@@ -33,6 +33,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **`verify browser:` под SSRF-политикой (оплата долга).** `runBrowserCheck` и
+  `checkDoneEvidence` принимают `networkSecurity` и вызывают `isUrlAllowedAsync`
+  до запуска браузера; `ExecutionModule` пробрасывает `config.security.network`
+  из bootstrap. Приватные URL блокируются без запуска, loopback разрешён при
+  `allowLoopback`. Гварды: `tests/execution/browser-check.test.ts`.
 - **Вложенный `AGENTS.md` + ленивый `.mma/` (F-01/F-06).** `agentsMdPaths()`
   теперь ищет вложенные `AGENTS.md` (`nestedAgentsMdPaths()`: обход до глубины 4,
   скип `node_modules`/`.git`/`.next`/`.mma`/`dist`/`.cache`, кап 5, приоритет

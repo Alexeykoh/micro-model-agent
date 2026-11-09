@@ -134,6 +134,7 @@ export function createSessionRunnerFactory(
       undefined,
       config.security?.paths,
       runnerLogger.child?.("execution") ?? runnerLogger,
+      config.security?.network,
     );
     runnerExec.setAutoAdvance(config.execution?.autoAdvance ?? true);
     // Только слот своей сессии (без legacy-adopt — его сделал main на старте).
