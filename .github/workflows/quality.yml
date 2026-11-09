@@ -34,8 +34,8 @@ jobs:
       - name: Lint (Biome)
         run: bun run lint
 
-      - name: Unit tests
-        run: bun test
+      - name: Unit tests (with coverage gate)
+        run: bun scripts/coverage-check.ts
 
       # Replay-инварианты петли. Отдельным шагом не ради красоты: `bun test`
       # подхватывает `tests/replay/**` сам, и если конфиг витрины изменится,
