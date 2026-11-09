@@ -25,3 +25,22 @@ export function rolloutMode(percentage: number): "shadow" | "canary" | "percenta
   if (percentage <= 10) return "canary";
   return "percentage";
 }
+
+/**
+ * Живая маршрутизация раскатки: при попадании threadId в процент и
+ * существующей записи-кандидате — переключает менеджера на кандидата.
+ * Возвращает `true`, если переключено. Fail-open: менеджер-стейб в
+ * тестах равен интерфейсу ниже.
+ */
+export function applyStagedRollout(
+  manager: { switch(name: string): void; listNames(): string[] },
+  threadId: string | undefined,
+  rollout: { candidate?: string; percentage?: number } | undefined,
+): boolean {
+  const percentage = rollout?.percentage ?? 0;
+  if (!threadId || !rollout?.candidate || !(percentage > 0)) return false;
+  if (!manager.listNames().includes(rollout.candidate)) return false;
+  if (!inRollout(threadId, percentage)) return false;
+  manager.switch(rollout.candidate);
+  return true;
+}

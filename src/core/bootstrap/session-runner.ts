@@ -24,6 +24,7 @@ import type { ToolRegistry } from "../../tools/registry";
 import type { PluginManager } from "../../modules/plugins/manager";
 import type { ToolContext } from "../../tools/types";
 import { ContextLogger } from "../agent/context-log";
+import { applyStagedRollout } from "../../modules/evals/rollout";
 import { buildActiveProvider } from "../../modules/providers/factory";
 import {
   buildRunnerDynamicBlocks,
@@ -112,6 +113,8 @@ export function createSessionRunnerFactory(
         probeCapabilities: () => capabilitiesProbeRef.probe,
       },
     );
+    // Staged rollout (Evals 2/2): поток в проценте — на запись-кандидата.
+    applyStagedRollout(providerManager, pinned.getActiveMeta()?.threadId, config.provider.rollout);
 
     // Свой Logger на раннер: посессионный `.log` и `sessionDir` (app.jsonl) —
     // иначе общий Logger перевешивался бы ходом соседней параллельной сессии.
