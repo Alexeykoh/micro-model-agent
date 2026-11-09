@@ -88,6 +88,26 @@
 
 ### P1 — управляемость
 
+> ⚠️ **Ограничитель: монолит UI + runtime в одном процессе.**
+> Сейчас `CLI/REPL/WebHost` и `Agent` общаются in-process через `Host`
+> (`src/core/host.ts`). Пока UI (терминал/веб) живёт в том же процессе,
+> что и исполнитель, недоступны: control plane с подписанной политикой,
+> thin-режим, отзыв доступа, централизованный аудит и разные клиенты
+> одного демона. **Разделение — блокер для дальнейшего развития**
+> (см. идею [`2026-11-09-mma-enterprise-separate-version.md`](./docs/ideas/2026-11-09-mma-enterprise-separate-version.md)
+> §3.5, волна -1 в §13). Без сетевого контракта `Host`/`HostStateSnapshot`/
+> `OutputEvent` нельзя строить Enterprise поверх монолита — любой
+> «enterprise-флаг» в монолите локально пропатчится.
+
+- [ ] **Разделение монолита UI / runtime (блокер).**
+      **Уже есть:** шов `Host` (`src/core/host.ts`), `buildHostState()`
+      (`src/core/host-state.ts`, фронтненд-агностичен), `OutputBus`-события
+      (`src/output/bus.ts`), Service API (`/v1`, SSE, pull, webhook,
+      OpenAPI в `src/modules/service/`).
+      **Осталось:** wire-транспорт поверх `Host` (сначала `127.0.0.1` HTTP+SSE,
+      токен в OS keychain, daemon как сервис), клиент как тонкий UI,
+      версионирование протокола, daemon переживает рестарт UI без потери хода
+      (pull/SSE resume). Критерий закрытия — волна -1 из идеи выше.
 - [ ] **Cost/LLM-gateway.**
       **Уже есть:** `CostTracker` (+per-provider breakdown), `mma usage` (OpenRouter),
       prompt-cache capability/resolver, prefix-monitor, `iterMaxTokensOverride=16384`.
