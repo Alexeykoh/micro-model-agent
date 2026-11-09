@@ -35,11 +35,14 @@
       инъекция `[LLM summary]` в блок компакции, async-проводка через `CompactionService`
       (пролог/финалайзер `await`). Гварды — `tests/compaction-llm-summary.test.ts` (6),
       `tests/arch/double-honesty.test.ts` (записи новых методов).
-- [ ] Живая приёмка леджера контекста: повторный прогон `hard-multi-extreme` с acceptance
-      «`NEEDLE_A_111`/`B_222`/`C_333`, decoy 0, `exit=0`, notes-файл с `path:line`, блок
-      с `[Notes:`» (план [`2026-10-14-context-ledger`](./docs/archive/plans/2026/2026-10-14-context-ledger.md), Task 6).
-      ⚠️ **Ручная задача, не код:** нечего проверить в репозитории, нужен живой прогон
-      (`bun run mma` в песочнице с настроенным провайдером); без него пункт не закроется.
+- [x] Живая приёмка леджера контекста — **закрыто 2026-11-09** прогоном
+      `hard-multi-extreme` (`_testing/live/ctx-probe/`, opencode-go `deepseek-v4.1-flash`,
+      `exit=0`, 368с, 14 компакций, сессия `ses_mw98i03e_wpgaphgvmfngbcso`):
+      агент вернул `NEEDLE_A_111` (hard-a:1800), `NEEDLE_B_222` (hard-b:3300),
+      `NEEDLE_C_333` (hard-c:900), heading `# Quarterly Infrastructure Report …`,
+      decoy count 0 (заодно верно отделил `corpus/decoy.md` от настоящего
+      `PIN_ALPHA_9F3` в big-needle:2500); `.mma/NOTES.md` содержит `path:line`
+      находки, блок компакции несёт `[Notes:` ×14 (не сырой контент).
 
 ---
 
