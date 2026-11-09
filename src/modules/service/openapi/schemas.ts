@@ -241,6 +241,26 @@ export const SCHEMAS: Record<string, JsonSchema> = {
     },
   },
 
+  OversightResponse: {
+    type: "object",
+    required: ["killSwitch", "compliance"],
+    properties: {
+      killSwitch: { type: "boolean", description: "Глобальный kill-switch активен." },
+      tenant: string({ description: "Тенант процесса (silo)." }),
+      pendingQuestions: integer({ description: "Висящие вопросы." }),
+      compliance: {
+        type: "object",
+        properties: {
+          enabled: { type: "boolean" },
+          retentionDays: integer({}),
+          auditValid: { type: "boolean" },
+          auditEntries: integer({}),
+          adversarialTail: { type: "array", items: { type: "string" } },
+        },
+      },
+    },
+  },
+
   HtmlPage: {
     type: "string",
     description: "Самодостаточная HTML-страница контракта (`text/html`), без внешних ресурсов.",
