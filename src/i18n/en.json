@@ -2472,6 +2472,7 @@
   "config.key.execution.profile": "execution profile",
   "config.desc.execution.profile": "local-trusted runs commands on the host; sandbox runs shell commands in a hardened Docker container (deny-by-default egress).",
   "config.key.cost.maxRunUsd": "per-run budget USD",
+  "tool.mcp_rate_limited": "MCP server \"{server}\" rate-limited (too soon)",
   "config.desc.cost.maxRunUsd": "Hard budget per agent run in whole USD (0 = no limit). At the cap the turn ends with cost_budget.",
   "config.key.otel.enabled": "OTel spans",
   "config.desc.otel.enabled": "Emit OpenTelemetry GenAI spans (otel-adapter).",

@@ -1,6 +1,7 @@
 node_modules/
 dist/
 release/
+sbom.json
 blog_api_test/
 .mma/
 .mimocode/
