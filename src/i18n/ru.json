@@ -2473,6 +2473,8 @@
   "config.desc.execution.profile": "local-trusted запускает команды на хосте; sandbox — шелл-команды в жёстком Docker-контейнере (deny-by-default egress).",
   "config.key.cost.maxRunUsd": "бюджет хода, USD",
   "tool.mcp_rate_limited": "MCP-сервер \"{server}\" — лимит частоты (слишком рано)",
+  "config.key.hitl.killSwitch": "глобальный kill-switch",
+  "config.desc.hitl.killSwitch": "Мгновенная глобальная остановка хода на границе итерации.",
   "config.desc.cost.maxRunUsd": "Жёсткий бюджет одного хода в целых USD (0 — без лимита). На капе ход заканчивается с cost_budget.",
   "config.key.otel.enabled": "OTel трейсы",
   "config.desc.otel.enabled": "Эмитить спаны OpenTelemetry GenAI (otel-адаптер).",

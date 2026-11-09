@@ -119,6 +119,16 @@ export class ManagerState {
     return isEmptySession(this.store, id, history);
   }
 
+  /** Durable-interrupt паузы: пишет `{paused, pausedAt}` (`interrupt.json`). */
+  saveInterrupt(id: string, paused: boolean): void {
+    this.store.saveInterrupt(id, paused ? { paused: true, pausedAt: new Date().toISOString() } : { paused: false });
+  }
+
+  /** Durable-interrupt паузы: чтение (нет/битый — null). */
+  loadInterrupt(id: string): { paused: boolean } | null {
+    return this.store.loadInterrupt(id);
+  }
+
   /** Удалить все пустые сессии, кроме `excludeId`. Не бросает. */
   pruneEmpty(excludeId: string | undefined, remove: (id: string) => void): string[] {
     this.pruneOrphanDirs();
