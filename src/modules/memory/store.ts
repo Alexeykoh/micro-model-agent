@@ -20,13 +20,22 @@ export const MAX_MEMORY_FILE_CHARS = 24_000;
 export class MemoryStore {
   private memoryDir: string;
   private validator: MemoryValidator | null;
+  /** TTL записей категорий в днях (0/undefined — без срока). */
+  private retentionDays: number;
 
-  constructor(memoryDir: string, validatorOpts?: ValidatorOptions) {
+  constructor(
+    memoryDir: string,
+    validatorOpts?: ValidatorOptions,
+    opts?: { retentionDays?: number },
+  ) {
     this.memoryDir = memoryDir;
     this.validator =
       validatorOpts?.enabled === false
         ? null
         : new MemoryValidator(memoryDir, validatorOpts);
+    const days = opts?.retentionDays;
+    this.retentionDays =
+      days !== undefined && Number.isFinite(days) && days > 0 ? Math.floor(days) : 0;
     this.ensureDir();
     for (const name of MEMORY_FILES) {
       const path = join(this.memoryDir, `${name}.md`);
@@ -59,7 +68,25 @@ export class MemoryStore {
   read(name: string): string {
     const path = this.fileFor(name);
     if (!existsSync(path)) return "";
-    return decryptMemoryText(readFileSync(path, "utf-8"));
+    const text = decryptMemoryText(readFileSync(path, "utf-8"));
+    if (!(this.retentionDays > 0)) return text;
+    return filterExpiredEntries(text, this.retentionDays, Date.now());
+  }
+
+  /**
+   * Физически удаляет просроченные записи из категории (TTL `retentionDays`).
+   * Работает по сырым строкам файла — at-rest шифрование (`[enc]…[/enc]`) не трогается.
+   * Возвращает число удалённых записей.
+   */
+  pruneExpired(name: string): number {
+    if (!(this.retentionDays > 0)) return 0;
+    const path = this.fileFor(name);
+    if (!existsSync(path)) return 0;
+    const raw = readFileSync(path, "utf-8");
+    const { kept, removed } = pruneExpiredEntries(raw, this.retentionDays, Date.now());
+    if (removed === 0) return 0;
+    writeFileSync(path, kept, "utf-8");
+    return removed;
   }
 
   /** Дописывает запись с таймстампом в файл категории. */
@@ -160,4 +187,62 @@ export class MemoryStore {
     const entry = `**pattern:** ${pattern}\n  **cause:** ${cause}\n  **solution:** ${solution}`;
     return this.append(category, entry);
   }
+}
+
+/** Граница записи памяти: строка `- **<ts>** …`. */
+const ENTRY_START = /^- \*\*(\d{4}-\d{2}-\d{2})[^\n]*\*\*/;
+
+/** Возраст записи по её штампу (`YYYY-MM-DD HH:MM:SS`); null — штампа нет. */
+function entryAgeMs(block: string[], now = Date.now()): number | null {
+  const first = block[0] ?? "";
+  const m = ENTRY_START.exec(first);
+  if (!m) return null;
+  const ts = Date.parse(m[1].replace(" ", "T"));
+  if (!Number.isFinite(ts)) return null;
+  return now - ts;
+}
+
+/** Разрезает текст на шапку (до первой записи) и блоки записей. */
+function splitEntries(text: string): { header: string; blocks: string[][] } {
+  const lines = text.split(/\r?\n/);
+  const blocks: string[][] = [];
+  const headerLines: string[] = [];
+  for (const line of lines) {
+    if (ENTRY_START.test(line)) blocks.push([line]);
+    else if (blocks.length > 0) blocks[blocks.length - 1].push(line);
+    else headerLines.push(line);
+  }
+  return { header: headerLines.join("\n"), blocks };
+}
+
+/** TTL-фильтр прямое чтение: просроченные записи скрываются (файл не трогается). */
+export function filterExpiredEntries(text: string, retentionDays: number, now: number): string {
+  if (!(retentionDays > 0)) return text;
+  const { header, blocks } = splitEntries(text);
+  const cutoffMs = retentionDays * 86400000;
+  const kept = blocks.filter((b) => {
+    const age = entryAgeMs(b, now);
+    return age === null || age < cutoffMs;
+  });
+  const parts = [header, ...kept.map((b) => b.join("\n"))].filter((p) => p.trim().length > 0);
+  return parts.join("\n") + "\n";
+}
+
+/** TTL-prune: физически вырезает просроченные записи (сырые строки сохраняются). */
+export function pruneExpiredEntries(
+  text: string,
+  retentionDays: number,
+  now: number,
+): { kept: string; removed: number } {
+  const { header, blocks } = splitEntries(text);
+  const cutoffMs = retentionDays * 86400000;
+  let removed = 0;
+  const keptBlocks = blocks.filter((b) => {
+    const age = entryAgeMs(b, now);
+    const expired = age !== null && age >= cutoffMs;
+    if (expired) removed++;
+    return !expired;
+  });
+  const parts = [header, ...keptBlocks.map((b) => b.join("\n"))].filter((p) => p.trim().length > 0);
+  return { kept: parts.join("\n") + "\n", removed };
 }

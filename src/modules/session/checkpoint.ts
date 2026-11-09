@@ -4,8 +4,66 @@
  *
  * Персистится только прогресс/флаги цикла (не тексты, не история — они уже
  * на диске в `history.jsonl`). Капы множеств/мап ограничивают размер файла.
+ *
+ * INV-3: модуль не импортирует `core/agent`. Тип состояния — структурный
+ * `CheckpointCounters` (LoopState ему совместим).
  */
-import type { LoopState } from "../../core/agent/loop-state";
+
+/** Счётчики хода (структурный подтип LoopState без импорта из core/agent). */
+export interface CheckpointCounters {
+  iteration: number;
+  pendingCompaction: boolean;
+  reactiveCompactionUsed: boolean;
+  lastForcedCompactionIteration: number;
+  lastOverflowCompactionIteration: number;
+  lastPendingCompactionIteration: number;
+  lastCompactionIteration: number;
+  hallucinationRetries: number;
+  claimCheckRetries: number;
+  artifactClaimRetries: number;
+  outputClaimRetries: number;
+  webClaimRetries: number;
+  fileCreationRetries: number;
+  llmErrorRetries: number;
+  truncationRetries: number;
+  auditRetries: number;
+  criticCalls: number;
+  criticRepairCycles: number;
+  mutationsSinceCritic: number;
+  criticHistoryMark: number;
+  lastFinishReason?: string;
+  finalAnswerAccepted: boolean;
+  consecutiveDuplicateBatches: number;
+  duplicateNudged: boolean;
+  consecutiveResearchBatches: number;
+  researchNudged: boolean;
+  consecutiveSilentBatches: number;
+  narrationNudged: boolean;
+  recentBatchFailures: boolean[];
+  failedBatchesTotal: number;
+  stallNudged: boolean;
+  nonResearchBatchesWithResult: number;
+  consecutiveToolFailures: number;
+  consecutiveFailedBatches: number;
+  honestStopNudged: boolean;
+  consecutiveToolSuccesses: number;
+  seenToolCalls: Set<string>;
+  novelToolKeys: Set<string>;
+  disabledTools: Set<string>;
+  toolFailureCounts: Map<string, { count: number; error: string; samples: string[] }>;
+  memoryRuleRecorded: Set<string>;
+  toolTargetCounts: Map<string, number>;
+  cycleNudgedKeys: Set<string>;
+  consecutiveSingleQuestions: number;
+  questionBatchNudged: boolean;
+  sawSecurityBlock: boolean;
+  scriptWorkaroundNudged: boolean;
+  seenCriticIssues: Set<string>;
+  emptyResponseRetries: number;
+  emptyResponseExhausted: boolean;
+  auditFailed: boolean;
+  suppressRepetitionRetry: boolean;
+}
 
 /** Кап входных множеств/мап в снимке (защита от бесконечного роста файла). */
 export const CHECKPOINT_KEY_CAP = 500;
@@ -72,7 +130,7 @@ export interface TurnCheckpoint {
 }
 
 /** Снимок счётчиков цикла (чистая функция, без IO). */
-export function snapshotLoopState(state: LoopState, threadId?: string): TurnCheckpoint {
+export function snapshotLoopState(state: CheckpointCounters, threadId?: string): TurnCheckpoint {
   return {
     v: 1,
     threadId,
@@ -135,8 +193,8 @@ export function snapshotLoopState(state: LoopState, threadId?: string): TurnChec
   };
 }
 
-/** Восстановление счётчиков в живой `LoopState` (fail-open на чужих версиях). */
-export function restoreLoopState(state: LoopState, snap: TurnCheckpoint): boolean {
+/** Восстановление счётчиков в живой ход (fail-open на чужих версиях). */
+export function restoreLoopState(state: CheckpointCounters, snap: TurnCheckpoint): boolean {
   if (snap.v !== 1) return false;
   state.iteration = snap.iteration;
   state.pendingCompaction = snap.pendingCompaction;

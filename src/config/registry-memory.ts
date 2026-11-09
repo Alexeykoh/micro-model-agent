@@ -51,4 +51,10 @@ export const MEMORY_VALIDATOR_DEFS: ConfigKeyDef[] = [
       c.memory.validator ??= {};
       c.memory.validator.similarityThreshold = v as number;
     }),
+  def("memory.retentionDays", "int", { min: 0, max: 3650, step: 1 },
+    (c) => c.memory?.retentionDays ?? DEFAULTS.memory?.retentionDays ?? 0,
+    (c, v) => {
+      c.memory ??= {};
+      c.memory.retentionDays = v as number;
+    }),
 ];
