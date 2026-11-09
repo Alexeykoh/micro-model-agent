@@ -197,7 +197,7 @@ export function controlFor(def: Dict, value: unknown, ctx: Dict): HTMLElement {
 export const PANEL_SECTIONS: Record<string, Dict[]> = {
   general: [
     { id: "general.interface", titleKey: "web.settings.sec.general.interface", keys: ["locale", "ui.verbosity"] },
-    { id: "general.agent", titleKey: "web.settings.sec.general.agent", descKey: "web.settings.sec.general.agent.desc", keys: ["maxToolIterations", "stuckThreshold", "autoPlan", "execution.autoAdvance"] },
+    { id: "general.agent", titleKey: "web.settings.sec.general.agent", descKey: "web.settings.sec.general.agent.desc", keys: ["maxToolIterations", "stuckThreshold", "autoPlan", "execution.autoAdvance", "execution.profile", "execution.image", "cost.maxRunUsd"] },
     { id: "general.provider", titleKey: "web.settings.sec.general.provider", keys: ["provider.fallback"] },
     { id: "general.update", titleKey: "web.settings.sec.general.update", descKey: "web.settings.sec.general.update.desc", keys: ["updater.enabled", "updater.autoInstall", "updater.intervalMs"] },
   ],
@@ -219,7 +219,7 @@ export const PANEL_SECTIONS: Record<string, Dict[]> = {
   agent: [
     { id: "agent.experts", titleKey: "web.settings.sec.agent.experts", descKey: "web.settings.sec.agent.experts.desc", keys: ["experts"] },
     { id: "agent.critic", titleKey: "web.settings.sec.agent.critic", descKey: "web.settings.sec.agent.critic.desc", keys: ["critic.enabled", "critic.model", "critic.provider", "critic.tools", "critic.maxCalls", "critic.maxRepairCycles", "critic.timeoutMs", "critic.maxTokens"] },
-    { id: "agent.tools", titleKey: "web.settings.sec.agent.tools", descKey: "web.settings.sec.agent.tools.desc", keys: ["tools.enableOnDemand", "tools.defaultTags", "tools.grepEngine", "skills.budget", "memory.validator", "memory.validator.minChars", "memory.validator.minWords", "memory.validator.similarityThreshold"] },
+    { id: "agent.tools", titleKey: "web.settings.sec.agent.tools", descKey: "web.settings.sec.agent.tools.desc", keys: ["tools.enableOnDemand", "tools.defaultTags", "tools.grepEngine", "skills.budget", "memory.validator", "memory.validator.minChars", "memory.validator.minWords", "memory.validator.similarityThreshold", "memory.retentionDays", "hitl.killSwitch", "hitl.autoApproveLow", "compliance.enabled", "compliance.retentionDays"] },
     { id: "agent.subagent", titleKey: "web.settings.sec.agent.subagent", descKey: "web.settings.sec.agent.subagent.desc", keys: ["subagent.resultMode", "subagent.maxSummaryChars", "subagent.maxParallelChunkQueries", "subagent.stableSystemPrompt", "subagent.timeoutMs", "subagent.maxDurationMs"] },
     { id: "agent.hallucination", titleKey: "web.settings.sec.agent.hallucination", descKey: "web.settings.sec.agent.hallucination.desc", keys: ["hallucination.judge.enabled"] },
   ],
@@ -256,7 +256,7 @@ export const PANEL_SECTIONS: Record<string, Dict[]> = {
   advanced: [
     { id: "advanced.diagnostics", titleKey: "web.settings.sec.advanced.diagnostics", descKey: "web.settings.sec.advanced.diagnostics.desc", keys: ["logLevel", "version"] },
     { id: "advanced.retry", titleKey: "web.settings.sec.advanced.retry", descKey: "web.settings.sec.advanced.retry.desc", keys: ["retry.maxRetries", "retry.baseDelay", "retry.maxDelay", "retry.maxStreamRetries", "retry.noDataTimeoutMs"] },
-    { id: "advanced.service", titleKey: "web.settings.sec.advanced.service", descKey: "web.settings.sec.advanced.service.desc", keys: ["pricing.enabled", "pricing.overrides"] },
+    { id: "advanced.service", titleKey: "web.settings.sec.advanced.service", descKey: "web.settings.sec.advanced.service.desc", keys: ["pricing.enabled", "pricing.overrides", "otel.enabled", "otel.endpoint", "otel.serviceName"] },
   ],
   plugins: [
     { id: "plugins.registry", titleKey: "web.settings.sec.plugins.registry", descKey: "web.settings.sec.plugins.registry.desc", keys: ["plugins.disabled", "plugins.maxDrafts"] },

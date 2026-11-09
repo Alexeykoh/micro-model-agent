@@ -36,6 +36,7 @@ export const CONFIG_DOMAINS: Record<string, (keyof AppConfig)[]> = {
     "locale",
     "reasoning",
     "hallucination",
+    "cost",
   ],
   provider: ["provider", "retry", "pricing", "modelCapabilities"],
   experts: ["experts"],
@@ -51,7 +52,9 @@ export const CONFIG_DOMAINS: Record<string, (keyof AppConfig)[]> = {
   skills: ["skills"],
   plugins: ["plugins"],
   updater: ["updater"],
-  service: ["service"],
+  service: ["service", "otel"],
+  hitl: ["hitl"],
+  compliance: ["compliance"],
 };
 
 /** Вырезает подмножество ключей домена из полного AppConfig. */

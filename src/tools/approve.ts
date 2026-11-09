@@ -51,7 +51,7 @@ export const approveTool: ToolDefinition = {
     const rawPath = String(args.path || "").trim();
     const impact = args.impact as Impact | undefined;
     // Escalation: low impact auto-approves only when policy allows.
-    if (!shouldEscalate(impact, ctx.config.hitl)) {
+    if (!shouldEscalate(impact, ctx.config?.hitl)) {
       return { success: true, output: t("tool.approved") };
     }
     const question = t("tool.approve_prompt", { action });
