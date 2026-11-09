@@ -87,8 +87,9 @@ export function buildProviderCommands(program: Command): void {
           // молча терялся на выходе для мульти-записных конфигов.
           saveConfig(config, configPath, dirname(configPath));
           getDefaultChannel().writeLine(t("cli.provider_set", { name }));
-        } catch (e: any) {
-          fail(pc.red(e.message));
+        } catch (e: unknown) {
+          const message = e instanceof Error ? e.message : String(e);
+          fail(pc.red(message));
         }
         return;
       }

@@ -108,8 +108,8 @@ export async function fetchWithRetry(
       lastStatus = response.status;
       const retryAfter = Number(response.headers.get("retry-after") ?? 0);
       lastRetryAfter = retryAfter > 0 ? retryAfter * 1000 : 0;
-    } catch (err: any) {
-      if (err.name === "AbortError") {
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") {
         throw err;
       }
       if (attempt === maxRetries) throw err;

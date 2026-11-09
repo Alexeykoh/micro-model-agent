@@ -87,7 +87,17 @@ export function buildModelCommands(program: Command): void {
     .option("--force", t("cli.cert_force"))
     .option("--clean", t("cli.cert_clean"))
     .description(t("cli.certify"))
-    .action(async (name: string, cmdOpts: any) => {
+    .action(async (name: string, cmdOpts: {
+      providerUrl?: string;
+      providerKey?: string;
+      contextWindow?: string;
+      tags?: string;
+      scenarios?: string;
+      timeout?: string;
+      reps?: string;
+      force?: boolean;
+      clean?: boolean;
+    }) => {
       const { config } = await bootstrap();
       const { certify, parseTags } = await import("../modules/certification/cli");
       await certify({
@@ -95,7 +105,7 @@ export function buildModelCommands(program: Command): void {
         providerUrl: cmdOpts.providerUrl,
         providerKey: cmdOpts.providerKey,
         contextWindow: cmdOpts.contextWindow ? parseInt(cmdOpts.contextWindow, 10) : undefined,
-        tags: parseTags(cmdOpts.tags),
+        tags: parseTags(cmdOpts.tags ?? "core"),
         scenarios: cmdOpts.scenarios
           ? String(cmdOpts.scenarios)
               .split(",")

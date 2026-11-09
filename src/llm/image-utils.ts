@@ -240,8 +240,9 @@ export async function loadUrlAsDataUrl(
       opts.fetchImpl,
     );
     response = validated.response;
-  } catch (err: any) {
-    throw new ImageDownloadError(err?.message ?? "fetch failed", "network_error");
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "fetch failed";
+    throw new ImageDownloadError(message || "fetch failed", "network_error");
   }
   if (!response.ok) {
     throw new ImageDownloadError(
