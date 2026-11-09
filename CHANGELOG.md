@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Removed
+
+- **Learning Phase B вычеркнута из очереди (2026-11-09).** Удалены пункт §1.6
+  (`src/modules/learning/**`, `mma learn`, `LearningModule`) и раздел 2 «Действия
+  пользователя» (`contextWindow 64000`) из `TODO.md`; план памяти
+  (`docs/plans/2026-08-12-memory-quality-and-learning.md`) помечен закрытым,
+  Phase B — отменённой. Phase A/C уже закрыты ранее.
+
 ### Fixed
 
 - **Входящие/исходящие токены сессии в сайдбаре `mma web`.** Сессии, шедшие
