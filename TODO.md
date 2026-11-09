@@ -54,15 +54,16 @@
 
 ### P0 — без этого в прод нельзя
 
-- [ ] **Изоляция исполнения.** Enforcement уже в одной точке (`ToolExecutor.execute()`):
-      allowlist, protected-пути, SSRF, теги, rate-limit; `bash` — `manual` + jail.
-      **Уже есть:** jail/workdir-scope, write-allowlist, symlink/device-escape.
-      **Осталось:** профиль исполнения `local-trusted | sandbox` (Docker: deny-by-default
-      egress, `--read-only`, лимиты, фиксированный образ), файловые тулы под jail,
-      egress-правила для web-тулов, cert-сценарии приёмки.
-      При `sandbox` и недоступном Docker ход **падает**, а не деградирует.
-      ⚠️ **Изменилось:** в репо нет ни `Dockerfile`, ни упоминаний `sandbox`-профиля в
-      конфиге — пункт целиком открыт, «частично» его не делает enforcement.
+- [x] **Изоляция исполнения.** **Закрыто 2026-11-09** двумя ветками
+      (спека [`2026-11-09-execution-sandbox-design`](./docs/specs/2026-11-09-execution-sandbox-design.md)):
+      `execution.profile: local-trusted|sandbox` (дефолт прежний) + `execution.image`
+      (`oven/bun:1.3.14`); bash в sandbox → `docker run --read-only`
+      `--network none --cap-drop ALL -u 1000:1000`, mount только baseDir→`/work`,
+      без ключей провайдера; fail-closed при недоступном Docker
+      (`execution.sandbox_unavailable`); файловые тулы — за существующим jail;
+      `Dockerfile` в корне + cert-acceptance живьём
+      (`tests/bash-docker-live.test.ts`: mount виден хосту, запись вне mount
+      запрещена, egress запрещён).
 - [x] **Durable state.** **Закрыто 2026-11-09** четырьмя ветками:
       (1) `thread_id` (`thr_<16 hex>` в `SessionMeta`, спека
       [`2026-11-09-thread-id-design`](./docs/specs/2026-11-09-thread-id-design.md));
