@@ -1,6 +1,22 @@
 // Загрузчик скиллов: рекурсивный скан .md-файлов с frontmatter-метаданными.
 import { readdirSync, readFileSync, existsSync, statSync, type Stats } from "fs";
 import { join } from "path";
+import { createHash } from "node:crypto";
+
+/** Манифест целостности: имя файла → sha256 контента. */
+export function skillManifestIntegrityOk(dirPath: string, fileName: string, content: string): boolean {
+  const manifestPath = join(dirPath, "skills-manifest.json");
+  if (!existsSync(manifestPath)) return true;
+  try {
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf-8")) as Record<string, string>;
+    const expected = manifest[fileName];
+    if (!expected) return false;
+    const actual = createHash("sha256").update(content, "utf-8").digest("hex");
+    return actual === expected;
+  } catch {
+    return false;
+  }
+}
 
 /** Метаданные скилла: имя, описание, ключи поиска, тело и путь источника. */
 export interface SkillMeta {
@@ -42,6 +58,9 @@ export class SkillsLoader {
       if (!entry.endsWith(".md") && !entry.endsWith(".skill.md")) continue;
 
       const content = readFileSync(fullPath, "utf-8");
+      // Целостность supply-chain: skills-manifest.json в каталоге обязан
+      // совпасть с sha256 файла, иначе скилл не грузится (fail-closed).
+      if (!skillManifestIntegrityOk(dirPath, entry, content)) continue;
       const parsed = this.parseSkillFile(content, fullPath);
       if (parsed) skills.push(parsed);
     }

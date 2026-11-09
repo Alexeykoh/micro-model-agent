@@ -6,6 +6,8 @@ import { MCPRegistry } from "../modules/mcp/registry";
 
 const registry = new MCPRegistry();
 let initialized = false;
+/** Прошлый вызов на сервер (gateway rate-limit). */
+const lastMcpCall = new Map<string, number>();
 
 /** Ленивая регистрация MCP-серверов из конфига (один раз на процесс). */
 function ensureInitialized(ctx: ToolContext): void {
@@ -24,6 +26,7 @@ function ensureInitialized(ctx: ToolContext): void {
         url: cfg.url,
         headers: cfg.headers,
         timeout: cfg.timeout,
+        rateLimitMs: cfg.rateLimitMs,
       });
     }
   }
@@ -70,6 +73,18 @@ export const mcpCallTool: ToolDefinition = {
     }
 
     const client = new MCPClient(serverConfig);
+    // MCP gateway rate-limit (supply-chain MVP): один вызов на сервер не чаще
+    // `rateLimitMs` из записи сервера (дефолт 0 — без лимита); лимит превышен —
+    // честный отказ этого вызова (не спавнится новый транспорт).
+    const rateLimitMs = serverConfig.rateLimitMs ?? 0;
+    if (rateLimitMs > 0) {
+      const now = Date.now();
+      if (now - (lastMcpCall.get(serverName) ?? -Infinity) < rateLimitMs) {
+        return { success: false, output: t("tool.mcp_rate_limited", { server: serverName }) };
+      }
+      lastMcpCall.set(serverName, now);
+    }
+
     try {
       await client.connect();
       const result = await client.callTool(toolName, toolArgs);

@@ -102,6 +102,8 @@ export interface MCPServerConfigEntry {
   headers?: MCPHeader;
   enabled?: boolean;
   timeout?: number;
+  /** Rate-limit gateway: мин. мс между вызовами одного сервера (0 — без лимита). */
+  rateLimitMs?: number;
 }
 
 export interface BrowserToolConfig {

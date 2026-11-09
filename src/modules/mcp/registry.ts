@@ -9,6 +9,8 @@ export interface MCPServerConfig {
   url?: string;
   headers?: Record<string, string>;
   timeout?: number;
+  /** Rate-limit gateway: мин. мс между вызовами сервера (0 — без лимита). */
+  rateLimitMs?: number;
 }
 
 /** Реестр конфигов MCP-серверов по именам. */
