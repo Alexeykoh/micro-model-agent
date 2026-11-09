@@ -12,3 +12,9 @@ export type SessionRead<T> =
 export function readCause(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
+
+/** Парсинг meta.json (шифр/открыт); битая — throw. */
+export function parseMetaContent(raw: string, decrypt: (s: string) => string): unknown {
+  const content = decrypt(raw);
+  return JSON.parse(content) as unknown;
+}
