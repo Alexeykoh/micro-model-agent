@@ -1658,6 +1658,7 @@
   "config.enum.default": "по умолчанию",
   "config.enum.off": "выкл.",
   "config.enum.ledger": "леджер тулов",
+  "config.enum.llm": "LLM-сводка",
   "config.enum.line": "строка",
   "config.enum.meta": "в подсказках",
   "config.enum.full": "полный",

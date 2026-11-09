@@ -1658,6 +1658,7 @@
   "config.enum.default": "default",
   "config.enum.off": "off",
   "config.enum.ledger": "tool ledger",
+  "config.enum.llm": "LLM summary",
   "config.enum.line": "line",
   "config.enum.meta": "hints row",
   "config.enum.full": "full",
