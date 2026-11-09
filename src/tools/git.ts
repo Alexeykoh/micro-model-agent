@@ -4,8 +4,8 @@
  * `2026-06-08-git-workflow-design` §5). Шелл-мета символы физически не
  * попадают в команду, `-C`/`--git-dir`/`-c` blocked jail-гейтом в `git-core`.
  *
- * DEBT(git-push-egress-ungated): `push` — исходящая операция без egress-гейта
- * (повторяет поведение bash, спека §9.6).
+ * Egress-гейт push: адресат через `checkOutboundUrl`, незапушенный дифф —
+ * через `detectSecrets` (спека `2026-11-09-git-push-egress-design`).
  */
 import { resolve } from "node:path";
 import { t } from "../i18n/index";
@@ -13,6 +13,9 @@ import { assertWorkdirAllowed } from "./path-guards";
 import { safeResolvePath } from "./path-utils";
 import { classifyGitArgv, gitCommandName, gitSubcommand } from "./git-classes";
 import { capDiff, runGit } from "./git-core";
+import { extractPushRemote, resolvePushUrl, unpushedDiff } from "./git-push-egress";
+import { checkOutboundUrl } from "../modules/security/outbound-policy";
+import { detectSecrets } from "../modules/security/data-policy/detectors/secrets";
 import type { ToolDefinition, ToolContext, ToolResult } from "./types";
 
 /** Субкоманды, которым нужен сетевой бюджет (fetch/pull/push идут дольше локальных). */
@@ -133,6 +136,43 @@ export const gitTool: ToolDefinition = {
     const workdir = safeResolvePath(ctx.baseDir, String(args.workdir ?? "."));
     const jail = assertWorkdirAllowed(ctx, workdir);
     if (jail) return jail;
+
+    // egress-гейт push (оплата долга git-push-egress-ungated): адресат + секреты.
+    if (sub === "push") {
+      const remote = extractPushRemote(argv);
+      const url = await resolvePushUrl(workdir, remote);
+      if (!url) {
+        return {
+          success: false,
+          blocked: true,
+          output: `git push blocked: no remote configured and no explicit remote given (egress policy).`,
+          errorMeta: { code: "git_push_no_remote", retryable: false },
+        };
+      }
+      const outbound = checkOutboundUrl(url, "tool:git", {
+        networkConfig: ctx.config.security?.network,
+        operation: "git.push",
+      });
+      if (!outbound.allowed) {
+        return {
+          success: false,
+          blocked: true,
+          output: `git push blocked by outbound policy: ${outbound.reason ?? "URL not allowed"} (${url})`,
+          errorMeta: { code: "git_push_egress_blocked", retryable: false, hint: "set security.network.allowPrivateOutbound or use a public host" },
+        };
+      }
+      const diff = await unpushedDiff(workdir);
+      const findings = detectSecrets(diff);
+      if (findings.length > 0) {
+        const kinds = [...new Set(findings.map((f) => f.kind))].join(", ");
+        return {
+          success: false,
+          blocked: true,
+          output: `git push blocked: ${findings.length} secret finding(s) in unpushed commits (${kinds}). Remove them from history before pushing.`,
+          errorMeta: { code: "git_push_secret_in_history", retryable: false },
+        };
+      }
+    }
 
     // destructive — только по одноразовому разрешению `approve` (path=".").
     // Разрешение минтится хендлером approve и потребляется здесь по callId
