@@ -12,6 +12,7 @@ export function memoryModuleDef(memory: MemoryModule): ModuleDef {
   return {
     name: "memory",
     critical: false,
+    health: () => memory.health(),
     tools: () => memory.getToolDefinitions(),
     // `promptBlocks` есть (преференсы/память), а `hooks` — НЕТ намеренно: у
     // `MemoryModule.getPlugin().onBuildPrompt` тот же контент, что у блока, и

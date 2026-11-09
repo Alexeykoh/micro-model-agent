@@ -33,6 +33,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Честные `health()` у шести подсистем (оплата долга).** `lsp`/`mcp`/`browser`/
+  `indexer`/`skills`/`memory` отдают `health()` из реального сигнала (паузы LSP,
+  упавшие MCP, проба Chromium, ошибка стройки/перескана, читаемость стора);
+  `ModuleHost.health()` больше не врёт `ok` по умолчанию для них. Гейт
+  `tests/arch/health-coverage.test.ts` + `tests/modules/health-coverage.test.ts`.
+  Спека: `docs/specs/2026-11-09-observability-health-coverage-design.md`.
 - **`git push` под egress-гейтом (оплата долга).** Перед `push` тул резолвит
   адресат и проверяет его `checkOutboundUrl` (приватные/denied блокируются),
   незапушенный дифф сканируется `detectSecrets()`. Спека:

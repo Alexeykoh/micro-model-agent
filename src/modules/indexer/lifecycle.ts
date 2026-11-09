@@ -14,6 +14,7 @@ export function indexerModuleDef(indexer: IndexerModule): ModuleDef {
     name: "indexer",
     critical: false,
     teardown: () => indexer.unwatch(),
+    health: () => indexer.health(),
     tools: () => indexer.getToolDefinitions(),
     hooks: () => indexer.getPlugin(),
   };

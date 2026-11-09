@@ -65,8 +65,26 @@ export class SkillsModule implements AgentModule {
    * Нужен, чтобы навык, написанный агентом в `.mma/skills/`, был виден без
    * рестарта процесса.
    */
+  /** Последняя ошибка пересканирования (для честного `health()`). */
+  private lastReloadError: string | null = null;
+
+  /** Честный health: недавняя ошибка пересканирования → degraded (INV-6). Ноль скиллов — не failure. */
+  health(): { status: "ok" | "degraded" | "failed"; reason?: string } {
+    if (this.lastReloadError) {
+      return { status: "degraded", reason: `skills rescan failed: ${this.lastReloadError}` };
+    }
+    return { status: "ok" };
+  }
+
   reload(rescan: () => SkillMeta[]): { added: number; removed: number } {
-    const next = rescan();
+    let next: SkillMeta[];
+    try {
+      next = rescan();
+      this.lastReloadError = null;
+    } catch (err) {
+      this.lastReloadError = err instanceof Error ? err.message : String(err);
+      throw err;
+    }
     const before = new Set(this.availableSkills.map((s) => s.name));
     const after = new Set(next.map((s) => s.name));
     // Загруженные скиллы, которых больше нет на диске, уходят из бюджета.

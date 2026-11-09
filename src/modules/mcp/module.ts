@@ -36,10 +36,18 @@ export class MCPModule implements AgentModule {
     private logger?: Logger,
   ) {}
 
-  /**
-   * Зарегистрировать конфиги MCP-серверов БЕЗ коннекта. Коннект и discovery
-   * тулов — лениво, на первом вызове: старт быстрый и офлайн-безопасный.
-   */
+  getFailedServers(): string[] {
+    return [...this.failedServers];
+  }
+  /** Честный health: упавшие серверы → degraded (INV-6). */
+  health(): { status: "ok" | "degraded" | "failed"; reason?: string } {
+    if (this.failedServers.size > 0) {
+      return { status: "degraded", reason: `mcp servers failed: ${[...this.failedServers].join(", ")}` };
+    }
+    return { status: "ok" };
+  }
+
+  /** Регистрация конфигов БЕЗ коннекта (ленивый discovery на первом вызове). */
   async initialize(): Promise<void> {
     if (this.initialized) return;
     this.initialized = true;
@@ -78,11 +86,7 @@ export class MCPModule implements AgentModule {
     await this.discoverAllTools();
   }
 
-  /**
-   * Подключиться и найти тулы всех зарегистрированных серверов параллельно,
-   * каждый ограничен DISCOVERY_TIMEOUT_MS. Отменённая по таймауту попытка:
-   * её позднее завершение не должно регистрировать сервер, уже помеченный упавшим.
-   */
+  /** Параллельный discovery каждого сервера (таймаут DISCOVERY_TIMEOUT_MS). */
   private async discoverAllTools(): Promise<void> {
     await Promise.all(
       [...this.serverConfigs].map(async ([serverName, serverConfig]) => {
@@ -180,14 +184,9 @@ export class MCPModule implements AgentModule {
   }
 
   getToolDefinitions(): ToolDefinition[] {
-    // Дефиниции из найденных тулов И из зарегистрированных, но ещё не
-    // найденных серверов (модель видит все настроенные MCP-тулы, даже если
-    // discovery при старте упал).
+    // Дефиниции из найденных + зарегистрированных (видимые даже при падении discovery).
     const defs: ToolDefinition[] = [];
-
-    // Санитизация может схлопнуть разные имена в один id (`a.b`/`a-b`,
-    // `x.y`/`x-y`); реестр на дубле бросал, что роняло bootstrap.
-    // Разруливаем числовым суффиксом до регистрации.
+    // Санитизация схлопывает имена (`a.b`/`a-b`); суффикс до регистрации.
     const usedNames = new Set<string>();
     const uniqueName = (base: string): string => {
       if (!usedNames.has(base)) {
