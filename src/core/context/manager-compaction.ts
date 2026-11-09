@@ -47,7 +47,7 @@ export function compact(s: ContextState, opts?: CompactOptions): CompactResult |
     s.toolLedgerKeys,
   );
 
-  s.compactedBlock = buildCompactionBlock(s, oldTurns);
+  s.compactedBlock = buildCompactionBlock(s, oldTurns, opts?.llmSummary);
   const summary: Message = stampSeq(s, {
     role: "user",
     content: `<system-summary>${s.compactedBlock}</system-summary>`,

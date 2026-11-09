@@ -19,31 +19,31 @@ import { compact, pruneStaleToolResults } from "./manager-compaction";
  * давшей значимое сокращение; иначе последний (hard-drop).
  */
 export function compactAdaptive(s: ContextState, opts?: CompactOptions): CompactResult | null {
-  const { minReduction, keepLastN, toolResultKeep } = resolveCompactOptions(s, opts);
+  const { minReduction, keepLastN, toolResultKeep, llmSummary } = resolveCompactOptions(s, opts);
   // Исходный объём — база для ОБЩЕГО прогресса. Стадии сжимают историю
   // последовательно, поэтому reducedBy отдельной стадии занижен; клиент
   // (CompactionService) должен видеть суммарное сокращение от исходного.
   const originalTokens = estimatedTokens(s);
 
-  let result = finalizeAdaptive(s, compact(s, { keepLastN, minReduction }), originalTokens);
+  let result = finalizeAdaptive(s, compact(s, { keepLastN, minReduction, llmSummary }), originalTokens);
   if (isReduced(result, minReduction)) return result;
 
   result = finalizeAdaptive(
     s,
-    escalatePrune(s, result, keepLastN, toolResultKeep, minReduction),
+    escalatePrune(s, result, keepLastN, toolResultKeep, minReduction, llmSummary),
     originalTokens,
   );
   if (isReduced(result, minReduction)) return result;
 
   result = finalizeAdaptive(
     s,
-    escalateAggressive(s, result, keepLastN, minReduction),
+    escalateAggressive(s, result, keepLastN, minReduction, llmSummary),
     originalTokens,
   );
   if (isReduced(result, minReduction)) return result;
 
   const smaller = Math.max(2, Math.floor(keepLastN / 2));
-  return finalizeAdaptive(s, hardDropOldest(s, smaller) ?? result, originalTokens);
+  return finalizeAdaptive(s, hardDropOldest(s, smaller, llmSummary) ?? result, originalTokens);
 }
 
 /** Пересчитывает токены результата как ОБЩЕЕ сокращение от исходного объёма. */
@@ -66,11 +66,12 @@ function finalizeAdaptive(
 function resolveCompactOptions(
   s: ContextState,
   opts?: CompactOptions,
-): { minReduction: number; keepLastN: number; toolResultKeep: number } {
+): { minReduction: number; keepLastN: number; toolResultKeep: number; llmSummary?: string } {
   return {
     minReduction: opts?.minReduction ?? 0,
     keepLastN: opts?.keepLastN ?? KEEP_LAST_N,
     toolResultKeep: opts?.toolResultKeep ?? s.toolResultKeep,
+    llmSummary: opts?.llmSummary,
   };
 }
 
@@ -86,9 +87,10 @@ function escalatePrune(
   keepLastN: number,
   toolResultKeep: number,
   minReduction: number,
+  llmSummary?: string,
 ): CompactResult | null {
   if (pruneStaleToolResults(s, toolResultKeep, keepLastN) <= 0) return prev;
-  const pruned = compact(s, { keepLastN, minReduction });
+  const pruned = compact(s, { keepLastN, minReduction, llmSummary });
   return pruned ? { ...pruned, strategy: "prune-tools" } : prev;
 }
 
@@ -98,10 +100,11 @@ function escalateAggressive(
   prev: CompactResult | null,
   keepLastN: number,
   minReduction: number,
+  llmSummary?: string,
 ): CompactResult | null {
   const smaller = Math.max(2, Math.floor(keepLastN / 2));
   if (smaller >= keepLastN) return prev;
-  const aggressive = compact(s, { keepLastN: smaller, minReduction });
+  const aggressive = compact(s, { keepLastN: smaller, minReduction, llmSummary });
   return aggressive ? { ...aggressive, strategy: "aggressive" } : prev;
 }
 
@@ -109,7 +112,7 @@ function escalateAggressive(
  * Stage C: жёсткий дроп старейших групп сверх `keep` (system и активный
  * system-summary сохраняются). Пишет диагностику вызывающему.
  */
-export function hardDropOldest(s: ContextState, keep: number): CompactResult | null {
+export function hardDropOldest(s: ContextState, keep: number, llmSummary?: string): CompactResult | null {
   const firstSystem = s.messages.find((m) => m.role === "system");
   const nonSystem = s.messages.filter((m) => m.role !== "system");
   if (nonSystem.length <= keep) return null;
@@ -129,7 +132,7 @@ export function hardDropOldest(s: ContextState, keep: number): CompactResult | n
   // Сводка hard-drop строится из СВЕЖИХ фактов выброшенного head, а не из
   // остатка предыдущей компакции: иначе свежие `[Files:]`/`[Errors:]` попадали
   // в сообщение только при СЛЕДУЮЩЕЙ компакции (§3.6 аудита).
-  const headBlock = buildCompactionBlock(s, head);
+  const headBlock = buildCompactionBlock(s, head, llmSummary);
   const summary: Message = stampSeq(s, {
     role: "user",
     content: `<system-summary>[Compressed: ${head.length} old turns hard-dropped to fit context] ${headBlock}</system-summary>`,

@@ -45,6 +45,12 @@ export interface CompactOptions {
   toolResultKeep?: number;
   /** Порог значимости: ниже него счётчик/лог не обновляются. */
   minReduction?: number;
+  /**
+   * Готовый текст LLM-сводки удалённых turns (обычно от
+   * `summarizeOldTurns`). Входит в блок как `[LLM summary]` только при
+   * `compactionSummaryMode === "llm"`; в остальных режимах игнорируется.
+   */
+  llmSummary?: string;
 }
 
 /** Снапшот состояния контекста для логов/наблюдаемости. */
