@@ -62,8 +62,12 @@ describe("download_file tool", () => {
 
   it("should download a binary file and write it to disk", async () => {
     const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+    // Свежий Response на каждый вызов: один объект mockResolvedValue
+    // нельзя читать дважды (fetchValidated + чтение тела → «Body already used»).
     stubFetch(
-      vi.fn().mockResolvedValue(mockResponse(bytes, 200, { "content-type": "image/jpeg" })),
+      vi.fn().mockImplementation(async () =>
+        mockResponse(bytes, 200, { "content-type": "image/jpeg" }),
+      ),
     );
 
     const ctx = makeCtx();
