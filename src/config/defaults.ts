@@ -93,7 +93,8 @@ export const DEFAULTS: AppConfig = {
   // уточняет настроенное значение (см. contextAuto в types.ts).
   contextAuto: true,
   cost: { maxRunUsd: 0 },
-  hitl: { killSwitch: false },
+  hitl: { killSwitch: false, autoApproveLow: false },
+  compliance: { enabled: false, retentionDays: 180 },
   memory: {
     validator: {
       enabled: true,

@@ -32,6 +32,7 @@
     "build:release": "bun run build:prod && bun run scripts/stage-release.ts",
     "build:manifest": "bun run scripts/build-manifest.ts",
     "build:sbom": "bun scripts/build-sbom.ts",
+    "build:release-manifest": "bun scripts/build-release-manifest.ts",
     "sync:landing": "bun run scripts/sync-landing-version.ts",
     "build:clean": "bun run scripts/clean.ts",
     "build:bundle": "bun build ./src/cli/main.ts --outfile ./dist/main.js --target node --format esm --packages external",

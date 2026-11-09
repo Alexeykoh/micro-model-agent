@@ -23,5 +23,15 @@ export function setupHappyDom(html = ""): Window {
   const w = win as unknown as Record<string, unknown>;
   for (const key of DOM_GLOBALS) g[key] = w[key];
   if (html) win.document.body.innerHTML = html;
+  // Кэш модуля dom.ts общий на процесс: перезахватываем ref'ы под новый
+  // document, иначе первый тест с неполным DOM отравляет inp=null всем.
+  try {
+    const dom = require("../../src/modules/webui/assets/js/dom.js") as {
+      refreshDomRefs?: () => void;
+    };
+    dom.refreshDomRefs?.();
+  } catch {
+    // dom.js ещё не загружался — первый импорт сам захватит новый document.
+  }
   return win;
 }

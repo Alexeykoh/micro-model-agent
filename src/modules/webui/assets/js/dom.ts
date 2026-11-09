@@ -1,24 +1,56 @@
 // DOM refs + tiny element builders for the `mma web` frontend.
 // Depends only on the icon table; every other module builds on these.
+//
+// Ref-ы перезахватываются `refreshDomRefs()`: happy-dom harness
+// (`tests/helpers/happy-dom.ts`) меняет глобальный document между
+// тест-файлами, а кэш модуля Bun общий на процесс — без перезахвата
+// первый тест с неполным DOM отравлял бы `inp=null` всем остальным.
 import { ICONS } from "./icons.js";
 
-export const msgs = document.getElementById("msgs") as HTMLElement;
-export const inp = document.getElementById("inp") as HTMLTextAreaElement;
-export const tabstripEl = document.getElementById("tabstrip") as HTMLElement;
-export const planEl = document.getElementById("plan") as HTMLElement;
-export const planCountEl = document.getElementById("planCount") as HTMLElement;
-export const usageEl = document.getElementById("usage") as HTMLElement;
-export const envEl = document.getElementById("env") as HTMLElement;
-export const wsLine = document.getElementById("wsLine") as HTMLElement;
-export const wsGitEl = document.getElementById("wsGit") as HTMLElement | null;
-export const saveIndicator = document.getElementById("saveIndicator") as HTMLElement;
-export const attachStrip = document.getElementById("attachStrip") as HTMLElement;
-export const attachErr = document.getElementById("attachErr") as HTMLElement;
-export const imgPicker = document.getElementById("imgPicker") as HTMLInputElement;
-export const connStatus = document.getElementById("connStatus") as HTMLElement;
-export const staleBar = document.getElementById("staleBar") as HTMLElement;
-export const liveEl = document.getElementById("live") as HTMLElement;
-export const sendBtn = document.getElementById("sendBtn") as HTMLElement;
+export let msgs: HTMLElement;
+export let inp: HTMLTextAreaElement;
+export let tabstripEl: HTMLElement;
+export let planEl: HTMLElement;
+export let planCountEl: HTMLElement;
+export let usageEl: HTMLElement;
+export let envEl: HTMLElement;
+export let wsLine: HTMLElement;
+export let wsGitEl: HTMLElement | null;
+export let saveIndicator: HTMLElement;
+export let attachStrip: HTMLElement;
+export let attachErr: HTMLElement;
+export let imgPicker: HTMLInputElement;
+export let connStatus: HTMLElement;
+export let staleBar: HTMLElement;
+export let liveEl: HTMLElement;
+export let sendBtn: HTMLElement;
+
+function captureDomRefs(): void {
+  msgs = document.getElementById("msgs") as HTMLElement;
+  inp = document.getElementById("inp") as HTMLTextAreaElement;
+  tabstripEl = document.getElementById("tabstrip") as HTMLElement;
+  planEl = document.getElementById("plan") as HTMLElement;
+  planCountEl = document.getElementById("planCount") as HTMLElement;
+  usageEl = document.getElementById("usage") as HTMLElement;
+  envEl = document.getElementById("env") as HTMLElement;
+  wsLine = document.getElementById("wsLine") as HTMLElement;
+  wsGitEl = document.getElementById("wsGit") as HTMLElement | null;
+  saveIndicator = document.getElementById("saveIndicator") as HTMLElement;
+  attachStrip = document.getElementById("attachStrip") as HTMLElement;
+  attachErr = document.getElementById("attachErr") as HTMLElement;
+  imgPicker = document.getElementById("imgPicker") as HTMLInputElement;
+  connStatus = document.getElementById("connStatus") as HTMLElement;
+  staleBar = document.getElementById("staleBar") as HTMLElement;
+  liveEl = document.getElementById("live") as HTMLElement;
+  sendBtn = document.getElementById("sendBtn") as HTMLElement;
+}
+
+captureDomRefs();
+
+/** Перезахват DOM-ref'ов после смены глобального document (тестовый харнес). */
+export function refreshDomRefs(): void {
+  captureDomRefs();
+}
 
 // Announce a short status line to assistive tech (turn end, warnings/errors).
 // Clearing first forces repeats to be re-announced.
@@ -26,7 +58,7 @@ export function announce(text: string): void {
   if (!liveEl || !text) return;
   liveEl.textContent = "";
   setTimeout(() => {
-    liveEl.textContent = text;
+    if (liveEl) liveEl.textContent = text;
   }, 30);
 }
 

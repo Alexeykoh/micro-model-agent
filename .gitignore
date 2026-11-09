@@ -20,3 +20,4 @@ tmp/
 
 # Local agent scratch space (plans, notes) — not shared project config.
 .opencode/plans/
+release-manifest.json

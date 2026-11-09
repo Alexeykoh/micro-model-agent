@@ -9,6 +9,7 @@
 import { t } from "../i18n/index";
 import { safeResolvePath } from "./path-utils";
 import { askChoice } from "./user-input";
+import { shouldEscalate, type Impact } from "../modules/hitl/escalation";
 import type { ToolDefinition } from "./types";
 
 /** Просит подтверждение; reject — success:false (сигнал сбоя для цикла). */
@@ -34,6 +35,11 @@ export const approveTool: ToolDefinition = {
         type: "string",
         description: t("tool.approve_path_desc"),
       },
+      impact: {
+        type: "string",
+        enum: ["low", "medium", "high", "critical"],
+        description: "Impact of the action. low = auto-approvable when hitl.autoApproveLow.",
+      },
     },
     required: ["action"],
   },
@@ -43,6 +49,11 @@ export const approveTool: ToolDefinition = {
     }
     const action = String(args.action || "");
     const rawPath = String(args.path || "").trim();
+    const impact = args.impact as Impact | undefined;
+    // Escalation: low impact auto-approves only when policy allows.
+    if (!shouldEscalate(impact, ctx.config?.hitl)) {
+      return { success: true, output: t("tool.approved") };
+    }
     const question = t("tool.approve_prompt", { action });
     const options = [
       { label: t("tool.approve_yes"), description: t("tool.approve_yes_desc") },

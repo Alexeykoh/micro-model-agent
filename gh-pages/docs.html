@@ -884,6 +884,28 @@ max_tokens: 8000</code></pre>
     "everything": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-everything"] }
   }
 }</code></pre>
+          <p>
+            Внешние HTTP-серверы защищены шлюзом: вызовы идут через allowlist
+            (<code>mcp.allowedServers</code>), каждый сервер поддерживает rate-limit
+            (<code>rateLimitMs</code> в записи сервера), DLP-редактирует arguments до сети.
+            <b>OAuth 2.1 (per-user):</b> если запись сервера имеет
+            <code>oauth: { tokenUrl, clientId?, scope?, tokenFile }</code>, транспорт читает
+            access-токен из <code>tokenFile</code>, обновляет его по <code>tokenUrl</code>
+            (refresh grant) и подставляет <code>Authorization: Bearer</code> на каждый вызов;
+            при 401 — один refresh и повтор. Токен файла — локален процессу (silo):
+            per-user OAuth оформляется IdP вне MMA.
+          </p>
+          <p>
+            Целостность скиллов: каталог скиллов может нести
+            <code>skills-manifest.json</code> (sha256 по каждому <code>.skill.md</code>);
+            загрузчик fail-closed (битый/незаписанный файл не грузится).
+            Подпись манифеста: <code>skills-manifest.sig.json</code>
+            (<code>bun scripts/sign-skills-manifest.ts &lt;dir&gt; &lt;privkey.pem&gt;</code>,
+            Ed25519) + <code>skills-manifest.pubkey</code> — неверная подпись
+            отключает весь каталог.
+            Состав поставки — <code>sbom.json</code> (<code>bun run build:sbom</code>,
+            CycloneDX, dev-метки).
+          </p>
 
           <h2 id="plugins">Плагины</h2>
           <p>

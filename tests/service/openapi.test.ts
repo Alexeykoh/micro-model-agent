@@ -23,6 +23,7 @@ const ROUTED: Array<[string, string]> = [
   ["GET", "/v1/ready"],
   ["GET", "/v1/openapi.json"],
   ["GET", "/v1/docs"],
+  ["GET", "/v1/oversight"],
   ["POST", "/v1/sessions"],
   ["GET", "/v1/sessions"],
   ["GET", "/v1/sessions/{sessionId}"],

@@ -16,6 +16,17 @@ function btnEl(): HTMLButtonElement | null {
   return document.getElementById("pauseBtn") as HTMLButtonElement | null;
 }
 
+/**
+ * Клик биндится лениво (на current button), а не на импрете: happy-dom тесты
+ * сменяют document между файлами, и биндинг на узле прошлого document
+ * мёртв. dataset-флаг — идемпотентность повторных вызовов.
+ */
+function bindOnce(btn: HTMLButtonElement): void {
+  if (btn.dataset.pauseBound) return;
+  btn.dataset.pauseBound = "1";
+  btn.addEventListener("click", () => void toggle());
+}
+
 /** Ход какой сессии показывать: активная сессионная вкладка. */
 function ownSessionId(): string | null {
   const tab = tabState.tabs.find((x) => x.id === tabState.activeTabId);
@@ -30,6 +41,7 @@ function ownSessionId(): string | null {
 export function refreshPauseButton(): void {
   const btn = btnEl();
   if (!btn) return;
+  bindOnce(btn);
   const sid = ownSessionId();
   const running = !!sid && (session.runningSessionIds || []).includes(sid);
   const paused = !!sid && (session.pausedIds || []).includes(sid);
@@ -61,4 +73,4 @@ async function toggle(): Promise<void> {
 }
 
 const composerBtn = btnEl();
-if (composerBtn) composerBtn.addEventListener("click", () => void toggle());
+if (composerBtn) bindOnce(composerBtn);
