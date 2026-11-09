@@ -85,16 +85,15 @@
       degraded), drift контекстного окна vs конфигурации (context-probe);
       связка `threadId`+`sessionId` на каждом спане. W5/W6-сигналы остаются
       отдельным долгом `observability-w5-w6`.
-- [ ] **Evals в контуре + staged rollout.**
-      **Уже есть:** сертификация (`src/modules/certification/`),
-      реплей-инварианты в CI; скоpковер (90% по bundled-манифесту),
-      trajectory-чекер (`src/modules/evals/trajectory.ts`), eval-gate в CI
-      (`scripts/evals-check.ts`, successRate ≥ 80%, safety = 0),
+- [x] **Evals в контуре + staged rollout.** **Закрыто 2026-11-09** тремя ветками:
+      скоpковер + trajectory-чекер + eval-gate в CI (спека
+      [`2026-11-09-evals-design`](./docs/specs/2026-11-09-evals-design.md),
+      bundled-манифест, gate ≥80%/safety=0),
       human-gold фикстуры (`tests/evals/gold-v1.json` по живому прогону
-      hard-multi-extreme), детерминированный stagingбакет
-      (`rollout.ts`: shadow→canary→percentage→full).
-      **Осталось:** ensemble-судья (несколько LLM-судей голосуют, дорого),
-      живая маршрутизация staging-раскатки провайдеров (сейчас только бакет).
+      hard-multi-extreme), staged-бакет (`rollout.ts`:
+      shadow→canary→percentage→full при живом применении
+      `applyStagedRollout` в session-runner), ensemble-судья
+      (`EnsembleJudge`: большинство голосов, fail-open degraded).
 
 ### P1 — управляемость
 
