@@ -54,6 +54,34 @@ export function pruneEmptySessions(
 }
 
 /**
+ * Retention-prune: удалить сессии с `updatedAt` старше `retentionDays`
+ * (активную, `excludeId`, не удаляет). Ротация (>30d → .gz) архивирует
+ * историю; retention — безвозвратное удаление старых сессий.
+ */
+export function pruneSessionsByRetention(
+  store: SessionStore,
+  retentionDays: number,
+  excludeId: string | undefined,
+  remove: (id: string) => void,
+): string[] {
+  if (!Number.isFinite(retentionDays) || retentionDays <= 0) return [];
+  const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+  const deleted: string[] = [];
+  for (const s of store.listSessions()) {
+    if (s.id === excludeId) continue;
+    try {
+      if (new Date(s.updatedAt).getTime() < cutoff) {
+        remove(s.id);
+        deleted.push(s.id);
+      }
+    } catch {
+      // fail-open: пропускаем
+    }
+  }
+  return deleted;
+}
+
+/**
  * Каталог-сирота: ровно один вход — пустой каталог `temp` (INV-W4). Так
  * оставался след эагерного создания `temp` в `createSessionContext`. Мета, логи
  * или любые другие файлы означают живую либо оборванную сессию — их не трогаем.

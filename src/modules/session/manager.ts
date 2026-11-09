@@ -50,6 +50,13 @@ export class SessionManager {
     return this.store.loadCheckpoint(id);
   }
 
+  /** Retention-prune: удалить сессии старше `retentionDays` (кроме активной). */
+  pruneByRetention(retentionDays: number): string[] {
+    return this.state.pruneByRetention(retentionDays, this.activeId ?? undefined, (sid) =>
+      this.delete(sid),
+    );
+  }
+
   /** Обновить конфиг шифрования. */
   updateEncryption(config: SessionEncryptionConfig): void {
     this.store.updateEncryption(config);
