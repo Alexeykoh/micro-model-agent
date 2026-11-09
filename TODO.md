@@ -32,8 +32,13 @@
 Остальные находки прогонов (MCP-теги, path-гейт, pre-write LSP, post-build, финальный
 typecheck, loopback, `--isolated`, локальные заглушки) закрыты и перенесены в архив.
 
-- [ ] **Вложенный `AGENTS.md` и `.mma/`** — mma не читает `site/AGENTS.md` Next 16, а
-      `.mma/` в корне ломает `create-next-app .`. Долг F-01/F-06.
+- [x] **Вложенный `AGENTS.md` и `.mma/`** — закрыто веткой `feat/nested-agents-md`
+      по спеке [`docs/specs/2026-11-09-nested-agents-md-design.md`](./docs/specs/2026-11-09-nested-agents-md-design.md):
+      `nestedAgentsMdPaths()` обходит `baseDir` до глубины 4 (скип `node_modules`/`.git`/`.next`/`.mma`/`dist`/`.cache`),
+      кап 5, приоритет корень → `.mma` → вложенные → глобальный; вложенные блоки помечаются
+      относительным путём (`instructions (site/)`). `IndexCache.save()` не создаёт `.mma/`
+      на пустом индексе (F-06). Гварды — `tests/agents-md-nested.test.ts`,
+      `tests/indexer/lazy-mma.test.ts`.
 
 ### 1.13 mma web — UX-задачи (добавлено 2026-11-04)
 

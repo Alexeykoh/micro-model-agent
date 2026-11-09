@@ -33,6 +33,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- **Вложенный `AGENTS.md` + ленивый `.mma/` (F-01/F-06).** `agentsMdPaths()`
+  теперь ищет вложенные `AGENTS.md` (`nestedAgentsMdPaths()`: обход до глубины 4,
+  скип `node_modules`/`.git`/`.next`/`.mma`/`dist`/`.cache`, кап 5, приоритет
+  корень → `.mma` → вложенные → глобальный); вложенные prompt-блоки помечаются
+  относительным путём (`instructions (site/)`). `IndexCache.save()` не создаёт
+  `.mma/` на пустом индексе — пустой workspace не ломает `create-next-app .`.
+  Спека: `docs/specs/2026-11-09-nested-agents-md-design.md`; гварды
+  `tests/agents-md-nested.test.ts`, `tests/indexer/lazy-mma.test.ts`.
 - **Проверка плана `file-modified:<path>`.** Шаг-правка существующего файла теперь
   может требовать проживания: снапшот sha256 контента снимается на `create`/`re-plan`
   (`PlanStep.checkBaseline`), на `done` контент обязан отличаться — чтение файла

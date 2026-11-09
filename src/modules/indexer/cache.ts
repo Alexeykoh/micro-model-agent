@@ -135,6 +135,10 @@ export class IndexCache {
     const now = Date.now();
     this.cache = result;
     this.cachedBuiltAt = now;
+    // F-06: пустой workspace не получает `.mma/` до первого наполнения
+    // (иначе ломается `create-next-app .`). Дисковая запись пропускается,
+    // мемоизация в памяти уже сделана выше.
+    if (result.files.length === 0) return;
     const envelope: CacheEnvelope = {
       version: CACHE_VERSION,
       root: this.root ?? "",
