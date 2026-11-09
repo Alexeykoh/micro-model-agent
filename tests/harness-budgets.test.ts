@@ -4,6 +4,7 @@ import { isAliasModuleError } from "../src/modules/lsp/write-check";
 import { mutationTargetKey } from "../src/core/agent/loop-nudges";
 import { bumpBudgetAfterWriteTooLarge } from "../src/core/agent/tool-batch-effects";
 import { createLoopState } from "../src/core/agent/loop-state-init";
+import { createLoopState } from "../src/core/agent/loop-state-init";
 import { advancePlanIfStepComplete, looksLikeScaffoldTemplate } from "../src/modules/execution/step-advance";
 import { PlanTracker } from "../src/modules/execution/tracker";
 import { PlanStore } from "../src/modules/execution/plan-store";
@@ -11,6 +12,19 @@ import { mkdtempSync, writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { proactiveBudgetAfterLargeWrite } from "../src/core/agent/tool-batch-effects";
+import { toWireMessage } from "../src/llm/request-body";
+
+describe("INV-H7 wire messages for opencode-go", () => {
+  it("strips internal success/blocked/arguments from tool messages", () => {
+    const w = toWireMessage({ role: "tool", content: "ok", tool_call_id: "1", name: "write_file", success: true, blocked: false, arguments: { path: "a" } } as never);
+    expect(w).toEqual({ role: "tool", content: "ok", tool_call_id: "1", name: "write_file" });
+  });
+  it("keeps assistant tool_calls intact", () => {
+    const w = toWireMessage({ role: "assistant", content: "", tool_calls: [{ id: "1", type: "function", function: { name: "write_file", arguments: "{}" } }], success: true } as never);
+    expect("success" in w).toBe(false);
+    expect(w.tool_calls).toBeDefined();
+  });
+});
 
 describe("INV-H2 write chunk", () => {
   it("rejects content above chunk limit with append hint", () => {
