@@ -35,7 +35,7 @@ import { setMemoryEncryptor } from "../../modules/memory/at-rest";
 import { SessionFileEncryptor } from "../../modules/security/session-encryption";
 import type { PromptBlock } from "../types";
 import { readMmaVersion } from "../version";
-import { isOneShotMode, registerBuiltinPlugin } from "./state";
+import { isOneShotMode, registerBuiltinPlugin, shouldAutocreateSession } from "./state";
 import { ModuleHost, registerOwnedTools } from "../module-host";
 import { restoreStartupPlanFrom } from "./startup-plan";
 import { defaultOutputBus } from "../../output";
@@ -78,7 +78,13 @@ export async function setupModulesPhase(input: ModulesPhaseInput): Promise<Modul
   registerModuleToolsAndPlugins(input, moduleHost);
 
   const promptBlocks = buildStaticPromptBlocks(input, moduleHost, core.execModule);
-  dryRunStartupOverflow(input, promptBlocks);
+  // Read-only CLI-команды (config show, session list, doctor, plugins list …)
+  // не запускают агента: «будет суммаризован перед первым запуском» — ложь.
+  // shouldAutocreateSession — тот же гейт, что запрещает им создавать сессию
+  // (A-01): он false только для подкоманд, которым не нужен диалог.
+  if (shouldAutocreateSession()) {
+    dryRunStartupOverflow(input, promptBlocks);
+  }
 
   // План-блок удалён: мутирует каждую итерацию (статусы шагов), инвалидируя
   // локальный KV-кеш. Статус плана теперь инжектится в <system-summary>
