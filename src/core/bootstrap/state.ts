@@ -153,12 +153,15 @@ export function nestedAgentsMdPaths(baseDir: string): string[] {
  * глобальный. Вложенные (F-01) — до 5 шт, от корня к глубине.
  */
 export function agentsMdPaths(baseDir: string, configDir: string): string[] {
-  return [
+  const explicit: string[] = [
     join(baseDir, "AGENTS.md"),
     join(projectMmaDir(baseDir), "AGENTS.md"),
-    ...nestedAgentsMdPaths(baseDir),
-    join(configDir, "AGENTS.md"),
   ];
+  // Nested-обход тоже находит корневой AGENTS.md (depth 0) — без фильтра он
+  // попадался в промпт дважды (2× токены, дубль варнингов dry-run).
+  const explicitSet = new Set(explicit);
+  const nested = nestedAgentsMdPaths(baseDir).filter((p) => !explicitSet.has(p));
+  return [...explicit, ...nested, join(configDir, "AGENTS.md")];
 }
 
 /**
@@ -174,7 +177,8 @@ export function loadAgentsMdBlocks(
 ): PromptBlock[] {
   if (skip) return [];
   const blocks: PromptBlock[] = [];
-  const candidates = agentsMdPaths(baseDir, dir);
+  // Дедпу: один файл — один блок, даже если каталог Союза путей его повторил.
+  const candidates = [...new Set(agentsMdPaths(baseDir, dir))];
   for (const p of candidates) {
     if (existsSync(p)) {
       const content = readFileSync(p, "utf-8").trim();

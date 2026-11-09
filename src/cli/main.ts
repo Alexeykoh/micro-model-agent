@@ -11,7 +11,7 @@ import { Repl } from "./repl";
 import { runSetup } from "./setup";
 import { applyAnswersToConfig } from "./setup-order";
 import { relaunchCli } from "./relaunch";
-import { getDefaultChannel, writeMachineJson } from "../output";
+import { getDefaultChannel, setLogsToStderr, writeMachineJson } from "../output";
 import { buildJsonError } from "./json-payload";
 import { errMsg } from "../utils";
 import { saveConfig, loadConfig } from "../config/config";
@@ -115,6 +115,10 @@ async function main(): Promise<void> {
     program.args.length > 0 && commandNames.has(program.args[0]) && !onboardingStart;
 
   if (isSubcommand) {
+    // Машинный stdout подкоманд (config show JSON и т. п.): диагностические
+    // логи → stderr. Блоки writeLine остаются в stdout. Зеркалит A-14
+    // (`session export --out -`).
+    setLogsToStderr(true);
     return;
   }
 

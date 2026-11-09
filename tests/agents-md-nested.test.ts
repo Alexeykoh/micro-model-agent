@@ -22,6 +22,18 @@ describe("nested AGENTS.md (F-01)", () => {
     );
   });
 
+  it("корневой AGENTS.md не дублируется через nested-обход", () => {
+    const base = ws();
+    writeFileSync(join(base, "AGENTS.md"), "root rules");
+    mkdirSync(join(base, "site"));
+    writeFileSync(join(base, "site", "AGENTS.md"), "next rules");
+    const paths = agentsMdPaths(base, "/nonexistent-config");
+    expect(paths.filter((p) => p === join(base, "AGENTS.md"))).toHaveLength(1);
+    expect(new Set(paths).size).toBe(paths.length);
+    const blocks = loadAgentsMdBlocks(base, "/nonexistent-config", false);
+    expect(blocks.filter((b) => b.content === "root rules")).toHaveLength(1);
+  });
+
   it("скипает node_modules и .git", () => {
     const base = ws();
     mkdirSync(join(base, "node_modules", "x"), { recursive: true });
