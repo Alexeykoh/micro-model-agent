@@ -174,7 +174,18 @@ pre-write LSP (`isAliasModuleError`, `src/modules/lsp/write-check.ts`); (5) но
 (1) bump бюджета `iterMaxTokensOverride=16384`: реактивный на chunk-фейл и проактивный
 после крупной успешной записи (>4k) (`tool-batch-effects.ts`); wire-шов: `toWireMessage`
 режет внутренние `success/blocked/arguments` для строгих гейтов opencode-go (`src/llm/request-body.ts`).
-Тесты: `tests/harness-budgets.test.ts` (11).
+Тесты: `tests/harness-budgets.test.ts` (13).
+
+**Followups 2026-11-09** (`feat/harness-followups`, после merge в `dev`):
+(3) прогнозирующий бюджет до вызова (`src/core/agent/harness-budget.ts`, `predictMaxTokens` —
+файловые задачи сразу на 16k, `loop-llm.ts`); (4) enforcement: скаффолд-команды
+принудительно в фон (`src/tools/bash.ts`), батчинг вопросов — счётчик подряд одиночных
+`question` + стоящая директива (`loop-nudges.ts`, `loop-state.ts`); (5) quality:
+проверено что `file-size` роняли мои `sidebar.ts` 307 и `loop-state.ts` 304 (починены:
+выделен `sidebar-env.ts`, сжаты комментарии) + lint errors 2 (дублирующий import в
+моём тесте, неиспользуемый `ReasoningStrategy` в `manager.ts`) — все закрыты.
+Остался только предсуществующий fallow circular `providers/manager ↔ reasoning-resolve`
+(не трогал — отдельная задача).
 
 ---
 
