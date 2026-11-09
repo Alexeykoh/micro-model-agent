@@ -41,9 +41,11 @@ export class OpenAICompatProvider implements LLMProvider {
   private userAgent: string;
   private cache?: CacheCapability;
   private cacheReport: CacheReportFormat;
-  private reasoningStrategy: ReasoningStrategy;
+  // Публичные: LLMProvider объявляет их опционально — приватный индикатор
+  // сломал бы assignability (INV-R2: обёртки пробрасывают 1:1).
+  reasoningStrategy: ReasoningStrategy;
   private reasoningOff: boolean;
-  private reasoningLevels?: string[];
+  reasoningLevels?: string[];
 
   constructor(config: OpenAICompatConfig) {
     this.config = config;

@@ -21,6 +21,13 @@ export class OtelProvider implements LLMProvider {
   get maxCompletionTokens(): number | undefined {
     return this.inner.maxCompletionTokens;
   }
+  /** Механизм reasoning пробрасывается 1:1 (INV-R2): обёртка не «теряет» стратегию. */
+  get reasoningStrategy(): string | undefined {
+    return this.inner.reasoningStrategy;
+  }
+  get reasoningLevels(): string[] | undefined {
+    return this.inner.reasoningLevels;
+  }
 
   async *chat(
     messages: Message[],

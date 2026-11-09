@@ -4,8 +4,10 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { dockerAvailable, runDockerBash, DEFAULT_SANDBOX_IMAGE } from "../src/tools/bash-docker";
 
-// Live-интеграция sandbox (P0 изоляция 2/2). Пропускается без daemon.
-describe.skipIf(!dockerAvailable())("sandbox docker live (cert acceptance)", () => {
+// Live-интеграция sandbox (P0 изоляция 2/2). Пропускается без daemon и
+// без явного флага: на CI (GitHub Windows runner) Docker Desktop file-sharing
+// broken — bind-mount падает. Локально: MMA_LIVE_DOCKER=1 bun test tests/bash-docker-live.test.ts
+describe.skipIf(!dockerAvailable() || process.env.MMA_LIVE_DOCKER !== "1")("sandbox docker live (cert acceptance)", () => {
   it("mount write inside baseDir is visible on the host", async () => {
     const dir = mkdtempSync(join(tmpdir(), "mma-sandbox-live-"));
     try {

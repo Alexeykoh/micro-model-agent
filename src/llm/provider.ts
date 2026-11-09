@@ -91,6 +91,14 @@ export interface LLMProvider {
    * 2048 → finish_reason "length" → fail-open вердикта).
    */
   readonly maxCompletionTokens?: number;
+  /**
+   * Механизм reasoning, разрешённый для экземпляра (INV-R2): резолвится из
+   * capabilities пресета + пробы; читается напрямую (bootstrap, тесты).
+   * Обёртки обязаны пробрасывать 1:1, иначе стратегия «теряется» за DLP/OTel.
+   */
+  readonly reasoningStrategy?: string;
+  /** Гранулярные уровни effort; пустой/undefined — есть только on/off. */
+  readonly reasoningLevels?: string[];
 
   chat(
     messages: Message[],

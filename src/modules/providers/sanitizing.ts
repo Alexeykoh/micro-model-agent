@@ -106,6 +106,19 @@ export class SanitizingProvider implements LLMProvider {
     return this.inner.maxCompletionTokens;
   }
 
+  /**
+   * Механизм reasoning пробрасывается 1:1 (INV-R2): без этого bootstrap
+   * с установленным egress guard «терял» стратегию провайдера, и тесты
+   * (порядковый pollутинг глобального setEgressGuard) падали на пустом поле.
+   */
+  get reasoningStrategy(): string | undefined {
+    return this.inner.reasoningStrategy;
+  }
+
+  get reasoningLevels(): string[] | undefined {
+    return this.inner.reasoningLevels;
+  }
+
   countTokens(text: string): number {
     return this.inner.countTokens(text);
   }
