@@ -42,6 +42,8 @@ export async function startServiceServer(s: AgentServiceState): Promise<string> 
 const OPEN_PATHS = new Set([
   "/v1/health",
   "/v1/ready",
+  "/healthz",
+  "/readyz",
   "/v1/openapi.json",
   "/v1/docs",
 ]);
