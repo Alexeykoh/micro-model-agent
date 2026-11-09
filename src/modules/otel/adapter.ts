@@ -4,6 +4,7 @@
  * (Development, меняются только здесь) + связки по thread/session.
  * Без `otel.enabled` — no-op без fetch.
  */
+import { fetchOutbound } from "../security/outbound-policy";
 
 /** Атрибуты, общие для каждого спано (связка trace↔session). */
 export type SpanAttributes = Record<string, string | number | boolean>;
@@ -111,7 +112,7 @@ export class OtelAdapter {
     };
     this.spans = [];
     try {
-      const res = await fetch(url, {
+      const res = await fetchOutbound(url, "module:otel", { operation: "otel.export" }, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
