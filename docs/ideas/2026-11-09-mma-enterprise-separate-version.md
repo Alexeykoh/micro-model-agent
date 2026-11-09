@@ -90,29 +90,53 @@ runtime, model gateway и credential broker — отдельные сервис�
 
 ## 4. Как устроена отдельная версия
 
-```text
-                    ┌─ ingress (TLS, вход через компанию, маршруты)
-  Пользователь ────►│
-  CLI / браузер /   │    /        — чат
-  API               │    /me      — личный кабинет
-                    │    /admin   — панель администратора
-                    └──────┬──────┘
-                           ▼
-         ┌──────────────────────────────────┐
-         │ control plane (отдельный сервис) │  люди, роли, политика,
-         │ НЕ модуль агента                 │  лимиты, агенты, аудит
-         └────────────────┬─────────────────┘
-                          │ подписанная политика с TTL
-                          ▼
-         ┌──────────────────────────────────┐
-         │ runtime (текущее ядро MMA)       │  агент, инструменты, DLP
-         └────────┬──────────────┬──────────┘
-                  ▼              ▼
-        model gateway     credential broker
-      (модели, бюджет,    (короткие пропуска к
-       резерв, allowlist)  файлам и MCP)
-                  + Postgres / S3 / Vault / журнал аудита
+```mermaid
+%%{init: {'flowchart': {'curve': 'stepBefore', 'htmlLabels': true}}}%%
+flowchart TB
+    subgraph SURFACE["Поверхности"]
+        direction TB
+        USER["Пользователь"]
+        CLIENT["CLI / браузер / API"]
+        ING["ingress<br/>TLS · OIDC · маршруты"]
+        ROUTES["/ чат · /me кабинет · /admin панель"]
+        USER --> CLIENT
+        CLIENT --> ING
+        ING --> ROUTES
+    end
+
+    subgraph SERVICES["Сервисы MMA Enterprise"]
+        direction TB
+        CTRL["control plane<br/>люди · роли · политика · лимиты · агенты · аудит"]
+        RUN["runtime<br/>ядро MMA: агент · инструменты · DLP"]
+        GW["model gateway<br/>модели · бюджет · резерв"]
+        BROKER["credential broker<br/>короткие пропуска к шарам и MCP"]
+        CTRL --> RUN
+        RUN --> GW
+        RUN --> BROKER
+    end
+
+    subgraph DATA["Данные"]
+        PG["Postgres"]
+        S3["S3 / MinIO"]
+        VAULT["Vault / KMS"]
+        AUDIT["Журнал аудита"]
+    end
+
+    ROUTES --> CTRL
+    CTRL --> PG
+    CTRL --> S3
+    CTRL --> AUDIT
+    GW --> VAULT
+
+    classDef surface fill:#eef4ff,stroke:#5b8def,color:#10233f;
+    classDef service fill:#eaf7ee,stroke:#3d9d6b,color:#10331f;
+    classDef data fill:#fff4e0,stroke:#d9a441,color:#4a3200;
+    class USER,CLIENT,ING,ROUTES surface;
+    class CTRL,RUN,GW,BROKER service;
+    class PG,S3,VAULT,AUDIT data;
 ```
+
+Подпись на стрелке control plane → runtime: подписанная политика с TTL.
 
 **Control plane** — диспетчерская: кто этот человек, что ему можно,
 сколько ему можно, какие агенты доступны, кто и что менял. Он не читает
@@ -455,6 +479,13 @@ flowchart TB
     CTRL --> S3
     GW --> VAULT
     REG --> MMA
+
+    classDef org fill:#f2f2f2,stroke:#8a8a8a,color:#222222;
+    classDef mma fill:#eaf7ee,stroke:#3d9d6b,color:#10331f;
+    classDef user fill:#eef4ff,stroke:#5b8def,color:#10233f;
+    class EDR,MDM,DISK,DNS,NTP,WAF,AD,IDP,SHARE,PG,S3,VAULT,REG,SIEM,MON,BACKUP,ITSM org;
+    class ING,CTRL,RUN,GW,BROKER mma;
+    class USER user;
 ```
 
 ### Потоки доверия и данных
@@ -496,6 +527,13 @@ flowchart LR
     CTRL --> SIEM
     RUN --> MON
     CTRL --> MON
+
+    classDef client fill:#eef4ff,stroke:#5b8def,color:#10233f;
+    classDef core fill:#eaf7ee,stroke:#3d9d6b,color:#10331f;
+    classDef out fill:#fff4e0,stroke:#d9a441,color:#4a3200;
+    class CLI,ING client;
+    class CTRL,RUN,GW,BROKER core;
+    class IDP,MODEL,SHARE,SIEM,MON out;
 ```
 
 ### Кто чем владеет
