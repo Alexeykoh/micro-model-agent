@@ -16,6 +16,8 @@ import { AuditGate } from "./audit-gate";
 import { CriticGate } from "./critic-gate";
 import type { CostTracker } from "../../modules/pricing/index";
 import { CriticClient, CRITIC_DEGRADED_PREFIX } from "../../modules/critic/client";
+import { summarizeOldTurns } from "../context/compaction-llm-summary";
+import { join } from "path";
 import { buildCriticProvider } from "../../modules/critic/provider";
 import { CRITIC_READONLY_TOOLS } from "../../modules/critic/tools";
 import { buildEvidencePack } from "../../modules/critic/evidence";
@@ -58,11 +60,22 @@ export function createLoopModules(host: LoopSetupHost, slog: SessionLogger): Loo
       ? contextManager.beginTurn()
       : contextManager.getActiveHistory().length;
 
+  const llmProvider = deps.llmProvider;
   const compactionService = new CompactionService({
     contextManager,
     logger,
     slog,
     hallucinationDetector,
+    llmSummarizer:
+      llmProvider && deps.config.contextBudget?.compactionSummary === "llm"
+        ? (text) =>
+            summarizeOldTurns({
+              provider: llmProvider,
+              text,
+              cacheDir: join(deps.baseDir, ".mma/cache/compaction-summaries"),
+              sessionId: deps.sessionManager?.getActiveMeta?.()?.id,
+            })
+        : null,
   });
   const tokenTracker = new TokenTracker(
     host.costTracker,

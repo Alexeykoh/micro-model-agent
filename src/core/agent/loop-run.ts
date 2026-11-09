@@ -90,7 +90,7 @@ export async function executeAgentLoop(
     contextManager.noteIteration();
 
     // Пролог итерации: тулы/бюджет, компакция, история, монитор префикса (INV-23).
-    const { allToolsForBudget, boundedToolNames, history } = runIterationPrologue(
+    const { allToolsForBudget, boundedToolNames, history } = await runIterationPrologue(
       ctx.iterationPrologueHost(),
       { state, slog, input, onMeta, compactionService },
     );

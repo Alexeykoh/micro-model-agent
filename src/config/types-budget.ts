@@ -45,7 +45,9 @@ export interface ContextBudget {
   /**
    * Сводка компакции: `off` — только task/plan/facts; `ledger` (дефолт) —
    * дополнительно пинить структурный `[Tool ledger]` (что уже прочитано/
-   * прочитано/fetched), чтобы модель не переисследовала то же после сжатия.
+   * прочитано/fetched), чтобы модель не переисследовала то же после сжатия;
+   * `llm` — как `ledger`, плюс LLM-сводка удалённых turns
+   * (`[LLM summary]`, bounded, fail-open → ledger-only).
    */
-  compactionSummary?: "off" | "ledger";
+  compactionSummary?: "off" | "ledger" | "llm";
 }

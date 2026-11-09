@@ -27,7 +27,7 @@ export function computeCutoff(messages: Message[], keepLastN: number): number {
  * Собирает внутренний блок сводки компакции из фактов и pinning-констант
  * (задача, план, thinking, «пробовали и не вышло»).
  */
-export function buildCompactionBlock(s: ContextState, oldTurns: Message[]): string {
+export function buildCompactionBlock(s: ContextState, oldTurns: Message[], llmSummary?: string): string {
   const parts: string[] = [];
   parts.push(`[Compressed: ${oldTurns.length} old turns removed]`);
 
@@ -68,6 +68,12 @@ export function buildCompactionBlock(s: ContextState, oldTurns: Message[]): stri
     if (s.toolLedger.length > 0) {
       parts.push(`[Tool ledger]\n${s.toolLedger.join("\n")}`);
     }
+  }
+
+  // LLM-сводка: только в режиме `llm` и при непустом тексте. Fail-open
+  // обеспечивается вызывающим слоем (null → сюда не попадает).
+  if (s.compactionSummaryMode === "llm" && llmSummary?.trim()) {
+    parts.push(`[LLM summary]\n${llmSummary.trim()}`);
   }
 
   const triedAndFailed = extractTriedAndFailed(oldTurns);

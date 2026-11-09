@@ -25,7 +25,7 @@ export interface ContextTuning {
   toolResultKeep: number;
   calibrationWarmup: number;
   ratioFloor: number;
-  compactionSummary: "off" | "ledger";
+  compactionSummary: "off" | "ledger" | "llm";
 }
 
 /** Всё изменяемое состояние одного `ContextManager`. */
@@ -51,8 +51,8 @@ export interface ContextState {
   overflowCooldown: number;
   /** Сколько последних tool-результатов не чистить (v2). */
   toolResultKeep: number;
-  /** Режим сводки компакции: пинить `[Tool ledger]` или нет. */
-  compactionSummaryMode: "off" | "ledger";
+  /** Режим сводки компакции: пинить `[Tool ledger]` или нет; `llm` — плюс LLM-сводка turns. */
+  compactionSummaryMode: "off" | "ledger" | "llm";
   /**
    * Структурный леджер тулов: что уже прочитано/найдено/запущено. Копится через
    * компакции (пинится в каждой сводке), чтобы модель не переисследовала тот же

@@ -81,10 +81,10 @@ export function buildThinkCtx(args: {
 }
 
 /** Выполняет подготовительные шаги итерации до вызова LLM. */
-export function runIterationPrologue(
+export async function runIterationPrologue(
   host: IterationPrologueHost,
   inp: IterationPrologueInput,
-): IterationPrologueResult {
+): Promise<IterationPrologueResult> {
   const { deps } = host;
   const { state, slog, input, onMeta, compactionService } = inp;
   const { contextManager, pluginManager, logger, toolExecutor, config } = deps;
@@ -119,7 +119,7 @@ export function runIterationPrologue(
   );
 
   // Единая точка компакции: интервал → качество (с cooldown) → переполнение.
-  compactionService.compactIfNeeded(state);
+  await compactionService.compactIfNeeded(state);
 
   host.refreshSystemPrompt();
   // Taint (T2/T3): доверие текущей цели решает, наследует ли ответ taint, а
