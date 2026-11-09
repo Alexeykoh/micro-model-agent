@@ -200,7 +200,6 @@ export class ToolExecutor {
       }
       result.toolCallId = call.id;
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e);
       // INV-15: исключение хендлера — это деградация исполнения, а не
       // содержательный отказ тула. Сигнал пишем здесь: `tool-batch-calls`
       // исключения уже не увидит, оно превращено в failed-результат.
@@ -208,13 +207,13 @@ export class ToolExecutor {
         source: `tool:${call.name}`,
         operation: "tool.execute",
         kind: "failed",
-        cause: message,
+        cause: e instanceof Error ? e.message : String(e),
         recoverable: true,
         detail: { toolCallId: call.id },
       });
       result = {
         success: false,
-        output: `${t("error.prefix")}${message}`,
+        output: `${t("error.prefix")}${e instanceof Error ? e.message : String(e)}`,
         toolCallId: call.id,
       };
     }

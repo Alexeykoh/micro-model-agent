@@ -93,11 +93,7 @@ export class BrowserSession {
       if (err instanceof BrowserUnavailableError) {
         return { success: false, output: err.message };
       }
-      const message = err instanceof Error ? err.message : String(err);
-      return {
-        success: false,
-        output: t("browser.error", { message }),
-      };
+      return { success: false, output: t("browser.error", { message: err instanceof Error ? err.message : String(err) }) };
     }
   }
 

@@ -120,10 +120,9 @@ export class MCPModule implements AgentModule {
             }),
           ]);
         } catch (e: unknown) {
-          const message = e instanceof Error ? e.message : String(e);
           timedOut = true;
           this.failedServers.add(serverName);
-          this.logger?.warn(`MCP server "${serverName}" init failed: ${message}`);
+          this.logger?.warn(`MCP server "${serverName}" init failed: ${e instanceof Error ? e.message : String(e)}`);
           await client.disconnect().catch((err: unknown) => {
             this.logger?.warn(`cleanup disconnect for "${serverName}" failed`, {
               error: String(err),
@@ -173,9 +172,8 @@ export class MCPModule implements AgentModule {
       }
       return client;
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e);
       this.failedServers.add(serverName);
-      this.logger?.warn(`MCP connect failed for "${serverName}": ${message}`);
+      this.logger?.warn(`MCP connect failed for "${serverName}": ${e instanceof Error ? e.message : String(e)}`);
       await client.disconnect().catch(() => {});
       return null;
     }
@@ -237,8 +235,7 @@ export class MCPModule implements AgentModule {
               output: typeof result === "string" ? result : JSON.stringify(result, null, 2),
             };
           } catch (e: unknown) {
-            const message = e instanceof Error ? e.message : String(e);
-            return { success: false, output: `MCP call failed: ${message}` };
+            return { success: false, output: `MCP call failed: ${e instanceof Error ? e.message : String(e)}` };
           }
         },
       });
@@ -291,9 +288,8 @@ export class MCPModule implements AgentModule {
           } catch (e: unknown) {
             // Best-effort cleanup на конце сессии: упавший disconnect не
             // должен ронять shutdown, но обязан остаться в диагностике.
-            const message = e instanceof Error ? e.message : String(e);
             this.logger?.warn(`disconnect from "${serverName}" failed`, {
-              error: message,
+              error: e instanceof Error ? e.message : String(e),
             });
           }
         }

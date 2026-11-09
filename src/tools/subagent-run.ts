@@ -295,7 +295,6 @@ export async function runSubagent(
       executor?.setRecursionDepth?.(currentDepth);
     }
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : String(e);
-    return { success: false, output: t("tool.subagent_error", { error: message }) };
+    return { success: false, output: t("tool.subagent_error", { error: e instanceof Error ? e.message : String(e) }) };
   }
 }

@@ -128,7 +128,7 @@ export class LintOnWritePlugin implements AgentPlugin {
         ) {
           return null;
         }
-        const stderr = String(err.stderr ?? err.stdout ?? "");
+        const stderr = String(err.stderr ?? "") || String(err.stdout ?? "");
         const firstError =
           stderr.split("\n").find((line: string) => line.trim()) || "TypeScript syntax error";
         syntaxCache.set(filePath, { hash, error: firstError.trim() });
@@ -282,7 +282,7 @@ export class LintOnWritePlugin implements AgentPlugin {
       ) {
         return null;
       }
-      const stderr = String(err.stderr ?? err.stdout ?? "");
+      const stderr = String(err.stderr ?? "") || String(err.stdout ?? "");
       if (stderr.includes("error TS")) {
         const firstError =
           stderr.split("\n").find((line: string) => line.includes("error TS")) ||
