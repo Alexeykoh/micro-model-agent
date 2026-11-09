@@ -108,55 +108,61 @@
 > `OutputEvent` нельзя строить Enterprise поверх монолита — любой
 > «enterprise-флаг» в монолите локально пропатчится.
 
-- [ ] **Разделение монолита UI / runtime (блокер).**
-      **Уже есть:** шов `Host` (`src/core/host.ts`), `buildHostState()`
-      (`src/core/host-state.ts`, фронтненд-агностичен), `OutputBus`-события
-      (`src/output/bus.ts`), Service API (`/v1`, SSE, pull, webhook,
-      OpenAPI в `src/modules/service/`).
-      **Осталось:** wire-транспорт поверх `Host` (сначала `127.0.0.1` HTTP+SSE,
-      токен в OS keychain, daemon как сервис), клиент как тонкий UI,
-      версионирование протокола, daemon переживает рестарт UI без потери хода
-      (pull/SSE resume). Критерий закрытия — волна -1 из идеи выше.
+- [x] **Разделение монолита UI / runtime (блокер).**
+      **Закрыто 2026-11-09** веткой `feat/daemon-wire` (спека
+      [`2026-11-09-daemon-wire-design`](./docs/specs/2026-11-09-daemon-wire-design.md),
+      волна -1): wire-транспорт `mma serve` (Agent Service API `/v1`+SSE,
+      daemon переживает рестарт UI через `session.jsonl`/`checkpoint.json`/
+      `interrupt.json` + SSE pull-resume), версионирование протокола
+      (`PROTOCOL_VERSION="1"`, `/v1/health.protocol`, клиент отвергает чужой
+      major), токен в файле `~/.mma/daemon.token` (0600, fallback OS keychain),
+      thin-клиент `DaemonClient` (`src/modules/daemon/protocol.ts`).
+      Полное разделение REPL/TUI в thin-клиенты — вне волны -1 (web уже thin).
 - [x] **Cost/LLM-gateway.** **MVP закрыт 2026-11-09**: per-run hard-stop
       `cost.maxRunUsd` (целые USD; `stopReason=cost_budget` через форс-финал,
       `src/core/agent/cost-budget.ts` + проверка в loop-run). `max_turns`
       hard-stop уже был (`maxToolIterations`), intent-routing кодовая
       (`ProviderManager.pickFor`), cache-anchoring — prefix-monitor (был),
       per-tenant — процессом (silo).
-- [ ] **MCP/plugin supply-chain.**
-      **Уже есть:** allowlist серверов (`mcp.allowedServers`, гвард
-      `tests/arch/outbound-policy.test.ts`), DLP-egress на MCP, plugin-permissions как
-      декларация; **добавлено 2026-11-09**: gateway rate-limit
-      (`rateLimitMs` на запись сервера, `tool.mcp_rate_limited`), integrity-манифест
-      скиллов (`skills-manifest.json`, sha256, fail-closed), SBOM
-      (`bun run build:sbom` → `sbom.json`).
-      **Осталось:** OAuth 2.1 per-user (существующие заголовки позволяют токен вручную —
-      per-user флоу не встроен), signed skill-манифесты (sha-манифест готов —
-      подпись требует ключей), актуализация спеки MCP. Disable плагина ≠ sandbox (код уже загружен,
-      зафиксировано в `AGENTS.md`).
-- [ ] **HITL + kill-switch.**
-      **Уже есть:** тулы `question`/`approve`, `ApprovalStore` одноразовыми токенами
-      (`tests/tools/approve-token.test.ts`), пауза/возобновление в памяти
-      (см. 1.13, спека `2026-11-06-webui-pause-resume-design.md` — явно не durable),
-      `Host.interrupt()` в памяти.
-      **Осталось:** durable `interrupt()`, escalation по impact, oversight-панель,
-      глобальный kill-switch (`question`/`approve` не переживают рестарт).
-- [ ] **Поставка и эксплуатация.**
-      **Уже есть:** `/v1/health` + `/v1/ready` (`src/modules/service/server.ts`,
-      без auth для LB/k8s), релиз через GitHub Actions (`.github/workflows/release.yml`),
-      silo-модель «1 процесс = 1 тенант» (`tests/service/tenant-authz.test.ts`).
-      **Осталось:** Dockerfile/K8s, `/healthz` как имя (сейчас `/v1/health` —
-      переименовать или алиас), манифест (prompt+model+tools+evals), откат одной
-      командой, RBAC/тенанты сверх silo, SLO + runbook.
+- [x] **MCP/plugin supply-chain.**
+      **Закрыто 2026-11-09** тремя ветками: (1) gateway rate-limit
+      (`rateLimitMs`, `tool.mcp_rate_limited`) + integrity-манифест скиллов
+      (sha256, fail-closed) + SBOM; (2) OAuth 2.1 per-user
+      (`src/modules/mcp/oauth.ts`: tokenFile, refresh grant, 401-retry,
+      спека `2026-11-09-mcp-oauth-design`); (3) signed-манифесты скиллов
+      (Ed25519 `skills-manifest.sig.json` + pubkey, `scripts/sign-skills-manifest.ts`,
+      fail-closed при неверной подписи) + spec-синк (`docs/plugins.md`,
+      сайт `#mcp`). Disable плагина ≠ sandbox (зафиксировано в `AGENTS.md`).
+- [x] **HITL + kill-switch.**
+      **Закрыто 2026-11-09** двумя ветками: (1) durable `interrupt()`
+      (`interrupt.json` в каталоге сессии, `Agent.pause/resume` персистят,
+      рестарт восстанавливает паузу) + глобальный kill-switch
+      (`hitl.killSwitch`, стоп на границе итерации); (2) escalation по impact
+      (`src/modules/hitl/escalation.ts`: `approve(impact=low|medium|high|critical)`,
+      `hitl.autoApproveLow`) + oversight-панель (`GET /v1/oversight`:
+      kill-switch, pending-вопросы, audit-валидность, adversarial-хвост;
+      регистрация в OpenAPI + гвард `openapi.test.ts`).
+- [x] **Поставка и эксплуатация.**
+      **Закрыто 2026-11-09** веткой `feat/deployment-ops`: Dockerfile сервиса
+      (`deploy/Dockerfile.service`, `mma serve`, HEALTHCHECK), K8s-манифест
+      (`deploy/k8s.yaml`: RollingUpdate, probes `/healthz`+`/readyz`,
+      least-privilege RBAC Role), `/healthz`+`/readyz` алиасы
+      (`/v1/health` остаётся), манифест релиза
+      (`bun run build:release-manifest`), откат одной командой
+      (`kubectl rollout undo`), SLO + runbook (`deploy/RUNBOOK.md`),
+      RBAC/тенанты — silo-процессы + K8s RBAC (silo: 1 процесс = 1 тенант).
 
 ### P2 — зрелость
 
-- [ ] **Compliance (EU AI Act).**
-      **Уже есть:** `context.diff` append-only, `memory/*.md` append-only,
-      `session.jsonl` зашифровывается при `sessionEncryption.enabled`.
-      **Осталось:** tamper-evident audit-лог (append-only + подпись), high-risk
-      артефакты (risk file, lineage, oversight-панель, adversarial-лог Art.15),
-      retention ≥6 мес. (сейчас: архив сессий 30 дней, service 7 дней).
+- [x] **Compliance (EU AI Act).**
+      **Закрыто 2026-11-09** веткой `feat/compliance-audit`:
+      tamper-evident audit-лог (append-only JSONL + hash-chain + HMAC-ключ,
+      `src/modules/compliance/audit-log.ts`, верификация `verifyAudit`),
+      high-risk артефакты (risk-файл на сессию с tools/approvals/denied,
+      lineage model+promptHash, adversarial-лог Art.15 —
+      `src/modules/compliance/risk.ts`, oversight-панель читает их через
+      `/v1/oversight`), retention ≥6 мес. (`compliance.retentionDays=180`).
+      Итого P1+P2 дорожной карты закрыты; открыт только бэклог долгов.
 - [x] **Внутренние хвосты.** **Закрыто 2026-11-09**:
       `noExplicitAny` warn→error ratchet'ом (144→0 в `src/`,
       `PlatformHookContext`-контракт + `ctx: any` убраны;
