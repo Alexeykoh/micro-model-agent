@@ -2471,6 +2471,8 @@
   "config.desc.memory.retentionDays": "TTL записей памяти категорий (0 — без срока). Старые записи не попадают в промпт и не ищутся.",
   "config.key.execution.profile": "профиль исполнения",
   "config.desc.execution.profile": "local-trusted запускает команды на хосте; sandbox — шелл-команды в жёстком Docker-контейнере (deny-by-default egress).",
+  "config.key.cost.maxRunUsd": "бюджет хода, USD",
+  "config.desc.cost.maxRunUsd": "Жёсткий бюджет одного хода в целых USD (0 — без лимита). На капе ход заканчивается с cost_budget.",
   "config.key.otel.enabled": "OTel трейсы",
   "config.desc.otel.enabled": "Эмитить спаны OpenTelemetry GenAI (otel-адаптер).",
   "config.key.otel.endpoint": "endpoint OTLP",

@@ -20,6 +20,7 @@ import { gatherTurnToolEvents } from "./critic-events";
 import { buildLoopResult, type LoopResultHost } from "./loop-result";
 import { snapshotLoopState } from "../../modules/session/checkpoint";
 import { getOtelAdapter } from "../../modules/otel/adapter";
+import { costBudgetExceeded } from "./cost-budget";
 import { accumulateToolTargets } from "./loop-nudges";
 
 /** Хосты фаз и доступ к мутабельному состоянию агента. */
@@ -128,6 +129,14 @@ export async function executeAgentLoop(
     if (llm.kind === "continue") continue;
     if (llm.kind === "break") break;
     if (llm.kind === "return") return finishSpan(llm.result);
+
+    // Cost/LLM-gateway MVP: per-run бюджет. Превышение — форс-финал
+    // (`stopReason=cost_budget` + critic), как для max_iters.
+    const maxRunUsd = ctx.deps.config.cost?.maxRunUsd ?? 0;
+    if (costBudgetExceeded(state.apiCostUsd, maxRunUsd)) {
+      state.finalizeReason = "cost_budget";
+      break;
+    }
     const { textContent, reasoningContent, toolCalls, sawToolCall } = llm;
 
     const cycleNudges = sawToolCall ? accumulateToolTargets(state, toolCalls) : [];
