@@ -970,6 +970,15 @@ mma security enable-audit</code></pre>
               <b>Bash:</b> рабочая директория ограничена, опасные команды блокируются, вывод
               санитизируется.
             </li>
+            <li>
+              <b>Sandbox-профиль:</b> <code>execution.profile: sandbox</code> запускает shell-команды
+              в отдельном Docker-контейнере (<code>execution.image</code>, по умолчанию
+              <code>oven/bun:1.3.14</code> / <code>mma-sandbox:0.1.0</code> из <code>Dockerfile</code>):
+              rootfs read-only, egress отклонён (<code>--network none</code>), mount только рабочей
+              директории, без секретов провайдера. Если Docker недоступен, ход падает
+              (<code>execution.sandbox_unavailable</code>) и не откатывается на хост.
+              Без Docker пользуйтесь дефолтным <code>local-trusted</code> — поведение прежнее.
+            </li>
             <li><b>SSRF:</b> приватные адреса и метаданные облака недоступны сетевым тулам.</li>
           </ul>
 
