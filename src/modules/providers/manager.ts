@@ -1,6 +1,6 @@
 // Менеджер провайдеров: активный провайдер + модель в рантайме, hot-swap, кеш сборки.
 import type { LLMProvider } from "../../llm/provider";
-import type { ProviderConfig, ProviderEntry, ReasoningStrategy, ModelCapabilities } from "../../config/types";
+import type { ProviderConfig, ProviderEntry, ModelCapabilities } from "../../config/types";
 import type { ProviderRegistry } from "./registry";
 import type { ProviderCapabilities } from "./types";
 import { createProvider, defaultRegistry } from "./create";

@@ -62,6 +62,8 @@ export function createLoopState(): LoopState {
     toolTargetCounts: new Map(),
     cycleNudgedKeys: new Set(),
     artifactChurn: createArtifactChurnState(),
+    consecutiveSingleQuestions: 0,
+    questionBatchNudged: false,
     sawSecurityBlock: false,
     scriptWorkaroundNudged: false,
     apiPromptTokens: 0,
