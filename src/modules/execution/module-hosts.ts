@@ -39,6 +39,7 @@ export function stepAdvanceDeps(view: ExecutionHostView): StepAdvanceDeps {
     depsGateHints: view.state.depsGateHints,
     pendingMessages: view.pendingMessages,
     autoAdvance: view.autoAdvance,
+    typecheckFailures: view.state.typecheckFailures,
     flushSessionPlan: () => view.plan.flushSessionPlan(),
     setPendingAutoArchive: () => view.plan.setPendingAutoArchive(),
   };

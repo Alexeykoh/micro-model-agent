@@ -63,6 +63,27 @@ export function trackToolResultSideEffects(
 }
 
 /**
+ * После отказа `write_file` на размер куска (INV-H2) следующий LLM-вызов идёт
+ * с повышенным бюджетом, чтобы модель успела разбить файл на несколько
+ * `append_file`-кусков без обрыва по reasoning. Фактически вызывающий
+ * `state.iterMaxTokensOverride` поднимается один раз на отказ.
+ */
+export function bumpBudgetAfterWriteTooLarge(
+  state: LoopState,
+  call: ToolCall,
+  result: ToolResult,
+): void {
+  if (call.name !== "write_file" || result.success) return;
+  const out = typeof result.output === "string" ? result.output : "";
+  if (!/too large|слишком большое|too_large/i.test(out)) return;
+  const prev = state.iterMaxTokensOverride ?? 8192;
+  state.iterMaxTokensOverride = Math.min(
+    Math.max(prev, 16384),
+    32000,
+  );
+}
+
+/**
  * Запоминает `[SECURITY BLOCKED]` и сообщает, нужно ли добавить nudge против
  * записи shell-скрипта-обхода (после блока запись .bat/.cmd/.sh/.ps1 — почти
  * всегда попытка обойти заблокированный оператор; один раз, обобщённо).

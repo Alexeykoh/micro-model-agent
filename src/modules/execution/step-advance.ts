@@ -8,6 +8,7 @@ import { resolve } from "path";
 import { t } from "../../i18n/index";
 import { extractFileLikeTokens, stripUrls } from "../../core/hallucination/js-identifiers";
 import { findExistingFile } from "./auditor";
+import { stepTypecheckGate } from "./plugin-plan";
 import type { PlanTracker } from "./tracker";
 import type { PlanStore } from "./plan-store";
 
@@ -47,6 +48,8 @@ export interface StepAdvanceDeps {
   depsGateHints: Map<number, number>;
   pendingMessages: Array<{ role: "user"; content: string }>;
   autoAdvance: boolean;
+  /** Файловые compile-фейлы текущего хода (см. INV-H3, stepTypecheckGate). */
+  typecheckFailures: ReadonlyMap<string, string>;
   flushSessionPlan(): void;
   setPendingAutoArchive(): void;
 }
@@ -137,6 +140,22 @@ export function advancePlanIfStepComplete(
       });
       return;
     }
+  }
+
+  // Typecheck-гейт: авто-продвижение не обходит done-gate (INV-H3). Тот же
+  // контракт, что у `plan update status=done`: пока последний write/edit
+  // репортит compile-ошибку на файлах шага, шаг нельзя двигать.
+  const tcFail = stepTypecheckGate(d.typecheckFailures, step.description);
+  if (tcFail) {
+    d.pendingMessages.push({
+      role: "user",
+      content: `<system-summary>${t("plan.typecheck_failed", { step: String(step.id), error: tcFail })}</system-summary>`,
+    });
+    sessionLog?.plan(
+      "auto-advance-blocked",
+      `Step ${step.id} typecheck gate: ${tcFail.slice(0, 200)}`,
+    );
+    return;
   }
 
   // При выключенном autoAdvance статус ставит модель: подталкиваем закрыть шаг.

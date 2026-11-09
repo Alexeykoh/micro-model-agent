@@ -12,13 +12,35 @@ import { assertWritable, recheckWrite } from "./path-guards";
 import { preValidateSyntax, detectImportConflicts } from "./syntax-validator";
 import { errMsg } from "../utils";
 
+/** Лимит одного `write_file` (символов). Больше — кусками через `append_file`. */
+export const WRITE_CHUNK_LIMIT = 8000;
+
+function writeTooLargeOutput(path: string, size: number): string {
+  return t("file.write_too_large", {
+    path,
+    size: String(size),
+    limit: String(WRITE_CHUNK_LIMIT),
+  });
+}
+
+export function validateWriteChunk(
+  path: string,
+  content: string,
+): { ok: true } | { ok: false; output: string } {
+  if (content.length > WRITE_CHUNK_LIMIT) {
+    return { ok: false, output: writeTooLargeOutput(path, content.length) };
+  }
+  return { ok: true };
+}
+
 /** Создаёт/перезаписывает файл; parent-dirs, проверки, diff в ответе. */
 export const writeFileTool: ToolDefinition = {
   name: "write_file",
   security: { caps: [{ fs: "write" }], pathArgs: ["path"] },
   icon: "📝",
   description:
-    "Create or overwrite a file with given content. Creates intermediate directories if needed.",
+    "Create or overwrite a file with given content. Creates intermediate directories if needed. " +
+    "For content longer than ~6000 chars, write the first part with write_file and append the rest with append_file chunks (≤8000 chars per call).",
   tags: ["file", "code"],
   parameters: {
     type: "object",
@@ -39,6 +61,12 @@ export const writeFileTool: ToolDefinition = {
     const resolved = safeResolvePath(ctx.baseDir, path);
 
     // Allowlist записи (аудит §4.4) — единая точка для мутирующих тулов.
+    // Лимит куска (INV-H2): большой content одним вызовом обрывается по
+    // completion-лимиту и теряет всё. Режем на чанки через append_file.
+    const content = String(args.content ?? "");
+    const chunk = validateWriteChunk(path, content);
+    if (!chunk.ok) return { success: false, output: chunk.output };
+
     const notAllowed = assertWritable(path, ctx);
     if (notAllowed) return notAllowed;
 
@@ -66,7 +94,6 @@ export const writeFileTool: ToolDefinition = {
     // Скан контента на опасные паттерны — только при включённой безопасности.
     // У contentScan свой флаг `enabled`, но при выключенном глобальном свитче
     // он молчит (ложные срабатывания на обычном CLI-коде).
-    const content = String(args.content);
     if (securityConfig?.enabled && securityConfig?.contentScan?.enabled) {
       const scanResult = scanContent(content, path, securityConfig.contentScan);
       if (!scanResult.allowed) {

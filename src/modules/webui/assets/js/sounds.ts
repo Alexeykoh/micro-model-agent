@@ -49,7 +49,7 @@ export interface SoundClock {
  */
 export function resolveSoundPrefs(sounds: unknown): SoundPrefs {
   const src = isRecord(sounds) ? sounds : {};
-  const pick = (key: keyof SoundPrefs): boolean =>
+  const pick = (key: Exclude<keyof SoundPrefs, "volume">): boolean =>
     typeof src[key] === "boolean" ? (src[key] as boolean) : DEFAULT_SOUND_PREFS[key];
   const volume =
     typeof src.volume === "number" && Number.isFinite(src.volume)

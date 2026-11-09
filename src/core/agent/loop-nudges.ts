@@ -34,7 +34,16 @@ export function mutationTargetKey(name: string, rawArgs: unknown): string | null
     return `write:${a.path.replace(/\\/g, "/").toLowerCase()}`;
   }
   if (name === "bash" && typeof a.command === "string") {
-    const cmd = a.command.replace(/\s+/g, " ").trim().slice(0, 80).toLowerCase();
+    // Нормализация версий: `npx shadcn@4.22.0 add` / `@4.21.0` / `@latest` —
+    // одна цель для перфекционизм-цикла, иначе thrashing по версиям не
+    // набирает порог (сессия veloman: 10 shadcn-вызовов с разными версиями).
+    const cmd = a.command
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase()
+      .replace(/@[\w.-]+(?=\s|$)/g, "@VER")
+      .replace(/npx\s+--yes\s+/g, "npx ")
+      .slice(0, 80);
     return cmd ? `bash:${cmd}` : null;
   }
   // Bookkeeping-churn: повторы plan/todo над тем же действием с чуть разными
