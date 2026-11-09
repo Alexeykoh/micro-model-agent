@@ -238,11 +238,12 @@ describe("gate: style rules have a guard or a declared reason (W12)", () => {
   });
 
   it("unsafe casts in src/ stay at or below the baseline", () => {
-    // Baseline 45 — поднят осознанно 2026-11-09 при ratchet `noExplicitAny` → error.
+    // Baseline 47 — поднят осознанно 2026-11-09 при ratchet `noExplicitAny` → error.
     // +9 — касты границы плагинных хуков (`PluginHookContext` → `ToolContext`/`ToolHookContext`
     // в dispatch/executor-hooks/builtin- плагинах/lsp): нетипизированный пакет хука
     // пересекает типизированный контракт; альтернатива — возврат `any`.
-    const BASELINE = 45;
+    // +2 — OTel декораторы (OTel execution-path casts).
+    const BASELINE = 47;
     const now = srcFiles.reduce((n, f) => n + countMatches(readFileSync(f, "utf-8"), CAST_RE), 0);
     expect(
       now,

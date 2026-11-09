@@ -37,6 +37,9 @@ jobs:
       - name: Unit tests (with coverage gate)
         run: bun scripts/coverage-check.ts
 
+      - name: Evals gate (scorecard)
+        run: bun scripts/evals-check.ts
+
       # Replay-инварианты петли. Отдельным шагом не ради красоты: `bun test`
       # подхватывает `tests/replay/**` сам, и если конфиг витрины изменится,
       # набор молча выпадет из защиты — а он единственный ловит класс дефектов,
