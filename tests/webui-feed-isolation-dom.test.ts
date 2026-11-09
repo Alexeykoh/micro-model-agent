@@ -1,7 +1,7 @@
 // Regression guard: with parallel turns in two tabs, a background session's
 // stream/tool events must never land in the active tab's feed (session id
 // routing at the DOM layer). See `feed/stream.ts` / `core/store/feed.ts`.
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { setupHappyDom } from "./helpers/happy-dom";
 
 const win = setupHappyDom(`<div id="msgs" class="msgs"></div>`);
@@ -23,6 +23,11 @@ function mountTab(id: string): HTMLElement {
 }
 
 describe("feed stream isolation across tabs", () => {
+  // Store — shared module state: чужой тест мог оставить табы A/B.
+  beforeEach(() => {
+    store.tabs.tabs = [];
+  });
+
   it("routes interleaved streamed text to the owning session feed only", () => {
     const a = mountTab("A");
     const b = mountTab("B");
