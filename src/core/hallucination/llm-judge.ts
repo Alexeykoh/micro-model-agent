@@ -1,6 +1,7 @@
 // LLM-судья консистентности: противоречит ли новый ответ ранним решениям.
 import { t } from "../../i18n/index";
 import type { Message } from "../../llm/provider";
+import { getOtelAdapter } from "../../modules/otel/adapter";
 import type { LLMProvider } from "../../llm/provider";
 import type { HallucinationCheckResult } from "./detector";
 import type { Diagnostic } from "../../output/types";
@@ -72,17 +73,20 @@ Reply with ONLY valid JSON, no other text:
       const verdict = this.parseVerdict(verdictText);
 
       if (verdict.contradicts) {
+        getOtelAdapter().incMetric("gen_ai.faithfulness.judge", 1, { verdict: "contradiction" });
         const reason = verdict.reason?.trim() ? ` — ${verdict.reason.trim()}` : "";
         return {
           status: "warn",
           reason: t("hall.contradiction_llm", { reason }),
         };
       }
+      getOtelAdapter().incMetric("gen_ai.faithfulness.judge", 1, { verdict: "pass" });
       return { status: "pass" };
     } catch (e) {
       // INV-15: fail-open `pass` обязан оставить след, иначе «судья молчала» и
       // «модель не противоречила» — одно и то же в разборе сессии.
       const cause = e instanceof Error ? e.message : String(e);
+      getOtelAdapter().incMetric("gen_ai.faithfulness.judge", 1, { verdict: "degraded" });
       this.onDiagnostic?.({
         source: "core",
         operation: "hallucination.judge",

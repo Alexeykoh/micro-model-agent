@@ -16,6 +16,7 @@ import { createContextManager } from "./context-factory";
 import type { ContextManager } from "../../core/context/manager";
 import { ToolExecutor } from "../../tools/executor";
 import { wrapExecutorWithOtel } from "../../modules/otel/decorate";
+import { getOtelAdapter } from "../../modules/otel/adapter";
 import { HallucinationDetector } from "../../core/hallucination/detector";
 import { createToolContext, admissionDiagnosticSink } from "./tool-context";
 import { egressDiagnosticSink } from "./egress-sink";
@@ -141,6 +142,12 @@ export async function setupSessionPhase(input: SessionPhaseInput): Promise<Sessi
   void contextProbePromise
     .then((probe) => {
       if (!probe) return;
+      const drift = probe.actual - config.contextWindow;
+      if (drift !== 0) {
+        getOtelAdapter().incMetric("mm.drift.context_window", Math.abs(drift), {
+          direction: drift < 0 ? "small" : "big",
+        });
+      }
       try {
         sessionManager.appendLog({
           ts: new Date().toISOString(),

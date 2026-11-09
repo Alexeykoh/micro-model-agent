@@ -87,6 +87,9 @@ export function wrapExecutorWithOtel<T extends ToolExecutor>(inner: T): T {
               tool: call.name,
               result: result.success ? "ok" : "failed",
             });
+            if (result.blocked) {
+              adapter.incMetric("executor.denied", 1, { tool: call.name, kind: "blocked" });
+            }
             await span.ended(result.success ? "ok" : "error", {
               "gen_ai.tool.success": result.success,
             });
