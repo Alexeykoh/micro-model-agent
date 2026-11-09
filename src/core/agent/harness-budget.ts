@@ -16,15 +16,16 @@ function taskText(input: string, historyHint?: string): string {
 
 /**
  * Прогноз бюджета для вызова: если задача/история требует крупного вывода —
- * 16384, иначе undefined (дефолт провайдера). Существующий явный override
- * не затирается — вердикт «больше или равно».
+ * 16384, иначе undefined (дефолт провайдера). Явный override (например,
+ * удвоение после обрыва до ответа) побеждает прогноз: прогноз заполняет
+ * бюджет только когда ничего явного не выставлено.
  */
 export function predictMaxTokens(
   input: string,
   opts: { existingOverride?: number; historyHint?: string } = {},
 ): number | undefined {
+  if (opts.existingOverride !== undefined) return opts.existingOverride;
   const text = taskText(input, opts.historyHint);
-  if (!LARGE_OUTPUT_HINTS.test(text)) return opts.existingOverride;
-  const budget = Math.min(PREDICTIVE_BUDGET_LARGE, 32000);
-  return Math.max(opts.existingOverride ?? PREDICTIVE_BUDGET_SMALL, budget);
+  if (!LARGE_OUTPUT_HINTS.test(text)) return undefined;
+  return Math.min(PREDICTIVE_BUDGET_LARGE, 32000);
 }
