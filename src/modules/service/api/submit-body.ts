@@ -64,6 +64,18 @@ export function parseSubmitBody(
     if (!check.allowed) return submitError("callbackUrl not allowed", 422, check.reason);
   }
 
+  // Неизвестный mode — ошибка, а не тихий fallback в job: клиент, приславший
+  // `Interactive`/`JOB`/опечатку, иначе молча получал автономную задачу без
+  // тулов вместо интерактивной.
+  let mode: TaskMode = "job";
+  if (body.mode !== undefined) {
+    if (body.mode === "interactive" || body.mode === "job") {
+      mode = body.mode;
+    } else {
+      return submitError("invalid mode", 400, "mode must be 'interactive' or 'job'");
+    }
+  }
+
   const output = parseOutput(body.output);
   if (!output.ok) return submitError("invalid output spec", 422, output.detail);
   const toolAllowlist = parseStringArray(body.toolAllowlist);
@@ -74,7 +86,7 @@ export function parseSubmitBody(
     ok: true,
     params: {
       input,
-      mode: body.mode === "interactive" ? "interactive" : "job",
+      mode,
       ...(output.output ? { output: output.output } : {}),
       toolAllowlist,
       ...(timeout.value !== undefined ? { timeoutMs: timeout.value } : {}),
