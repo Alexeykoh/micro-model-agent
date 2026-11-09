@@ -1,6 +1,7 @@
 /** `GET /v1/health` (liveness) и `GET /v1/ready` (readiness). */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { readMmaVersion } from "../../../core/version";
+import { PROTOCOL_VERSION } from "../../daemon/protocol";
 import { preflightFromConfig } from "../../providers/preflight";
 import { errMsg } from "../../../utils/error";
 import { sendJson, sendProblem } from "../http/respond";
@@ -21,7 +22,7 @@ type ProbeResult = { ok: boolean; reason: string };
 
 /** Liveness: процесс жив (не проверяет провайдера). */
 export function handleHealth(_req: IncomingMessage, res: ServerResponse): void {
-  sendJson(res, 200, { status: "ok", version: readMmaVersion() });
+  sendJson(res, 200, { status: "ok", version: readMmaVersion(), protocol: PROTOCOL_VERSION });
 }
 
 /** Readiness: конфиг загружен и активный провайдер отвечает на дешёвую пробу. */
