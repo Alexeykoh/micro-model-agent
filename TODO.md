@@ -76,25 +76,25 @@
       `filterExpiredEntries`/`pruneExpired`, at-rest шифрование не трогается).
       Плюс честные сплиты ради потолка 300 строк
       (`checkpoint-io.ts`, `manager-lifecycle.ts`). Гварды — `tests/session/*`.
-- [ ] **Observability (OTel).**
-      **Уже есть:** `session.jsonl`/`app.jsonl`, `context.diff`, `CostTracker`,
-      честные `health()` у 6 модулей (`tests/arch/health-coverage.test.ts`),
-      W0–W4 наблюдаемость (`docs/specs/2026-11-05-observability-gaps-design.md`).
-      **Осталось:** GenAI-спаны (`gen_ai.*` v1.41), OTLP-экспорт, метрики
-      faithfulness/drift/bypass, связка trace↔session↔cost↔approvals.
-      ⚠️ **Изменилось:** OTel встречается только в `docs/ideas/*` и gap-спеке —
-      кода спаанов/OTLP в `src/` нет. Остаток W5/W6 вынесен в долг
-      `observability-w5-w6`, а не в этот пункт.
+- [x] **Observability (OTel).** **Закрыто 2026-11-09** двумя ветками + fix
+      (speки [`2026-11-09-otel-design`](./docs/specs/2026-11-09-otel-design.md)):
+      адаптер `gen_ai.*` (`src/modules/otel/adapter.ts`), OTLP-JSON-экспорт
+      (`fetchOutbound`-политика, fail-silent), декораторы `llm.chat`/`tool.call`,
+      workflow-спаны `agent.run`, метрики `tool.execute`/`llm.chats`/
+      `executor.denied` (bypass), `gen_ai.faithfulness.judge` (pass/contradiction/
+      degraded), drift контекстного окна vs конфигурации (context-probe);
+      связка `threadId`+`sessionId` на каждом спане. W5/W6-сигналы остаются
+      отдельным долгом `observability-w5-w6`.
 - [ ] **Evals в контуре + staged rollout.**
-      **Уже есть:** сертификация моделей (`src/modules/certification/`,
-      сценарные факт-чеки, `mma model certify`), реплей-инварианты в CI
-      (`.github/workflows/quality.yml`: `bun test tests/replay`).
-      **Осталось:** eval-набор с trajectory-оценкой, ensemble-судья + human-gold,
-      eval-gate в CI (сейчас в `quality.yml` только typecheck/lint/test/fallow —
-      нет ни eval-гейта, ни coverage-threshold), shadow→canary→percentage→full,
-      скоркард (success/cost/p95/safety).
-      ⚠️ Сертификация ≠ evals в контуре: это разовые прогоны на песочнице, а не
-      гейт на каждое изменение.
+      **Уже есть:** сертификация (`src/modules/certification/`),
+      реплей-инварианты в CI; скоpковер (90% по bundled-манифесту),
+      trajectory-чекер (`src/modules/evals/trajectory.ts`), eval-gate в CI
+      (`scripts/evals-check.ts`, successRate ≥ 80%, safety = 0),
+      human-gold фикстуры (`tests/evals/gold-v1.json` по живому прогону
+      hard-multi-extreme), детерминированный stagingбакет
+      (`rollout.ts`: shadow→canary→percentage→full).
+      **Осталось:** ensemble-судья (несколько LLM-судей голосуют, дорого),
+      живая маршрутизация staging-раскатки провайдеров (сейчас только бакет).
 
 ### P1 — управляемость
 
