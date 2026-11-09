@@ -99,6 +99,7 @@ export const DEFAULTS: AppConfig = {
       minWords: 3,
       similarityThreshold: 0.8,
     },
+    retentionDays: 0,
   },
   contextBudget: {
     systemPrompt: 0.1,

@@ -110,7 +110,7 @@ export interface AppConfig {
   contextAuto?: boolean;
   contextBudget: ContextBudget;
   /** Детерминированный гейт качества записей памяти (TODO §1.6, Phase A). */
-  memory?: { validator?: Partial<MemoryValidatorConfig> };
+  memory?: { validator?: Partial<MemoryValidatorConfig>; retentionDays?: number };
   instructions: InstructionsConfig;
   modelLoad: ModelLoadConfig;
   retry: RetryConfig;

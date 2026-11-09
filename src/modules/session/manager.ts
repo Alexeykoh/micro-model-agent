@@ -11,6 +11,7 @@ import type { SessionEncryptionConfig } from "../../config/types";
 import { newSessionId, newThreadId } from "./id";
 import type { SessionManagerOptions } from "./manager-options";
 import { ManagerState, RenameHub } from "./manager-state";
+import { applyEffectiveContext, touchActiveSession, getActiveMetaOf, activateSession, readSessionLog, readSessionLogWithStatus } from "./manager-lifecycle";
 
 export type { SessionManagerOptions } from "./manager-options";
 
@@ -141,16 +142,7 @@ export class SessionManager {
    * дефолты новых (`create()` берёт их из `options`, а не из конфига). Fail-open.
    */
   setEffectiveContext(contextWindow: number, model?: string): void {
-    // Дефолты новых сессий: без этого они записывали стартовую модель.
-    this.options.contextWindow = contextWindow;
-    if (model) this.options.model = model;
-    if (!this.activeId) return;
-    const meta = this.store.loadMeta(this.activeId);
-    if (!meta) return;
-    meta.contextWindow = contextWindow;
-    if (model) meta.model = model;
-    meta.updatedAt = new Date().toISOString();
-    this.store.saveMeta(this.activeId, meta);
+    applyEffectiveContext(this.store, this.options, this.activeId, contextWindow, model);
   }
 
   /**
@@ -160,11 +152,7 @@ export class SessionManager {
    * Fail-open: нет активной сессии — no-op.
    */
   touch(): void {
-    if (!this.activeId) return;
-    const meta = this.store.loadMeta(this.activeId);
-    if (!meta) return;
-    meta.updatedAt = new Date().toISOString();
-    this.store.saveMeta(this.activeId, meta);
+    touchActiveSession(this.store, this.activeId);
   }
 
   /** Пустая ли сессия (нет user-сообщения с текстом). Fail-open: ошибки чтения — непустая. */
@@ -184,16 +172,12 @@ export class SessionManager {
 
   /** Мета активной сессии (null — нет). */
   getActiveMeta(): SessionMeta | null {
-    if (!this.activeId) return null;
-    return this.store.loadMeta(this.activeId);
+    return getActiveMetaOf(this.store, this.activeId);
   }
 
   /** Сделать сессию активной (нет такой — ошибка). */
   setActive(id: string): void {
-    if (!this.store.sessionExists(id)) {
-      throw new Error(t("session.not_found", { id }));
-    }
-    this.activeId = id;
+    activateSession(this.store, (next) => { this.activeId = next; }, id);
   }
 
   /**
@@ -244,22 +228,14 @@ export class SessionManager {
    * Прочитать session.jsonl сессии (для `session show`); с `since` — только хвост.
    */
   loadSessionLog(id: string, opts: { since?: string } = {}): SessionLogEntry[] {
-    try {
-      return this.store.loadSessionLog(id, opts);
-    } catch {
-      return [];
-    }
+    return readSessionLog(this.store, id, opts);
   }
 
   loadSessionLogWithStatus(
     id: string,
     opts: { since?: string } = {},
   ): import("./read-status").SessionRead<SessionLogEntry[]> {
-    try {
-      return this.store.loadSessionLogWithStatus(id, opts);
-    } catch (err) {
-      return { status: "unreadable", cause: err instanceof Error ? err.message : String(err) };
-    }
+    return readSessionLogWithStatus(this.store, id, opts);
   }
   /** История активной сессии ([] — нет активной). */
   loadHistory(): SessionMessage[] {

@@ -2467,6 +2467,8 @@
   "config.desc.memory.validator.minWords": "Минимум значимых слов в записи памяти.",
   "config.key.memory.validator.similarityThreshold": "память: порог дубликата",
   "config.desc.memory.validator.similarityThreshold": "Сходство Jaccard, при котором запись считается почти дубликатом.",
+  "config.key.memory.retentionDays": "память: хранение (дней)",
+  "config.desc.memory.retentionDays": "TTL записей памяти категорий (0 — без срока). Старые записи не попадают в промпт и не ищутся.",
   "config.key.contextBudget.overflowCooldown": "cooldown переполнения",
   "config.desc.contextBudget.overflowCooldown": "Минимум итераций между компакциями по переполнению (1-20).",
   "config.key.contextBudget.toolResultKeep": "оставлять свежие tool-результаты",

@@ -53,3 +53,17 @@ export class SessionListCache {
     this.items = null;
   }
 }
+
+/** Сканирование каталога сессий в список мет (сортировка по updatedAt). */
+export function scanSessionList(
+  loadMeta: (id: string) => SessionMeta | null,
+  names: string[],
+): SessionMeta[] {
+  const sessions: SessionMeta[] = [];
+  for (const name of names) {
+    const meta = loadMeta(name);
+    if (meta) sessions.push(meta);
+  }
+  sessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  return sessions;
+}

@@ -6,7 +6,7 @@ import { existsSync, readdirSync, rmSync, type Dirent } from "node:fs";
 import { join } from "node:path";
 import { getMessageText } from "../../llm/provider";
 import type { SessionStore } from "./store";
-import type { SessionMessage } from "./types";
+import type { SessionMeta, SessionMessage } from "./types";
 
 /**
  * Пустая ли сессия (нет user-сообщения с текстом).
@@ -51,6 +51,33 @@ export function pruneEmptySessions(
     }
   }
   return deleted;
+}
+
+/**
+ * Ротация старых сессий: истории старше 30 дней → `.jsonl.gz`, мета marked.
+ * Loop live in SessionStore (public API) — delegates here.
+ */
+export function rotateSessions(store: {
+  listSessions(): SessionMeta[];
+  loadMeta(id: string): SessionMeta | null;
+  saveMeta(id: string, meta: SessionMeta): void;
+  archiveHistory(id: string): boolean;
+}): void {
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  for (const session of store.listSessions().slice()) {
+    if (new Date(session.updatedAt) >= thirtyDaysAgo) continue;
+    if (!store.archiveHistory(session.id)) continue;
+    // Пометить мету, чтобы сессия не выглядела «живой» в списках —
+    // иначе gz-сессия рекламирует messageCount > 0.
+    const meta = store.loadMeta(session.id);
+    if (meta) {
+      meta.messageCount = 0;
+      meta.rotated = true;
+      store.saveMeta(session.id, meta);
+    }
+  }
 }
 
 /**

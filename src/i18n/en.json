@@ -2467,6 +2467,8 @@
   "config.desc.memory.validator.minWords": "Minimum number of meaningful words in a memory entry.",
   "config.key.memory.validator.similarityThreshold": "memory: duplicate threshold",
   "config.desc.memory.validator.similarityThreshold": "Jaccard similarity at which an entry counts as a near-duplicate.",
+  "config.key.memory.retentionDays": "memory: retention (days)",
+  "config.desc.memory.retentionDays": "TTL for category memory entries (0 = no expiry). Older entries no longer reach the prompt or search.",
   "config.key.contextBudget.overflowCooldown": "overflow cooldown",
   "config.desc.contextBudget.overflowCooldown": "Minimum iterations between overflow compactions (1-20).",
   "config.key.contextBudget.toolResultKeep": "keep recent tool results",
