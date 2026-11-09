@@ -11,6 +11,13 @@ import type { AppConfig } from "../../src/config/types";
 let server: ReturnType<typeof Bun.serve> | undefined;
 let requestCount = 0;
 
+/**
+ * Реальный fetch: соседние файлы мокают global.fetch (не все восстанавливают),
+ * а global-this capture у них тоже отравлен цепочкой. `Bun.fetch` — рантаймный
+ * натив, иммунитетом к подмене свойства global.fetch (трюк probe-parallel.test.ts).
+ */
+const REAL_FETCH: typeof fetch = Bun.fetch.bind(Bun) as typeof fetch;
+
 async function startLmStudioStub(): Promise<string> {
   requestCount = 0;
   server = Bun.serve({
@@ -72,6 +79,9 @@ describe("agent reconfigure probe", () => {
   let baseUrl: string;
 
   beforeEach(async () => {
+    // Восстановить реальный fetch: соседние файлы мокают global.fetch и
+    // оставляют мок включённым (порядковая поллюция между файлами).
+    globalThis.fetch = REAL_FETCH;
     baseUrl = await startLmStudioStub();
   });
 

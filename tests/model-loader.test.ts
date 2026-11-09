@@ -1,6 +1,8 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ModelLoader } from "../src/llm/model-loader";
 
+// Глобальный fetch мокну вручную — без восстановления поллютить соседние
+// файлы (agent-reconfigure-probe с реальным stub-сервером).
 const mockLogger = {
   debug: vi.fn(),
   info: vi.fn(),
@@ -9,6 +11,14 @@ const mockLogger = {
 };
 
 describe("ModelLoader", () => {
+  let originalFetch: typeof global.fetch;
+  beforeEach(() => {
+    originalFetch = global.fetch;
+  });
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
   it("should skip loading when autoLoad is false", async () => {
     const loader = new ModelLoader("http://localhost:1234", mockLogger as any);
     const result = await loader.ensureModelLoaded({
