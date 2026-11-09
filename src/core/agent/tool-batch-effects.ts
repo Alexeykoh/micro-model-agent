@@ -63,6 +63,25 @@ export function trackToolResultSideEffects(
 }
 
 /**
+ * Проактивный бюджет: после крупной успешной записи (большой файл) следующий
+ * LLM-вызов идёт с повышенным лимитом — модель, скорее всего, продолжит
+ * дописывать тот же файл чанками и упрётся в дефолтные 8192. Один раз, на
+ * следующий вызов.
+ */
+export function proactiveBudgetAfterLargeWrite(
+  state: LoopState,
+  call: ToolCall,
+  result: ToolResult,
+): void {
+  if (call.name !== "write_file" || !result.success) return;
+  const args = (call.arguments ?? {}) as Record<string, unknown>;
+  const len = typeof args.content === "string" ? args.content.length : 0;
+  if (len < 4000) return;
+  const prev = state.iterMaxTokensOverride ?? 8192;
+  state.iterMaxTokensOverride = Math.min(Math.max(prev, 16384), 32000);
+}
+
+/**
  * После отказа `write_file` на размер куска (INV-H2) следующий LLM-вызов идёт
  * с повышенным бюджетом, чтобы модель успела разбить файл на несколько
  * `append_file`-кусков без обрыва по reasoning. Фактически вызывающий

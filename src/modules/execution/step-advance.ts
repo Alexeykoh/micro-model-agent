@@ -12,12 +12,28 @@ import { stepTypecheckGate } from "./plugin-plan";
 import type { PlanTracker } from "./tracker";
 import type { PlanStore } from "./plan-store";
 
-/**
- * Допуск на дрейф/гранулярность FS-таймстампа при сравнении `mtime` с
- * рождением плана (см. {@link provablyStale}). 2с — с запасом для грубых FS
- * (FAT), при этом реально старые файлы (секунды/дни) остаются «старыми».
- */
 const MTIME_SKEW_TOLERANCE_MS = 2000;
+
+/** Маркеры шаблонных заготовок (create-next-app/vite): не пустые, но не работа. */
+const SCAFFOLD_TEMPLATE_MARKERS = [
+  "To get started, edit the",
+  "Get started by editing",
+  "Looking for a starting point",
+  "We've dropped you a starter template",
+  "Welcome to",
+  "Learn React",
+  "Getting Started with Create",
+  "Vite + React",
+  "Next.js logo",
+  "Vercel Templates",
+];
+
+/** Похоже ли содержимое на нетронутый шаблон скаффолда. */
+export function looksLikeScaffoldTemplate(content: string, filePath: string): boolean {
+  const normalized = filePath.replace(/\\/g, "/").toLowerCase();
+  if (!/(?:^|\/)page\.tsx$/.test(normalized) && !/\/(?:layout|app)\.tsx$/.test(normalized)) return false;
+  return SCAFFOLD_TEMPLATE_MARKERS.some((m) => content.includes(m));
+}
 
 /**
  * Доказанная старость файлов шага: КАЖДЫЙ резолвленный файл создан/изменён не
@@ -121,14 +137,21 @@ export function advancePlanIfStepComplete(
     if (plan && provablyStale(resolved, Date.parse(plan.createdAt))) return;
   }
 
-  // Гейт шагов: файлы проверяем на контент (не пустые).
+  // Гейт шагов: файлы проверяем на контент (не пустые, не шаблонный
+  // заготовки create-next-app / create-vite: непустой, но нереальный файл —
+  // тот же vacuous-truth, что пустой).
   if (step.kind !== "delete") {
     const emptyFiles: string[] = [];
+    const templateFiles: string[] = [];
     for (const r of resolved) {
       if (!r) continue;
       try {
         const content = readFileSync(r, "utf-8");
-        if (content.trim().length < 10) emptyFiles.push(r);
+        if (content.trim().length < 10) {
+          emptyFiles.push(r);
+          continue;
+        }
+        if (looksLikeScaffoldTemplate(content, r)) templateFiles.push(r);
       } catch {
         // Нечитаем — откат на existence.
       }
@@ -138,6 +161,17 @@ export function advancePlanIfStepComplete(
         role: "user",
         content: `<system-summary>${t("exec.step_gate_empty", { step: String(step.id), files: emptyFiles.join(", ") })}</system-summary>`,
       });
+      return;
+    }
+    if (templateFiles.length > 0) {
+      d.pendingMessages.push({
+        role: "user",
+        content: `<system-summary>${t("exec.step_gate_template", { step: String(step.id), files: templateFiles.join(", ") })}</system-summary>`,
+      });
+      sessionLog?.plan(
+        "auto-advance-blocked",
+        `Step ${step.id} template gate: ${templateFiles.join(", ")}`,
+      );
       return;
     }
   }

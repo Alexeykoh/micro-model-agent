@@ -4,12 +4,13 @@ import { isAliasModuleError } from "../src/modules/lsp/write-check";
 import { mutationTargetKey } from "../src/core/agent/loop-nudges";
 import { bumpBudgetAfterWriteTooLarge } from "../src/core/agent/tool-batch-effects";
 import { createLoopState } from "../src/core/agent/loop-state-init";
-import { advancePlanIfStepComplete } from "../src/modules/execution/step-advance";
+import { advancePlanIfStepComplete, looksLikeScaffoldTemplate } from "../src/modules/execution/step-advance";
 import { PlanTracker } from "../src/modules/execution/tracker";
 import { PlanStore } from "../src/modules/execution/plan-store";
 import { mkdtempSync, writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
+import { proactiveBudgetAfterLargeWrite } from "../src/core/agent/tool-batch-effects";
 
 describe("INV-H2 write chunk", () => {
   it("rejects content above chunk limit with append hint", () => {
@@ -55,6 +56,22 @@ describe("INV-H1 budget bump after chunk failure", () => {
     expect(s.iterMaxTokensOverride).toBeUndefined();
     bumpBudgetAfterWriteTooLarge(s, { id: "1", name: "write_file", arguments: {} } as never, { success: false, output: "syntax error" } as never);
     expect(s.iterMaxTokensOverride).toBeUndefined();
+  });
+});
+
+describe("INV-H3 template guard", () => {
+  it("detects create-next-app page template", () => {
+    expect(looksLikeScaffoldTemplate('import Image from "next/image";\n// To get started, edit the page.tsx', "C:/proj/src/app/page.tsx")).toBe(true);
+    expect(looksLikeScaffoldTemplate("export default function Page(){ return null }", "src/app/page.tsx")).toBe(false);
+  });
+  it("proactive bump on large successful write", () => {
+    const s = createLoopState();
+    proactiveBudgetAfterLargeWrite(
+      s,
+      { id: "1", name: "write_file", arguments: { path: "a.ts", content: "x".repeat(5000) } } as never,
+      { success: true, output: "ok" } as never,
+    );
+    expect(s.iterMaxTokensOverride).toBe(16384);
   });
 });
 

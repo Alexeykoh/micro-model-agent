@@ -24,6 +24,7 @@ import {
   detectScriptWorkaround,
   emitSynthesizedToolResults,
   persistResultImages,
+  proactiveBudgetAfterLargeWrite,
   trackToolResultSideEffects,
 } from "./tool-batch-effects";
 
@@ -167,6 +168,7 @@ export class ToolCallRunner {
 
     trackToolResultSideEffects(deps, this.init.state, call, result);
     bumpBudgetAfterWriteTooLarge(this.init.state, call, result);
+    proactiveBudgetAfterLargeWrite(this.init.state, call, result);
     pluginManager.runOnToolEnd(
       { iteration, logger, contextManager },
       { id: call.id, name: call.name, arguments: call.arguments },
