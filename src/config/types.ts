@@ -117,9 +117,12 @@ export interface AppConfig {
   maxToolIterations: number;
   stuckThreshold: number;
   autoPlan: boolean;
-  /** Настройки execution-модуля: autoAdvance — автопометка done по файлам (дефолт true). */
+  /** Настройки execution-модуля: autoAdvance — автопометка done по файлам (дефолт true).
+   * + профиль исполнения (P0 изоляция): profile — local-trusted = хост, sandbox = Docker. */
   execution?: {
     autoAdvance?: boolean;
+    profile?: "local-trusted" | "sandbox";
+    image?: string;
   };
   showReasoning: boolean;
   logLevel: string;

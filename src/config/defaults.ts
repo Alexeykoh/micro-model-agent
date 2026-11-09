@@ -141,6 +141,8 @@ export const DEFAULTS: AppConfig = {
   autoPlan: true,
   execution: {
     autoAdvance: true,
+    profile: "local-trusted",
+    image: "oven/bun:1.3.14",
   },
   showReasoning: true,
   logLevel: "info",

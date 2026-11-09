@@ -18,6 +18,8 @@ import {
 } from "./bash-parse";
 import { isMemoizableCommand, memoClear, memoRead } from "./bash-memo";
 import { runBashCommand } from "./bash-process";
+import { runDockerBash, checkSandboxProfile } from "./bash-docker";
+import { decorateCommandOutput, detectTestResults } from "./bash-output";
 
 // Публичные ре-экспорты: тесты и смежные модули импортируют их из `bash`.
 export { BASH_GRACE_MS, setBashGraceMs } from "./bash-process";
@@ -209,6 +211,12 @@ export const bashTool: ToolDefinition = {
       memoClear(ctx);
     }
 
+    // Sandbox-профиль (P0 изоляция): bash уходит в Docker-контейнер; фон не
+    // поддерживается — команда идёт foreground (честно, без фейкового фона).
+    if (ctx.config.execution?.profile === "sandbox") {
+      return runSandboxBash({ ctx, command, originalCommand, workdir, securityConfig });
+    }
+
     return runBashCommand({
       ctx,
       command,
@@ -222,3 +230,37 @@ export const bashTool: ToolDefinition = {
     });
   },
 };
+
+/** Sandbox-ветка bash (P0 изоляция): bash → Docker, local-trusted — не вызывается. */
+export async function runSandboxBash(opts: {
+  ctx: ToolContext;
+  command: string;
+  originalCommand: string;
+  workdir: string;
+  securityConfig: BashSecurityConfig;
+}): Promise<import("./types").ToolResult> {
+  const { ctx, command, originalCommand, workdir, securityConfig } = opts;
+  const chk = checkSandboxProfile(ctx);
+  if (!chk.ok) {
+    logSecurityBlock(ctx.sessionId, "bash_command", `docker unavailable (image ${chk.image})`, sanitizeCommandForLog(command));
+    return { success: false, output: t("execution.sandbox_unavailable", { image: chk.image }) };
+  }
+  const res = await runDockerBash({
+    command,
+    workdir,
+    baseDir: ctx.baseDir,
+    image: chk.image,
+    signal: ctx.abortSignal,
+  });
+  const output = decorateCommandOutput({
+    ctx,
+    command,
+    originalCommand,
+    code: res.success ? 0 : 1,
+    output: res.output,
+    testRun: detectTestResults(res.output),
+    workdir,
+    securityConfig,
+  });
+  return { success: res.success, output };
+}
