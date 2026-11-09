@@ -113,6 +113,8 @@ export interface AppConfig {
   cost?: { maxRunUsd?: number };
   /** Глобальный kill-switch (HITL): при true ход стопится на границе итерации. */
   hitl?: { killSwitch?: boolean };
+  /** Compliance (P2): audit-лог, high-risk артефакты, retention ≥6 мес. */
+  compliance?: { enabled?: boolean; retentionDays?: number };
   /** Детерминированный гейт качества записей памяти (TODO §1.6, Phase A). */
   memory?: { validator?: Partial<MemoryValidatorConfig>; retentionDays?: number };
   instructions: InstructionsConfig;
