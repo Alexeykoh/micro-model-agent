@@ -94,6 +94,7 @@ export const DEFAULTS: AppConfig = {
   contextAuto: true,
   cost: { maxRunUsd: 0 },
   hitl: { killSwitch: false },
+  compliance: { enabled: false, retentionDays: 180 },
   memory: {
     validator: {
       enabled: true,
