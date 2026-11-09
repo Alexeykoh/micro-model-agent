@@ -24,6 +24,7 @@
  */
 import { t } from "../../i18n/index";
 import type { ToolResult } from "../../tools/types";
+import type { NetworkSecurityConfig } from "../../config/types";
 import { runHttpCheck } from "./http-check";
 import {
   runBrowserCheck,
@@ -167,6 +168,8 @@ export async function checkDoneEvidence(
     browserLauncher?: BrowserProbeLauncher;
     /** База для `web-build:`: каталог сборки резолвится внутри неё. */
     baseDir?: string;
+    /** Сетевая политика для `browser:` (SSRF/deny до запуска). */
+    networkSecurity?: NetworkSecurityConfig;
   } = {},
 ): Promise<{ note: string; blocked: ToolResult | null } | null> {
   if (parsed.kind === "web-build") {
@@ -226,6 +229,7 @@ export async function checkDoneEvidence(
   if (parsed.kind === "browser") {
     const res = await runBrowserCheck(parsed.target, {
       ...(opts.browserLauncher ? { launcher: opts.browserLauncher } : {}),
+      ...(opts.networkSecurity ? { networkSecurity: opts.networkSecurity } : {}),
     });
     if (res.ok) {
       return {

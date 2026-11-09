@@ -1,5 +1,6 @@
 // Тулы плана: plan / plan_step / todo / verify + зависимости через deps-замыкания.
 import type { ToolDefinition } from "../../tools/types";
+import type { NetworkSecurityConfig } from "../../config/types";
 import { t } from "../../i18n/index";
 import type { Plan, StepKind } from "./planner";
 import type { PlanTracker } from "./tracker";
@@ -45,6 +46,8 @@ export interface PlanToolDeps {
    *  состояния execution-плагина). Done-gate реджектит, пока файлы шага здесь. */
   typecheckFailures: ReadonlyMap<string, string>;
   baseDir: string;
+  /** Сетевая политика для `browser:`-проверок (SSRF/deny). */
+  networkSecurity?: NetworkSecurityConfig;
   /** Проверяет, трекался ли файл как удалённый агентом (ConsistencyCheck).
    *  Нужно авто-свитчу для подтверждения: модель реально удалила файл (через
    *  delete_file или bash rm) перед сменой kind на delete. */

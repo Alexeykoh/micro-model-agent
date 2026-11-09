@@ -10,7 +10,7 @@ import { Auditor } from "./auditor";
 import type { PlanStore } from "./plan-store";
 import type { PlanTracker } from "./tracker";
 import type { Plan } from "./planner";
-import type { PathSecurityConfig } from "../../config/types";
+import type { NetworkSecurityConfig, PathSecurityConfig } from "../../config/types";
 import { performWebSearch } from "../../tools/web-search";
 import { createPlanToolDefinitions } from "./plan-tool";
 import { parseKinds, parseChecks } from "./plan-parse";
@@ -84,6 +84,7 @@ export class ExecutionModule implements AgentModule {
   private readonly errorSearchCooldownMs: number;
   private hallucinationDetector: { getConsistencyCheck(): { getDeletedFiles(): string[] } } | null =
     null;
+  private networkSecurity?: NetworkSecurityConfig;
 
   /**
    * Мутабельное состояние execution-плагина. Владеем ЗДЕСЬ, передаём ПО ССЫЛКЕ
@@ -100,6 +101,7 @@ export class ExecutionModule implements AgentModule {
     errorSearchCooldownMs = ERROR_SEARCH_MIN_INTERVAL_MS,
     pathSecurity?: PathSecurityConfig,
     logger?: import("../../logger/app-logger").Logger,
+    networkSecurity?: NetworkSecurityConfig,
   ) {
     this.baseDir = baseDir;
     this.plan = new PlanSession(baseDir, logger);
@@ -112,6 +114,7 @@ export class ExecutionModule implements AgentModule {
     this.auditor = new Auditor(baseDir);
     this.searchRunner = searchRunner;
     this.errorSearchCooldownMs = errorSearchCooldownMs;
+    this.networkSecurity = networkSecurity;
   }
 
   /** Подключить диагностический sink (INV-15); зовёт Agent после создания SessionLogger. */
@@ -254,6 +257,7 @@ export class ExecutionModule implements AgentModule {
       noActivePlanMessage: () => noActivePlanMessage(this.plan.store),
       typecheckFailures: this.state.typecheckFailures,
       baseDir: this.baseDir,
+      ...(this.networkSecurity ? { networkSecurity: this.networkSecurity } : {}),
       wasFileDeleted: this.hallucinationDetector
         ? (path: string) =>
             this.hallucinationDetector!.getConsistencyCheck().getDeletedFiles().includes(path)

@@ -98,4 +98,6 @@ URL dev-сервера разрешены. Это снимает ложный в
 
 ## Долг
 
-DEBT(verify-browser-url-policy): `verify browser:` пока не применяет сетевую политику; зафиксировано в docs/agents/debt.md.
+Оплачен веткой `fix/verify-browser-url-policy` (2026-11-09): `runBrowserCheck`/
+`checkDoneEvidence` принимают `networkSecurity` и вызывают `isUrlAllowedAsync`
+до запуска.
