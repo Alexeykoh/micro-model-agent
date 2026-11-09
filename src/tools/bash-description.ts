@@ -5,7 +5,9 @@ const BASE_DESCRIPTION =
   "Commands that are still running after a few seconds are automatically moved to the background and return a " +
   "process id — manage them with process_list, process_log, process_wait, process_kill. For a finite background " +
   "task prefer a single process_wait over polling process_log or sleeping (never use ping/timeout/sleep as a delay). " +
-  "Set background=true to return a process id immediately for commands you know are long-running (dev servers, watchers).";
+  "Set background=true to return a process id immediately for commands you know are long-running (dev servers, watchers, " +
+  "scaffolding such as create-next-app/create-vite/shadcn init, and package installs such as npm install/bun install). " +
+  "For scaffolding, never run create-next-app directly in a non-empty directory and never re-run the same scaffold command with just a version-flag change: check the help once, then run one command and wait with process_wait.";
 
 const WINDOWS_NOTES =
   "Windows notes: the shell is cmd.exe — PowerShell cmdlets (Write-Host, Get-Content, Select-String, Out-File) " +

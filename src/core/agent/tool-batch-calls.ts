@@ -20,9 +20,11 @@ import { queueToolImages } from "./tool-images";
 import { imageEventFields, renderToolResultMeta } from "./tool-result-meta";
 import { recordRepeatedToolFailure } from "./failure-memory";
 import {
+  bumpBudgetAfterWriteTooLarge,
   detectScriptWorkaround,
   emitSynthesizedToolResults,
   persistResultImages,
+  proactiveBudgetAfterLargeWrite,
   trackToolResultSideEffects,
 } from "./tool-batch-effects";
 
@@ -165,6 +167,8 @@ export class ToolCallRunner {
     if (result.success) this.batchHasSuccess = true;
 
     trackToolResultSideEffects(deps, this.init.state, call, result);
+    bumpBudgetAfterWriteTooLarge(this.init.state, call, result);
+    proactiveBudgetAfterLargeWrite(this.init.state, call, result);
     pluginManager.runOnToolEnd(
       { iteration, logger, contextManager },
       { id: call.id, name: call.name, arguments: call.arguments },

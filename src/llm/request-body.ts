@@ -86,11 +86,25 @@ export interface RequestBodyOptions {
   streamUsage?: boolean;
 }
 
+/** Проволочный вид сообщения для провайдера: только поля OpenAI-совместимого
+ *  контракта. Внутренние поля (`success`, `blocked`, `arguments`, `name`
+ *  вне tool-ролей) шлём не можем — строгие гейты (opencode-go) отвечают
+ *  `cannot preserve this message field across protocols` (замер 2026-11-09). */
+export function toWireMessage(msg: Record<string, unknown>): Record<string, unknown> {
+  const role = msg.role as string | undefined;
+  const out: Record<string, unknown> = { role, content: msg.content };
+  if (msg.tool_calls !== undefined) out.tool_calls = msg.tool_calls;
+  if (msg.tool_call_id !== undefined) out.tool_call_id = msg.tool_call_id;
+  if (msg.reasoning_content !== undefined) out.reasoning_content = msg.reasoning_content;
+  if (msg.name !== undefined && (role === "tool" || role === "system")) out.name = msg.name;
+  return out;
+}
+
 /** Собрать тело POST `/chat/completions`. */
 export function buildRequestBody(opts: RequestBodyOptions): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: opts.model,
-    messages: opts.messages,
+    messages: (opts.messages as Record<string, unknown>[]).map(toWireMessage),
     stream: opts.stream,
   };
   if (opts.maxTokens !== undefined) body.max_tokens = opts.maxTokens;

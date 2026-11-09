@@ -158,6 +158,37 @@ typecheck, loopback, `--isolated`, локальные заглушки) закр
 
 ---
 
+### 1.14 Harness — бюджеты, честный план и LSP-tolerance (добавлено 2026-11-08) ✅ реализовано на `feat/agent-harness-budgets`
+
+Сессия веломагазина `ses_mw88khb4_tegctnqtvjfcogha` (qwen3.8-27b, 60 мин, 110 LLM-вызовов,
+142 тул-вызовов, 2.8M токенов): три обрыва на `8192`, фейковые 7/10 шагов при реальном
+~4.5/10 (`page.tsx` шаблонный, `Helmet` не существует), 4 ложных LSP-блока `@/`, bash-thrashing
+shadcn (`--help`/`init` 10+ раз). Спека:
+[`docs/specs/2026-11-08-agent-harness-design.md`](./docs/specs/2026-11-08-agent-harness-design.md).
+Реализовано (2026-11-09): (2) запрет `write_file > 8k` + подсказка `append_file` (`src/tools/write-file.ts`,
+ключ `file.write_too_large`); (3) честный `done` — `stepTypecheckGate` в auto-advance
+(`src/modules/execution/step-advance.ts` + `module-hosts.ts`), плюс template-gate — шаблонный
+`page.tsx`/`layout.tsx` блокирует продвижение (`looksLikeScaffoldTemplate`); (4) alias-tolerance в
+pre-write LSP (`isAliasModuleError`, `src/modules/lsp/write-check.ts`); (5) нормализация
+версий bash-ключа (`@VER`) + подсказка про фоновый скаффолд в `bash-description.ts`;
+(1) bump бюджета `iterMaxTokensOverride=16384`: реактивный на chunk-фейл и проактивный
+после крупной успешной записи (>4k) (`tool-batch-effects.ts`); wire-шов: `toWireMessage`
+режет внутренние `success/blocked/arguments` для строгих гейтов opencode-go (`src/llm/request-body.ts`).
+Тесты: `tests/harness-budgets.test.ts` (11).
+
+---
+
+**Замер 2026-11-09** (Crouton Alpha Free, opencode-go, контекст 131k, песочница в `%TEMP%`,
+`MMA_CONFIG_DIR` изолирован + ключ из реального конфига, `--no-agents-md`, reasoning=low):
+веломагазин построен до зеленого `npm run build` за 175.7s, 583,488 токенов (559k prompt / 24k completion),
+сессия 700 строк, **ошибок LLM 0**, обрывов по 8192 — 0 (16k `products.ts`: первый `write_file` отклонен
+гейтом «too large», далее 3 куска `write_file + 2×append_file`). План честно признает skips
+(шаги 4–5 пропущены из-за import-path рассинхрона) вместо ложного done.
+
+Для сравнения — тот же веломагазин на qwen3.8-27b: 60 мин, 2.8M токенов, 3 обрыва, фейковые 7/10.
+
+---
+
 ## 2. Действия пользователя (не задачи для агента)
 
 - [ ] Вернуть `contextWindow 64000` в реальном конфиге (`~/.mma`) — сейчас 32768
