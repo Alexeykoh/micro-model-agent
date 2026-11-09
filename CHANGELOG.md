@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.25.1] - 2026-11-09
+
+### Changed
+
+- **Релизная матрица без mac-arm64 (временно).** GitHub-hosted macOS ARM пул
+  деградировал fleet-wide (ноябрь 2026, `actions/runner#4833`): джоба 15 мин
+  ждёт раннера и отменяется до checkout. В релизе — 4 платформы
+  (win-x64, mac-x64, linux-x64, linux-arm64); `mma-mac-arm64.tar.gz` из
+  0.25.0 остаётся доступен. Возврат mac-arm64 — записью в матрицу.
+
+### Fixed
+
+- **Обёртки провайдеров не теряют `reasoningStrategy`/`reasoningLevels`**:
+  `SanitizingProvider` (DLP) и `OtelProvider` ре-экспортируют механизм
+  проброса 1:1 (INV-R2) — те же поля терялись глобальным
+  `setEgressGuard` из соседних тестов (порядковая поллюция, падающая
+  POSIX CI в `agent-reconfigure-probe`).
+- **Hermetic тесты проб**: `agent-reconfigure-probe` — через реальный
+  локальный HTTP-стаб вместо мутации `global.fetch` (гонки между файлами);
+  `model-loader` и `download-file` восстанавливают fetch и не переиспользуют
+  Response-объект. Полный сьют: 6272 pass / 0 fail.
+- **Docker live-тесты за флагом `MMA_LIVE_DOCKER=1`**: на GitHub Windows
+  раннерах ломается bind-mount (Docker Desktop) — live не должен ронять CI.
+
 ### Removed
 
 - **Learning Phase B вычеркнута из очереди (2026-11-09).** Удалены пункт §1.6
