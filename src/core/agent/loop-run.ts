@@ -19,6 +19,7 @@ import { runFinalGates, type GateTimings } from "./loop-gates";
 import { gatherTurnToolEvents } from "./critic-events";
 import { buildLoopResult, type LoopResultHost } from "./loop-result";
 import { snapshotLoopState } from "../../modules/session/checkpoint";
+import { getOtelAdapter } from "../../modules/otel/adapter";
 import { accumulateToolTargets } from "./loop-nudges";
 
 /** Хосты фаз и доступ к мутабельному состоянию агента. */
@@ -58,6 +59,21 @@ export async function executeAgentLoop(
   // стоящие директивы прошлого хода снимаются. Внутри хода они переживают
   // компакцию (см. `ContextManager.standingDirectives`).
   contextManager.standingDirectives?.clear();
+
+  // OTel workflow-span (P0, 1/2): связка thread/session; no-op при выключенности.
+  const otel = getOtelAdapter();
+  const activeMetaForOtel = ctx.deps.sessionManager?.getActiveMeta?.() ?? null;
+  if (activeMetaForOtel) {
+    otel.setThread(activeMetaForOtel.threadId, activeMetaForOtel.id);
+  }
+  const agentSpan = otel.startSpan("agent.run", {
+    "gen_ai.system": "mma",
+    "gen_ai.agent.name": "mma-agent",
+  });
+  const finishSpan = async (result: AgentResult): Promise<AgentResult> => {
+    await agentSpan.ended("ok", {});
+    return result;
+  };
 
   // Модули цикла (состояние + сервисы) — единый контейнер (INV-23).
   const {
@@ -111,7 +127,7 @@ export async function executeAgentLoop(
     });
     if (llm.kind === "continue") continue;
     if (llm.kind === "break") break;
-    if (llm.kind === "return") return llm.result;
+    if (llm.kind === "return") return finishSpan(llm.result);
     const { textContent, reasoningContent, toolCalls, sawToolCall } = llm;
 
     const cycleNudges = sawToolCall ? accumulateToolTargets(state, toolCalls) : [];
@@ -172,7 +188,7 @@ export async function executeAgentLoop(
     });
     if (gates.kind === "continue") continue;
     if (gates.kind === "break") break;
-    if (gates.kind === "return") return gates.result;
+    if (gates.kind === "return") return finishSpan(gates.result);
     // gates.kind === "ok": гейты пройдены, продолжаем цикл.
   }
 
@@ -189,12 +205,12 @@ export async function executeAgentLoop(
     // Прерванный ход не проверяем: пользователь уже остановил работу.
     if (ctx.isShutdownRequested()) {
       state.stopReason = reason;
-      return buildLoopResult(
+      return finishSpan(buildLoopResult(
         ctx.loopResultHost(),
         state,
         tokenTracker,
         state.iteration >= config.maxToolIterations && !state.finalAnswerAccepted,
-      );
+      ));
     }
     const action = await criticGate.evaluate({
       state,
@@ -222,10 +238,10 @@ export async function executeAgentLoop(
     state.stopReason = reason;
   }
 
-  return buildLoopResult(
+  return finishSpan(buildLoopResult(
     ctx.loopResultHost(),
     state,
     tokenTracker,
     state.iteration >= config.maxToolIterations && !state.finalAnswerAccepted,
-  );
+  ));
 }

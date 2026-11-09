@@ -144,6 +144,11 @@ export const DEFAULTS: AppConfig = {
     profile: "local-trusted",
     image: "oven/bun:1.3.14",
   },
+  otel: {
+    enabled: false,
+    endpoint: "",
+    serviceName: "mma",
+  },
   showReasoning: true,
   logLevel: "info",
   locale: "en",

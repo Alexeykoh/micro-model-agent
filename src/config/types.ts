@@ -124,6 +124,8 @@ export interface AppConfig {
     profile?: "local-trusted" | "sandbox";
     image?: string;
   };
+  /** OTel наблюдаемость (P0): адаптер gen_ai.* + OTLP-экспорт. */
+  otel?: { enabled?: boolean; endpoint?: string; serviceName?: string };
   showReasoning: boolean;
   logLevel: string;
   locale: string;
