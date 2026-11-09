@@ -105,7 +105,9 @@ export class IndexerModule implements AgentModule {
     this.buildPromise = (async () => {
       try {
         const result = await this.indexer.walk(prev);
-        this.cache.save(result);
+        // F-06: пустой workspace не получает `.mma/` до первого наполнения
+        // (иначе ломается `create-next-app .`). Память индекса всё равно заполнена.
+        if (result.files.length > 0) this.cache.save(result);
         this.index = result;
         this.builtAt = Date.now();
         this.lastBuildError = null;

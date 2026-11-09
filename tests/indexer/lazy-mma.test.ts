@@ -4,12 +4,12 @@ import { tmpdir } from "os";
 import { IndexCache } from "../../src/modules/indexer/cache";
 
 describe("lazy .mma (F-06)", () => {
-  it("пустой индекс не создаёт .mma/", () => {
+  it("пустой workspace не создаёт .mma/ через IndexerModule", async () => {
+    const { IndexerModule } = await import("../../src/modules/indexer/module");
     const dir = mkdtempSync(join(tmpdir(), "mma-lazy-"));
     const cacheDir = join(dir, ".mma");
-    const cache = new IndexCache(cacheDir, {});
-    // @ts-expect-error — минимальный фикстурный результат для проверки ленивости
-    cache.save({ files: [], symbols: [], totalTokens: 0, builtAt: Date.now() });
+    const mod = new IndexerModule({ baseDir: dir, cacheDir });
+    await mod.buildIndex();
     expect(existsSync(cacheDir)).toBe(false);
   });
 
