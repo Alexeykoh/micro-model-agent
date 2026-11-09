@@ -126,9 +126,13 @@
 - [ ] **MCP/plugin supply-chain.**
       **Уже есть:** allowlist серверов (`mcp.allowedServers`, гвард
       `tests/arch/outbound-policy.test.ts`), DLP-egress на MCP, plugin-permissions как
-      декларация.
-      **Осталось:** OAuth 2.1 per-user, gateway с rate-limit, signed skill-манифесты/SBOM,
-      актуализация спеки MCP. Disable плагина ≠ sandbox (код уже загружен,
+      декларация; **добавлено 2026-11-09**: gateway rate-limit
+      (`rateLimitMs` на запись сервера, `tool.mcp_rate_limited`), integrity-манифест
+      скиллов (`skills-manifest.json`, sha256, fail-closed), SBOM
+      (`bun run build:sbom` → `sbom.json`).
+      **Осталось:** OAuth 2.1 per-user (существующие заголовки позволяют токен вручную —
+      per-user флоу не встроен), signed skill-манифесты (sha-манифест готов —
+      подпись требует ключей), актуализация спеки MCP. Disable плагина ≠ sandbox (код уже загружен,
       зафиксировано в `AGENTS.md`).
 - [ ] **HITL + kill-switch.**
       **Уже есть:** тулы `question`/`approve`, `ApprovalStore` одноразовыми токенами
@@ -153,12 +157,12 @@
       **Осталось:** tamper-evident audit-лог (append-only + подпись), high-risk
       артефакты (risk file, lineage, oversight-панель, adversarial-лог Art.15),
       retention ≥6 мес. (сейчас: архив сессий 30 дней, service 7 дней).
-- [ ] **Внутренние хвосты.**
-      **Уже есть (частично закрыто):** остаток раздутых файлов — **закрыт**:
-      `.arch-allowlist.json` пуст с 2026-11-03, каждый файл ≤300 строк
-      (долг `split-bloated-files` оплачен, `tests/arch/file-size.test.ts`).
-      **Осталось:** `noExplicitAny` warn (`biome.json:34`) → error ratchet'ом,
-      coverage-threshold в CI (в `quality.yml` отсутствует).
+- [x] **Внутренние хвосты.** **Закрыто 2026-11-09**:
+      `noExplicitAny` warn→error ratchet'ом (144→0 в `src/`,
+      `PlatformHookContext`-контракт + `ctx: any` убраны;
+      baseline кастов поднят 36→45→47 осознанно по правилам гейта),
+      coverage-threshold в CI (`scripts/coverage-check.ts`, funcs ≥87, lines ≥90),
+      остаток раздутых файлов закрыт (`.arch-allowlist.json` пуст).
 
 ---
 
