@@ -9,6 +9,7 @@ import type { ContextManager } from "../../core/context/manager";
 import type { SessionManager } from "../../modules/session/index";
 import type { ExecutionModule } from "../../modules/execution/module";
 import { ToolExecutor } from "../../tools/executor";
+import { wrapExecutorWithOtel } from "../../modules/otel/decorate";
 import { ToolRegistry } from "../../tools/registry";
 import { PluginManager } from "../../modules/plugins/manager";
 import type { ToolContext, ToolDefinition } from "../../tools/types";
@@ -202,7 +203,7 @@ export function buildRunnerExecutor(
   plugins: PluginManager,
   sessionManager: SessionManager,
 ): ToolExecutor {
-  const executor = new ToolExecutor(registry, toolCtx, plugins);
+  const executor = wrapExecutorWithOtel(new ToolExecutor(registry, toolCtx, plugins));
   // INV-15: `admission_degraded` — в сессию раннера, как `verify_error`.
   executor.setDiagnosticSink(admissionDiagnosticSink(sessionManager));
   return executor;

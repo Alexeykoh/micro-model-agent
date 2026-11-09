@@ -15,6 +15,7 @@ import { join } from "path";
 import { createContextManager } from "./context-factory";
 import type { ContextManager } from "../../core/context/manager";
 import { ToolExecutor } from "../../tools/executor";
+import { wrapExecutorWithOtel } from "../../modules/otel/decorate";
 import { HallucinationDetector } from "../../core/hallucination/detector";
 import { createToolContext, admissionDiagnosticSink } from "./tool-context";
 import { egressDiagnosticSink } from "./egress-sink";
@@ -210,7 +211,7 @@ export async function setupSessionPhase(input: SessionPhaseInput): Promise<Sessi
     draftHost: input.draftHost,
   });
 
-  const toolExecutor = new ToolExecutor(toolRegistry, toolCtx, pluginManager);
+  const toolExecutor = wrapExecutorWithOtel(new ToolExecutor(toolRegistry, toolCtx, pluginManager));
   // INV-15: fail-open admission (спилл упал → результат не admitted) пишет
   // `admission_degraded` в сессию этим же путём, что `verify_error`.
   toolExecutor.setDiagnosticSink(admissionDiagnosticSink(sessionManager));
