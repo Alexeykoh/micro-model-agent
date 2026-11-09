@@ -4,6 +4,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   writeFileSync,
   appendFileSync,
@@ -11,6 +12,8 @@ import {
 import { join } from "path";
 import { gzipSync } from "zlib";
 import type { SessionMeta, SessionMessage } from "./types";
+import type { TurnCheckpoint } from "./checkpoint";
+import { parseTurnCheckpoint } from "./checkpoint";
 import type { SessionEncryptionConfig } from "../../config/types";
 import { SessionFileEncryptor } from "../security/session-encryption";
 import { readHistoryFile, readRotatedHistory } from "./history-io";
@@ -89,6 +92,11 @@ export class SessionStore {
   /** Хвост session-лога: последние строки для инкрементального чтения (Trace). */
   private sessionLogTailPath(id: string): string {
     return join(this.sessionDir(id), "session.log.tail");
+  }
+
+  /** Путь чекпоинтера хода (durable state 2/4). */
+  private checkpointPath(id: string): string {
+    return join(this.sessionDir(id), "checkpoint.json");
   }
 
   /** Есть ли сессия (по meta.json). */
@@ -220,6 +228,31 @@ export class SessionStore {
     // Инкрементальное чтение: с курсором берём только хвост (аудит §6.13).
     const path = opts.since ? this.sessionLogTailPath(id) : this.sessionLogPath(id);
     return readLogEntries(path, this.encryptor) ?? [];
+  }
+
+  /** Сохранить чекпоинт хода (атомарно: tmp + rename; шифр как у meta). */
+  saveCheckpoint(id: string, checkpoint: TurnCheckpoint): void {
+    const dir = this.sessionDir(id);
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const target = this.checkpointPath(id);
+    const content = JSON.stringify(checkpoint, null, 2);
+    const body = this.encryptor?.isEnabled() ? this.encryptor.encryptFileContent(content) : content;
+    const tmp = `${target}.${process.pid}.tmp`;
+    writeFileSync(tmp, body, { encoding: "utf-8", mode: 0o600 });
+    renameSync(tmp, target);
+  }
+
+  /** Загрузить чекпоинт хода; нет/битая/чужая версия — null (fail-open). */
+  loadCheckpoint(id: string): TurnCheckpoint | null {
+    const path = this.checkpointPath(id);
+    if (!existsSync(path)) return null;
+    try {
+      const raw = readFileSync(path, "utf-8");
+      const content = this.encryptor?.isEnabled() ? this.encryptor.decryptFileContent(raw) : raw;
+      return parseTurnCheckpoint(content);
+    } catch {
+      return null;
+    }
   }
   /** session-лог с причиной: «нет файла» ≠ «не прочитан» (INV-15). */
   loadSessionLogWithStatus(
