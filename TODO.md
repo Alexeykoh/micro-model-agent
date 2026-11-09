@@ -63,12 +63,18 @@
       При `sandbox` и недоступном Docker ход **падает**, а не деградирует.
       ⚠️ **Изменилось:** в репо нет ни `Dockerfile`, ни упоминаний `sandbox`-профиля в
       конфиге — пункт целиком открыт, «частично» его не делает enforcement.
-- [ ] **Durable state.**
-      **Уже есть:** `session.jsonl` + ротация/prune (`tests/session/rotate-and-prune.test.ts`,
-      auto-prune порог 1000 сессий, архив >30 дней), service-retention
-      (`service.resultRetentionDays`, `tests/service/retention.test.ts`).
-      **Осталось:** опциональный checkpointer, стабильный `thread_id` <255,
-      long-term store с TTL. Краш посреди хода по-прежнему теряет текущую итерацию.
+- [x] **Durable state.** **Закрыто 2026-11-09** четырьмя ветками:
+      (1) `thread_id` (`thr_<16 hex>` в `SessionMeta`, спека
+      [`2026-11-09-thread-id-design`](./docs/specs/2026-11-09-thread-id-design.md));
+      (2) чекпоинтер хода `checkpoint.json` — снимок/восстановление `LoopState`
+      на границе батча, атомарный write, fail-open (спека
+      [`2026-11-09-checkpoint-design`](./docs/specs/2026-11-09-checkpoint-design.md),
+      `src/modules/session/checkpoint{,-io}.ts`);
+      (3) retention-prune `pruneByRetention(retentionDays)` (кроме активной);
+      (4) long-term TTL `memory.retentionDays` (0 = без срока;
+      `filterExpiredEntries`/`pruneExpired`, at-rest шифрование не трогается).
+      Плюс честные сплиты ради потолка 300 строк
+      (`checkpoint-io.ts`, `manager-lifecycle.ts`). Гварды — `tests/session/*`.
 - [ ] **Observability (OTel).**
       **Уже есть:** `session.jsonl`/`app.jsonl`, `context.diff`, `CostTracker`,
       честные `health()` у 6 модулей (`tests/arch/health-coverage.test.ts`),
