@@ -172,11 +172,20 @@ shadcn (`--help`/`init` 10+ раз). Спека:
 pre-write LSP (`isAliasModuleError`, `src/modules/lsp/write-check.ts`); (5) нормализация
 версий bash-ключа (`@VER`) + подсказка про фоновый скаффолд в `bash-description.ts`;
 (1) bump бюджета `iterMaxTokensOverride=16384`: реактивный на chunk-фейл и проактивный
-после крупной успешной записи (>4k) (`tool-batch-effects.ts`). Тесты: `tests/harness-budgets.test.ts` (9). Проверка-diff:
-`bun test` — только предсуществующий file-size fail (`sidebar.ts` 307) + флейки-таймауты,
-`typecheck` зелёный; quality красный на предсуществующих (file-size/lint), дельта ветки чистая.
+после крупной успешной записи (>4k) (`tool-batch-effects.ts`); wire-шов: `toWireMessage`
+режет внутренние `success/blocked/arguments` для строгих гейтов opencode-go (`src/llm/request-body.ts`).
+Тесты: `tests/harness-budgets.test.ts` (11).
 
 ---
+
+**Замер 2026-11-09** (Crouton Alpha Free, opencode-go, контекст 131k, песочница в `%TEMP%`,
+`MMA_CONFIG_DIR` изолирован + ключ из реального конфига, `--no-agents-md`, reasoning=low):
+веломагазин построен до зеленого `npm run build` за 175.7s, 583,488 токенов (559k prompt / 24k completion),
+сессия 700 строк, **ошибок LLM 0**, обрывов по 8192 — 0 (16k `products.ts`: первый `write_file` отклонен
+гейтом «too large», далее 3 куска `write_file + 2×append_file`). План честно признает skips
+(шаги 4–5 пропущены из-за import-path рассинхрона) вместо ложного done.
+
+Для сравнения — тот же веломагазин на qwen3.8-27b: 60 мин, 2.8M токенов, 3 обрыва, фейковые 7/10.
 
 ---
 
