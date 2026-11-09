@@ -7,6 +7,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { handleHealth, handleReady } from "../api/health";
 import { handleApiDocs, handleOpenApiDocument } from "../api/docs-api";
+import { handleOversight } from "../api/oversight";
 import { handleEventsApi } from "../api/events-api";
 import { handleSessionsApi } from "../api/sessions-api";
 import { handleTasksApi } from "../api/tasks-api";
@@ -37,6 +38,7 @@ const API_ROUTES: Record<string, RouteHandler> = {
   "GET /readyz": (req, res, _reqUrl, s) => handleReady(req, res, s),
   "GET /v1/openapi.json": (req, res, url, s) => handleOpenApiDocument(req, res, url, s),
   "GET /v1/docs": (req, res, url, s) => handleApiDocs(req, res, url, s),
+  "GET /v1/oversight": (req, res, _url, s) => handleOversight(req, res, s),
 };
 
 const API_GROUPS: RouteGroup[] = [handleSessionsApi, handleTasksApi, handleEventsApi];
