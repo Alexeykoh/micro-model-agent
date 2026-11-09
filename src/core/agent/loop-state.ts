@@ -1,4 +1,7 @@
-/** Состояние одного запуска агентного цикла: счётчики, бюджеты, сигналы. */
+/** Состояние одного запуска агентного цикла: счётчики, бюджеты, сигналы.
+ * Заменяет ~24 разрозненных `let`-переменных одним структурированным объектом.
+ * Модули цикла получают этот объект и правят его поля.
+ */
 import type { PrefixDelta, PromptSnapshot } from "./prefix-monitor";
 import type { CacheUsage } from "../../llm/cache-usage";
 import type { ArtifactChurnState } from "./artifact-progress";
@@ -7,8 +10,7 @@ import type { StopReason, LlmCallSpeed } from "../types";
 /**
  * Состояние одного запуска агентного цикла (executeSingleAgentLoop).
  *
- * Заменяет ~24 разрозненных `let`-переменных одним структурированным объектом.
- * Группы полей соответствуют ответственностям цикла:
+ * Группы полей соответствуют ответственностям цикла.
  * - счётчики и итоговый текст;
  * - компакция;
  * - халлюцинации;
@@ -168,6 +170,9 @@ export interface LoopState {
 
   /** Прогресс тест/спек-артефактов: churn тестов без production-правок. */
   artifactChurn: ArtifactChurnState;
+  /** Подряд одиночные question (батчинг) + nudge отправлен. */
+  consecutiveSingleQuestions: number;
+  questionBatchNudged: boolean;
   /** В этом прогоне был ответ [SECURITY BLOCKED] (вход для script-workaround nudge). */
   sawSecurityBlock: boolean;
   /** Nudge против скрипта-обхода блокировки уже отправлен. */
@@ -212,14 +217,7 @@ export interface LoopState {
   criticRepairCycles: number;
   /** Рабочие мутации с последнего вызова критика. */
   mutationsSinceCritic: number;
-  /**
-   * Маркер seq на старте захода (executeSingleAgentLoop), из `ContextManager.beginTurn()`.
-   * Маркер для gatherTurnToolEvents: критик видит только тул-события
-   * текущего захода, а не всей сессии (иначе тулы прошлого вопроса —
-   * напр. погода — ложно свидетельствуют против текущей задачи).
-   * Монотонный seq переживает компакцию, поэтому сжатие истории посреди
-   * хода больше не обнуляет улики текущего захода.
-   */
+  /** Маркер seq на старте захода: критик видит только тул-события текущего захода. */
   criticHistoryMark: number;
   /** Сигнатуры уже показанных проблем критика (дедупликация). */
   seenCriticIssues: Set<string>;

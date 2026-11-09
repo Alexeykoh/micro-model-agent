@@ -189,12 +189,19 @@ export const bashTool: ToolDefinition = {
       );
     }
 
+    // Enforcement скаффолда (INV-H6): долгие генераторы (create-next-app/vite,
+    // shadcn init, npm/bun install) принудительно уходят в фон, иначе
+    // foreground-ожидание сгорает на одном шаге (замер veloman: 52с скаффолда
+    // в fg, затем повтор того же скаффолда с другим флагом версии).
+    const isScaffold = /(?:create-next-app|create-vite|shadcn\s+(?:init|add|latest)|npm\s+(?:install|i)\b|bun\s+(?:install|add)\b)/.test(originalCommand);
+    const explicitBackground = args.background === true || (isScaffold && args.background !== false);
+
     // Мемо результата (manualMemo, после security-гейта, чтобы блок никогда не
     // маскировался stored-результатом): одиночные read-only отдаются из мемо
     // исполнителя; всё остальное его сбрасывает. Фоновые запуски не мемоизируются
     // (process id одноразовые).
     const memoKey = { command, workdir };
-    const memoizable = args.background !== true && isMemoizableCommand(command);
+    const memoizable = !explicitBackground && isMemoizableCommand(command);
     if (memoizable) {
       const hit = memoRead(ctx, memoKey);
       if (hit) return { ...hit };
@@ -207,10 +214,10 @@ export const bashTool: ToolDefinition = {
       command,
       originalCommand,
       workdir,
-      explicitBackground: args.background === true,
+      explicitBackground,
       force: args.force === true,
       securityConfig,
-      memoizable,
+      memoizable: !explicitBackground && isMemoizableCommand(command),
       memoKey,
     });
   },

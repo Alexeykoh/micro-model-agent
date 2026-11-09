@@ -4,7 +4,8 @@ import { isAliasModuleError } from "../src/modules/lsp/write-check";
 import { mutationTargetKey } from "../src/core/agent/loop-nudges";
 import { bumpBudgetAfterWriteTooLarge } from "../src/core/agent/tool-batch-effects";
 import { createLoopState } from "../src/core/agent/loop-state-init";
-import { createLoopState } from "../src/core/agent/loop-state-init";
+import { predictMaxTokens } from "../src/core/agent/harness-budget";
+import { accumulateToolTargets } from "../src/core/agent/loop-nudges";
 import { advancePlanIfStepComplete, looksLikeScaffoldTemplate } from "../src/modules/execution/step-advance";
 import { PlanTracker } from "../src/modules/execution/tracker";
 import { PlanStore } from "../src/modules/execution/plan-store";
@@ -13,6 +14,26 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { proactiveBudgetAfterLargeWrite } from "../src/core/agent/tool-batch-effects";
 import { toWireMessage } from "../src/llm/request-body";
+
+describe("INV-H1 predictive budget", () => {
+  it("raises to 16k for file tasks, leaves others alone", () => {
+    expect(predictMaxTokens("Create src/data/products.ts with 12 products")).toBe(16384);
+    expect(predictMaxTokens("Hello")).toBeUndefined();
+    expect(predictMaxTokens("Create products.ts", { existingOverride: 32000 })).toBe(32000);
+  });
+});
+
+describe("INV-H6 question batching counter", () => {
+  it("counts consecutive single-question batches, resets on batch", () => {
+    const s = createLoopState();
+    accumulateToolTargets(s, [{ name: "question", arguments: {} } as never]);
+    expect(s.consecutiveSingleQuestions).toBe(1);
+    accumulateToolTargets(s, [{ name: "question", arguments: {} } as never]);
+    expect(s.consecutiveSingleQuestions).toBe(2);
+    accumulateToolTargets(s, [{ name: "write_file", arguments: {} } as never]);
+    expect(s.consecutiveSingleQuestions).toBe(0);
+  });
+});
 
 describe("INV-H7 wire messages for opencode-go", () => {
   it("strips internal success/blocked/arguments from tool messages", () => {

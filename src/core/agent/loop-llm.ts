@@ -22,6 +22,7 @@ import { handleLlmError } from "./loop-llm-errors";
 import { issueDirective, clearDirective } from "./directives";
 import { detectRepeatedToolCall } from "./loop-repeat";
 import { consumeLlmStream, createLlmStreamResult } from "./loop-llm-stream";
+import { predictMaxTokens } from "./harness-budget";
 import { buildLlmResponse, finalizeLlmUsage, recordLlmOutput } from "./loop-llm-usage";
 import { reasoningLevelsForProvider } from "../../modules/providers/manager";
 
@@ -110,7 +111,15 @@ export async function runLlmPhase(
 
   // Эскалация бюджета после обрыва до ответа: значение живёт ровно один вызов
   // и снимается вместе с остальными per-итерационными сигналами.
-  const maxTokensOverride = state.iterMaxTokensOverride;
+  // Прогноз до вызова: крупные файловые задачи сразу уходят на 16k (INV-H1),
+  // чтобы не ждать первого обрыва.
+  const historyHint = (history?.[history.length - 1] as { content?: unknown })?.content;
+  const historyHintText = typeof historyHint === "string" ? historyHint.slice(-500) : undefined;
+  const predicted = predictMaxTokens(input, {
+    existingOverride: state.iterMaxTokensOverride,
+    historyHint: historyHintText,
+  });
+  const maxTokensOverride = predicted;
   // Очистка per-итерационных сигналов после потребления политикой.
   clearIterationSignals(state);
   // Решение доступно поверхностям ДО старта генерации (INV-R9), поэтому фаза
