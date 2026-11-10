@@ -1,11 +1,12 @@
 // Browser-local UI themes. The `id` is the body class consumed by
-// `console.css`, `groovebox.css` and `themes.css`; `colors` are the three
-// swatch dots shown on the settings card. Keep this list in sync with the
-// pre-paint whitelist in `index.html` (guarded by tests/webui-themes.test.ts).
+// `console.css`, `groovebox.css`, `metallica.css` and `themes.css`; `colors`
+// are the three swatch dots shown on the settings card. Keep this list in sync
+// with the pre-paint whitelist in `index.html` (guarded by
+// tests/webui-themes.test.ts).
 export interface UiTheme {
   id: string;
-  /** Picker section: base/color themes vs seasonal ones. */
-  group: "color" | "seasonal";
+  /** Picker section: base/color themes vs seasonal vs album/fandom themes. */
+  group: "color" | "seasonal" | "themed";
   /** [ground, accent, secondary] — preview only. */
   colors: readonly [string, string, string];
 }
@@ -21,6 +22,7 @@ export const UI_THEMES: readonly UiTheme[] = [
   { id: "spring", group: "seasonal", colors: ["#fdf8fb", "#b02a68", "#9be59b"] },
   { id: "summer", group: "seasonal", colors: ["#04141a", "#ffd34d", "#4fe3d7"] },
   { id: "autumn", group: "seasonal", colors: ["#170d08", "#ff9a3d", "#ffc857"] },
+  { id: "metallica", group: "themed", colors: ["#060403", "#883825", "#bd6615"] },
 ];
 
 /** Class names to add/remove on `<body>` (`flat` has no stylesheet of its own). */

@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200" role="img" aria-label="Master of Puppets inspired scene">
+  <defs>
+    <radialGradient id="horizonGlow" cx="50%" cy="48%" r="42%">
+      <stop offset="0" stop-color="#ffd166" stop-opacity=".95" />
+      <stop offset=".26" stop-color="#bd6615" stop-opacity=".72" />
+      <stop offset=".58" stop-color="#883825" stop-opacity=".5" />
+      <stop offset="1" stop-color="#050303" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#060303" />
+      <stop offset=".45" stop-color="#581f14" />
+      <stop offset=".72" stop-color="#883825" />
+      <stop offset="1" stop-color="#c14b1b" />
+    </linearGradient>
+    <linearGradient id="field" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#63564a" />
+      <stop offset=".26" stop-color="#2a201a" />
+      <stop offset="1" stop-color="#050403" />
+    </linearGradient>
+    <linearGradient id="crossFace" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f8f4ee" />
+      <stop offset=".55" stop-color="#ded5c9" />
+      <stop offset="1" stop-color="#8a7c71" />
+    </linearGradient>
+    <linearGradient id="chrome" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f4efe8" />
+      <stop offset=".22" stop-color="#a9a49e" />
+      <stop offset=".46" stop-color="#e9e3da" />
+      <stop offset=".62" stop-color="#4a3b35" />
+      <stop offset="1" stop-color="#d7cec5" />
+    </linearGradient>
+    <filter id="blur" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.4" />
+    </filter>
+    <g id="cross">
+      <path d="M-9-48H9v25h24v11H9v48H-9V-12h-24v-11h24z" fill="url(#crossFace)" stroke="#251712" stroke-width="2" />
+      <path d="M-5-44H5v23h22v5H5v43H-5V-16h-22v-5h22z" fill="#fffdf8" opacity=".28" />
+    </g>
+    <g id="distantCross">
+      <path d="M-5-28h10v15h15v9H5v28H-5V-4h-15v-9h15z" fill="url(#crossFace)" />
+    </g>
+  </defs>
+
+  <rect width="1200" height="1200" fill="url(#sky)" />
+  <circle cx="600" cy="575" r="540" fill="url(#horizonGlow)" />
+  <rect y="620" width="1200" height="580" fill="url(#field)" />
+
+  <!-- Controlling hands: shadowy silhouettes descending from the red sky. -->
+  <g fill="#1d0c09" opacity=".82" filter="url(#blur)">
+    <path d="M185 52 C226 21 295 26 335 83 C363 122 371 185 356 225 L335 290 L308 260 L292 297 L266 268 L250 304 L225 271 L209 303 L176 248 C142 201 144 122 185 52 Z" />
+    <path d="M1015 52 C974 21 905 26 865 83 C837 122 829 185 844 225 L865 290 L892 260 L908 297 L934 268 L950 304 L975 271 L991 303 L1024 248 C1058 201 1056 122 1015 52 Z" />
+  </g>
+
+  <!-- Puppet strings attached to the grave markers. -->
+  <g stroke="#f0e8df" stroke-width="1.5" opacity=".48">
+    <path d="M219 303 L142 672" /><path d="M250 304 L235 672" /><path d="M292 297 L327 672" /><path d="M335 290 L418 672" />
+    <path d="M991 303 L1058 672" /><path d="M950 304 L965 672" /><path d="M908 297 L873 672" /><path d="M865 290 L782 672" />
+    <path d="M150 670 L126 1010" /><path d="M330 670 L318 1010" /><path d="M510 670 L492 1010" /><path d="M690 670 L702 1010" />
+    <path d="M870 670 L882 1010" /><path d="M1050 670 L1074 1010" />
+  </g>
+
+  <!-- Rows of graves receding toward the red horizon. -->
+  <g>
+    <use href="#distantCross" transform="translate(82 652) scale(.24)" opacity=".32" />
+    <use href="#distantCross" transform="translate(166 651) scale(.27)" opacity=".36" />
+    <use href="#distantCross" transform="translate(252 650) scale(.3)" opacity=".4" />
+    <use href="#distantCross" transform="translate(341 648) scale(.33)" opacity=".44" />
+    <use href="#distantCross" transform="translate(432 646) scale(.36)" opacity=".48" />
+    <use href="#distantCross" transform="translate(526 644) scale(.4)" opacity=".54" />
+    <use href="#distantCross" transform="translate(620 644) scale(.43)" opacity=".56" />
+    <use href="#distantCross" transform="translate(713 646) scale(.4)" opacity=".52" />
+    <use href="#distantCross" transform="translate(805 648) scale(.37)" opacity=".48" />
+    <use href="#distantCross" transform="translate(895 650) scale(.34)" opacity=".44" />
+    <use href="#distantCross" transform="translate(986 651) scale(.3)" opacity=".38" />
+    <use href="#distantCross" transform="translate(1075 652) scale(.26)" opacity=".34" />
+  </g>
+
+  <g>
+    <use href="#distantCross" transform="translate(134 705) scale(.55)" opacity=".72" />
+    <use href="#distantCross" transform="translate(307 703) scale(.61)" opacity=".76" />
+    <use href="#distantCross" transform="translate(480 700) scale(.68)" opacity=".8" />
+    <use href="#distantCross" transform="translate(655 700) scale(.71)" opacity=".83" />
+    <use href="#distantCross" transform="translate(831 703) scale(.66)" opacity=".78" />
+    <use href="#distantCross" transform="translate(1008 705) scale(.6)" opacity=".74" />
+  </g>
+
+  <g>
+    <use href="#cross" transform="translate(210 812) scale(1.06)" opacity=".94" />
+    <use href="#cross" transform="translate(420 804) scale(1.16)" opacity=".96" />
+    <use href="#cross" transform="translate(610 796) scale(1.24)" />
+    <use href="#cross" transform="translate(795 804) scale(1.17)" opacity=".98" />
+    <use href="#cross" transform="translate(990 812) scale(1.08)" opacity=".95" />
+  </g>
+
+  <g>
+    <use href="#cross" transform="translate(128 1044) scale(1.7)" opacity=".9" />
+    <use href="#cross" transform="translate(312 1035) rotate(-2) scale(1.82)" />
+    <use href="#cross" transform="translate(590 1028) scale(2.05)" />
+    <use href="#cross" transform="translate(886 1036) rotate(3) scale(1.84)" />
+    <use href="#cross" transform="translate(1088 1046) scale(1.66)" opacity=".88" />
+  </g>
+
+  <!-- Soldier helmet and dog tags: the Disposable Heroes detail. -->
+  <g transform="translate(94 1068)" opacity=".75">
+    <path d="M-58 16 C-58-22-18-49 28-41 C65-35 82-8 79 20 L65 21 C56-6 24-26-11-19 C-39-13-51 2-52 17 Z" fill="#4c382e" />
+    <path d="M-62 20 H84 V36 H-62z" fill="#321e17" />
+  </g>
+  <g stroke="#b99269" stroke-width="3" opacity=".72" fill="none">
+    <path d="M118 1090 q16-25 40-13 q19 11 11 31" />
+    <ellipse cx="155" cy="1124" rx="10" ry="17" transform="rotate(18 155 1124)" fill="#87715a" stroke="#d5c9b8" stroke-width="2" />
+    <ellipse cx="188" cy="1127" rx="10" ry="17" transform="rotate(23 188 1127)" fill="#87715a" stroke="#d5c9b8" stroke-width="2" />
+  </g>
+
+  <!-- Overgrown grass and weeds across the graveyard. -->
+  <g stroke="#2c261d" stroke-width="3" opacity=".46" fill="none">
+    <path d="M58 1160 C92 1099 110 1055 142 1003" /><path d="M164 1165 C201 1102 225 1064 248 1006" /><path d="M343 1162 C376 1096 389 1061 418 1003" />
+    <path d="M520 1165 C560 1099 583 1063 603 1006" /><path d="M728 1160 C751 1094 762 1058 789 1001" /><path d="M928 1166 C954 1098 970 1061 994 1006" />
+    <path d="M1104 1157 C1133 1094 1147 1060 1169 1004" />
+  </g>
+
+  <!-- Logo and title, in the album's lower third. -->
+  <g transform="translate(600 220)" text-anchor="middle" font-family="Impact, 'Arial Black', 'Helvetica Neue', sans-serif" font-weight="900">
+    <text x="0" y="0" fill="url(#chrome)" font-size="126" letter-spacing="2">METALLICA</text>
+    <text x="0" y="18" fill="#8b1f15" font-size="126" letter-spacing="2" opacity=".26">METALLICA</text>
+    <path d="M-438-82 L-408-14 L-438 30" stroke="url(#chrome)" stroke-width="13" fill="none" opacity=".76" />
+    <path d="M438-82 L408-14 L438 30" stroke="url(#chrome)" stroke-width="13" fill="none" opacity=".76" />
+  </g>
+
+  <text x="600" y="1165" text-anchor="middle" font-family="Impact, 'Arial Black', 'Helvetica Neue', sans-serif" font-weight="900" font-size="45" fill="#e6ddd3" opacity=".72" letter-spacing="14">MASTER OF PUPPETS</text>
+  <rect width="1200" height="1200" fill="#000" opacity=".18" />
+</svg>

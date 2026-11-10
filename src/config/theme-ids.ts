@@ -7,7 +7,7 @@
 // Дефолтный скин входит в список: `flat` — тоже скин (без своего stylesheet,
 // поэтому в pre-paint whitelist и в списке классов его нет).
 
-/** Id скинов веб-UI в порядке пикера (color → seasonal). */
+/** Id скинов веб-UI в порядке пикера (color → seasonal → themed). */
 export const UI_THEME_IDS = [
   "console",
   "groovebox",
@@ -19,6 +19,7 @@ export const UI_THEME_IDS = [
   "spring",
   "summer",
   "autumn",
+  "metallica",
 ] as const;
 
 /** Id скина веб-UI. */

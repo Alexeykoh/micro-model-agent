@@ -23,6 +23,10 @@ export interface WebUiAssets {
    * палитрой. Опциональна по той же причине, что и `cssConsole`.
    */
   cssGroovebox?: string;
+  /** Тема «Metallica» (`/metallica.css`) — альбомный скин Master of Puppets. */
+  cssMetallica?: string;
+  /** Обложка-оммаж для фона темы Metallica (`/metallica-cover.svg`). */
+  metallicaCover?: string;
   /** Пакет дополнительных тем (`/themes.css`): neon/paper/contrast + сезоны. */
   cssThemes?: string;
   js: string;
