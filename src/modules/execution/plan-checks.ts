@@ -153,6 +153,31 @@ export interface StepEvidenceTarget {
 }
 
 /**
+ * Статическое доказательство на поведенческом/UI-шаге: сборка зелёная, страница
+ * может быть пустой (волна 21). Общий для `command:` и файловых контрактов —
+ * иначе `file-exists:` обходит требование (дефект F, спека 0.25.2).
+ */
+export function staticEvidenceForBehaviorStep(
+  parsed: ParsedCheck,
+  target: StepEvidenceTarget,
+  stepId: number,
+): { note: string; blocked: ToolResult | null } {
+  if (classifyCheck(parsed) === "static" && isBehaviorStep(target.description)) {
+    return {
+      note: "",
+      blocked: {
+        success: false,
+        output: t("plan.check_need_behavior", {
+          step: String(stepId),
+          check: target.check || "",
+        }),
+      },
+    };
+  }
+  return { note: "", blocked: null };
+}
+
+/**
  * Проверка check-контракта на done для не-файловых видов.
  *
  * Возвращает `null`, если дополнительных требований нет (caller ставит
@@ -251,17 +276,6 @@ export async function checkDoneEvidence(
   }
   // Шаг меняет поведение, а доказательство — статика: сборка зелёная, страница
   // может быть пустой (волна 21). Требуем поведенческий контракт.
-  if (classifyCheck(parsed) === "static" && isBehaviorStep(target.description)) {
-    return {
-      note: "",
-      blocked: {
-        success: false,
-        output: t("plan.check_need_behavior", {
-          step: String(stepId),
-          check: target.check || "",
-        }),
-      },
-    };
-  }
-  return null;
+  const gate = staticEvidenceForBehaviorStep(parsed, target, stepId);
+  return gate.blocked ? gate : null;
 }
