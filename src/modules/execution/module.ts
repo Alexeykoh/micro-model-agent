@@ -16,7 +16,7 @@ import { createPlanToolDefinitions } from "./plan-tool";
 import { parseKinds, parseChecks } from "./plan-parse";
 import { createExecutionPluginState, type ExecutionPluginState } from "./plugin-state";
 import { EXECUTION_ERROR_SEARCH_MIN_INTERVAL_MS as ERROR_SEARCH_MIN_INTERVAL_MS } from "../../config/timeouts";
-import { runFinalAudit } from "./final-audit";
+import { pendingStepsOf, runFinalAudit } from "./final-audit";
 import { maybeSearchError, type WebSearchRunner } from "./error-search";
 import {
   errorSearchHost,
@@ -235,6 +235,10 @@ export class ExecutionModule implements AgentModule {
   /** Строка "текущий план" для сводки компакции (реализация — `plan-session.ts`). */
   getPlanSummary(): string | null {
     return this.plan.getPlanSummary();
+  }
+
+  getPlanPendingSteps(): string[] {
+    return pendingStepsOf(this.plan.getActivePlan() ?? this.plan.getCompletedPlan());
   }
 
   /** Определения тулов модуля (plan/todo/verify через фабрику plan-tool). */

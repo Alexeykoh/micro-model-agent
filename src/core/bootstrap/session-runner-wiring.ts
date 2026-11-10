@@ -190,6 +190,7 @@ export function assembleRunnerAgent(input: AssembleRunnerAgentInput): Agent {
     reasoningStrategy,
     capabilitiesProbeRef,
     planSummary: () => runnerExec.getPlanSummary(),
+    planPendingSteps: () => runnerExec.getPlanPendingSteps(),
     toolCtx,
     onDiagnostic: admissionDiagnosticSink(sessionManager),
   };

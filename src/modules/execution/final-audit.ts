@@ -99,6 +99,15 @@ function summaryWithPending(
 }
 
 /**
+ * Незакрытые шаги плана (S5): те же критерии `isUnconfirmed`, что у аудита.
+ * Единый источник для финального аудита и улики критика — не дублируем.
+ */
+export function pendingStepsOf(plan: Plan | null): string[] {
+  if (!plan) return [];
+  return plan.steps.flatMap((s) => (isUnconfirmed(s) ? [`${s.id}. ${s.description}`] : []));
+}
+
+/**
  * Шаг считается незакрытым, если он не done/skipped ИЛИ закрыт по `manual:`,
  * но без наблюдения (W2 спеки turn-runtime-gate): «проверил глазами» без
  * записи не подтверждает пункт.
@@ -136,9 +145,7 @@ export async function runFinalAudit(d: FinalAuditHost): Promise<FinalAuditResult
     const plan = d.completedPlan;
     const autoClosed = autoCloseEvidenceSteps(d, plan);
     const audit = await d.auditor.audit(plan, { mutated: d.mutatedThisTurn });
-    const pendingSteps = plan.steps.flatMap((s) =>
-      isUnconfirmed(s) ? [`${s.id}. ${s.description}`] : [],
-    );
+    const pendingSteps = pendingStepsOf(plan);
     const done = plan.steps.filter((s) => s.status === "done").length;
     if (autoClosed > 0) {
       d.store.saveActive(plan);
@@ -165,9 +172,7 @@ export async function runFinalAudit(d: FinalAuditHost): Promise<FinalAuditResult
     d.flushSessionPlan();
   }
   const audit = await d.auditor.audit(plan, { mutated: d.mutatedThisTurn });
-  const pendingSteps = plan.steps.flatMap((s) =>
-    isUnconfirmed(s) ? [`${s.id}. ${s.description}`] : [],
-  );
+  const pendingSteps = pendingStepsOf(plan);
   const done = plan.steps.filter((s) => s.status === "done").length;
   return {
     passed: audit.passed && pendingSteps.length === 0,

@@ -187,6 +187,7 @@ export function createLoopModules(host: LoopSetupHost, slog: SessionLogger): Loo
       buildEvidencePack({
         task: d.task,
         planSummary: d.planSummary,
+        planPendingSteps: d.planPendingSteps,
         toolEvents: d.toolEvents,
         baseDir: deps.baseDir,
         answerText: d.answerText,

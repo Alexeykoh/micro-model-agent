@@ -178,6 +178,7 @@ export async function assembleAgent(
     reasoningStrategy,
     capabilitiesProbeRef,
     planSummary: () => execModule.getPlanSummary(),
+    planPendingSteps: () => execModule.getPlanPendingSteps(),
     toolCtx,
     // INV-15: деградации проверки заявлений идут в сессию тем же стоком,
     // что и прочие сигналы петли.

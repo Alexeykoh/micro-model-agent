@@ -16,6 +16,9 @@ export interface CriticGateDeps {
   slog: SessionLogger;
   task: string;
   planSummary?: string;
+  /** Незакрытые шаги плана (S5): критик видит, что работа не завершена. */
+  planPendingSteps?: string[];
+  planPendingStepsTotal?: number;
   toolEvents: Array<{
     tool: string;
     args?: Record<string, unknown>;
