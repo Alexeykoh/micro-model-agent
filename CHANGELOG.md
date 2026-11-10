@@ -38,6 +38,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   с `passed`: при неподтверждённых шагах сообщение перечисляет причины, а не
   печатает «[✓] Задача выполнена»; auto-advance не закрывает `manual:`-шаг без
   заметки. Спека: `docs/specs/0.25.2/2026-11-10-harness-verification-defects-design.md` (C).
+- **Аудит на форс-финале** — ход, завершённый `failed_batches`/stalled/duplicate/
+  max_iters, теперь проходит детерминированный аудит плана (не только
+  LLM-критика): при незакрытых шагах `success:false`. Спека: `docs/specs/0.25.2/2026-11-10-surrender-recovery-design.md` (S6).
 
 ## [0.24.4] - 2026-11-06
 
