@@ -15,6 +15,7 @@ import type { SkillMeta } from "../../../src/modules/skills/loader";
 function makeSkills(count: number): SkillMeta[] {
   return Array.from({ length: count }, (_, i) => ({
     name: `s${String(i).padStart(2, "0")}`,
+    kind: "global" as const,
     description: `skill ${i}`,
     keywords: [],
     content: `content ${i}`,

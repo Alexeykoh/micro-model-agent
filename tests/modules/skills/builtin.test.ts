@@ -23,11 +23,12 @@ function mdFiles(): string[] {
 
 describe("скиллы: встроенный каталог", () => {
   it("каждый builtin-файл проходит загрузчик (frontmatter не битый)", () => {
-    const skills = new SkillsLoader().loadFromDir(BUILTIN_DIR);
+    const skills = new SkillsLoader().loadFromDir(BUILTIN_DIR, "builtin");
     expect(skills.length, "файл отброшен молча — проверьте `---` и обязательный name").toBe(
       mdFiles().length,
     );
     expect(skills.length).toBeGreaterThanOrEqual(3);
+    for (const skill of skills) expect(skill.kind).toBe("builtin");
   });
 
   it("имена уникальны, в kebab-case, с описанием и телом", () => {

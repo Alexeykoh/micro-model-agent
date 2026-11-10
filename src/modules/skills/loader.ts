@@ -41,9 +41,13 @@ export function skillManifestIntegrityOk(dirPath: string, fileName: string, cont
   }
 }
 
-/** Метаданные скилла: имя, описание, ключи поиска, тело и путь источника. */
+/** Источник, из которого загружен скилл: `builtin` — из поставки, `global`/`project` — внешние. */
+export type SkillKind = "builtin" | "global" | "project";
+
+/** Метаданные скилла: имя, источник, описание, ключи поиска, тело и путь файла. */
 export interface SkillMeta {
   name: string;
+  kind: SkillKind;
   description: string;
   keywords: string[];
   content: string;
@@ -53,17 +57,17 @@ export interface SkillMeta {
 /** Загрузчик скиллов из каталогов (встроенные, глобальные, проектные). */
 export class SkillsLoader {
   /** Рекурсивно грузит все скиллы из каталога; нет каталога — пусто. */
-  loadFromDir(dirPath: string): SkillMeta[] {
+  loadFromDir(dirPath: string, kind: SkillKind = "global"): SkillMeta[] {
     if (!existsSync(dirPath)) return [];
     // Подпись манифеста: неверная подпись = каталог не грузится целиком.
     if (!skillManifestSignatureOk(dirPath)) return [];
 
     const skills: SkillMeta[] = [];
-    this.scanDir(dirPath, skills);
+    this.scanDir(dirPath, skills, kind);
     return skills;
   }
 
-  private scanDir(dirPath: string, skills: SkillMeta[]): void {
+  private scanDir(dirPath: string, skills: SkillMeta[], kind: SkillKind): void {
     const entries = readdirSync(dirPath);
 
     for (const entry of entries) {
@@ -76,7 +80,7 @@ export class SkillsLoader {
       }
 
       if (stat.isDirectory()) {
-        this.scanDir(fullPath, skills);
+        this.scanDir(fullPath, skills, kind);
         continue;
       }
 
@@ -86,12 +90,12 @@ export class SkillsLoader {
       // Целостность supply-chain: skills-manifest.json в каталоге обязан
       // совпасть с sha256 файла, иначе скилл не грузится (fail-closed).
       if (!skillManifestIntegrityOk(dirPath, entry, content)) continue;
-      const parsed = this.parseSkillFile(content, fullPath);
+      const parsed = this.parseSkillFile(content, fullPath, kind);
       if (parsed) skills.push(parsed);
     }
   }
 
-  private parseSkillFile(content: string, sourcePath: string): SkillMeta | null {
+  private parseSkillFile(content: string, sourcePath: string, kind: SkillKind): SkillMeta | null {
     // BOM режем: файл из Windows-редактора начинается с U+FEFF, и весь
     // фронтматтер не матчился — скилл молча не грузился.
     const normalized = content.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
@@ -110,6 +114,7 @@ export class SkillsLoader {
 
     return {
       name: String(frontmatter.name).trim(),
+      kind,
       description: typeof frontmatter.description === "string" ? frontmatter.description : "",
       keywords: Array.isArray(frontmatter.keywords)
         ? frontmatter.keywords.map((k) => String(k))
@@ -165,9 +170,9 @@ export class SkillsLoader {
    */
   loadFromAllSources(builtinDir: string, globalDir: string, projectDir: string): SkillMeta[] {
     const byName = new Map<string, SkillMeta>();
-    for (const skill of this.loadFromDir(builtinDir)) byName.set(skill.name, skill);
-    for (const skill of this.loadFromDir(globalDir)) byName.set(skill.name, skill);
-    for (const skill of this.loadFromDir(projectDir)) byName.set(skill.name, skill);
+    for (const skill of this.loadFromDir(builtinDir, "builtin")) byName.set(skill.name, skill);
+    for (const skill of this.loadFromDir(globalDir, "global")) byName.set(skill.name, skill);
+    for (const skill of this.loadFromDir(projectDir, "project")) byName.set(skill.name, skill);
     return [...byName.values()];
   }
 }

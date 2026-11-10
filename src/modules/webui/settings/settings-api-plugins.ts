@@ -19,6 +19,7 @@ export function handleSkillsGet(res: ServerResponse, s: SettingsState): void {
   const loaded = new Set(s.skills.getLoaded().map((skill) => skill.name));
   const skills = s.skills.getAvailable().map((skill) => {
     const info: Record<string, unknown> = { name: skill.name, enabled: loaded.has(skill.name) };
+    if (skill.kind) info.kind = skill.kind;
     if (skill.description) info.description = skill.description;
     if (skill.sourcePath) info.source = skill.sourcePath;
     return info;
