@@ -43,6 +43,16 @@ export function isAliasModuleError(message: string): boolean {
 }
 
 /**
+ * Производные от неразрешённого алиаса диагностики (дефект B, спека 0.25.2):
+ * потерянные типы импорта → implicit any / cannot find name. На холодном
+ * индексе это следствие той же холодной индексации, а не ошибка черновика.
+ */
+const DERIVED_ALIAS_PATTERNS = [
+  /implicitly has an 'any' type/i,
+  /Cannot find name '/i,
+];
+
+/**
  * Pre-write gate: check the DRAFT through a warm LSP before the file changes.
  * Returns a block message for `onBeforeTool`, or null to allow the write.
  * Cold servers are warmed in the background and the write is allowed (fail-open,
@@ -84,10 +94,20 @@ export async function runPreWriteCheck(
     // INV-H4: ошибки резолва alias-модулей на холодном индексе не настоящие —
     // разрешаем запись как unverified, верификация после прогрева индекса.
     const aliasErrors = errors.filter((d) => isAliasModuleError(d.message));
-    const hardErrors = errors.filter((d) => !isAliasModuleError(d.message));
+    // Дефект B: неразрешённый алиас роняет типы импорта → каскад implicit any /
+    // cannot find name. Та же холодная индексация (INV-H4), не реальная ошибка
+    // черновика — помечаем unverified и не блокируем запись.
+    const derivedErrors =
+      aliasErrors.length > 0
+        ? errors.filter((d) => DERIVED_ALIAS_PATTERNS.some((p) => p.test(d.message)))
+        : [];
+    const hardErrors = errors.filter(
+      (d) => !isAliasModuleError(d.message) && !derivedErrors.includes(d),
+    );
     deps.log(
       `LSP pre-write check: ${fullPath} in ${Date.now() - started}ms (${errors.length} error(s)` +
-        `${aliasErrors.length > 0 ? `, ${aliasErrors.length} unverified` : ""})`,
+        `${aliasErrors.length > 0 ? `, ${aliasErrors.length} unverified` : ""}` +
+        `${derivedErrors.length > 0 ? `, ${derivedErrors.length} derived-unverified` : ""})`,
       { op: "pre_write_check", server: key, file: fullPath, durMs: Date.now() - started, errors: errors.length },
     );
     if (hardErrors.length === 0) return null;

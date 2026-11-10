@@ -52,6 +52,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   `PLAN PENDING STEPS` (кап 8, «+N more»), а промпт требует помечать незакрытую
   работу `critical` и не наказывать за недоступный тул (`shell unavailable` /
   `SECURITY BLOCKED`) с вопросом пользователю. Спека: `docs/specs/0.25.2/2026-11-10-surrender-recovery-design.md` (S5).
+- **LSP: каскад `implicit any` от неразрешённого алиаса не блокирует запись** —
+  на холодном индексе потерянные типы импорта давали ложные
+  `implicit any` / `cannot find name` и блокировали корректную запись (модель
+  обходила баг явными аннотациями). Спека: `docs/specs/0.25.2/2026-11-10-harness-verification-defects-design.md` (B).
 
 ## [0.24.4] - 2026-11-06
 
