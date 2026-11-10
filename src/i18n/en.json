@@ -149,6 +149,7 @@
   "bash.cwd_flag_hint": "--cwd is not a standard flag. Pass the directory via the bash tool's \"workdir\" parameter instead (e.g. workdir=\"{workdir}\").",
   "bash.posix_workdir_hint": "workdir \"{workdir}\" is a POSIX path, but this shell is Windows cmd.exe. Use a Windows path, or omit workdir to use the workspace root ({baseDir}).",
   "bash.workdir_blocked": "[SECURITY BLOCKED] Working directory is not allowed: {reason}. Use a directory inside {baseDir}.",
+  "bash.shell_unavailable": "The shell is unavailable on this machine — every shell call will fail the same way. Use file tools for file work: read_file, write_file, edit_file, glob, grep, list_dir. If a command is truly needed, ask the user once with the question tool.",
   "git.truncated": "output truncated: showing {shown} of {total} lines — raise `lines` or narrow with `file`/`stat`",
   "git.approve_required": "[SECURITY] `{command}` is destructive. Ask the user first: call approve with action=\"{command}\", then retry the exact command.",
   "git.not_a_repo": "Not a git repository ({path}). The workspace has no git repo — do not retry git commands here.",

@@ -1230,6 +1230,7 @@
   "bash.cwd_flag_hint": "--cwd не стандартный флаг. Передай каталог через параметр \"workdir\" тула bash (например, workdir=\"{workdir}\").",
   "bash.posix_workdir_hint": "workdir \"{workdir}\" — POSIX-путь, но это оболочка Windows cmd.exe. Используй Windows-путь или не указывай workdir, чтобы взять корень workspace ({baseDir}).",
   "bash.workdir_blocked": "[SECURITY BLOCKED] Рабочий каталог запрещён: {reason}. Используй каталог внутри {baseDir}.",
+  "bash.shell_unavailable": "Шелл недоступен на этой машине — любые shell-вызовы упадут одинаково. Для работы с файлами используй файловые тулы: read_file, write_file, edit_file, glob, grep, list_dir. Если без команды не обойтись — задай пользователю один короткий вопрос через question.",
   "git.truncated": "вывод усечён: {shown} из {total} строк — увеличь `lines` или сузь через `file`/`stat`",
   "git.approve_required": "[SECURITY] `{command}` — разрушительная операция. Сначала спроси пользователя: вызови approve с action=\"{command}\", затем повтори команду дословно.",
   "git.not_a_repo": "Не git-репозиторий ({path}). В workspace нет git — не повторяй git-команды здесь.",
