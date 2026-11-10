@@ -218,22 +218,20 @@ body.metallica.light .composer {
   background: #f6efe6e0;
 }
 
-/* Logo callback in the topbar: the spiked M and A become a lightning glyph. */
+/* Metallica logo in the topbar, used as a CSS mask so the chrome gradient
+ * follows the theme instead of being a fixed-color image. */
 @media (min-width: 1040px) {
   body.metallica .bar-top::after {
-    content: "M⚡LLICA";
+    content: "";
     position: absolute;
-    right: 92px;
+    right: 78px;
     top: 50%;
+    width: 126px;
+    height: 30px;
     transform: translateY(-50%);
-    color: transparent;
-    background: linear-gradient(180deg, #f4efe8 0, #a9a49e 30%, #e9e3da 52%, #4a3b35 76%, #d7cec5 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    font-weight: 900;
-    font-size: 12px;
-    letter-spacing: 0.16em;
-    text-shadow: 0 0 12px rgba(189, 102, 21, 0.32);
+    background: linear-gradient(180deg, #f6f1ea 0, #b1aba4 30%, #e9e3da 52%, #4a3b35 76%, #d7cec5 100%);
+    -webkit-mask: url("/metallica-logo.svg") center / contain no-repeat;
+    mask: url("/metallica-logo.svg") center / contain no-repeat;
     pointer-events: none;
   }
 }
@@ -274,6 +272,19 @@ body.metallica .mdl::after {
   pointer-events: none;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.58));
 }
+/* Theme picker: use the supplied Metallica logo as the swatch itself. */
+.theme-card.metallica .theme-swatch {
+  background: linear-gradient(135deg, #581f14, #bd6615);
+  -webkit-mask: url("/metallica-logo.svg") center / contain no-repeat;
+  mask: url("/metallica-logo.svg") center / contain no-repeat;
+}
+.theme-card.metallica .theme-name {
+  color: transparent;
+  background: linear-gradient(180deg, #f0ece7 12%, #a49d96 38%, #d8d4cf 54%, #433a37 82%, #d4cfc9 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
 body.metallica .wx-p {
   filter: drop-shadow(0 0 6px rgba(189, 102, 21, 0.38));
 }

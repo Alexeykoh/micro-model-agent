@@ -143,13 +143,6 @@
     <path d="M1538 900 C1565 842 1581 793 1598 739" />
   </g>
 
-  <!-- Dog tags near the first grave, a Disposable Heroes detail. -->
-  <g class="tags" opacity=".7">
-    <path d="M258 844 q48-52 92-32" fill="none" stroke="#b99269" stroke-width="4" />
-    <ellipse cx="366" cy="864" rx="12" ry="19" transform="rotate(14 366 864)" fill="#87715a" stroke="#d5c9b8" stroke-width="2" />
-    <ellipse cx="403" cy="876" rx="12" ry="19" transform="rotate(20 403 876)" fill="#87715a" stroke="#d5c9b8" stroke-width="2" />
-  </g>
-
   <!-- Depth haze: keep the artwork from competing with chat text. -->
   <rect width="1600" height="900" fill="url(#field)" opacity=".08" />
 </svg>

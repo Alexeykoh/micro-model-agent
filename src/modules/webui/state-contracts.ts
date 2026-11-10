@@ -27,6 +27,8 @@ export interface WebUiAssets {
   cssMetallica?: string;
   /** Обложка-оммаж для фона темы Metallica (`/metallica-cover.svg`). */
   metallicaCover?: string;
+  /** Логотип Metallica для хэдера темы (`/metallica-logo.svg`). */
+  metallicaLogo?: string;
   /** Пакет дополнительных тем (`/themes.css`): neon/paper/contrast + сезоны. */
   cssThemes?: string;
   js: string;

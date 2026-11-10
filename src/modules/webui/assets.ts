@@ -88,6 +88,7 @@ export function loadAssets(): WebUiAssets {
     cssGroovebox: read("groovebox.css", ""),
     cssMetallica: read("metallica.css", ""),
     metallicaCover: read("metallica-cover.svg", ""),
+    metallicaLogo: read("metallica-logo.svg", ""),
     cssThemes: read("themes.css", ""),
     js: read("app.js", "// missing"),
     setupJs: read("setup.js", "// missing"),

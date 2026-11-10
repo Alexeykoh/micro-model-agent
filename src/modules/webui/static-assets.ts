@@ -24,6 +24,7 @@ export type StaticAssetKey =
   | "cssGroovebox"
   | "cssMetallica"
   | "metallicaCover"
+  | "metallicaLogo"
   | "cssThemes"
   | "js"
   | "setupJs"
@@ -39,6 +40,7 @@ export const STATIC_ASSETS: Record<string, { type: string; key: StaticAssetKey }
   "/groovebox.css": { type: "text/css; charset=utf-8", key: "cssGroovebox" },
   "/metallica.css": { type: "text/css; charset=utf-8", key: "cssMetallica" },
   "/metallica-cover.svg": { type: "image/svg+xml; charset=utf-8", key: "metallicaCover" },
+  "/metallica-logo.svg": { type: "image/svg+xml; charset=utf-8", key: "metallicaLogo" },
   "/themes.css": { type: "text/css; charset=utf-8", key: "cssThemes" },
   "/app.js": { type: "text/javascript; charset=utf-8", key: "js" },
   "/setup.js": { type: "text/javascript; charset=utf-8", key: "setupJs" },

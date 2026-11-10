@@ -12,7 +12,7 @@ export function buildThemePicker(active: string, onPick: (id: string) => void): 
     picker.appendChild(el("div", "theme-group-label", t("web.settings.theme.group." + group)));
     const grid = el("div", "theme-grid");
     UI_THEMES.filter((opt) => opt.group === group).forEach((opt) => {
-      const card = el("button", "theme-card" + (opt.id === active ? " on" : ""));
+      const card = el("button", "theme-card theme-" + opt.id + (opt.id === active ? " on" : ""));
       card.type = "button";
       card.setAttribute("aria-pressed", opt.id === active ? "true" : "false");
       card.title = t("web.settings.theme." + opt.id);
