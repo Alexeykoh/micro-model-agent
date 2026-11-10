@@ -15,10 +15,11 @@ export function fileContentHash(
   rawPath: string,
   scope?: ToolScope,
   securityConfig?: PathSecurityConfig,
+  strict = false,
 ): { blocked: string | null; hash: string | null } {
   const check = resolveCheckPath(baseDir, rawPath, scope, securityConfig);
   if (check.blocked) return { blocked: check.blocked, hash: null };
-  const found = findExistingFile(baseDir, check.path);
+  const found = findExistingFile(baseDir, check.path, { mode: strict ? "suffix" : "fuzzy" });
   if (!found) return { blocked: null, hash: null };
   let content: Buffer;
   try {
@@ -54,7 +55,7 @@ export function checkFileModified(
   if (baseline === undefined) {
     return { passed: false, message: t("verify.file_no_baseline", { path: rawPath }) };
   }
-  const current = fileContentHash(baseDir, rawPath, scope, securityConfig);
+  const current = fileContentHash(baseDir, rawPath, scope, securityConfig, true);
   if (current.blocked) return { passed: false, message: current.blocked };
   if (current.hash === baseline) {
     return { passed: false, message: t("verify.file_not_modified", { path: rawPath }) };
