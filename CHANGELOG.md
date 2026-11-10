@@ -45,6 +45,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **bash: описание не советует недоступные тулы** — `bash` и `subagent_list`
   больше не ссылаются на `process_*` (они доступны только с тегом `shell`);
   вместо этого — `enable_tools shell`. Спека: `docs/specs/0.25.2/2026-11-10-harness-verification-defects-design.md` (E).
+- **Аудит на форс-финале** — ход, завершённый `failed_batches`/stalled/duplicate/
+  max_iters, теперь проходит детерминированный аудит плана (не только
+  LLM-критика): при незакрытых шагах `success:false`. Спека: `docs/specs/0.25.2/2026-11-10-surrender-recovery-design.md` (S6).
 
 ## [0.24.4] - 2026-11-06
 
