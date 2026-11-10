@@ -75,3 +75,4 @@
 - [observability gaps](./2026-11-05-observability-gaps-design.md)
 - [webui activity phase](./2026-11-05-webui-activity-phase-design.md)
 - [critic transparency and fixes](./2026-11-05-critic-transparency-and-fixes-design.md)
+- [monolith split](./2026-11-10-monolith-split-design.md) — полное разделение UI / runtime
