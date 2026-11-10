@@ -226,8 +226,8 @@ body.metallica.light .composer {
     position: absolute;
     right: 78px;
     top: 50%;
-    width: 126px;
-    height: 30px;
+    width: 68px;
+    height: 16px;
     transform: translateY(-50%);
     background: linear-gradient(180deg, #f6f1ea 0, #b1aba4 30%, #e9e3da 52%, #4a3b35 76%, #d7cec5 100%);
     -webkit-mask: url("/metallica-logo.svg") center / contain no-repeat;
@@ -273,12 +273,15 @@ body.metallica .mdl::after {
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.58));
 }
 /* Theme picker: use the supplied Metallica logo as the swatch itself. */
-.theme-card.metallica .theme-swatch {
+.theme-card.theme-metallica .theme-swatch {
+  width: 52px;
+  min-width: 52px;
+  height: 26px;
   background: linear-gradient(135deg, #581f14, #bd6615);
   -webkit-mask: url("/metallica-logo.svg") center / contain no-repeat;
   mask: url("/metallica-logo.svg") center / contain no-repeat;
 }
-.theme-card.metallica .theme-name {
+.theme-card.theme-metallica .theme-name {
   color: transparent;
   background: linear-gradient(180deg, #f0ece7 12%, #a49d96 38%, #d8d4cf 54%, #433a37 82%, #d4cfc9 100%);
   -webkit-background-clip: text;
