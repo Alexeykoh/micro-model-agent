@@ -67,6 +67,32 @@ workspace. Всё состояние хода, сессий и конфига ж
 - **Удалённый sandbox.** `execution.profile: sandbox` исполняется на хосте
   демона; семантика на удалённом хосте не переопределяется.
 
+### 3.1. Позиционирование: enterprise-standalone
+
+Спека описывает **автономный standalone-демон**: один workspace, один
+тенант, без каталога пользователей, control plane и Org-инфраструктуры.
+Это не enterprise: по критериям
+[`2026-11-05-mma-enterprise.md`](../ideas/2026-11-05-mma-enterprise.md) §16
+«общий токен на всех» и «политика в файле конфигурации» — ровно standalone.
+
+Задача спеки — дать **фундамент**, без которого enterprise не построить:
+один runtime-процесс, тонкие клиенты, сетевой контракт, серверный
+enforcement, сессии на диске, удалённый доступ. Поверх него следующим
+слоем идут control plane (OIDC/SCIM, RBAC/ABAC, мульти-workspace),
+подписанная политика с TTL, model gateway, credential broker, HA и админ UI
+(§13 идеи о отдельной версии).
+
+Чтобы standalone-решения не стали тупиком, контракт уже несёт
+**расширения под enterprise**:
+
+| Расширение | Сегодня (standalone) | Завтра (enterprise) |
+|---|---|---|
+| Workspace | один на демон, передаётся в запросе | мульти-workspace, выбор клиентом |
+| Identity | токен процесса + `X-Mma-Principal` (метка) | OIDC-токен, per-user `actor` в аудите |
+| Хранилище токена | файл 0600 / env | системное хранилище (keychain) как интерфейс |
+| Локальный режим | разрешён по умолчанию | запрещается политикой (`host.allowLocal`) |
+| Состояние | `RunPool`/кэши in-memory, сессии на диске | внешнее состояние, 2+ экземпляра (HA) |
+
 ## 4. Текущее состояние (AS-IS)
 
 | Поверхность | Вход | Runtime | Состояние |
@@ -121,7 +147,7 @@ plugins), шина событий, резолверы HITL-вопросов, о�
 ```ts
 interface Host {
   // ход
-  submit(text: string, opts?: { images?: string[] }): Promise<TurnHandle>;
+  submit(text: string, opts?: { images?: string[]; workspace?: string }): Promise<TurnHandle>;
   interrupt(sessionId?: string): void;
   pause(sessionId?: string): Promise<void>;
   resume(sessionId?: string): Promise<void>;
@@ -134,7 +160,7 @@ interface Host {
 
   // сессии
   listSessions(): Promise<SessionSummary[]>;
-  createSession(name?: string): Promise<SessionSummary>;
+  createSession(name?: string, opts?: { workspace?: string }): Promise<SessionSummary>;
   activateSession(id: string): Promise<void>;
   deleteSession(id: string): Promise<void>;
   getHistory(sessionId: string): Promise<SessionMessage[]>;
@@ -146,6 +172,9 @@ interface Host {
   listModels(): Promise<ModelInfo[]>;
 }
 ```
+
+`workspace` в `submit`/`createSession` — параметр, а не свойство демона:
+standalone передаёт единственный, enterprise будет передавать выбранный.
 
 Две реализации:
 
@@ -257,6 +286,9 @@ major и отвергает несовместимый (fail-fast, сущест�
   Если демон недоступен — внятная ошибка с подсказкой `mma serve`.
 - Локальный и удалённый режимы — один и тот же код UI; разница только в
   транспорте под `Host`.
+- Режим можно запретить политикой: `host.allowLocal: false` (дефолт `true`)
+  не поднимает `LocalHost` — клиент получает внятную ошибку «локальный
+  режим запрещён политикой».
 
 ## 10. Web-адаптер
 
@@ -288,10 +320,14 @@ Host-контракт для этого не нужен.
   метка. Per-user — позже (enterprise).
 - **Workspace:** один на демон, фиксируется при старте (`--project` или
   cwd). Клиент не выбирает и не создаёт; он читает `state.workspace` и
-  показывает его. Локально cwd клиента и workspace демона совпадают, для
-  удалённого это принципиально: cwd клиента не имеет значения.
+  показывает его. В запросе передаётся `workspace` (сегодня — единственный,
+  завтра — выбор из доступных). Локально cwd клиента и workspace демона
+  совпадают; для удалённого это принципиально: cwd клиента не имеет
+  значения.
 - **Токен:** `~/.mma/daemon.token` (0600) или `MMA_DAEMON_TOKEN`. Смена
-  токена требует рестарта демона (as-is, документируется).
+  токена требует рестарта демона (as-is, документируется). Хранилище
+  токена — интерфейс с реализациями file и keychain; keychain включается
+  конфигом, чтобы не держать секрет в файле.
 
 ## 13. Локаль
 
@@ -366,6 +402,9 @@ Host-контракт для этого не нужен.
   обойти.
 - **INV-S10. Локаль — свойство клиента.** `X-Mma-Locale` на каждый запрос;
   модельные промпты не локализуются.
+- **INV-S11. Контракт расширяем под enterprise.** Workspace, identity и
+  хранилище токена — параметры/интерфейсы, а не зашитые в контракт
+  догмы; переход к control plane не ломает `/v1/host`.
 
 ## 18. Риски
 
@@ -385,6 +424,9 @@ Host-контракт для этого не нужен.
    словарь веб-событий и существующий `Renderer`.
 6. **Сломанный `deploy/Dockerfile.service`.** `CMD` указывает на
    `src/index.ts` вместо CLI-входа. Митигация: исправить в W6.
+7. **HA и мульти-инстанс.** `RunPool`, очереди и кэши — in-memory; один
+   демон не HA. Митигация: сессии уже на диске, внешнее состояние и
+   реплики — следующий слой (enterprise production, §3.1).
 
 ## 19. Критерии готовности
 
