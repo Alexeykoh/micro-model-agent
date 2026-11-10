@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Fixed
+
+- **Актуальные данные провайдера при переключении провайдера/модели** (`mma`, `mma web`): контекст, capabilities и reasoning перепрашиваются у нового бэкенда вместо наследования прошлого.
+  - Контекст: проба читает `limit.context` из OpenAI-compat `/models` (OpenCode Zen/Go) — окно opencode-go больше не «не определяется» для моделей вне каталога models.dev.
+  - `reconfigure`/`setProvider` перепрашивают capabilities (LM Studio/llama.cpp) и reasoning-поддержку при смене идентичности; при пустом ответе — сброс к пресету, а не чужие данные. `probePassed` сбрасывается до резолва новой пробы; раннеры читают пробу из общего бокса.
+  - CLI `mma provider use` восстанавливает запомненную модель провайдера; `toConfig()` больше не теряет `provider.models`.
+  - UI-селектор reasoning показывает тот механизм, что реально применяется (`rememberReasoningMechanism` на каждом reconfigure).
+  - Спека: `docs/specs/2026-11-10-provider-switch-probes-design.md`.
+
 ## [0.24.4] - 2026-11-06
 
 ### Added

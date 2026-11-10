@@ -5,9 +5,8 @@
  *
  * Порядок: LM Studio native → Ollama native → llama.cpp `/props` →
  * OpenAI-compat `/models`-метаданные (`context_length`, vLLM `max_model_len`,
- * OpenRouter `top_provider.context_length`) → каталог models.dev (последний
- * шанс, только для OpenCode Zen/Go, чей `/models` отдаёт голые id — проверено
- * вживую: `{id, object, created, owned_by}` без context-полей).
+ * OpenRouter `top_provider.context_length`, OpenCode Zen/Go `limit.context`)
+ * → каталог models.dev (последний шанс, когда `/models` не сообщил окно).
  *
  * Null, если окно никто не сообщил — вызывающий хранит настроенный
  * `contextWindow` (fail-open).

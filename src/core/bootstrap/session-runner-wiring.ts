@@ -9,7 +9,8 @@
 import { join } from "path";
 import { Agent } from "../agent";
 import type { AgentDeps } from "../agent";
-import type { AppConfig, ReasoningStrategy, ModelCapabilities } from "../../config/types";
+import type { AppConfig, ReasoningStrategy } from "../../config/types";
+import type { ProviderProbesBox } from "../agent/deps";
 import type { Logger } from "../../logger/app-logger";
 import type { LLMProvider } from "../../llm/provider";
 import type { ProviderManager } from "../../modules/providers/manager";
@@ -51,7 +52,6 @@ export interface SessionRunnerTemplate {
   lazyPromptBlocks: () => Promise<PromptBlock[]>;
   memoryStore: MemoryStore;
   moduleRegistry: ModuleRegistry;
-  reasoningProbePromise: Promise<boolean>;
   reasoningStrategy: ReasoningStrategy;
   contextProbePromise: Promise<ContextProbeResult | null>;
   /** Живой реестр main-агента (клон на спавн; question/approve уже внутри). */
@@ -66,8 +66,9 @@ export interface SessionRunnerTemplate {
   indexerModule: { getSystemPromptBlock(): PromptBlock | null };
   /** Шаблон активных тегов (раннер берёт копию — enable_tools per-сессия). */
   activeToolTags: string[];
-  /** Живой capabilities-пробник провайдера (та же ссылка, что у main). */
-  capabilitiesProbeRef: { probe?: ModelCapabilities };
+  /** Живой бокс проб провайдера (та же ссылка, что у main): capabilities +
+   *  reasoning-проба — после свитча читается актуальное, а не снимок. */
+  capabilitiesProbeRef: ProviderProbesBox;
   /** Был ли включён --context-log (раннер пишет свой context.diff). */
   contextLogEnabled: boolean;
 }
@@ -119,13 +120,12 @@ interface AssembleRunnerAgentInput {
   memoryStore: MemoryStore;
   moduleRegistry: ModuleRegistry;
   contextLogger: ContextLogger | undefined;
-  reasoningProbePromise: Promise<boolean>;
   reasoningStrategy: ReasoningStrategy;
   runnerExec: ExecutionModule;
   toolCtx: ToolContext;
   contextProbePromise: Promise<ContextProbeResult | null>;
   registry: ToolRegistry;
-  capabilitiesProbeRef: { probe?: ModelCapabilities };
+  capabilitiesProbeRef: ProviderProbesBox;
 }
 
 /**
@@ -154,7 +154,6 @@ export function assembleRunnerAgent(input: AssembleRunnerAgentInput): Agent {
     memoryStore,
     moduleRegistry,
     contextLogger,
-    reasoningProbePromise,
     reasoningStrategy,
     runnerExec,
     toolCtx,
@@ -185,7 +184,9 @@ export function assembleRunnerAgent(input: AssembleRunnerAgentInput): Agent {
     moduleRegistry,
     exitOnComplete: false,
     contextLogger,
-    reasoningProbe: () => reasoningProbePromise,
+    // Живая reasoning-проба из ОБЩЕГО бокса (INV-R2): после свитча провайдера
+    // новый раннер читает актуальный вердикт, а не снимок bootstrap.
+    reasoningProbe: () => capabilitiesProbeRef.reasoningProbe?.() ?? Promise.resolve(false),
     reasoningStrategy,
     capabilitiesProbeRef,
     planSummary: () => runnerExec.getPlanSummary(),

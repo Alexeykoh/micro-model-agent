@@ -225,7 +225,6 @@ export async function bootstrap(
       lazyPromptBlocks: modules.lazyPromptBlocks,
       memoryStore: modules.memoryStore,
       moduleRegistry: modules.moduleRegistry,
-      reasoningProbePromise: provider.reasoningProbePromise,
       reasoningStrategy: provider.reasoningStrategy,
       contextProbePromise: provider.contextProbePromise,
       toolRegistry: workspace.toolRegistry,

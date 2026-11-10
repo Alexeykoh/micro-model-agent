@@ -168,6 +168,9 @@ export class ProviderManager {
       type: active.type,
       baseUrl: active.baseUrl,
       apiKey: active.apiKey,
+      // Память моделей провайдеров (INV-19): hot-swap пересоздаёт
+      // `config.provider`, и без этого поля она молча терялась на диске.
+      models: this.providerConfig.models,
     };
   }
 

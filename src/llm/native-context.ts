@@ -24,8 +24,9 @@ function asPositiveInt(v: unknown): number | null {
 
 /**
  * Первое положительное среди известных context-полей объекта. OpenRouter
- * кладёт per-endpoint значение в `top_provider.context_length`, поэтому один
- * уровень вложенности тоже покрыт.
+ * кладёт per-endpoint значение в `top_provider.context_length`, а OpenCode
+ * Zen/Go — в `limit.context` (проверено вживую 2026-11-10: `/models` отдаёт
+ * `limit: {context, output}`), поэтому обе вложенности покрыты.
  */
 function pickContextField(obj: Record<string, unknown>): number | null {
   for (const k of CONTEXT_KEYS) {
@@ -38,6 +39,11 @@ function pickContextField(obj: Record<string, unknown>): number | null {
       const n = asPositiveInt((top as Record<string, unknown>)[k]);
       if (n !== null) return n;
     }
+  }
+  const limit = obj.limit;
+  if (limit && typeof limit === "object") {
+    const n = asPositiveInt((limit as Record<string, unknown>).context);
+    if (n !== null) return n;
   }
   return null;
 }
@@ -212,8 +218,9 @@ export async function probeOpenAICompatModels(
 }
 
 /**
- * Лукап каталога models.dev — последний шанс для OpenCode Zen/Go. Гейт на
- * Zen-URL/тип: локальные бэкенды ради этого в сеть не ходят.
+ * Лукап каталога models.dev — последний шанс, когда `/models` не сообщил окно
+ * (старые ответы Zen/Go были без context-полей; гейт на Zen-URL/тип остаётся,
+ * чтобы локальные бэкенды ради каталога не ходили в сеть).
  */
 export async function probeModelsDev(
   baseUrl: string,

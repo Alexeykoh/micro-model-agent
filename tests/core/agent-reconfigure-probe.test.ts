@@ -33,6 +33,13 @@ async function startLmStudioStub(): Promise<string> {
               key: "new-model",
               max_context_length: 131072,
               loaded_instances: [{ config: { context_length: 65536 } }],
+              // Discovery НОВОЙ модели при свитче (INV-R2): перепроба обязана
+              // заменить пробу прошлой пары, а не совпасть с ней по инъекции.
+              capabilities: {
+                vision: false,
+                trained_for_tool_use: true,
+                reasoning: { allowed_options: ["off", "low", "high", "on"], default: "on" },
+              },
             },
           ],
         });
@@ -114,6 +121,8 @@ describe("agent reconfigure probe", () => {
         probe: {
           reasoningStrategy: "openai-effort" as const,
           reasoningOff: true,
+          // Проба ПРОШЛОЙ пары: после свитча модель перепрашивается у бэкенда,
+          // и инъекция не должна переживать перепробу.
           reasoningLevels: ["low", "medium", "xhigh"],
         },
       },
@@ -129,7 +138,8 @@ describe("agent reconfigure probe", () => {
       reasoningLevels?: string[];
     };
     expect(provider.reasoningStrategy).toBe("openai-effort");
-    expect(provider.reasoningLevels).toEqual(["low", "medium", "xhigh"]);
+    // Уровни — из перепробы НОВОЙ модели (off/low/high/on), не из инъекции.
+    expect(provider.reasoningLevels).toEqual(["low", "high"]);
   });
 
   it("skips the probe when only an unrelated key changed", async () => {

@@ -24,7 +24,8 @@ import type { ProviderManager } from "../../modules/providers/manager";
 import type { LLMProvider } from "../../llm/provider";
 import { UserProfile } from "../../modules/user-profile/profile";
 import { t } from "../../i18n/index";
-import type { AppConfig, ModelCapabilities, ReasoningStrategy } from "../../config/types";
+import type { AppConfig, ReasoningStrategy } from "../../config/types";
+import type { ProviderProbesBox } from "../agent/deps";
 import type { Logger } from "../../logger/app-logger";
 import type { SessionManager } from "../../modules/session/index";
 
@@ -38,7 +39,7 @@ export interface ProviderPhase {
   /** Загруженный и сохранённый профиль пользователя (для systemInfo). */
   profile: UserProfile;
   /** Живой источник capabilities модели для тулов (заполняется native-probe фоном). */
-  capabilitiesRef: { probe?: ModelCapabilities };
+  capabilitiesRef: ProviderProbesBox;
   /** Значение contextWindow на старте (для детекта ручного переопределения). */
   probeConfiguredAtStart: number;
   /** Фоновая проба реально отдаваемого контекста (null = fail-open). */
@@ -110,7 +111,7 @@ export async function setupProviderPhase(
   // асинхронно и записывает сюда, не блокируя старт. Геттер на toolCtx
   // резолвит итог при каждом обращении, поэтому смена модели/провайдера
   // через reconfigure видна тулам без пересборки контекста.
-  const capabilitiesRef: { probe?: ModelCapabilities } = {};
+  const capabilitiesRef: ProviderProbesBox = {};
   // Native discovery ДО сборки: механизм reasoning нужен экземпляру сразу (INV-R2/R6).
   const nativeProbe = await probeNativeCapabilities(
     probeEndpoint.baseUrl,
@@ -252,6 +253,12 @@ export async function setupProviderPhase(
       }
     })();
   }
+
+  // Проба живёт в общем боксе (INV-R2): и main-агент, и раннеры/субагенты
+  // читают ОДНО живое значение, а `restartReasoningProbe` при свитче
+  // переключает его на новую пару — новый раннер не наследует вердикт
+  // прошлого бэкенда.
+  capabilitiesRef.reasoningProbe = () => reasoningProbePromise;
 
   return {
     probeEndpoint,

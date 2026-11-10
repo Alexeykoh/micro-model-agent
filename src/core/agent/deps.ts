@@ -21,6 +21,17 @@ import type { Diagnostic } from "../../output/types";
 /** Сток диагностик fail-open (INV-15). */
 export type DiagnosticSink = (diag: Diagnostic) => void;
 
+/**
+ * Общий бокс ЖИВЫХ проб провайдера (INV-R2): capabilities-discovery + ленивая
+ * reasoning-проба. Один объект на main-агента, раннеры и субагентов — иначе
+ * свитч провайдера обновляет данные только у того, кто их перепробил.
+ */
+export interface ProviderProbesBox {
+  probe?: import("../../config/types").ModelCapabilities;
+  /** Проба поддержки reasoning для ТЕКУЩЕЙ пары провайдер+модель (B2). */
+  reasoningProbe?: () => Promise<boolean>;
+}
+
 /** Зависимости агента: конфиг, провайдер, тулы, контекст, логгеры, швы. */
 export interface AgentDeps {
   config: AppConfig;
@@ -84,8 +95,9 @@ export interface AgentDeps {
    * Живая проба возможностей (INV-R2): пересборка провайдера при `reconfigure`
    * и смене модели обязана видеть те же discovery-данные, что и bootstrap,
    * иначе экземпляр откатывается к пресету и молча теряет `reasoning_effort`.
+   * Общий бокс: его обновляет основной агент, читают раннеры/субагенты.
    */
-  capabilitiesProbeRef?: { probe?: import("../../config/types").ModelCapabilities };
+  capabilitiesProbeRef?: ProviderProbesBox;
   /** Каталог конфига — для хинта «подними окно контекста» в варнингах. */
   configDir?: string;
   /**
