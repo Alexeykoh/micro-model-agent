@@ -36,14 +36,22 @@ export class StuckDetector extends StuckTracker {
     this.observations.recordBashOutput(command, output);
   }
 
-  /** Исход одной bash-попытки (успех/фейл) — для детекции флейлинга. */
-  recordBashAttempt(success: boolean): void {
-    this.observations.recordBashAttempt(success);
+  /**
+   * Исход одной bash-попытки (успех/фейл) — для детекции флейлинга.
+   * `shellUnavailable` — из классификатора S1 (`errorMeta` тула), не парсингом.
+   */
+  recordBashAttempt(success: boolean, shellUnavailable = false): void {
+    this.observations.recordBashAttempt(success, shellUnavailable);
   }
 
   /** True, если свежие bash-попытки в массе фейлятся — модель флейлит. */
   hasBashFlailing(): boolean {
     return this.observations.hasBashFlailing();
+  }
+
+  /** True, если шелл недоступен подряд достаточно раз — смени класс инструментов. */
+  hasShellUnavailable(): boolean {
+    return this.observations.hasShellUnavailable();
   }
 
   /** Последняя bash-команда. */

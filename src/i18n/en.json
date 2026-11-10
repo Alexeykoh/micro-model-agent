@@ -1035,6 +1035,8 @@
   "exec.consecutive_failures_recovery": "{count} consecutive tool failures. Create files directly via write_file instead of terminal commands. Check that dependencies are installed (npm install). Do not run build/tests until all files are created.",
   "exec.bash_flailing_recovery": "bash failed in {fails} of the last {window} attempts. Stop using shell commands for file operations on this machine — they do not work. Use the dedicated tools instead: read_file (the header shows line counts), write_file, edit_file, file_info (file size), glob/grep for search",
   "exec.bash_flailing": "bash failed in {fails} of the last {window} attempts.",
+  "exec.shell_unavailable": "The shell is unavailable on this machine — every shell call fails to start.",
+  "exec.shell_unavailable_recovery": "The shell is unavailable on this machine — do not waste bash calls. For file work use read_file/glob/grep; write_file/edit_file to change files. If a command is truly needed, ask the user once with the question tool.",
   "exec.consecutive_failures": "{count} consecutive tool failures.",
   "exec.honest_stop": "STOP retrying. {count} consecutive tool batches failed or were blocked with no successful call in between — more variants of the same action will not help. Do NOT try another command, flag, or workaround for this. Write your final text answer NOW: state plainly what was done, what could NOT be done or verified, and why. Do NOT paste output you did not actually receive from a tool.",
   "exec.tool_disabled": "The \"{tool}\" tool failed repeatedly and cannot succeed in this environment — it is now DISABLED for this turn. Do NOT call it again. Use a different tool or answer with what you already have.",

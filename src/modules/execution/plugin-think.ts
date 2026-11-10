@@ -93,6 +93,7 @@ export function runBeforeThink(deps: ExecutionPluginDeps, ctx: ExecutionThinkCon
   }
   if (
     deps.stuckDetector.isStuck() ||
+    deps.stuckDetector.hasShellUnavailable() ||
     deps.stuckDetector.hasRepetitiveToolCalls() ||
     deps.stuckDetector.hasBashFlailing() ||
     deps.stuckDetector.hasConsecutiveFailures() ||

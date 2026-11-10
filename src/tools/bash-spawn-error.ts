@@ -13,6 +13,13 @@ import { t } from "../i18n/index";
 
 export type SpawnErrorClass = "shell" | "workdir" | "unknown";
 
+/**
+ * Машиночитаемый код результата тула: «шелл недоступен». Несёт
+ * `ToolResult.errorMeta`, чтобы смежные модули (stuck-детектор) узнали причину
+ * без парсинга строк вывода (S2).
+ */
+export const SHELL_UNAVAILABLE_ERROR_CODE = "bash_shell_unavailable";
+
 /** Маркеры «процесс вообще не стартовал» (в отличие от ненулевого exit). */
 const ENOENT_MARKERS = ["enoent", "no such file", "uv_spawn"];
 
