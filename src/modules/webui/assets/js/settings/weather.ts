@@ -1,11 +1,12 @@
-// Falling weather for seasonal themes: a thin fixed overlay of emoji particles
-// with randomized size, lane, speed and drift. One CSS animation per particle
-// on `transform`/`opacity` only, so the main thread stays free and the effect
-// is easy to disable under `prefers-reduced-motion`.
+// Falling weather for themes that ask for it: a thin fixed overlay of emoji
+// particles with randomized size, lane, speed and drift. One CSS animation per
+// particle on `transform`/`opacity` only, so the main thread stays free and the
+// effect is easy to disable under `prefers-reduced-motion`.
 const LAYER_ID = "themeWeather";
 const PARTICLES: Record<string, { chars: string[]; count: number; size: [number, number] }> = {
   winter: { chars: ["❄️", "❅", "❆"], count: 28, size: [10, 20] },
   autumn: { chars: ["🍁", "🍂", "🍃"], count: 22, size: [14, 26] },
+  metallica: { chars: ["⚡", "🎸", "💀", "🤘"], count: 24, size: [12, 28] },
 };
 
 let current = "";

@@ -26,7 +26,7 @@ describe("webui theme state", () => {
   });
 
   it("validates ids against the picker catalog", () => {
-    expect(THEME_SKIN_IDS).toHaveLength(10);
+    expect(THEME_SKIN_IDS).toHaveLength(11);
     expect(isThemeSkin("flat")).toBe(true);
     expect(isThemeSkin("nope")).toBe(false);
     expect(isThemeMode("auto")).toBe(true);
