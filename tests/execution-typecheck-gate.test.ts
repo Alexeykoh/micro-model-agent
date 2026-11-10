@@ -134,7 +134,7 @@ describe("plan update typecheck gate (integration)", () => {
   it("blocks marking done while the step's file is still broken", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};
-    await createTestPlan(execModule, "T", ["Create src/app.tsx with a component"]);
+    await createTestPlan(execModule, "T", ["Create src/app.tsx"]);
     writeTestFile(tmpDir, "src/app.tsx", "export const App = () => null;\n");
 
     failures().set("src/app.tsx", "src/app.tsx(1,1): error TS1005: Expected ';'");
@@ -147,7 +147,7 @@ describe("plan update typecheck gate (integration)", () => {
   it("allows done once the failure is cleared (clean write)", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};
-    await createTestPlan(execModule, "T", ["Create src/app.tsx with a component"]);
+    await createTestPlan(execModule, "T", ["Create src/app.tsx"]);
     writeTestFile(tmpDir, "src/app.tsx", "export const App = () => null;\n");
 
     failures().set("src/app.tsx", "src/app.tsx(1,1): error TS1005");
@@ -161,7 +161,7 @@ describe("plan update typecheck gate (integration)", () => {
   it("allows done when the failure is in an unrelated file", async () => {
     const tool = planTool(execModule);
     const ctx: any = {};
-    await createTestPlan(execModule, "T", ["Create src/app.tsx with a component"]);
+    await createTestPlan(execModule, "T", ["Create src/app.tsx"]);
     writeTestFile(tmpDir, "src/app.tsx", "export const App = () => null;\n");
 
     failures().set("src/other.ts", "src/other.ts(1,1): error TS1: x");

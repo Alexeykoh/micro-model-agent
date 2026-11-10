@@ -38,6 +38,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   с `passed`: при неподтверждённых шагах сообщение перечисляет причины, а не
   печатает «[✓] Задача выполнена»; auto-advance не закрывает `manual:`-шаг без
   заметки. Спека: `docs/specs/0.25.2/2026-11-10-harness-verification-defects-design.md` (C).
+- **План: UI-шаг не доказывается `file-exists:`** — требование поведенческого
+  доказательства (волна 21) распространяется и на файловые контракты:
+  `file-exists:` / `file-modified:` на шаге, меняющем UI, блокируют `done`.
+  Спека: `docs/specs/0.25.2/2026-11-10-harness-verification-defects-design.md` (F).
 
 ## [0.24.4] - 2026-11-06
 
