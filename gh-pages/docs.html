@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru" class="console">
+<html lang="ru" class="console docs">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -11,8 +11,8 @@
     />
     <link rel="canonical" href="https://alexeykoh.github.io/micro-model-agent/docs.html" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <meta name="theme-color" content="#0f1013" media="(prefers-color-scheme: dark)" />
-    <meta name="theme-color" content="#f4f1ea" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a0a0b" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f7f7f4" media="(prefers-color-scheme: light)" />
     <meta property="og:type" content="article" />
     <meta property="og:title" content="Документация — MMA" />
     <meta
@@ -26,67 +26,39 @@
       (function () {
         try {
           var th = localStorage.getItem("mma-lp-theme");
-          if (
-            th === "light" ||
-            (th !== "dark" && matchMedia("(prefers-color-scheme: light)").matches)
-          ) {
-            document.documentElement.classList.add("light");
-          }
+          if (th === "light") document.documentElement.classList.add("light");
         } catch (e) {}
       })();
     </script>
-    <link rel="stylesheet" href="docs.css" />
+    <link rel="stylesheet" href="shared.css" />
     <link rel="stylesheet" href="console.css" />
+    <link rel="stylesheet" href="docs.css" />
     <link rel="stylesheet" href="mascot.css" />
   </head>
   <body>
-    <header class="top">
-      <button
-        class="iconbtn menu-btn"
-        id="menuBtn"
-        aria-label="Разделы документации"
-        aria-controls="side"
-        aria-expanded="false"
-      >
-        ☰
-      </button>
-      <a class="brand" href="index.html"
-        ><span class="mdl sm c-recon track" id="docsFace" aria-hidden="true"></span
-        ><span>MMA <span class="sub">docs</span></span></a
-      >
-      <div class="spacer"></div>
-      <div class="search desktop-search">
-        <input
-          id="docSearch"
-          type="search"
-          autocomplete="off"
-          spellcheck="false"
-          placeholder="Поиск по документации…"
-          aria-label="Поиск по документации"
-          role="combobox"
-          aria-expanded="false"
-          aria-controls="docResults"
-        />
-        <kbd>/</kbd>
-        <div
-          class="search-results"
-          id="docResults"
-          role="listbox"
-          aria-label="Результаты поиска"
-          hidden
-        ></div>
-      </div>
-      <button class="iconbtn" id="themeBtn" aria-label="Сменить тему" title="Светлая / тёмная тема">
-        ◐
-      </button>
-      <a class="iconbtn" href="index.html">← на сайт</a>
-    </header>
+    <a class="skip" href="#main">К содержанию</a>
+
+    <button
+      class="burger"
+      id="burgerBtn"
+      type="button"
+      aria-label="Разделы документации"
+      aria-expanded="false"
+      aria-controls="side"
+    >
+      <span aria-hidden="true"></span><span aria-hidden="true"></span
+      ><span aria-hidden="true"></span>
+    </button>
 
     <div class="layout">
-      <aside class="side" id="side">
-        <div class="side-search">
+      <aside class="side" id="side" aria-label="Разделы документации">
+        <a class="brand" href="index.html">
+          <span class="mdl sm c-recon track" id="brandFace" aria-hidden="true"></span>
+          <span class="brand-txt">MMA <span class="sub">docs</span></span>
+        </a>
+        <div class="search" id="sideSearch">
           <input
-            id="sideSearch"
+            id="docSearch"
             type="search"
             autocomplete="off"
             spellcheck="false"
@@ -94,108 +66,134 @@
             aria-label="Поиск по документации"
             role="combobox"
             aria-expanded="false"
-            aria-controls="sideResults"
+            aria-controls="docResults"
           />
           <div
             class="search-results"
-            id="sideResults"
+            id="docResults"
             role="listbox"
             aria-label="Результаты поиска"
             hidden
           ></div>
         </div>
-        <h4>Начало</h4>
-        <a href="#overview">Обзор</a>
-        <a href="#install">Установка</a>
-        <a href="#quickstart">Быстрый старт</a>
-        <a href="#setup">Первый запуск и провайдеры</a>
-        <a href="#update">Обновление и удаление</a>
+        <nav class="side-links">
+          <h4 class="side-head">Начало</h4>
+          <a href="#overview">Обзор</a>
+          <a href="#install">Установка</a>
+          <a href="#quickstart">Быстрый старт</a>
+          <a href="#setup">Первый запуск и провайдеры</a>
+          <a href="#update">Обновление и удаление</a>
 
-        <h4>Работа с агентом</h4>
-        <a href="#cli">CLI: однократный запуск</a>
-        <a href="#repl">REPL и slash-команды</a>
-        <a href="#web">Web UI</a>
-        <a href="#sessions">Сессии</a>
-        <a href="#context">Контекст и компакция</a>
-        <a href="#planning">Планирование и гарантии</a>
-        <a href="#subagents">Субагенты</a>
-        <a href="#memory">Память, скиллы, AGENTS.md</a>
+          <h4 class="side-head">Работа с агентом</h4>
+          <a href="#cli">CLI: однократный запуск</a>
+          <a href="#repl">REPL и slash-команды</a>
+          <a href="#web">Web UI</a>
+          <a href="#sessions">Сессии</a>
+          <a href="#context">Контекст и компакция</a>
+          <a href="#planning">Планирование и гарантии</a>
+          <a href="#subagents">Субагенты</a>
+          <a href="#memory">Память, скиллы, AGENTS.md</a>
 
-        <h4>Возможности</h4>
-        <a href="#tools">Инструменты</a>
-        <a href="#web-tools">Поиск и веб</a>
-        <a href="#browser">Браузер</a>
-        <a href="#mcp">MCP</a>
-        <a href="#plugins">Плагины</a>
-        <a href="#pipelines">Пайплайны</a>
-        <a href="#lsp">LSP</a>
-        <a href="#map">Карта проекта</a>
-        <a href="#certification">Сертификация моделей</a>
+          <h4 class="side-head">Возможности</h4>
+          <a href="#tools">Инструменты</a>
+          <a href="#web-tools">Поиск и веб</a>
+          <a href="#browser">Браузер</a>
+          <a href="#mcp">MCP</a>
+          <a href="#plugins">Плагины</a>
+          <a href="#pipelines">Пайплайны</a>
+          <a href="#lsp">LSP</a>
+          <a href="#map">Карта проекта</a>
+          <a href="#certification">Сертификация моделей</a>
+          <a href="#images">Изображения и документы</a>
 
-        <h4>Безопасность</h4>
-        <a href="#security">Политики и защита</a>
-        <a href="#data-policy">DLP и данные</a>
+          <h4 class="side-head">Безопасность</h4>
+          <a href="#security">Политики и защита</a>
+          <a href="#data-policy">DLP и данные</a>
 
-        <h4>Интеграция</h4>
-        <a href="#service">Service API</a>
-        <a href="#config">Конфигурация</a>
-        <a href="#env">Переменные окружения</a>
-        <a href="#data-layout">Файлы и каталоги</a>
+          <h4 class="side-head">Интеграция</h4>
+          <a href="#service">Service API</a>
+          <a href="#config">Конфигурация</a>
+          <a href="#env">Переменные окружения</a>
+          <a href="#data-layout">Файлы и каталоги</a>
 
-        <h4>Разработка</h4>
-        <a href="#architecture">Архитектура</a>
-        <a href="#code-map">Карта кода</a>
-        <a href="#tests">Тесты и quality</a>
-        <a href="#release">Релиз</a>
-        <a href="#contributing">Участие</a>
+          <h4 class="side-head">Эксплуатация</h4>
+          <a href="#cost">Стоимость и кеш</a>
+          <a href="#observability">Наблюдаемость и диагностика</a>
+          <a href="#doctor">Диагностика</a>
+          <a href="#troubleshooting">Частые проблемы</a>
+          <a href="#faq">FAQ</a>
 
-        <h4>Помощь</h4>
-        <a href="#doctor">Диагностика</a>
-        <a href="#troubleshooting">Частые проблемы</a>
-        <a href="#faq">FAQ</a>
-        <p class="meta">MMA <span id="docsVer">v0.24.0</span> · beta<br />MIT License</p>
+          <h4 class="side-head">Разработка</h4>
+          <a href="#architecture">Архитектура</a>
+          <a href="#code-map">Карта кода</a>
+          <a href="#tests">Тесты и quality</a>
+          <a href="#release">Релиз</a>
+          <a href="#contributing">Участие</a>
+
+          <h4 class="side-head">Разное</h4>
+          <a href="#mascot">MMART — 25 состояний</a>
+        </nav>
+        <p class="side-meta">MMA <span id="docsVer">v0.25.1</span> · beta · MIT</p>
+        <div class="side-actions">
+          <button class="iconbtn" id="themeBtn" type="button" aria-label="Сменить тему" aria-pressed="false">
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <circle cx="12" cy="12" r="4.2" />
+              <path
+                d="M12 2v2.4M12 19.6V22M2 12h2.4M19.6 12H22M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M19.1 4.9l-1.7 1.7M6.6 17.4l-1.7 1.7"
+              />
+            </svg>
+          </button>
+          <a class="iconbtn" href="index.html" aria-label="На главную">← index</a>
+        </div>
       </aside>
-      <div class="scrim" id="scrim" hidden></div>
 
-      <main>
+      <main id="main">
         <article>
           <h1>Документация MMA</h1>
           <p class="lead">
-            Micro Models Agent — универсальный harness для небольших языковых моделей (9B, 32K–64K
-            контекста), который держит их на задаче: бюджет контекста, структурная компакция,
-            проверяемое планирование и настоящие гарантии исполнения. Не только код: разработка,
-            веб-исследование, API, умный дом, ассистент.
+            Micro Models Agent — харнес для небольших языковых моделей (9B, 32K–64K контекста),
+            который держит их на задаче: бюджет контекста, структурная компакция, проверяемое
+            планирование и настоящие гарантии исполнения. Не только код: разработка, веб-исследование,
+            API, умный дом, ассистент.
           </p>
           <p class="sub">
-            Это руководство покрывает полный цикл: установка → настройка → повседневная работа →
-            интеграции → безопасность → разработка → эксплуатация.
+            Установка → настройка → повседневная работа → инструменты → безопасность → интеграции →
+            эксплуатация → разработка.
           </p>
 
           <h2 id="overview">Обзор</h2>
           <p>
             MMA — это CLI-агент с единым циклом исполнения
-            <code>INIT → THINK → OBSERVE → VERIFY → OUTPUT → ERROR</code>. Один и тот же агент
-            доступен через три поверхности:
+            <code>INIT → THINK → OBSERVE → VERIFY → OUTPUT → ERROR</code>. Развилки нет: все гейты
+            (проверка утверждений, критик, аудит) стоят внутри петли. Один и тот же агент доступен
+            через три поверхности:
           </p>
-          <div class="cards">
-            <div class="card">
-              <b>Терминал</b>
-              <p><code>mma</code> — REPL и однократный запуск, markdown→ANSI, без TUI.</p>
+          <dl class="rows">
+            <div class="row">
+              <dt>Терминал</dt>
+              <dd><code>mma</code> — REPL и однократный запуск, markdown→ANSI, без TUI.</dd>
             </div>
-            <div class="card">
-              <b>Браузер</b>
-              <p><code>mma web</code> — SSE + REST, вкладки, файлы, Trace, MMART.</p>
+            <div class="row">
+              <dt>Браузер</dt>
+              <dd><code>mma web</code> — SSE + REST, вкладки, файлы, Trace, MMART.</dd>
             </div>
-            <div class="card">
-              <b>HTTP-сервис</b>
-              <p><code>mma serve</code> — Agent Service API v1, задачи, SSE, webhooks.</p>
+            <div class="row">
+              <dt>HTTP-сервис</dt>
+              <dd><code>mma serve</code> — Agent Service API v1, задачи, SSE, webhooks.</dd>
             </div>
-          </div>
-          <h3>Что важно знать сразу</h3>
-          <ul>
+          </dl>
+          <ul class="feat">
             <li>
-              <b>Провайдер</b> — любой OpenAI-совместимый сервер: LM Studio, Ollama, vLLM,
-              llama.cpp, cloud-провайдеры. Работает офлайн, если модель локальная.
+              <b>Провайдер</b> — любой OpenAI-совместимый сервер: LM Studio, Ollama, vLLM, llama.cpp,
+              облачные. Работает офлайн, если модель локальная.
             </li>
             <li>
               <b>Контекст</b> — окно задаётся автоматически по провайдеру или вручную; при
@@ -214,7 +212,7 @@
 
           <h2 id="install">Установка</h2>
           <p>
-            Релиз самодостаточный: внутри Bun runtime, собранный агент, production-зависимости и
+            Релиз самодостаточен: внутри Bun runtime, собранный агент, production-зависимости и
             веб-ассеты. Node.js/npm/Bun ставить не нужно.
           </p>
           <h3>Windows (PowerShell 5.1+)</h3>
@@ -222,7 +220,7 @@
           <h3>macOS / Linux</h3>
           <pre><code>curl -fsSL https://raw.githubusercontent.com/Alexeykoh/micro-model-agent/master/scripts/install.sh | bash</code></pre>
           <p>Откройте новый терминал и запустите <code>mma setup</code>, затем <code>mma</code>.</p>
-          <h3 id="manual-install">Ручная установка (без скрипта)</h3>
+          <h3>Ручная установка (без скрипта)</h3>
           <p>
             Нужна, когда однострочник блокируется: корпоративный прокси с подменой сертификата, нет
             доступа к shell или файлы нужны в своём каталоге. Архивы — те же
@@ -251,9 +249,7 @@ shasum -a 256 mma-mac-arm64.tar.gz     # или: sha256sum
 # Windows
 Get-FileHash -Algorithm SHA256 "$env:USERPROFILE\Downloads\mma-win-x64.tar.gz"</code></pre>
           <p><b>3. Распакуйте и запустите.</b> Права администратора не нужны.</p>
-          <p>
-            <b>Windows (PowerShell 5.1+, <code>tar</code> есть в Windows 10+):</b>
-          </p>
+          <p><b>Windows (PowerShell 5.1+, <code>tar</code> есть в Windows 10+):</b></p>
           <pre><code>$dst = "$env:USERPROFILE\mma"
 New-Item -ItemType Directory -Force $dst | Out-Null
 tar -xzf "$env:USERPROFILE\Downloads\mma-win-x64.tar.gz" -C $dst
@@ -267,9 +263,7 @@ tar -xzf ~/Downloads/mma-mac-arm64.tar.gz -C ~/mma
 tar -xzf ~/Downloads/mma-linux-x64.tar.gz -C ~/mma
 chmod +x ~/mma/runtime/bun
 ~/mma/runtime/bun ~/mma/app/main.js --version</code></pre>
-          <p>
-            <b>4. Положите <code>mma</code> в PATH</b> (необязательно):
-          </p>
+          <p><b>4. Положите <code>mma</code> в PATH</b> (необязательно):</p>
           <pre><code># Windows: создать обёртку и добавить каталог в пользовательский PATH
 $bin = "$env:USERPROFILE\.local\bin"
 New-Item -ItemType Directory -Force $bin | Out-Null
@@ -277,7 +271,7 @@ Set-Content "$bin\mma.cmd" -Encoding ASCII -Value "@echo off`r`n`"$env:USERPROFI
 
 # macOS / Linux
 mkdir -p ~/.local/bin
-printf '#!/bin/sh\nexec "%s/mma/runtime/bun" "%s/mma/app/main.js" "$@"\n' "$HOME" "$HOME" > ~/.local/bin/mma
+printf '#!/bin/sh\nexec "%s/mma/runtime/bun" "%s/mma/app/main.js" "$@"\n' "$HOME" "$HOME" &gt; ~/.local/bin/mma
 chmod +x ~/.local/bin/mma</code></pre>
           <div class="callout">
             <b>Важно:</b> при ручной установке встроенный апдейтер не управляет файлами — он
@@ -322,6 +316,25 @@ mma web                   # браузерный интерфейс на том 
 /help                    # все slash-команды
 /config                  # действующая конфигурация (секреты скрыты)
 /doctor                  # полная диагностика окружения</code></pre>
+          <h3>Куда дальше</h3>
+          <ul class="anchor">
+            <li>
+              <a href="index.html"><code>index.html</code></a
+              ><span>лендинг: установка, возможности, живое демо</span>
+            </li>
+            <li>
+              <a href="docs.html#setup"><code>docs.html#setup</code></a
+              ><span>провайдеры, модель, контекст, онбординг</span>
+            </li>
+            <li>
+              <a href="docs.html#repl"><code>docs.html#repl</code></a
+              ><span>slash-команды и клавиши</span>
+            </li>
+            <li>
+              <a href="https://github.com/Alexeykoh/micro-model-agent"><code>github</code></a
+              ><span>исходники, issues, релизы</span>
+            </li>
+          </ul>
 
           <h2 id="setup">Первый запуск и провайдеры</h2>
           <p>
@@ -638,12 +651,10 @@ mma web --host 0.0.0.0 --token &lt;secret&gt;</code></pre>
             </tbody>
           </table>
           <h3>Чат</h3>
-          <ul>
+          <ul class="feat">
             <li>
-              Параллельные ходы в разных вкладках; в одной сессии — очередь сообщений (<code
-                >Esc</code
-              >
-              останавливает ход).
+              Параллельные ходы в разных вкладках; в одной сессии — очередь сообщений
+              (<code>Esc</code> останавливает ход).
             </li>
             <li>
               <b>MMART</b> — маскот-индикатор: отражает фазу (думает, читает, пишет, выполняет,
@@ -691,9 +702,10 @@ mma session prune            # удалить сессии без сообщен
             Приближение к лимиту запускает структурную компакцию: она сохраняет факты, решения и
             ошибки, а не просто режет историю.
           </p>
-          <ul>
+          <ul class="feat">
             <li>
-              <code>[Tool ledger]</code> — список уже прочитанного, чтобы модель не ходила по кругу.
+              <code>[Tool ledger]</code> — список уже прочитанного, чтобы модель не ходила по
+              кругу.
             </li>
             <li>Оценка токенов калибруется по реальному <code>prompt_tokens</code> провайдера.</li>
             <li>
@@ -705,6 +717,14 @@ mma session prune            # удалить сессии без сообщен
               пороги компакции.
             </li>
           </ul>
+          <h3>Якоря, которые переживают компакцию</h3>
+          <ul class="anchor">
+            <li><code>[Task:]</code><span>исходный запрос хода</span></li>
+            <li><code>[Plan:]</code><span>чек-лист плана, перечитанный с диска</span></li>
+            <li><code>[Files:]</code><span>созданные, изменённые и удалённые файлы</span></li>
+            <li><code>[Read:]</code><span>уже прочитанные файлы — чтобы не читать их снова</span></li>
+            <li><code>[Errors:]</code><span>повторяющиеся ошибки и уже попробованное</span></li>
+          </ul>
           <pre><code>mma context                  # текущая разбивка
 mma context 65536            # окно вручную
 mma context --system 0.2 --reserve 0.15</code></pre>
@@ -715,7 +735,7 @@ mma context --system 0.2 --reserve 0.15</code></pre>
             закрывается только проверкой: файл существует, содержимое совпало, команда выполнилась.
             Дополнительно работают:
           </p>
-          <ul>
+          <ul class="feat">
             <li>
               <b>Hallucination detection</b> — проверка путей, противоречий, уверенности и claims
               («создал файл X»).
@@ -728,6 +748,18 @@ mma context --system 0.2 --reserve 0.15</code></pre>
             <li><b>Final audit</b> — финальная проверка перед ответом.</li>
             <li><b>Auto-advance</b> — шаг плана двигается по факту изменения файлов/команд.</li>
           </ul>
+          <h3>Три гейта перед «готово»</h3>
+          <div class="pipe">
+            <span class="pipe-step"><span class="pipe-node">Утверждение</span></span>
+            <span class="pipe-arrow">→</span>
+            <span class="pipe-step"><span class="pipe-node">Аргумент</span></span>
+            <span class="pipe-arrow">→</span>
+            <span class="pipe-step"><span class="pipe-node gate">Критик</span></span>
+            <span class="pipe-arrow">→</span>
+            <span class="pipe-step"><span class="pipe-node gate">Аудит</span></span>
+            <span class="pipe-arrow">→</span>
+            <span class="pipe-step"><span class="pipe-node">Ответ</span></span>
+          </div>
 
           <h2 id="subagents">Субагенты</h2>
           <p>
@@ -741,7 +773,7 @@ tool_tags: ["file", "code"]
 expert_tag: "reviewer"       # опционально: роль из config.experts
 result_mode: "file"          # вернуть путь+сводку вместо полного текста
 max_tokens: 8000</code></pre>
-          <ul>
+          <ul class="feat">
             <li>Глубина рекурсии ограничена <code>security.maxRecursionDepth</code>.</li>
             <li>
               Результат в режиме <code>file</code> сохраняется в
@@ -759,7 +791,7 @@ max_tokens: 8000</code></pre>
           </ul>
 
           <h2 id="memory">Память, скиллы, AGENTS.md</h2>
-          <ul>
+          <ul class="feat">
             <li>
               <b>Память</b> (<code>remember</code> / <code>recall</code>, <code>/memory</code>) —
               глобальные факты и предпочтения, переживают сессии.
@@ -779,9 +811,10 @@ max_tokens: 8000</code></pre>
 
           <h2 id="tools">Инструменты</h2>
           <p>
-            Ядро поставляет ~37 инструментов. Набор сужается тегами и <code>enable_tools</code>;
-            структурные тулы (<code>plan</code>, <code>todo</code>, <code>verify</code>,
-            <code>project_map</code>, <code>lsp_check</code>) доступны всегда.
+            Ядро регистрирует 35–37 инструментов (включая on-demand <code>enable_tools</code> и
+            <code>load_skill</code>), модуль документов добавляет ещё 4. Набор сужается тегами и
+            <code>enable_tools</code>; структурные тулы (<code>plan</code>, <code>todo</code>,
+            <code>verify</code>, <code>project_map</code>, <code>lsp_check</code>) доступны всегда.
           </p>
           <table>
             <thead>
@@ -851,7 +884,7 @@ max_tokens: 8000</code></pre>
           </p>
 
           <h2 id="web-tools">Поиск и веб</h2>
-          <ul>
+          <ul class="feat">
             <li>
               <code>web_search</code> — поиск (провайдер настраивается, по умолчанию DuckDuckGo).
             </li>
@@ -970,18 +1003,58 @@ mma map find &lt;query&gt;</code></pre>
 mma model cert-status &lt;name&gt;
 mma model cert-list</code></pre>
 
+          <h2 id="images">Изображения и документы</h2>
+          <p>
+            <code>attach_image</code> передаёт картинку модели с vision. Источник — путь к файлу,
+            URL или <code>clipboard</code>; картинка ставится в очередь и уходит в следующем
+            сообщении к модели.
+          </p>
+          <pre><code>attach_image ./screenshot.png
+attach_image https://example.com/diagram.png
+attach_image clipboard</code></pre>
+          <p>
+            Документные тулы сканируют каталог и работают с большими текстами, не загружая файл
+            целиком:
+          </p>
+          <dl class="rows">
+            <div class="row">
+              <dt><code>document_index</code></dt>
+              <dd>пересобрать индекс каталога документов.</dd>
+            </div>
+            <div class="row">
+              <dt><code>document_map</code></dt>
+              <dd>карта структуры документа: разделы и блоки.</dd>
+            </div>
+            <div class="row">
+              <dt><code>document_read</code></dt>
+              <dd>
+                срез по селектору (<code>all</code>, раздел, диапазон блоков) или vision-растр для
+                картинок.
+              </dd>
+            </div>
+            <div class="row">
+              <dt><code>document_find</code></dt>
+              <dd>поиск по индексу с ленивым обновлением.</dd>
+            </div>
+          </dl>
+
           <h2 id="security">Политики и защита</h2>
           <p>
             Безопасность включена по умолчанию (пресет <code>balanced</code>): валидация bash,
             политика путей, сетевой SSRF-фильтр, сканирование контента, шифрование сессий, аудит.
           </p>
+          <div class="presets">
+            <span class="preset on">balanced</span>
+            <span class="preset">strict</span>
+            <span class="preset">permissive</span>
+          </div>
           <pre><code>mma security status
 mma security policies
 mma security set-policy balanced
 mma security enable-encryption
 mma security enable-audit</code></pre>
           <h3>Всегда включено</h3>
-          <ul>
+          <ul class="feat">
             <li>
               <b>Защищённые пути:</b> <code>.git/</code>, <code>.env*</code>,
               <code>*.key|pem|p12|crt</code>, <code>.npmrc</code>, <code>.netrc</code> — независимо
@@ -1010,33 +1083,33 @@ mma security enable-audit</code></pre>
             провайдеру, скрывает пути от API, маскирует секреты и может требовать локального
             провайдера. При <code>failClosed</code> сомнительный запрос не уходит наружу.
           </p>
-          <ul>
+          <ul class="feat">
             <li>
               <code>apiHiddenGlobs</code> — 404 на скрытые пути в web/serve; в SSE-событиях и
-              истории такой путь маскируется целиком, а не только корнем.
+              истории такой путь маскируется целиком, а не только корень.
             </li>
             <li>
               <code>providerBlockGlobs</code> — что нельзя отправлять внешней модели (включая вывод
               <code>bash</code> и MCP-тулов с объявленными путями).
             </li>
             <li>
-              <strong>Видимость:</strong> бейдж DLP под ответом показывает
-              <em>где именно</em> вычищено (сообщение/тул, поле, диапазон), Trace — поп-ап «Запрос
-              провайдеру» (system → messages → tools, после редакции и до сети), вкладка
-              «Безопасность» — живой журнал block/DLP/approval/SSRF.
+              <b>Видимость:</b> бейдж DLP под ответом показывает <em>где именно</em> вычищено
+              (сообщение/тул, поле, диапазон), Trace — поп-ап «Запрос провайдеру» (system → messages
+              → tools, после редакции и до сети), вкладка «Безопасность» — живой журнал
+              block/DLP/approval/SSRF.
             </li>
             <li>
-              <strong>Taint:</strong> текст, произведённый локальной моделью по защищённым файлам,
+              <b>Taint:</b> текст, произведённый локальной моделью по защищённым файлам,
               помечается; при переключении на внешнего провайдера он уходит как <code>[FILE]</code>,
               а не содержимым. Флаг переживает компакцию и resume.
             </li>
             <li>
-              <strong>Обфускация:</strong> base64/base64url, hex, percent (в т.ч. двойной), split по
+              <b>Обфускация:</b> base64/base64url, hex, percent (в т.ч. двойной), split по
               пробелам и кавычкам, zero-width, fullwidth и кириллические гомоглифы распознаются до
               отправки.
             </li>
             <li>
-              <strong>NER без модели:</strong> ФИО только с отчеством, адрес — только с маркером
+              <b>NER без модели:</b> ФИО только с отчеством, адрес — только с маркером
               улицы и номером дома (ложные срабатывания важнее пропусков).
             </li>
             <li>
@@ -1240,6 +1313,202 @@ mma config migrate          # legacy config.json → домены</code></pre>
             <code>AGENTS.md</code>.
           </p>
 
+          <h2 id="cost">Стоимость и кеш</h2>
+          <p>
+            Провайдеры снижают цену на повторно отправленный префикс: системный промпт, схемы
+            тулов и карта проекта кешируются, и повторный запрос платит только за разметку кеша.
+            MMA держит префикс стабильным и не раздувает его на каждом ходу.
+          </p>
+          <ul class="feat">
+            <li>Оценка токенов калибруется по реальному <code>prompt_tokens</code> провайдера.</li>
+            <li>
+              <code>[Tool ledger]</code> и компакция убирают из контекста уже прочитанное — префикс
+              не растёт от хода к ходу.
+            </li>
+            <li>
+              Настройки: <code>context.*</code>, доли <code>system</code>/<code>reserve</code>;
+              пороги компакции.
+            </li>
+          </ul>
+          <div class="calc" id="costCalc">
+            <div class="calc-h">Кеш и стоимость</div>
+            <label class="calc-row"
+              ><span>входные токены</span>
+              <input id="cPrompt" type="range" min="1000" max="200000" step="1000" value="20000" />
+              <b id="cPromptV">20K</b></label
+            >
+            <label class="calc-row"
+              ><span>токены ответа</span>
+              <input id="cOut" type="range" min="100" max="8000" step="100" value="1000" />
+              <b id="cOutV">1K</b></label
+            >
+            <label class="calc-row"
+              ><span>кеш-хит</span>
+              <input id="cCache" type="range" min="0" max="100" step="5" value="0" />
+              <b id="cCacheV">0%</b></label
+            >
+            <div class="calc-out">
+              <span>цена / вызов</span> <b id="cCost">$0.00</b>
+              <span>экономия</span> <b id="cSaved">0%</b>
+            </div>
+            <p class="calc-note">
+              Пример цен: $0.15 / 1M входных, $0.60 / 1M выходных, чтение кеша — 10% от входных.
+            </p>
+          </div>
+          <div class="calc" id="cmpCalc">
+            <div class="calc-h">Локально или облако / месяц</div>
+            <label class="calc-row"
+              ><span>вызовов в день</span>
+              <input id="mCalls" type="range" min="1" max="400" step="1" value="40" />
+              <b id="mCallsV">40</b></label
+            >
+            <label class="calc-row"
+              ><span>токенов на вызов</span>
+              <input id="mTokens" type="range" min="2000" max="120000" step="2000" value="24000" />
+              <b id="mTokensV">24K</b></label
+            >
+            <div class="calc-out">
+              <span>облако</span> <b id="mCloud">$0</b>
+              <span>локально</span> <b id="mLocal">$0</b>
+            </div>
+            <p class="calc-note">
+              Локальный прогон — на своём железе: только электричество. Облако считается по тем же
+              примерным ценам.
+            </p>
+          </div>
+
+          <h2 id="observability">Наблюдаемость и диагностика</h2>
+          <p>
+            Всё, что происходит с агентом, оседает на диске. Это первое место, куда смотрят при
+            разборе сбоя.
+          </p>
+          <dl class="rows">
+            <div class="row">
+              <dt><code>history.jsonl</code></dt>
+              <dd>разговор: ваши запросы, ответы, сводки тулов.</dd>
+            </div>
+            <div class="row">
+              <dt><code>session.jsonl</code></dt>
+              <dd>
+                полный журнал: каждый вызов тула с результатом и длительностью, usage и кеш,
+                события контекста и компакции.
+              </dd>
+            </div>
+            <div class="row">
+              <dt><code>meta.json</code></dt>
+              <dd>паспорт сессии: имя, модель, счётчики, временные метки.</dd>
+            </div>
+            <div class="row">
+              <dt><code>~/.mma/memory/</code></dt>
+              <dd>
+                <code>conventions.md</code>, <code>decisions.md</code>, <code>errors.md</code> —
+                проектная память, переживает сессии.
+              </dd>
+            </div>
+            <div class="row">
+              <dt><code>[Tool ledger]</code></dt>
+              <dd>список уже прочитанного внутри блока компакции — модель не ходит по кругу.</dd>
+            </div>
+            <div class="row">
+              <dt>якоря компакции</dt>
+              <dd>
+                <code>[Task:]</code>, <code>[Plan:]</code>, <code>[Files:]</code>,
+                <code>[Read:]</code>, <code>[Errors:]</code> — переживают каждую компакцию.
+              </dd>
+            </div>
+          </dl>
+          <p>Быстрый доступ:</p>
+          <pre><code>mma usage                 # usage и баланс ключа провайдера
+mma doctor                # окружение, модули, плагины, провайдер, LSP, конфиг
+mma session diagnose &lt;id&gt;  # разбор сессии по сигнатурам сбоев
+/lsp doctor               # в REPL — почему не работает языковой сервер</code></pre>
+          <p>
+            В браузере то же самое видно в реальном времени: вкладка <b>Trace</b> — живой поток
+            событий сессии, детали тулов и логи.
+          </p>
+
+          <h2 id="doctor">Диагностика</h2>
+          <pre><code>mma doctor              # окружение, модули, плагины, провайдер, LSP, конфиг
+mma provider check      # доступность провайдеров (бесплатный listModels)
+mma session diagnose &lt;id&gt;
+/lsp doctor             # в REPL
+mma config show         # действующий конфиг (секреты скрыты)</code></pre>
+          <p>
+            Логи: <code>~/.mma/logs/</code> и <code>&lt;session&gt;/session.log</code>; подробный
+            лог сессии — <code>session.jsonl</code>.
+          </p>
+
+          <h2 id="troubleshooting">Частые проблемы</h2>
+          <h3>Модель «думает», но не вызывает тулы</h3>
+          <p>
+            Проверьте, что backend поддерживает tool-calling и модель не слишком мала. Увеличьте
+            <code>retry.noDataTimeoutMs</code>, если провайдер буферизует SSE.
+            <code>mma model certify</code> покажет, тянет ли модель агентский цикл.
+          </p>
+          <h3>Context overflow / частые компакции</h3>
+          <p>
+            Уменьшите системный промпт и карту проекта, поднимите окно (<code>mma context 65536</code>),
+            проверьте <code>/sysprompt</code> и Trace. Компакция с причиной видна в
+            <code>session.jsonl</code>.
+          </p>
+          <h3>Провайдер недоступен</h3>
+          <p>
+            <code>mma provider check</code>, затем <code>mma provider list</code> — активная запись
+            должна указывать на рабочий URL. Для локальных серверов проверьте
+            <code>curl http://localhost:PORT/v1/models</code>.
+          </p>
+          <h3>Браузер не запускается</h3>
+          <p>
+            Установите Chromium:
+            <code>~/.mma/current/runtime/bun x playwright install chromium</code>. В
+            headless-окружении нужен системный Chromium и <code>MMA_BROWSER_EXECUTABLE</code>.
+          </p>
+          <h3>LSP не отвечает</h3>
+          <p>
+            <code>/lsp doctor</code> объяснит причину: сервер не установлен, холодный старт,
+            офлайн-режим. Правка файла не блокируется ожиданием LSP.
+          </p>
+          <h3>Веб-интерфейс не открывается</h3>
+          <p>
+            <code>mma web --no-open</code> печатает URL; при <code>--host</code> не на loopback
+            обязателен <code>--token</code>. Порт можно задать <code>-p</code>.
+          </p>
+          <h3>Сессия повреждена/не читается</h3>
+          <p>
+            <code>mma session diagnose &lt;id&gt;</code> (только чтение), затем
+            <code>mma session export</code>. Не редактируйте <code>session.jsonl</code> вручную.
+          </p>
+
+          <h2 id="faq">FAQ</h2>
+          <h3>Нужен ли интернет?</h3>
+          <p>
+            Нет, если модель и провайдер локальные. Веб-поиск/браузер и облачные провайдеры требуют
+            сеть.
+          </p>
+          <h3>Минимальный контекст?</h3>
+          <p>
+            Комфортно от 32K; 8K работает с агрессивной компакцией. Окно определяется автоматически.
+          </p>
+          <h3>Это только для кода?</h3>
+          <p>
+            Нет. Позиционирование — универсальный агент: разработка, исследование, API,
+            автоматизация, ассистент.
+          </p>
+          <h3>Почему нет TUI?</h3>
+          <p>
+            Осознанно: минимальный CLI + REPL и браузерный UI. TUI остаётся возможной поверхностью,
+            но не целью.
+          </p>
+          <h3>Где хранятся секреты?</h3>
+          <p>
+            В конфиге провайдера; <code>config show</code> их скрывает, сессии и экспорт
+            редактируются, <code>.env*</code>/ключи защищены always-on.
+          </p>
+          <h3>Можно ли выставить web UI наружу?</h3>
+          <p>
+            Да, с <code>--token</code>, обратным прокси и TLS. Без токена не-loopback bind запрещён.
+          </p>
+
           <h2 id="architecture">Архитектура</h2>
           <p>
             Слои: поверхности (REPL / web / serve) → ядро (<code>Agent</code>,
@@ -1247,7 +1516,7 @@ mma config migrate          # legacy config.json → домены</code></pre>
             модули (LSP, browser, indexer, skills, MCP, memory, critic, execution, service, …).
             Критерий границы: модуль можно отключить и продолжить работу; ядро — нельзя.
           </p>
-          <ul>
+          <ul class="feat">
             <li>
               <b>Одна петля</b>: <code>Agent.run</code> вызывает цикл ровно один раз, все гейты
               внутри.
@@ -1257,8 +1526,8 @@ mma config migrate          # legacy config.json → домены</code></pre>
               scope, protected-пути, SSRF, rate-limit.
             </li>
             <li>
-              <b>Один позвоночник наблюдаемости</b>: события с <code>source</code>, ошибки объектом,
-              fail-open с записью.
+              <b>Один позвоночник наблюдаемости</b>: события с <code>source</code>, ошибки
+              объектом, fail-open с записью.
             </li>
             <li>
               <b>Один путь записи конфига</b>: <code>ConfigStore.set</code> возвращает эффекты,
@@ -1334,7 +1603,7 @@ bun run quality          # typecheck + frontend + arch + lint + fallow
 bun run dev              # watch
 bun run web:dev          # web UI в dev-режиме
 bun run test:e2e         # Playwright (по явной команде)</code></pre>
-          <ul>
+          <ul class="feat">
             <li>
               <b>Правило ≤300 строк</b>: крупные файлы — только в <code>.arch-allowlist.json</code>,
               потолки не растут.
@@ -1367,8 +1636,8 @@ bun run test:e2e         # Playwright (по явной команде)</code></p
               Commit <code>chore(release): X.Y.Z</code>, аннотированный тег <code>vX.Y.Z</code>.
             </li>
             <li>
-              <code>git push origin master --follow-tags</code> → GitHub Actions собирает 5 платформ
-              и публикует Release + <code>latest.json</code>.
+              <code>git push origin master --follow-tags</code> → GitHub Actions собирает пакеты для
+              всех поддерживаемых платформ и публикует Release + <code>latest.json</code>.
             </li>
           </ol>
           <p>
@@ -1377,14 +1646,12 @@ bun run test:e2e         # Playwright (по явной команде)</code></p
           </p>
 
           <h2 id="contributing">Участие</h2>
-          <ul>
+          <ul class="feat">
             <li>
               Ветка от <code>master</code>: <code>feat/</code>, <code>fix/</code>,
               <code>docs/</code>, <code>refactor/</code>, <code>chore/</code>.
             </li>
-            <li>
-              Одна задача — одна ветка и один контракт; массовые правки «заодно» не принимаются.
-            </li>
+            <li>Одна задача — одна ветка и один контракт; массовые правки «заодно» не принимаются.</li>
             <li>
               Для изменения поведения — тест, который падал бы без правки; для UI — живой прогон.
             </li>
@@ -1392,91 +1659,114 @@ bun run test:e2e         # Playwright (по явной команде)</code></p
             <li>PR/merge — после зелёных тестов и quality.</li>
           </ul>
 
-          <h2 id="doctor">Диагностика</h2>
-          <pre><code>mma doctor              # окружение, модули, плагины, провайдер, LSP, конфиг
-mma provider check      # доступность провайдеров (бесплатный listModels)
-mma session diagnose &lt;id&gt;
-/lsp doctor             # в REPL
-mma config show         # действующий конфиг (секреты скрыты)</code></pre>
+          <h2 id="mascot">MMART — 25 состояний</h2>
           <p>
-            Логи: <code>~/.mma/logs/</code> и <code>&lt;session&gt;/session.log</code>; подробный
-            лог сессии — <code>session.jsonl</code>.
+            MMART — маскот-индикатор агента. Он отражает фазу и последний тул: думает, читает, ищет,
+            пишет, выполняет, тестирует, компактирует, планирует, спрашивает, завершает, ошибается.
+            Нажмите на состояние, чтобы увидеть его на большом лице.
+          </p>
+          <div class="mascot-lab" id="mascotLab">
+            <div class="mascot-main">
+              <span class="mdl c-recon track" id="mascotBig" aria-hidden="true"></span>
+              <span class="mascot-name" id="mascotName">idle</span>
+            </div>
+            <div class="mascot-strip">
+              <button class="mstate on" type="button" data-state="idle"
+                ><span class="mdl xs c-dim track" aria-hidden="true"></span><em>idle</em></button
+              >
+              <button class="mstate" type="button" data-state="think"
+                ><span class="mdl xs c-active st-think" aria-hidden="true"></span
+                ><em>think</em></button
+              >
+              <button class="mstate" type="button" data-state="read"
+                ><span class="mdl xs c-recon st-read" aria-hidden="true"></span><em>read</em></button
+              >
+              <button class="mstate" type="button" data-state="find"
+                ><span class="mdl xs c-recon st-find" aria-hidden="true"></span><em>find</em></button
+              >
+              <button class="mstate" type="button" data-state="web"
+                ><span class="mdl xs c-recon st-web" aria-hidden="true"></span><em>web</em></button
+              >
+              <button class="mstate" type="button" data-state="edit"
+                ><span class="mdl xs c-mutate st-edit" aria-hidden="true"></span
+                ><em>edit</em></button
+              >
+              <button class="mstate" type="button" data-state="type"
+                ><span class="mdl xs c-active st-type" aria-hidden="true"></span
+                ><em>type</em></button
+              >
+              <button class="mstate" type="button" data-state="create"
+                ><span class="mdl xs c-mutate st-create" aria-hidden="true"></span
+                ><em>create</em></button
+              >
+              <button class="mstate" type="button" data-state="run"
+                ><span class="mdl xs c-exec st-run" aria-hidden="true"></span><em>run</em></button
+              >
+              <button class="mstate" type="button" data-state="tests"
+                ><span class="mdl xs c-exec st-tests" aria-hidden="true"></span
+                ><em>tests</em></button
+              >
+              <button class="mstate" type="button" data-state="compact"
+                ><span class="mdl xs c-active st-compact" aria-hidden="true"></span
+                ><em>compact</em></button
+              >
+              <button class="mstate" type="button" data-state="plan"
+                ><span class="mdl xs c-active st-plan" aria-hidden="true"></span
+                ><em>plan</em></button
+              >
+              <button class="mstate" type="button" data-state="ask"
+                ><span class="mdl xs c-warn st-ask" aria-hidden="true"></span><em>ask</em></button
+              >
+              <button class="mstate" type="button" data-state="done"
+                ><span class="mdl xs c-ok st-done" aria-hidden="true"></span><em>done</em></button
+              >
+              <button class="mstate" type="button" data-state="error"
+                ><span class="mdl xs c-err st-error" aria-hidden="true"></span
+                ><em>error</em></button
+              >
+              <button class="mstate" type="button" data-state="stop"
+                ><span class="mdl xs c-dim st-stop" aria-hidden="true"></span><em>stop</em></button
+              >
+              <button class="mstate" type="button" data-state="queued"
+                ><span class="mdl xs c-dim st-queued" aria-hidden="true"></span
+                ><em>queued</em></button
+              >
+              <button class="mstate" type="button" data-state="boot"
+                ><span class="mdl xs c-dim st-boot" aria-hidden="true"></span><em>boot</em></button
+              >
+              <button class="mstate" type="button" data-state="load"
+                ><span class="mdl xs c-dim st-load" aria-hidden="true"></span><em>load</em></button
+              >
+              <button class="mstate" type="button" data-state="update"
+                ><span class="mdl xs c-ok st-update" aria-hidden="true"></span
+                ><em>update</em></button
+              >
+              <button class="mstate" type="button" data-state="check"
+                ><span class="mdl xs c-recon st-check" aria-hidden="true"></span
+                ><em>check</em></button
+              >
+              <button class="mstate" type="button" data-state="warn"
+                ><span class="mdl xs c-warn st-warn" aria-hidden="true"></span><em>warn</em></button
+              >
+              <button class="mstate" type="button" data-state="recheck"
+                ><span class="mdl xs c-recon st-recheck" aria-hidden="true"></span
+                ><em>recheck</em></button
+              >
+              <button class="mstate" type="button" data-state="verify"
+                ><span class="mdl xs c-recon st-verify" aria-hidden="true"></span
+                ><em>verify</em></button
+              >
+              <button class="mstate" type="button" data-state="lspoff"
+                ><span class="mdl xs c-dim st-check" aria-hidden="true"></span
+                ><em>lspoff</em></button
+              >
+            </div>
+          </div>
+          <p class="note">
+            Тот же набор состояний, что и в веб-интерфейсе; маскот рисуется на canvas.
           </p>
 
-          <h2 id="troubleshooting">Частые проблемы</h2>
-          <h3>Модель «думает», но не вызывает тулы</h3>
-          <p>
-            Проверьте, что backend поддерживает tool-calling и модель не слишком мала. Увеличьте
-            <code>retry.noDataTimeoutMs</code>, если провайдер буферизует SSE.
-            <code>mma model certify</code> покажет, тянет ли модель агентский цикл.
-          </p>
-          <h3>Context overflow / частые компакции</h3>
-          <p>
-            Уменьшите системный промпт и карту проекта, поднимите окно (<code
-              >mma context 65536</code
-            >), проверьте <code>/sysprompt</code> и Trace. Компакция с причиной видна в
-            <code>session.jsonl</code>.
-          </p>
-          <h3>Провайдер недоступен</h3>
-          <p>
-            <code>mma provider check</code>, затем <code>mma provider list</code> — активная запись
-            должна указывать на рабочий URL. Для локальных серверов проверьте
-            <code>curl http://localhost:PORT/v1/models</code>.
-          </p>
-          <h3>Браузер не запускается</h3>
-          <p>
-            Установите Chromium:
-            <code>~/.mma/current/runtime/bun x playwright install chromium</code>. В
-            headless-окружении нужен системный Chromium и <code>MMA_BROWSER_EXECUTABLE</code>.
-          </p>
-          <h3>LSP не отвечает</h3>
-          <p>
-            <code>/lsp doctor</code> объяснит причину: сервер не установлен, холодный старт,
-            офлайн-режим. Правка файла не блокируется ожиданием LSP.
-          </p>
-          <h3>Веб-интерфейс не открывается</h3>
-          <p>
-            <code>mma web --no-open</code> печатает URL; при <code>--host</code> не на loopback
-            обязателен <code>--token</code>. Порт можно задать <code>-p</code>.
-          </p>
-          <h3>Сессия повреждена/не читается</h3>
-          <p>
-            <code>mma session diagnose &lt;id&gt;</code> (только чтение), затем
-            <code>mma session export</code>. Не редактируйте <code>session.jsonl</code> вручную.
-          </p>
-
-          <h2 id="faq">FAQ</h2>
-          <h3>Нужен ли интернет?</h3>
-          <p>
-            Нет, если модель и провайдер локальные. Веб-поиск/браузер и облачные провайдеры требуют
-            сеть.
-          </p>
-          <h3>Минимальный контекст?</h3>
-          <p>
-            Комфортно от 32K; 8K работает с агрессивной компакцией. Окно определяется автоматически.
-          </p>
-          <h3>Это только для кода?</h3>
-          <p>
-            Нет. Позиционирование — универсальный агент: разработка, исследование, API,
-            автоматизация, ассистент.
-          </p>
-          <h3>Почему нет TUI?</h3>
-          <p>
-            Осознанно: минимальный CLI + REPL и браузерный UI. TUI остаётся возможной поверхностью,
-            но не целью.
-          </p>
-          <h3>Где хранятся секреты?</h3>
-          <p>
-            В конфиге провайдера; <code>config show</code> их скрывает, сессии и экспорт
-            редактируются, <code>.env*</code>/ключи защищены always-on.
-          </p>
-          <h3>Можно ли выставить web UI наружу?</h3>
-          <p>
-            Да, с <code>--token</code>, обратным прокси и TLS. Без токена не-loopback bind запрещён.
-          </p>
-
-          <div class="hr"></div>
-          <p class="sub">
+          <p class="note">
             Нашли неточность или не хватает раздела? Откройте issue в
             <a href="https://github.com/Alexeykoh/micro-model-agent/issues">репозитории</a>.
             Исходная документация для разработчиков — в каталоге <code>docs/</code> репозитория.
@@ -1485,35 +1775,13 @@ mma config show         # действующий конфиг (секреты с
       </main>
     </div>
 
+    <script type="module" src="mascot-canvas.js"></script>
     <script>
       (function () {
         "use strict";
         var root = document.documentElement;
-        // MMART in the header — same face markup as the landing page.
-        var docsFace = document.getElementById("docsFace");
-        if (docsFace && !docsFace.querySelector(".eyes")) {
-          docsFace.innerHTML =
-            '<span class="eyes"><i class="eye left"></i><i class="eye right"></i></span>' +
-            '<span class="orb"><i></i></span><span class="keys"><i></i><i></i><i></i><i></i></span>' +
-            '<span class="grow"></span><span class="fly"></span>' +
-            '<span class="dust"><i></i><i></i><i></i></span>' +
-            '<span class="q"></span><span class="spark"></span><span class="star"></span>';
-          if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
-            addEventListener(
-              "mousemove",
-              function (e) {
-                var eyes = docsFace && docsFace.querySelector(".eyes");
-                if (!eyes) return;
-                var r = docsFace.getBoundingClientRect();
-                var ex = Math.max(-1, Math.min(1, (e.clientX - (r.left + r.width / 2)) / 460));
-                var ey = Math.max(-1, Math.min(1, (e.clientY - (r.top + r.height / 2)) / 460));
-                eyes.style.left = (ex * 12).toFixed(1) + "%";
-                eyes.style.top = "calc(" + (ey * 12).toFixed(1) + "% + var(--ey, 0px))";
-              },
-              { passive: true },
-            );
-          }
-        }
+
+        /* ---- theme ---- */
         var SUN =
           '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.4M12 19.6V22M2 12h2.4M19.6 12H22M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M19.1 4.9l-1.7 1.7M6.6 17.4l-1.7 1.7"/></svg>';
         var MOON =
@@ -1525,7 +1793,7 @@ mma config show         # действующий конфиг (секреты с
           themeBtn.innerHTML = light ? MOON : SUN;
           themeBtn.setAttribute("aria-pressed", String(light));
         }
-        themeBtn &&
+        if (themeBtn) {
           themeBtn.addEventListener("click", function () {
             var light = root.classList.toggle("light");
             try {
@@ -1533,60 +1801,54 @@ mma config show         # действующий конфиг (секреты с
             } catch (e) {}
             paintTheme();
           });
+        }
         paintTheme();
 
         /* ---- mobile nav drawer ---- */
-        var menuBtn = document.getElementById("menuBtn");
+        var burger = document.getElementById("burgerBtn");
         var side = document.getElementById("side");
-        var scrim = document.getElementById("scrim");
-        function drawerOpen() {
-          return document.body.classList.contains("side-open");
+        function setDrawer(open) {
+          document.body.classList.toggle("nav-open", open);
+          if (burger) burger.setAttribute("aria-expanded", open ? "true" : "false");
         }
-        function setDrawer(open, restoreFocus) {
-          document.body.classList.toggle("side-open", open);
-          if (scrim) scrim.hidden = !open;
-          if (menuBtn) menuBtn.setAttribute("aria-expanded", open ? "true" : "false");
-          if (side)
-            side.setAttribute("aria-hidden", open || window.innerWidth > 980 ? "false" : "true");
-          if (!open && restoreFocus && menuBtn) menuBtn.focus();
+        if (burger && side) {
+          burger.addEventListener("click", function () {
+            setDrawer(!document.body.classList.contains("nav-open"));
+          });
+          side.addEventListener("click", function (e) {
+            if (e.target.closest && e.target.closest("a")) setDrawer(false);
+          });
+          document.addEventListener("click", function (e) {
+            if (!document.body.classList.contains("nav-open")) return;
+            if (e.target.closest && !e.target.closest("#side") && !e.target.closest("#burgerBtn")) {
+              setDrawer(false);
+            }
+          });
+          document.addEventListener("keydown", function (e) {
+            if (e.key === "Escape") setDrawer(false);
+          });
+          addEventListener(
+            "resize",
+            function () {
+              if (innerWidth > 1180) setDrawer(false);
+            },
+            { passive: true },
+          );
         }
-        menuBtn &&
-          menuBtn.addEventListener("click", function () {
-            setDrawer(!drawerOpen(), false);
-          });
-        scrim &&
-          scrim.addEventListener("click", function () {
-            setDrawer(false, true);
-          });
-        document.addEventListener("keydown", function (e) {
-          if (e.key === "Escape" && drawerOpen()) setDrawer(false, true);
-        });
-        document.querySelectorAll(".side a").forEach(function (a) {
-          a.addEventListener("click", function () {
-            if (window.innerWidth <= 980) setDrawer(false, false);
-          });
-        });
-        addEventListener(
-          "resize",
-          function () {
-            if (window.innerWidth > 980 && drawerOpen()) setDrawer(false, false);
-          },
-          { passive: true },
-        );
 
-        // Copy buttons for code blocks.
+        /* ---- copy buttons ---- */
         document.querySelectorAll("pre").forEach(function (pre) {
           var btn = document.createElement("button");
           btn.className = "copy";
           btn.type = "button";
-          btn.textContent = "копировать";
+          btn.textContent = "Копировать";
           btn.addEventListener("click", function () {
             var code = pre.querySelector("code");
             var text = code ? code.textContent : pre.textContent;
             var done = function (ok) {
-              btn.textContent = ok ? "✓ скопировано" : "не удалось";
+              btn.textContent = ok ? "✓ Скопировано" : "Не удалось";
               setTimeout(function () {
-                btn.textContent = "копировать";
+                btn.textContent = "Копировать";
               }, 1400);
             };
             if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -1614,9 +1876,15 @@ mma config show         # действующий конфиг (секреты с
           pre.appendChild(btn);
         });
 
-        /* ---- full-text search over headings and sections ---- */
+        /* ---- full-text search ---- */
         var links = Array.prototype.slice.call(document.querySelectorAll(".side a[href^='#']"));
         var headings = Array.prototype.slice.call(document.querySelectorAll("article h2[id]"));
+        function byIdHref(id) {
+          for (var i = 0; i < links.length; i++) {
+            if (links[i].getAttribute("href") === "#" + id) return links[i];
+          }
+          return null;
+        }
         var index = headings.map(function (h) {
           var parts = [h.textContent];
           var node = h.nextElementSibling;
@@ -1633,12 +1901,6 @@ mma config show         # действующий конфиг (секреты с
             text: parts.join(" ").replace(/\s+/g, " ").toLowerCase(),
           };
         });
-        function byIdHref(id) {
-          for (var i = 0; i < links.length; i++) {
-            if (links[i].getAttribute("href") === "#" + id) return links[i];
-          }
-          return null;
-        }
         function esc(s) {
           return s.replace(/[&<>"]/g, function (c) {
             return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
@@ -1678,84 +1940,90 @@ mma config show         # действующий конфиг (секреты с
             })
             .slice(0, 8);
         }
-        function mountSearch(input, results) {
-          if (!input || !results) return null;
-          var active = -1;
-          function close() {
-            results.hidden = true;
-            results.textContent = "";
-            active = -1;
-            input.setAttribute("aria-expanded", "false");
+        var searchInput = document.getElementById("docSearch");
+        var searchResults = document.getElementById("docResults");
+        var active = -1;
+        function closeSearch() {
+          if (!searchResults) return;
+          searchResults.hidden = true;
+          searchResults.textContent = "";
+          active = -1;
+          if (searchInput) searchInput.setAttribute("aria-expanded", "false");
+        }
+        function goSearch(id) {
+          var target = document.getElementById(id);
+          closeSearch();
+          if (innerWidth <= 1180) setDrawer(false);
+          if (target) {
+            if (history.replaceState) history.replaceState(null, "", "#" + id);
+            target.scrollIntoView({ behavior: "smooth", block: "start" });
+            target.setAttribute("tabindex", "-1");
+            target.focus({ preventScroll: true });
           }
-          function go(id) {
-            var target = document.getElementById(id);
-            close();
-            if (window.innerWidth <= 980) setDrawer(false, false);
-            if (target) {
-              if (history.replaceState) history.replaceState(null, "", "#" + id);
-              target.scrollIntoView({ behavior: "smooth", block: "start" });
-              target.setAttribute("tabindex", "-1");
-              target.focus({ preventScroll: true });
-            }
+        }
+        function setActive(i) {
+          if (!searchResults) return;
+          var items = searchResults.querySelectorAll(".search-item");
+          if (!items.length) return;
+          active = (i + items.length) % items.length;
+          items.forEach(function (n, k) {
+            n.classList.toggle("on", k === active);
+          });
+          items[active].scrollIntoView({ block: "nearest" });
+        }
+        function paintSearch(rows, terms) {
+          if (!searchResults) return;
+          searchResults.textContent = "";
+          if (!rows.length) {
+            var empty = document.createElement("div");
+            empty.className = "search-empty";
+            empty.textContent = "Ничего не найдено";
+            searchResults.appendChild(empty);
           }
-          function paint(rows, terms) {
-            results.textContent = "";
-            if (!rows.length) {
-              var empty = document.createElement("div");
-              empty.className = "search-empty";
-              empty.textContent = "Ничего не найдено";
-              results.appendChild(empty);
-            }
-            rows.forEach(function (row, i) {
-              var b = document.createElement("button");
-              b.type = "button";
-              b.className = "search-item";
-              b.setAttribute("role", "option");
-              b.dataset.id = row.item.id;
-              b.innerHTML =
-                '<span class="si-t">' +
-                esc(row.item.label) +
-                "</span>" +
-                '<span class="si-s">' +
-                snippet(row.item.text, terms) +
-                "</span>";
-              b.addEventListener("click", function () {
-                go(row.item.id);
-              });
-              b.addEventListener("pointermove", function () {
-                setActive(i);
-              });
-              results.appendChild(b);
+          rows.forEach(function (row, i) {
+            var b = document.createElement("button");
+            b.type = "button";
+            b.className = "search-item";
+            b.setAttribute("role", "option");
+            b.dataset.id = row.item.id;
+            b.innerHTML =
+              '<span class="si-t">' +
+              esc(row.item.label) +
+              "</span>" +
+              '<span class="si-s">' +
+              snippet(row.item.text, terms) +
+              "</span>";
+            b.addEventListener("click", function () {
+              goSearch(row.item.id);
             });
-            results.hidden = false;
-            input.setAttribute("aria-expanded", "true");
-            active = -1;
-          }
-          function setActive(i) {
-            var items = results.querySelectorAll(".search-item");
-            if (!items.length) return;
-            active = (i + items.length) % items.length;
-            items.forEach(function (n, k) {
-              n.classList.toggle("on", k === active);
+            b.addEventListener("pointermove", function () {
+              setActive(i);
             });
-            items[active].scrollIntoView({ block: "nearest" });
-          }
-          function onInput() {
-            var q = input.value.trim();
+            searchResults.appendChild(b);
+          });
+          searchResults.hidden = false;
+          if (searchInput) searchInput.setAttribute("aria-expanded", "true");
+          active = -1;
+        }
+        if (searchInput && searchResults) {
+          searchInput.addEventListener("input", function () {
+            var q = searchInput.value.trim();
             if (!q) {
-              close();
+              closeSearch();
               return;
             }
             var terms = q.toLowerCase().split(/\s+/).filter(Boolean);
-            var rows = runQuery(q);
-            paint(rows, terms);
-          }
-          input.addEventListener("input", onInput);
-          input.addEventListener("focus", function () {
-            if (input.value.trim()) onInput();
+            paintSearch(runQuery(q), terms);
           });
-          input.addEventListener("keydown", function (e) {
-            var items = results.querySelectorAll(".search-item");
+          searchInput.addEventListener("focus", function () {
+            if (searchInput.value.trim()) {
+              var q = searchInput.value.trim();
+              var terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+              paintSearch(runQuery(q), terms);
+            }
+          });
+          searchInput.addEventListener("keydown", function (e) {
+            var items = searchResults.querySelectorAll(".search-item");
             if (e.key === "ArrowDown") {
               e.preventDefault();
               if (items.length) setActive(active + 1);
@@ -1765,46 +2033,42 @@ mma config show         # действующий конфиг (секреты с
             } else if (e.key === "Enter") {
               e.preventDefault();
               var pick = active >= 0 && items[active] ? items[active] : items[0];
-              if (pick) go(pick.dataset.id);
+              if (pick) goSearch(pick.dataset.id);
             } else if (e.key === "Escape") {
               e.stopPropagation();
-              if (!results.hidden) {
-                close();
+              if (!searchResults.hidden) {
+                closeSearch();
               } else {
-                input.value = "";
-                input.blur();
+                searchInput.value = "";
+                searchInput.blur();
               }
             }
           });
           document.addEventListener("click", function (e) {
-            if (!results.hidden && !results.contains(e.target) && e.target !== input) close();
+            if (
+              !searchResults.hidden &&
+              !searchResults.contains(e.target) &&
+              e.target !== searchInput
+            ) {
+              closeSearch();
+            }
           });
-          return { close: close, input: input };
         }
-        mountSearch(document.getElementById("docSearch"), document.getElementById("docResults"));
-        mountSearch(document.getElementById("sideSearch"), document.getElementById("sideResults"));
-        var search = document.getElementById("docSearch");
-        var sideSearchInput = document.getElementById("sideSearch");
         document.addEventListener("keydown", function (e) {
           var tag = document.activeElement && document.activeElement.tagName;
           if (e.key === "/" && !/^(INPUT|TEXTAREA|SELECT)$/.test(tag)) {
             e.preventDefault();
-            if (window.innerWidth <= 980) {
-              setDrawer(true, false);
-              if (sideSearchInput) sideSearchInput.focus();
-            } else if (search) search.focus();
+            if (innerWidth <= 1180) setDrawer(true);
+            if (searchInput) searchInput.focus();
           }
           if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
             e.preventDefault();
-            var t2 = window.innerWidth <= 980 ? sideSearchInput : search;
-            if (t2) {
-              if (window.innerWidth <= 980) setDrawer(true, false);
-              t2.focus();
-            }
+            if (innerWidth <= 1180) setDrawer(true);
+            if (searchInput) searchInput.focus();
           }
         });
 
-        // Active section in the sidebar (last heading above the reading line).
+        /* ---- scroll-spy ---- */
         var byId = {};
         links.forEach(function (a) {
           byId[a.getAttribute("href").slice(1)] = a;
@@ -1831,7 +2095,112 @@ mma config show         # действующий конфиг (секреты с
           { passive: true },
         );
         syncActive();
+
+        /* ---- calculators ---- */
+        function initCostCalc() {
+          var pIn = document.getElementById("cPrompt"),
+            oIn = document.getElementById("cOut"),
+            cIn = document.getElementById("cCache");
+          if (!pIn || !oIn || !cIn) return;
+          var pv = document.getElementById("cPromptV"),
+            ov = document.getElementById("cOutV"),
+            cv = document.getElementById("cCacheV"),
+            costEl = document.getElementById("cCost"),
+            savedEl = document.getElementById("cSaved");
+          var IN = 0.15 / 1e6,
+            OUT = 0.6 / 1e6,
+            CACHE = IN * 0.1;
+          function k(n) {
+            if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + "M";
+            if (n >= 1e3) return Math.round(n / 1e3) + "K";
+            return String(n);
+          }
+          function money(v) {
+            if (v === 0) return "$0";
+            return v < 0.01 ? "$" + v.toFixed(5) : "$" + v.toFixed(4);
+          }
+          function upd() {
+            var p = +pIn.value,
+              o = +oIn.value,
+              cache = +cIn.value / 100;
+            var cost = p * (1 - cache) * IN + p * cache * CACHE + o * OUT;
+            var base = p * IN + o * OUT;
+            pv.textContent = k(p);
+            ov.textContent = k(o);
+            cv.textContent = Math.round(cache * 100) + "%";
+            costEl.textContent = money(cost);
+            savedEl.textContent = base > 0 ? Math.round((1 - cost / base) * 100) + "%" : "0%";
+          }
+          [pIn, oIn, cIn].forEach(function (el) {
+            el.addEventListener("input", upd);
+          });
+          upd();
+        }
+        function initCompareCalc() {
+          var calls = document.getElementById("mCalls"),
+            tokens = document.getElementById("mTokens");
+          if (!calls || !tokens) return;
+          var callsV = document.getElementById("mCallsV"),
+            tokensV = document.getElementById("mTokensV"),
+            cloudEl = document.getElementById("mCloud"),
+            localEl = document.getElementById("mLocal");
+          var IN = 0.15 / 1e6,
+            OUT = 0.6 / 1e6,
+            OUT_SHARE = 0.08;
+          function k(n) {
+            if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
+            if (n >= 1e3) return Math.round(n / 1e3) + "K";
+            return String(n);
+          }
+          function money(v) {
+            if (v < 1) return "$" + v.toFixed(2);
+            return "$" + Math.round(v).toLocaleString("en-US");
+          }
+          function upd() {
+            var c = +calls.value,
+              t = +tokens.value;
+            var perCall = t * (1 - OUT_SHARE) * IN + t * OUT_SHARE * OUT;
+            var month = perCall * c * 30;
+            callsV.textContent = String(c);
+            tokensV.textContent = k(t);
+            cloudEl.textContent = money(month);
+            localEl.textContent = "$0";
+          }
+          [calls, tokens].forEach(function (el) {
+            el.addEventListener("input", upd);
+          });
+          upd();
+        }
+        initCostCalc();
+        initCompareCalc();
       })();
+    </script>
+    <script type="module">
+      document.querySelectorAll(".mdl").forEach(function (el) {
+        var state = "idle";
+        el.className.split(/\s+/).forEach(function (c) {
+          if (c.indexOf("st-") === 0) state = c.slice(3);
+        });
+        if (window.MMART) window.MMART.attach(el, state);
+      });
+      var big = document.getElementById("mascotBig");
+      var name = document.getElementById("mascotName");
+      var lab = document.getElementById("mascotLab");
+      if (big && lab && window.MMART) {
+        window.MMART.setState(big, "idle");
+        var btns = Array.prototype.slice.call(lab.querySelectorAll(".mstate"));
+        btns.forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            btns.forEach(function (b) {
+              b.classList.remove("on");
+            });
+            btn.classList.add("on");
+            var st = btn.getAttribute("data-state");
+            window.MMART.setState(big, st);
+            if (name) name.textContent = btn.getAttribute("data-label") || st;
+          });
+        });
+      }
     </script>
   </body>
 </html>

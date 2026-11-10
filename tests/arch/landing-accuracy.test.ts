@@ -21,6 +21,7 @@ import { collectFiles } from "../helpers/import-graph";
 const REPO_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const PAGES = join(REPO_ROOT, "gh-pages");
 const HTML = readFileSync(join(PAGES, "index.html"), "utf8");
+const DOCS = readFileSync(join(PAGES, "docs.html"), "utf8");
 const I18N_SRC = readFileSync(join(PAGES, "i18n.js"), "utf8");
 
 type Dict = Record<string, string>;
@@ -31,7 +32,7 @@ const landingWindow: LandingWindow = { LP_I18N: { en: {}, ru: {} } };
 new Function("window", I18N_SRC)(landingWindow);
 const EN = landingWindow.LP_I18N.en;
 const RU = landingWindow.LP_I18N.ru;
-const COPY = `${HTML}\n${I18N_SRC}`;
+const COPY = `${HTML}\n${DOCS}\n${I18N_SRC}`;
 
 /** Standalone word, so `mode`/`model` stay innocent. */
 const REMOVED_WORD_RE = /(^|[^A-Za-z0-9_])moe([^A-Za-z0-9_]|$)/i;
@@ -71,10 +72,9 @@ function faceStates(): string[] {
   return [...union[1].matchAll(/"([a-z]+)"/g)].map((m) => m[1]);
 }
 
-function pageStates(): string[] {
-  return [...HTML.matchAll(/data-state="([a-z]+)"/g)]
-    .map((m) => m[1])
-    .map((state) => (state === "track" ? "idle" : state));
+/** The MMART lab lives on the docs page, next to the component it documents. */
+function labStates(): string[] {
+  return [...DOCS.matchAll(/data-state="([a-z]+)"/g)].map((m) => m[1]);
 }
 
 function pageEndpointPaths(): string[] {
@@ -119,14 +119,12 @@ describe("landing page accuracy", () => {
   it("ships the same mascot states as the web UI", () => {
     const expected = faceStates();
     expect(expected.length).toBeGreaterThan(0);
-    expect(new Set(pageStates())).toEqual(new Set(expected));
-    expect(EN["mascot.count"]).toContain(`${expected.length} states`);
-    expect(RU["mascot.count"]).toContain(`${expected.length} состояния`);
+    expect(new Set(labStates())).toEqual(new Set(expected));
   });
 
   it("names only tools that exist in the registry", () => {
     const known = srcText();
-    const named = (EN["tools.always.d"] ?? "")
+    const named = (EN["ifaces.tools.always"] ?? "")
       .split("·")
       .map((part) => part.split("—")[0].trim())
       .filter(Boolean);
@@ -194,14 +192,27 @@ describe("landing page accuracy", () => {
   });
 
   it("ships a docs page whose sidebar anchors resolve", () => {
-    const docs = readFileSync(join(PAGES, "docs.html"), "utf8");
-    const side = docs.match(/<aside class="side"[\s\S]*?<\/aside>/)?.[0] ?? "";
-    const ids = new Set([...docs.matchAll(/<h2 id="([^"]+)"/g)].map((m) => m[1]));
+    const side = DOCS.match(/<aside class="side"[\s\S]*?<\/aside>/)?.[0] ?? "";
+    const ids = new Set([...DOCS.matchAll(/<h2 id="([^"]+)"/g)].map((m) => m[1]));
     const hrefs = [...side.matchAll(/href="#([^"]+)"/g)].map((m) => m[1]);
     expect(hrefs.length).toBeGreaterThan(20);
     expect(hrefs.filter((id) => !ids.has(id))).toEqual([]);
-    expect(docs).toContain('href="index.html"');
-    expect(docs).toContain('id="docsVer"');
-    expect(docs).not.toMatch(REMOVED_WORD_RE);
+    expect(DOCS).toContain('href="index.html"');
+    expect(DOCS).toContain('id="docsVer"');
+    expect(DOCS).not.toMatch(REMOVED_WORD_RE);
+  });
+
+  it("shares one chrome between the landing page and the docs", () => {
+    // Both pages must be styled by the same token source and the same sidebar
+    // component, otherwise they drift back into two different products.
+    expect(HTML).toContain('href="shared.css"');
+    expect(DOCS).toContain('href="shared.css"');
+    expect(HTML).toContain('href="console.css"');
+    expect(DOCS).toContain('href="console.css"');
+    expect(HTML).toContain('class="side"');
+    expect(DOCS).toContain('class="side"');
+    const shared = readFileSync(join(PAGES, "shared.css"), "utf8");
+    expect(shared).toContain("--accent: #d0cecc");
+    expect(shared).toContain("--bg: #0a0a0b");
   });
 });
