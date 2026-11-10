@@ -26,6 +26,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   попробовать другой класс инструментов (файловые тулы вместо shell,
   `plan_step status=skipped`, один вопрос пользователю), а не «НЕ пробуй другую
   команду». Спека: `docs/specs/0.25.2/2026-11-10-surrender-recovery-design.md` (S3).
+- **Снятая директива уходит из контекста** — `clearDirective` вычёркивает
+  `<system-summary>` снятой директивы из активной истории, а не только из
+  реестра: модель не продолжает читать «сдайся» после того, как условие снялось.
+  Спека: `docs/specs/0.25.2/2026-11-10-surrender-recovery-design.md` (S4).
 
 ## [0.24.4] - 2026-11-06
 

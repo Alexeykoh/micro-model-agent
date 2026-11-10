@@ -53,6 +53,8 @@ export const UNCOVERED_CONTEXT_METHODS: Record<string, string> = {
   needsIntervalCompaction: "интервальная компакция; проверяется отдельным тестом предиката",
   noteMissingUsage: "провай provider usage без счётчиков; дубль имитирует нулевое потребление",
   resetUserTurn: "сброс хода пользователя; в тестах ход всегда один и полный",
+  supersedeDirective:
+    "вычёркивание снятой директивы из истории (S4); зовётся из clearDirective, но в Agent.run тестах условия директив не снимаются — покрыто tests/core/directive-survives-compaction.test.ts с реальным менеджером",
   thinkingLevel: "уровень размышления из set-thinking; в Agent.run приходит из конфига",
   // ── Не вызываются петлёй; дубль не обязан их имитировать ───────────────
   addPendingImage: "очередь изображений; изображения идут через web/attach-image, не через цикл",

@@ -152,6 +152,28 @@ export class ContextManager {
   /** Снимает стоящую директиву (условие перестало выполняться). */
   clearStandingDirective(id: string): void { this.s.standingDirectives.delete(id); }
 
+  /**
+   * Вычёркивает сообщение снятой директивы из активной истории (S4). Ищем
+   * ПОСЛЕДНЕЕ user-сообщение `<system-summary>` с текстом из реестра: директива
+   * могла быть переиздана, и старое сообщение уже неактуально. Tool-пары не
+   * трогаем — директивы не бывают `role:"tool"`, а сообщение перед
+   * tool-результатом не удаляем (иначе рвётся assistant(tool_calls)↔tool
+   * связка). Текста в истории уже нет (компакция съела) — no-op.
+   */
+  supersedeDirective(id: string): void {
+    const text = this.s.standingDirectives.get(id);
+    if (!text) return;
+    const needle = `<system-summary>${text}</system-summary>`;
+    const msgs = this.s.messages;
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const m = msgs[i];
+      if (m.role !== "user" || m.content !== needle) continue;
+      if (i + 1 < msgs.length && msgs[i + 1].role === "tool") continue;
+      msgs.splice(i, 1);
+      return;
+    }
+  }
+
   /** Число сообщений в истории. */
   getMessageCount(): number { return this.s.messages.length; }
 
