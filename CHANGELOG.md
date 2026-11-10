@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   - CLI `mma provider use` восстанавливает запомненную модель провайдера; `toConfig()` больше не теряет `provider.models`.
   - UI-селектор reasoning показывает тот механизм, что реально применяется (`rememberReasoningMechanism` на каждом reconfigure).
   - Спека: `docs/specs/2026-11-10-provider-switch-probes-design.md`.
+- **Discovery выключателя reasoning у хостед-эндпоинтов** (оплачен долг `hosted-reasoning-discovery`): `/models`-capabilities дают стратегию и объявленные уровни (`reasoning.effort` → INV-R7), а поддержка `reasoning_effort:"none"` выясняется одним минимальным запросом — 200 → выключатель есть, 400 про параметр → строгий (`"none"` не шлём), несвязанный 400/5xx/сеть → «не знаем» (пресет, кэш не пишется). Кэш память+диск (`~/.mma/reasoning-off-cache.json`, `MMA_REASONING_OFF_CACHE`), TTL как у reasoning-пробы; проба не гоняется при `reasoning.mode: "none"`. Спека: `docs/specs/2026-11-10-hosted-reasoning-off-discovery-design.md`.
 
 ## [0.24.4] - 2026-11-06
 

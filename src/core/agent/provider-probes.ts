@@ -11,9 +11,10 @@
  * гейтит только контекстную пробу; capabilities обновляются всегда.
  */
 import type { AgentDeps, ProviderProbesBox } from "./deps";
-import type { AppConfig, ReasoningStrategy } from "../../config/types";
+import type { AppConfig, ModelCapabilities, ReasoningStrategy } from "../../config/types";
 import type { LLMProvider } from "../../llm/provider";
 import { activeProviderEndpoint } from "../../modules/providers/manager";
+import { BUILTIN_PROVIDERS } from "../../modules/providers/presets";
 import { t } from "../../i18n/index";
 import { errMsg } from "../../utils";
 
@@ -55,6 +56,75 @@ export interface SwitchProbeHost {
   >;
   probePassed: boolean;
 }
+
+/** Эндпоинт активной записи для discovery-проб. */
+export interface ProbeEndpointRef {
+  baseUrl: string;
+  apiKey?: string;
+  type: string;
+}
+
+/** Итог discovery: нативные поля + capabilities с учётом выключателя. */
+export interface DiscoveredCapabilities {
+  model?: string;
+  /** Длина загруженного инстанса (LM Studio native); иначе undefined. */
+  contextLength?: number;
+  capabilities?: ModelCapabilities;
+}
+
+/**
+ * Единая discovery-проба возможностей идентичности (спека
+ * `2026-11-10-hosted-reasoning-off-discovery-design.md`):
+ *
+ * 1. native/LM Studio + llama.cpp + декларативные `/models`-capabilities;
+ * 2. эмпирический выключатель reasoning: у хостед-шлюзов `reasoningOff` нигде
+ *    не декларирован, а строгие серверы на неизвестный `reasoning_effort`
+ *    отвечают 400 — значит «can send none» выясняется только одним минимальным
+ *    запросом (кэш 24ч/1ч, повторных сетевых вызовов нет).
+ *
+ * `probeOffSwitch: false` — пропустить эмпирику (например, при
+ * `reasoning.mode: "none"`).
+ */
+export async function discoverCapabilities(
+  endpoint: ProbeEndpointRef,
+  model: string,
+  opts: { timeoutMs?: number; probeOffSwitch?: boolean } = {},
+): Promise<DiscoveredCapabilities> {
+  const { probeNativeCapabilities } = await import("../../llm/model-loader");
+  const native = await probeNativeCapabilities(
+    endpoint.baseUrl,
+    model,
+    opts.timeoutMs ?? 3000,
+    endpoint.type,
+    endpoint.apiKey,
+  );
+  const capabilities: ModelCapabilities = { ...(native?.capabilities ?? {}) };
+  // Резолв стратегии (caps → пресет) — не «по умолчанию openai-effort»:
+  // слать пробное `"none"` prompt-tag-бэкенду бесполезно.
+  const presetStrategy = BUILTIN_PROVIDERS.find((p) => p.type === endpoint.type)?.capabilities
+    .reasoningStrategy;
+  const strategy = capabilities.reasoningStrategy ?? presetStrategy ?? "openai-effort";
+  if (
+    opts.probeOffSwitch !== false &&
+    capabilities.reasoningOff === undefined &&
+    strategy === "openai-effort"
+  ) {
+    const { probeReasoningOffSwitch } = await import("../../llm/reasoning-off-probe");
+    const off = await probeReasoningOffSwitch(endpoint.baseUrl, model, {
+      apiKey: endpoint.apiKey,
+      providerType: endpoint.type,
+    });
+    // `null` = «не смогли спросить» — не пишем, пресет остаётся (INV-15).
+    if (off !== null) capabilities.reasoningOff = off;
+  }
+  const hasCaps = Object.values(capabilities).some((v) => v !== undefined);
+  return {
+    model: native?.model,
+    contextLength: native?.contextLength,
+    capabilities: hasCaps ? capabilities : undefined,
+  };
+}
+
 /**
  * Перезапрашивает discovery-пробу возможностей активной идентичности и
  * ПЕРЕЗАПИСЫВАЕТ `capabilitiesProbeRef.probe` — включая сброс в `undefined`,
@@ -70,9 +140,10 @@ export async function refreshCapabilitiesProbe(
   if (!ref) return;
   try {
     const endpoint = activeProviderEndpoint(config.provider);
-    const { probeNativeCapabilities } = await import("../../llm/model-loader");
-    const native = await probeNativeCapabilities(endpoint.baseUrl, config.model, 3000, endpoint.type);
-    ref.probe = native?.capabilities;
+    const discovered = await discoverCapabilities(endpoint, config.model, {
+      probeOffSwitch: config.reasoning?.mode !== "none",
+    });
+    ref.probe = discovered.capabilities;
   } catch (err) {
     ref.probe = undefined;
     host.deps.onDiagnostic?.({

@@ -6,11 +6,8 @@
  * общую фабрику (с ленивым session id) → reasoning-стратегия + фоновая
  * reasoning-probe. Тяжёлые пробы — фоном, старт не блокируют.
  */
-import {
-  ModelLoader,
-  probeNativeCapabilities,
-  probeProviderContext,
-} from "../../llm/model-loader";
+import { ModelLoader, probeProviderContext } from "../../llm/model-loader";
+import { discoverCapabilities } from "../agent/provider-probes";
 import { join as joinDir } from "path";
 import type { ContextProbeResult } from "../../llm/model-loader";
 import { buildActiveProvider } from "../../modules/providers/factory";
@@ -113,13 +110,13 @@ export async function setupProviderPhase(
   // через reconfigure видна тулам без пересборки контекста.
   const capabilitiesRef: ProviderProbesBox = {};
   // Native discovery ДО сборки: механизм reasoning нужен экземпляру сразу (INV-R2/R6).
-  const nativeProbe = await probeNativeCapabilities(
-    probeEndpoint.baseUrl,
-    config.model,
-    3000,
-    probeEndpoint.type,
-  );
-  if (nativeProbe?.capabilities) capabilitiesRef.probe = nativeProbe.capabilities;
+  // Тот же путь, что `refreshCapabilitiesProbe` при свитче: native/декларативные
+  // capabilities + эмпирический выключатель reasoning (хостед-шлюзы его не
+  // декларируют, а строгие серверы на неизвестный effort отвечают 400).
+  const nativeProbe = await discoverCapabilities(probeEndpoint, config.model, {
+    probeOffSwitch: config.reasoning?.mode !== "none",
+  });
+  if (nativeProbe.capabilities) capabilitiesRef.probe = nativeProbe.capabilities;
 
   // Значение на старте. Проба резолвится фоном — если пользователь успел
   // сменить contextWindow раньше (веб-UI до приземления пробы), побеждает его
@@ -129,7 +126,7 @@ export async function setupProviderPhase(
   const contextProbePromise: Promise<ContextProbeResult | null> = (async () => {
     try {
       const lmContext =
-        nativeProbe?.contextLength !== undefined
+        nativeProbe.contextLength !== undefined && nativeProbe.model
           ? { model: nativeProbe.model, actual: nativeProbe.contextLength }
           : null;
       const detected =

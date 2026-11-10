@@ -36,6 +36,7 @@ export const OUTBOUND_FETCH_ALLOWLIST: Record<string, string> = {
   "src/llm/model-loader.ts": "ollama load endpoint from config baseUrl",
   "src/llm/models-dev.ts": "hardcoded models.dev registry URL",
   "src/llm/native-context.ts": "native context endpoint from provider config",
+  "src/llm/reasoning-off-probe.ts": "provider chat endpoint from config baseUrl (same target as openai-request); reasoning off-switch probe",
   "src/modules/providers/preflight.ts": "provider endpoint from config (baseUrl)",
   "src/modules/mcp/http-transport.ts": "MCP server URL from user config; separate allowlist (mcp.allowedServers)",
   "src/modules/mcp/sse-transport.ts": "MCP server URL from user config; separate allowlist (mcp.allowedServers)",

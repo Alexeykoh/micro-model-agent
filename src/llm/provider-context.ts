@@ -16,6 +16,7 @@ import {
   probeOllama,
   probeLlamaCpp,
   probeLlamaCppReasoning,
+  probeOpenAICompatCapabilities,
   probeOpenAICompatModels,
   probeModelsDev,
 } from "./native-context";
@@ -71,9 +72,9 @@ interface LmStudioModelsResponse {
  * `trained_for_tool_use`), если есть — это единый источник правды вместо
  * гадания по имени.
  *
- * Хостед-эндпоинты (opencode-go и т.п.) native discovery не отдают — там
- * capabilities пустые. DEBT(hosted-reasoning-discovery): из-за этого
- * неизвестен off-switch reasoning и `"none"` не уходит (см. debt.md).
+ * Хостед-эндпоинты (opencode-go и т.п.) на этот native API отвечают 404 — их
+ * capabilities приходят из `/models` (`probeOpenAICompatCapabilities`), а
+ * выключатель reasoning добирается эмпирической пробой (`reasoning-off-probe`).
  *
  * Null, если эндпоинт недоступен (не LM Studio), модели нет/снята или запрос
  * упал — вызывающий деградирует молча.
@@ -139,27 +140,31 @@ export interface NativeProbeResult {
 
 /**
  * Единая native-проба возможностей ДО сборки провайдера (INV-R2/R6): LM Studio
- * (`/api/v1/models`) и llama.cpp (`/props.chat_template_caps`) опрашиваются
- * параллельно. Механизм reasoning нужен экземпляру провайдера сразу, поэтому
- * эта проба, в отличие от context-probe, не фоновая.
+ * (`/api/v1/models`), llama.cpp (`/props.chat_template_caps`) и декларативные
+ * `/models`-capabilities OpenAI-compat шлюзов (`capabilities.reasoning` —
+ * OpenCode Zen/Go) опрашиваются параллельно. Механизм reasoning нужен
+ * экземпляру провайдера сразу, поэтому эта проба, в отличие от context-probe,
+ * не фоновая.
  */
 export async function probeNativeCapabilities(
   baseUrl: string,
   model: string,
   timeoutMs = 3000,
   providerType?: string,
+  apiKey?: string,
 ): Promise<NativeProbeResult | null> {
   const origin = baseUrl.replace(/\/$/, "").replace(/\/v1\/?$/, "");
   // `/props` — локальный llama.cpp; хостед-типы не опрашиваем синхронно, иначе
   // старт платит лишний сетевой round-trip к публичному эндпоинту.
   const llamaEligible =
     providerType === undefined || providerType === "openai-compat" || providerType === "lmstudio";
-  const [lm, llama] = await Promise.all([
+  const [lm, llama, compat] = await Promise.all([
     probeModel(baseUrl, model, timeoutMs),
     llamaEligible ? probeLlamaCppReasoning(origin, timeoutMs) : Promise.resolve(null),
+    probeOpenAICompatCapabilities(baseUrl, model, apiKey, timeoutMs),
   ]);
-  if (!lm && !llama) return null;
-  const capabilities: ModelCapabilities = { ...(lm?.capabilities ?? {}) };
+  if (!lm && !llama && !compat) return null;
+  const capabilities: ModelCapabilities = { ...(lm?.capabilities ?? {}), ...(compat ?? {}) };
   if (llama) {
     capabilities.reasoningStrategy = llama.strategy;
     capabilities.reasoningOff = llama.reasoningOff;

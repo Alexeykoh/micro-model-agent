@@ -1,7 +1,7 @@
 // Нативные пробы контекста бэкендов (Ollama / llama.cpp / OpenAI-compat
 // /models / models.dev) — вынесено из `provider-context.ts` (правило ≤300).
 import { lookupModelsDevContext } from "./models-dev";
-import type { ReasoningStrategy } from "../config/types";
+import type { ModelCapabilities, ReasoningStrategy } from "../config/types";
 
 /** Числовые context-подобные поля, что может нести запись `/models`. */
 const CONTEXT_KEYS = [
@@ -195,6 +195,24 @@ export async function probeLlamaCppReasoning(
 }
 
 /**
+ * Список моделей OpenAI-compat `/models` (общая часть context- и
+ * capabilities-проб): `null` при любом промахе.
+ */
+async function fetchOpenAICompatModelsList(
+  baseUrl: string,
+  apiKey: string | undefined,
+  timeoutMs: number,
+): Promise<Record<string, unknown>[] | null> {
+  const url = `${baseUrl.replace(/\/+$/, "")}/models`;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (apiKey && apiKey !== "not-needed") headers.Authorization = `Bearer ${apiKey}`;
+  const data = await fetchJson(url, timeoutMs, { headers });
+  const list = (data as { data?: unknown } | null)?.data;
+  if (!Array.isArray(list)) return null;
+  return list.filter((m): m is Record<string, unknown> => !!m && typeof m === "object");
+}
+
+/**
  * OpenAI-совместимый `/models` с расширенными метаданными. Серверы с голыми id
  * (чистый OpenAI, Zen/Go) context-полей не несут → null.
  */
@@ -204,17 +222,39 @@ export async function probeOpenAICompatModels(
   apiKey: string | undefined,
   timeoutMs: number,
 ): Promise<number | null> {
-  const url = `${baseUrl.replace(/\/+$/, "")}/models`;
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (apiKey && apiKey !== "not-needed") headers.Authorization = `Bearer ${apiKey}`;
-  const data = await fetchJson(url, timeoutMs, { headers });
-  const list = (data as { data?: unknown } | null)?.data;
-  if (!Array.isArray(list)) return null;
-  const found = list.find(
-    (m): m is Record<string, unknown> => !!m && typeof m === "object" && matchesModel(m as Record<string, unknown>, model),
-  );
+  const list = await fetchOpenAICompatModelsList(baseUrl, apiKey, timeoutMs);
+  const found = list?.find((m) => matchesModel(m, model));
   if (!found) return null;
   return pickContextField(found);
+}
+
+/**
+ * Декларативные возможности reasoning из OpenAI-compat `/models`
+ * (`capabilities.reasoning: {supported, effort}` — OpenCode Zen/Go и т.п.).
+ * Выключатель здесь НЕ декларируется — он выясняется эмпирически
+ * (`probeReasoningOffSwitch`), поэтому `reasoningOff` мы не ставим.
+ */
+export async function probeOpenAICompatCapabilities(
+  baseUrl: string,
+  model: string,
+  apiKey: string | undefined,
+  timeoutMs: number,
+): Promise<ModelCapabilities | null> {
+  const list = await fetchOpenAICompatModelsList(baseUrl, apiKey, timeoutMs);
+  const found = list?.find((m) => matchesModel(m, model));
+  if (!found) return null;
+  const raw = found.capabilities;
+  if (!raw || typeof raw !== "object") return null;
+  const reasoning = (raw as { reasoning?: unknown }).reasoning;
+  if (!reasoning || typeof reasoning !== "object") return null;
+  const r = reasoning as { supported?: unknown; effort?: unknown };
+  const capabilities: ModelCapabilities = {};
+  if (r.supported === true) capabilities.reasoningStrategy = "openai-effort";
+  if (Array.isArray(r.effort)) {
+    const levels = r.effort.filter((v): v is string => typeof v === "string");
+    if (levels.length > 0) capabilities.reasoningLevels = levels;
+  }
+  return Object.keys(capabilities).length > 0 ? capabilities : null;
 }
 
 /**

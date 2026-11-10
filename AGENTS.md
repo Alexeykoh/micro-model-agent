@@ -119,6 +119,15 @@ bun run mma "<промпт>"   # прогнать агента вживую
 `tests/core/session-diagnose.test.ts`, `tests/arch/observability-coverage.test.ts`,
 `tests/arch/double-honesty.test.ts`, `tests/replay/invariants.test.ts`, `tests/arch/guidance-enforcement.test.ts`, `tests/arch/timeout-relations.test.ts`, `tests/arch/session-provenance.test.ts`, `tests/arch/default-single-source.test.ts`, `tests/compaction-cooldown-invariant.test.ts`, `tests/arch/platform-skips.test.ts`, `tests/arch/style-rules.test.ts`, `tests/arch/llm-call-options.test.ts`, `tests/core/reasoning-strategy-resolve.test.ts`.
 
+Данные провайдера при смене идентичности (INV-R2/R8, спеки
+`2026-11-10-provider-switch-probes-design.md` и
+`2026-11-10-hosted-reasoning-off-discovery-design.md`) держат:
+`tests/core/provider-switch-probes.test.ts` (capabilities-перепроба, `probePassed`,
+remember для новой пары, `probe: false` без сети, discovery выключателя хостеда),
+`tests/llm/reasoning-off-probe.test.ts` (эмпирика `none`: 200/400-про-параметр/
+несвязанный 400, кэш), `tests/core/provider-setprovider.test.ts` (память моделей
+провайдера, INV-19), `tests/llm/provider-context-probe.test.ts` (`limit.context`).
+
 Границы безопасности тулов (аудит harness-модулей, волна W3) держат:
 `tests/tools/bash-scope.test.ts` (workdir-jail), `tests/tools/write-path-allowlist.test.ts`
 (allowlist записи во всех мутирующих тулах), `tests/tools/glob-scope.test.ts`

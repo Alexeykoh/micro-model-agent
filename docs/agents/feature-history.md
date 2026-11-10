@@ -10,6 +10,49 @@ the rules needed to avoid breaking things; this file keeps the detailed record.
 
 ---
 
+---
+
+### Данные провайдера при переключении + discovery выключателя reasoning (2026-11-10)
+
+Дефект (живой прогон на opencode-go): после свитча провайдера/модели контекст,
+capabilities и reasoning наследовались от прошлого бэкенда; `limit.context` из
+`/models` не читался (окно не определялось для моделей вне models.dev); CLI
+`provider use` терял память моделей (`toConfig()` без `models`) и не
+восстанавливал модель провайдера; хостед-эндпоинты не могли получить
+`reasoning_effort:"none"`, потому что `reasoningOff` нигде не декларирован.
+
+Что сделано (спеки
+`2026-11-10-provider-switch-probes-design.md`,
+`2026-11-10-hosted-reasoning-off-discovery-design.md`):
+
+- Идентичность (`model + baseUrl + active + type`) — единственный триггер
+  перепробы; `contextAuto` гейтит только контекст, capabilities — всегда
+  (`refreshCapabilitiesProbe` перезаписывает бокс, включая сброс в `undefined`).
+- Общий `ProviderProbesBox` (`capabilitiesProbeRef`): `probe` + ленивая
+  `reasoningProbe`. `restartReasoningProbe` публикует в него новую пробу,
+  `invalidateReasoningProbe` (путь `probe: false`) сбрасывает вердикт без сети;
+  новый раннер читает актуальное, а не снимок bootstrap.
+- `rememberReasoningMechanism` пишется на каждом `applyReasoningStrategy` —
+  UI-селектор и применяемая стратегия не расходятся (INV-R8).
+- `discoverCapabilities` = native (LM Studio/llama.cpp) + декларативные
+  `/models`-capabilities (`probeOpenAICompatCapabilities`: стратегия и уровни,
+  INV-R7) + эмпирическая проба выключателя (`reasoning-off-probe.ts`: один
+  минимальный `reasoning_effort:"none"`; 200 → true, 400-про-параметр → false,
+  прочее/несвязанный 400 → `null` не кэшируется; кэш 24ч/1ч
+  `~/.mma/reasoning-off-cache.json`, `MMA_REASONING_OFF_CACHE`). Один путь для
+  bootstrap и reconfigure.
+- `pickContextField` читает `limit.context` (OpenCode Zen/Go) — окно больше не
+  зависит от точного id в каталоге.
+- `setProvider` восстанавливает `provider.models[active]` и дописывает факт
+  использования; `toConfig()` сохраняет `models`.
+
+Гварды: `tests/core/provider-switch-probes.test.ts`,
+`tests/llm/reasoning-off-probe.test.ts`,
+`tests/core/provider-setprovider.test.ts`,
+`tests/llm/provider-context-probe.test.ts` (`limit.context`),
+`tests/webui-session-runner.test.ts` (живая reasoning-проба у нового раннера).
+Долг `hosted-reasoning-discovery` закрыт (debt.md).
+
 ### Эксперты: наследование модели и выбор «провайдер → модель» (2026-11-01)
 
 Дефект: `experts[*].model` был обязательным и в дефолтах стоял
