@@ -56,6 +56,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   на холодном индексе потерянные типы импорта давали ложные
   `implicit any` / `cannot find name` и блокировали корректную запись (модель
   обходила баг явными аннотациями). Спека: `docs/specs/0.25.2/2026-11-10-harness-verification-defects-design.md` (B).
+- **План: проверки привязаны к шагам** — файловая проверка
+  (`file-exists:` / `file-modified:`), не относящаяся к файлам своего шага,
+  больше не принимается: заменяется на manual + предупреждение (сдвинутый
+  массив checks давал `manual:`-ловушку). Спека: `docs/specs/0.25.2/2026-11-10-harness-verification-defects-design.md` (D).
 
 ## [0.24.4] - 2026-11-06
 

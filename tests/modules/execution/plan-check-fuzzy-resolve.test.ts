@@ -91,7 +91,10 @@ describe("auto-advance respects the step check", () => {
     const res = await planTool(execModule).handler({}, {
       action: "create",
       title: "T",
-      steps: ["Update src/a.ts"],
+      // Проверка обязана относиться к файлам своего шага (дефект D): шаг называет
+      // оба файла, свежий `src/a.ts` уводит vacuous-truth гард в false, а
+      // старый `src/b.ts` блокирует автопродвижение через file-modified.
+      steps: ["Update src/a.ts and src/b.ts"],
       checks: ["file-modified:src/b.ts"],
     });
     expect(res.success).toBe(true);

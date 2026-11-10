@@ -38,7 +38,7 @@ export interface PlanToolDeps {
   parseChecks(
     args: Record<string, unknown>,
     steps: string[],
-  ): { checks: string[] | null; error: string | null };
+  ): { checks: string[] | null; error: string | null; warnings: string[] };
   getTaskText(ctx: ToolContext | undefined): string;
   /** Модельно-видимое actionable-сообщение «нет активного плана». */
   noActivePlanMessage(): string;
