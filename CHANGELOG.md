@@ -34,6 +34,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   не подтверждается чужим файлом с тем же basename (`src/app/about/page.tsx`
   вместо `src/app/cart/page.tsx`), а auto-advance уважает `step.check`
   (`file-exists:` / `file-modified:`). Спека: `docs/specs/0.25.2/2026-11-10-harness-verification-defects-design.md` (A).
+- **Аудит перестал противоречить себе** — `summary` финального аудита согласован
+  с `passed`: при неподтверждённых шагах сообщение перечисляет причины, а не
+  печатает «[✓] Задача выполнена»; auto-advance не закрывает `manual:`-шаг без
+  заметки. Спека: `docs/specs/0.25.2/2026-11-10-harness-verification-defects-design.md` (C).
 
 ## [0.24.4] - 2026-11-06
 

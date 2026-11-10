@@ -4,6 +4,7 @@
  * (файлы/тесты/tsc/пендинги). Вынесено из класса `ExecutionModule`.
  */
 import { readFileSync } from "fs";
+import { t } from "../../i18n/index";
 import { extractFileLikeTokens, stripUrls } from "../../core/hallucination/js-identifiers";
 import { findExistingFile } from "./auditor";
 import { provablyStale } from "./step-advance";
@@ -82,6 +83,22 @@ export function autoCloseEvidenceSteps(d: FinalAuditHost, plan: Plan): number {
 }
 
 /**
+ * Сводка не должна противоречить `passed`: если есть неподтверждённые шаги,
+ * `summary` обязан это говорить (и перечислять причины), а не печатать
+ * «[✓] Задача выполнена» рядом с «проверка не пройдена» (дефект C).
+ */
+function summaryWithPending(
+  done: number,
+  total: number,
+  pendingSteps: string[],
+  fallback: string,
+): string {
+  if (pendingSteps.length === 0) return fallback;
+  const head = t("exec.audit_pending", { done: String(done), total: String(total) });
+  return `${head}\n${pendingSteps.join("\n")}`;
+}
+
+/**
  * Шаг считается незакрытым, если он не done/skipped ИЛИ закрыт по `manual:`,
  * но без наблюдения (W2 спеки turn-runtime-gate): «проверил глазами» без
  * записи не подтверждает пункт.
@@ -133,7 +150,7 @@ export async function runFinalAudit(d: FinalAuditHost): Promise<FinalAuditResult
       total: plan.steps.length,
       pendingSteps,
       missingFiles: audit.missingFiles,
-      summary: audit.summary,
+      summary: summaryWithPending(done, plan.steps.length, pendingSteps, audit.summary),
       testNote: audit.testNote,
     };
   }
@@ -158,7 +175,7 @@ export async function runFinalAudit(d: FinalAuditHost): Promise<FinalAuditResult
     total: plan.steps.length,
     pendingSteps,
     missingFiles: audit.missingFiles,
-    summary: audit.summary,
+    summary: summaryWithPending(done, plan.steps.length, pendingSteps, audit.summary),
     testNote: audit.testNote,
   };
 }
