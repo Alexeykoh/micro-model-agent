@@ -106,6 +106,11 @@ export interface AgentDeps {
    * (дружелюбен KV-кешу). Null, если активного плана нет.
    */
   planSummary?: () => string | null;
+  /**
+   * Незакрытые шаги плана (S5) — улика для критика, что работа не завершена.
+   * Те же критерии `isUnconfirmed`, что у финального аудита.
+   */
+  planPendingSteps?: () => string[];
   /** Тестовый шов — подменяет настоящий verify критика (моки Bun глобальны). */
   criticOverride?: {
     verify: (pack: import("../../modules/critic/types").EvidencePack, signal?: AbortSignal) => Promise<import("../../modules/critic/types").CriticVerdict | null>;

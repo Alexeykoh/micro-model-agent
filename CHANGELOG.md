@@ -48,6 +48,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Аудит на форс-финале** — ход, завершённый `failed_batches`/stalled/duplicate/
   max_iters, теперь проходит детерминированный аудит плана (не только
   LLM-критика): при незакрытых шагах `success:false`. Спека: `docs/specs/0.25.2/2026-11-10-surrender-recovery-design.md` (S6).
+- **Критик видит незакрытые шаги плана** — в evidence-пакет добавлен список
+  `PLAN PENDING STEPS` (кап 8, «+N more»), а промпт требует помечать незакрытую
+  работу `critical` и не наказывать за недоступный тул (`shell unavailable` /
+  `SECURITY BLOCKED`) с вопросом пользователю. Спека: `docs/specs/0.25.2/2026-11-10-surrender-recovery-design.md` (S5).
 
 ## [0.24.4] - 2026-11-06
 

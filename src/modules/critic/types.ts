@@ -47,6 +47,9 @@ export type CriticRunCheck = (
 export interface EvidencePack {
   task: string;
   planSummary?: string;
+  /** Незакрытые шаги плана (кап 8; рендер добавляет «+N more»). */
+  planPendingSteps?: string[];
+  planPendingStepsTotal?: number;
   changedFiles: string[];
   commands: Array<{ command: string; exitCode?: number; output?: string }>;
   toolDigest: string;

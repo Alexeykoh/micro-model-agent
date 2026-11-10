@@ -235,6 +235,7 @@ export async function executeAgentLoop(
       slog,
       task: input,
       planSummary: ctx.deps.planSummary?.() ?? undefined,
+      planPendingSteps: ctx.deps.planPendingSteps?.() ?? undefined,
       toolEvents: gatherTurnToolEvents(contextManager, state.criticHistoryMark),
       beforeFinish: true,
       answerText: text,
