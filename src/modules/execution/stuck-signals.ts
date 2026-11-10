@@ -27,6 +27,7 @@ export type FailureType =
   | "repeat" // identical tool call (same args) repeated
   | "error_loop" // one tool, or consecutive calls, failing repeatedly
   | "bash_flailing" // rotating failing shell commands
+  | "shell_unavailable" // shell cannot start at all — switch tool class
   | "read_only_streak"; // many successful reads/searches with no edit or run
 
 /** Классификация фейла: тип, тул, счётчик, итерация (0 — неизвестна). */

@@ -5,6 +5,7 @@
 import type { ToolCall, ToolContext, ToolResult } from "../../tools/types";
 import { t } from "../../i18n/index";
 import { detectTestResults } from "../../tools/bash";
+import { SHELL_UNAVAILABLE_ERROR_CODE } from "../../tools/bash-spawn-error";
 import { forbiddenWindowsCommand } from "./windows-commands";
 import { platform } from "os";
 import {
@@ -79,7 +80,11 @@ export function runAfterTool(deps: ExecutionPluginDeps, ctx: ToolContext & { onM
     // ротация разных фейлящихся команд (wc → cat → Get-Content → …) обязана
     // триггерить детектор.
     if (call.name === "bash") {
-      deps.stuckDetector.recordBashAttempt(false);
+      // Причину берём из классификатора S1 (errorMeta), не парсим вывод.
+      deps.stuckDetector.recordBashAttempt(
+        false,
+        result.errorMeta?.code === SHELL_UNAVAILABLE_ERROR_CODE,
+      );
     }
     // Hard stop для запрещённых Windows-команд: после второго фейла той же
     // запрещённой команды (grep/sed/ls/find/…) инжектим STOP, чтобы сессия

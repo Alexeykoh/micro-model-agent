@@ -18,7 +18,11 @@ import { logBashCommand } from "../modules/security/audit-log";
 import type { BashSecurityConfig } from "../config/types";
 import { decorateCommandOutput, detectTestResults } from "./bash-output";
 import { memoWrite } from "./bash-memo";
-import { classifySpawnError, shellUnavailableOutput } from "./bash-spawn-error";
+import {
+  SHELL_UNAVAILABLE_ERROR_CODE,
+  classifySpawnError,
+  shellUnavailableOutput,
+} from "./bash-spawn-error";
 import {
   SHELL_STOP_THRESHOLD,
   recordShellUnavailable,
@@ -63,7 +67,11 @@ export async function runBashCommand(opts: RunBashCommandOptions): Promise<ToolR
   // S1: два подряд «шелл недоступен» — третий спавн не вызываем, он заведомо
   // упадёт. Итерации жалеть нечем: причина на машине, а не в команде.
   if (shellUnavailableStreak(ctx) >= SHELL_STOP_THRESHOLD - 1) {
-    return { success: false, output: shellUnavailableOutput() };
+    return {
+      success: false,
+      output: shellUnavailableOutput(),
+      errorMeta: { code: SHELL_UNAVAILABLE_ERROR_CODE, retryable: false },
+    };
   }
 
   const entry = processRegistry.start(command, workdir, ctx.sessionId, {
@@ -85,7 +93,11 @@ export async function runBashCommand(opts: RunBashCommandOptions): Promise<ToolR
         // ложный совет проверить workdir (сломанный шелл не чинится workdir).
         if (classifySpawnError(entry.spawnError, platform(), workdir) === "shell") {
           recordShellUnavailable(ctx);
-          return { success: false, output: shellUnavailableOutput(entry.spawnError) };
+          return {
+            success: false,
+            output: shellUnavailableOutput(entry.spawnError),
+            errorMeta: { code: SHELL_UNAVAILABLE_ERROR_CODE, retryable: false },
+          };
         }
         return {
           success: false,

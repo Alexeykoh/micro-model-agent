@@ -12,6 +12,7 @@ import {
 } from "../../src/tools/bash-failures";
 import { processRegistry, type ManagedProcess } from "../../src/modules/processes";
 import { DEFAULT_SECURITY_CONFIG } from "../../src/config/security";
+import { SHELL_UNAVAILABLE_ERROR_CODE } from "../../src/tools/bash-spawn-error";
 import type { ToolContext } from "../../src/tools/types";
 
 const SHELL_MSG = "ENOENT: no such file or directory, uv_spawn 'C:\\Windows\\system32\\cmd.exe'";
@@ -121,6 +122,8 @@ describe("bash: shell-unavailable streak (S1)", () => {
     expect(result.success).toBe(false);
     expect(result.output).toContain("shell is unavailable");
     expect(result.output).not.toContain('check the "workdir"');
+    // Машиночитаемый сигнал для смежных модулей (stuck-детектор, S2).
+    expect(result.errorMeta?.code).toBe(SHELL_UNAVAILABLE_ERROR_CODE);
     expect(shellUnavailableStreak(ctx)).toBe(1);
   });
 
