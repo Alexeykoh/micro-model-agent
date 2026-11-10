@@ -153,16 +153,16 @@ body.metallica::before {
   z-index: -1;
   pointer-events: none;
   background:
-    linear-gradient(90deg, rgba(4, 2, 1, 0.88) 0 18%, rgba(4, 2, 1, 0.58) 34% 66%, rgba(4, 2, 1, 0.86) 82% 100%),
-    linear-gradient(180deg, rgba(3, 2, 1, 0.62) 0 30%, rgba(35, 8, 4, 0.42) 62%, rgba(5, 3, 2, 0.82) 100%),
-    url("/metallica-cover.svg") center 38% / cover no-repeat;
+    linear-gradient(180deg, rgba(4, 2, 1, 0.54) 0 18%, rgba(12, 3, 2, 0.34) 48%, rgba(4, 2, 1, 0.7)),
+    linear-gradient(90deg, rgba(4, 2, 1, 0.68) 0 24%, transparent 38% 62%, rgba(4, 2, 1, 0.7) 76% 100%),
+    url("/metallica-cover.svg") center 46% / cover no-repeat;
 }
 body.metallica.light::before {
   background:
-    linear-gradient(90deg, rgba(231, 223, 212, 0.93) 0 18%, rgba(231, 223, 212, 0.74) 34% 66%, rgba(231, 223, 212, 0.92) 82% 100%),
-    linear-gradient(180deg, rgba(231, 223, 212, 0.82), rgba(231, 223, 212, 0.66) 54%, rgba(185, 146, 105, 0.62)),
-    url("/metallica-cover.svg") center 38% / cover no-repeat;
-  filter: contrast(0.82) sepia(0.12) brightness(1.04);
+    linear-gradient(180deg, rgba(231, 223, 212, 0.72) 0 18%, rgba(231, 223, 212, 0.54) 48%, rgba(231, 223, 212, 0.82)),
+    linear-gradient(90deg, rgba(231, 223, 212, 0.86) 0 24%, transparent 38% 62%, rgba(231, 223, 212, 0.88) 76% 100%),
+    url("/metallica-cover.svg") center 46% / cover no-repeat;
+  filter: contrast(0.78) sepia(0.18) brightness(1.12);
 }
 
 /* Album typography: Hetfield's logo is angular, condensed and uppercase. */
@@ -191,7 +191,21 @@ body.metallica h3 {
 body.metallica .bar-top,
 body.metallica .bar-sub {
   background: #120908d6;
-  border-bottom: 1px solid var(--rule);
+  border: 0;
+}
+body.metallica .sb,
+body.metallica .sb-tabs-bar,
+body.metallica .sb-name,
+body.metallica .sec,
+body.metallica .sec-h,
+body.metallica .sb-tab,
+body.metallica .sb-tab-toggle,
+body.metallica .sb-settings,
+body.metallica .stab,
+body.metallica .icon-btn,
+body.metallica .btn,
+body.metallica .linkbtn {
+  border: 0;
 }
 body.metallica .composer {
   background: #0b0505e0;
@@ -240,20 +254,11 @@ body.metallica.light .sec-title {
 }
 
 body.metallica .composer-main::before {
-  content: "⚡";
+  content: "\203A";
   color: var(--accent);
   padding: 0 8px 0 4px;
   align-self: center;
   text-shadow: 0 0 8px rgba(189, 102, 21, 0.48);
-}
-body.metallica .send-btn {
-  font-size: 0;
-}
-body.metallica .send-btn::before {
-  content: "⚡";
-  font-size: 18px;
-  line-height: 1;
-  color: currentColor;
 }
 
 /* MMART accessory: the horns, not a fake hat. */
