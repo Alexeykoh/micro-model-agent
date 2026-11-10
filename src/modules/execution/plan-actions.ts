@@ -75,12 +75,13 @@ async function actionRePlan(deps: PlanToolDeps, _ctx: ToolContext, args: Record<
   const keptCount = replanned.steps.length - newSteps.length;
   deps.setPlan(replanned);
   const display = deps.trackerRef.current?.toPromptBlock();
+  const warnings = checked.warnings.length > 0 ? `\n${checked.warnings.join("\n")}` : "";
   return {
     success: true,
     output: t("plan.replanned", {
       kept: String(keptCount),
       steps: String(newSteps.length),
-    }),
+    }) + warnings,
     display,
   };
 }
@@ -161,6 +162,9 @@ async function actionCreate(deps: PlanToolDeps, ctx: ToolContext, args: Record<s
   }
   if (existing) {
     output += `\n${t("plan.existing_fresh")}`;
+  }
+  if (checked.warnings.length > 0) {
+    output += `\n${checked.warnings.join("\n")}`;
   }
   return {
     success: true,

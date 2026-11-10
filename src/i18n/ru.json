@@ -323,6 +323,7 @@
   "plan.checks_not_array": "checks должен быть массивом строк проверок 1:1 к шагам",
   "plan.checks_mismatch": "checks должны идти 1:1 к steps: получено {actual} проверок на {expected} шагов. Пример: steps [\"Создать src/a.ts\"] + checks [\"file-exists:src/a.ts\"]. Не передавай checks — тогда каждый шаг самоподтвердится.",
   "plan.checks_invalid": "Недопустимые проверки: {kinds}. Каждая должна начинаться с \"file-exists:\", \"file-modified:\", \"command:\", \"http:\", \"browser:\", \"web-build:\" или \"manual:\".",
+  "plan.check_unbound": "Проверка \"{check}\" не соответствует файлам шага {step}; она заменена на manual — проверь этот шаг сам.",
   "plan.check_failed": "Нельзя отметить шаг {step} выполненным: его проверка не прошла — {check}. Сначала выполни проверку (создай файл / запусти команду), затем отмечай done.",
   "plan.check_self_certified": "проверка подтверждена: {check} — выполнено перед done.",
   "plan.check_need_behavior": "Нельзя отметить шаг {step} выполненным: шаг меняет поведение/UI, а проверка «{check}» — статика (сборка/типы). Нужно поведенческое доказательство: команда с тестами или запуском, `http:<url>[~маркер]`, `browser:<url>[~маркер]` либо `manual:<что видно>`.",

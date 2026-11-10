@@ -333,6 +333,7 @@
   "plan.checks_not_array": "checks must be an array of check strings, aligned 1:1 with steps",
   "plan.checks_mismatch": "checks must align 1:1 with steps: got {actual} checks for {expected} steps. Example: steps [\"Create src/a.ts\"] + checks [\"file-exists:src/a.ts\"]. Omit checks to let each step self-certify.",
   "plan.checks_invalid": "Invalid check(s): {kinds}. Each check must start with \"file-exists:\", \"file-modified:\", \"command:\", \"http:\", \"browser:\", \"web-build:\" or \"manual:\".",
+  "plan.check_unbound": "Check \"{check}\" does not match any file in step {step}; it was replaced with a manual check — verify that step yourself.",
   "plan.check_failed": "Cannot mark step {step} done: its check failed — {check}. Run the check first (create the file / run the command), then mark done.",
   "plan.check_self_certified": "check self-certified: {check} — confirmed run before done.",
   "plan.check_need_behavior": "Cannot mark step {step} done: the step changes behaviour/UI while '{check}' is static evidence (build/types). Provide behavioural proof: a command that runs tests or the app, `http:<url>[~marker]`, `browser:<url>[~marker]`, or `manual:<what you see>`.",

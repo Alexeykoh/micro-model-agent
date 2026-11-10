@@ -41,6 +41,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Аудит на форс-финале** — ход, завершённый `failed_batches`/stalled/duplicate/
   max_iters, теперь проходит детерминированный аудит плана (не только
   LLM-критика): при незакрытых шагах `success:false`. Спека: `docs/specs/0.25.2/2026-11-10-surrender-recovery-design.md` (S6).
+- **План: проверки привязаны к шагам** — файловая проверка
+  (`file-exists:` / `file-modified:`), не относящаяся к файлам своего шага,
+  больше не принимается: заменяется на manual + предупреждение (сдвинутый
+  массив checks давал `manual:`-ловушку). Спека: `docs/specs/0.25.2/2026-11-10-harness-verification-defects-design.md` (D).
 
 ## [0.24.4] - 2026-11-06
 
