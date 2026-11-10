@@ -10,9 +10,26 @@ the rules needed to avoid breaking things; this file keeps the detailed record.
 
 ---
 
----
+### Расширение mma-user-guide + бейдж «встроенный» в панели веба (2026-11-10)
+
+- `src/modules/skills/builtin/mma-user-guide.md` дополнен по живому разбору
+  вопросов: флаги one-shot и эргономика REPL, память, картинки (Ctrl+V,
+  `/image`), плагины/MCP (ловушка «disable ≠ sandbox»), `mma agents init`,
+  обновления (панель → About, `updater.autoInstall`), `mma usage`, логи,
+  `mma session export` для репортов. Тело 7.4K символов — в бюджете (гейт
+  `tests/modules/skills/builtin.test.ts`, потолок 12K).
+- Панель «Навыки» разделяет встроенные и внешние скиллы и помечает встроенные
+  бейджем: загрузчик присваивает `SkillMeta.kind` по источнику
+  (`builtin`/`global`/`project`, при дедупе победитель сохраняет свой kind),
+  `GET /api/skills` аддитивно несёт `kind` (старые клиенты не ломаются),
+  фронтенд рендерит секции только с непустыми группами. Спека
+  `2026-11-10-skills-panel-builtin-design.md`. Проверки:
+  `tests/modules/skills/kind.test.ts`, `tests/webui-skills-panel-dom.test.ts`,
+  расширенные `webui-settings`/`builtin`. Живая проверка: dist-сборка +
+  Playwright (секции ВСТРОЕННЫЕ/ВНЕШНИЕ, бейдж у `mma-user-guide`).
 
 ### Скилл-плейбуки: пользовательский builtin + разработчик для OpenCode (2026-11-10)
+
 
 Запрос: два скилла — (1) playbook разработчика для работы в этом репозитории,
 (2) builtin-скилл MMA о том, как работать с самим агентом (провайдеры, конфиг,

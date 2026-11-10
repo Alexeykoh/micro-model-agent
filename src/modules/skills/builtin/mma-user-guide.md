@@ -45,6 +45,14 @@ command surface — when the user asks "how do I… with MMA", answer from it.
   `security.*`.
 - Sugar commands: `/reasoning [show|level low|medium|high]`, `/verbose`, `/status`.
 
+## Running one-shot tasks
+
+- `mma "<prompt>"` runs a single task. Flags: `-d <dir>` (workspace),
+  `-e` / `--exit-on-complete`, `-j` / `--json` (machine output),
+  `--reasoning <level>`, `--verbose`, `--context-log`, `--no-agents-md`.
+- Plain `mma` opens the REPL: Tab-completes commands/keys/paths, ↑/↓ history,
+  `/help [command]` for details, `/exit` (aliases `/quit`, `/q`) or Ctrl+D to leave.
+
 ## Tools the agent has
 
 - Files: `read_file`, `write_file`, `edit_file`, `append_file`, `list_dir`, `create_dir`,
@@ -72,6 +80,20 @@ command surface — when the user asks "how do I… with MMA", answer from it.
   `/new`, `/clear`, `/export`. Web uses `/session list|use`.
 - Long sessions auto-compact within `contextWindow`; the system/response budget split
   is tunable via `/config contextBudget` / `mma config context`.
+
+## Memory, images, plugins, updates
+
+- Memory: the agent persists durable facts via `remember`/`recall`; inspect with
+  `/memory`; history of past sessions is searchable via `search_history` and `/resume`.
+- Images (vision): paste into the web composer with Ctrl+V; in REPL use `/image <path>`
+  (alias `/img`) or let the agent call `attach_image`.
+- Plugins and MCP: `/plugins` (REPL) or `mma plugins list | show | reload | drafts`;
+  MCP servers appear in the web settings panel and are callable through `mcp_call`.
+  Note: disabling a plugin is not a sandbox — its code may already have loaded.
+- Subagents/experts: `mma agents init` scaffolds agent definitions; the model spawns
+  helpers via `subagent` (parallelizable, budgeted tokens).
+- Updates: the web panel (settings → about) installs new releases; or enable
+  `/config updater.autoInstall true`. `mma changelog [--from <v>]` shows what changed.
 
 ## Skills
 
@@ -110,7 +132,11 @@ command surface — when the user asks "how do I… with MMA", answer from it.
 
 - `/help [command]`, `/doctor` (env health), `/status`, `/sysprompt [--full]`,
   `/map` (project map), `/lsp`, `/plugins`, `/reload`, `/memory`, `/export`.
-- CLI: `mma usage`, `mma map`, `mma changelog [--from vX]`, `mma doctor`.
+- CLI: `mma usage` (token cost per model/provider), `mma map`, `mma changelog [--from vX]`,
+  `mma doctor`.
+- Logs: app log under `~/.mma/logs/`; the per-session `session.jsonl` is the full
+  event record — export a session (`mma session export <id>`) and attach it when
+  reporting a problem.
 - Web (`mma web`): chat + settings panels; REST includes `GET /api/skills`.
 - Service (`mma serve`): HTTP API v1, one tenant per process — point the user to
   `docs` on service-api for details.

@@ -91,8 +91,8 @@ describe("webui settings REST", () => {
     const s = createWebUiState();
     s.skills = {
       getAvailable: () => [
-        { name: "alpha", description: "A", sourcePath: "/skills/alpha.md" },
-        { name: "beta", sourcePath: "/skills/beta.md" },
+        { name: "alpha", kind: "builtin", description: "A", sourcePath: "/skills/alpha.md" },
+        { name: "beta", kind: "project", sourcePath: "/skills/beta.md" },
       ],
       getLoaded: () => [{ name: "alpha" }],
     };
@@ -100,13 +100,21 @@ describe("webui settings REST", () => {
       const res = await doFetch(`${base}/api/skills`);
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
-        skills: Array<{ name: string; source?: string; enabled?: boolean; description?: string }>;
+        skills: Array<{
+          name: string;
+          kind?: string;
+          source?: string;
+          enabled?: boolean;
+          description?: string;
+        }>;
       };
       const byName = new Map(body.skills.map((x) => [x.name, x]));
       expect(byName.get("alpha")?.enabled).toBe(true);
+      expect(byName.get("alpha")?.kind).toBe("builtin");
       expect(byName.get("alpha")?.source).toBe("/skills/alpha.md");
       expect(byName.get("alpha")?.description).toBe("A");
       expect(byName.get("beta")?.enabled).toBe(false);
+      expect(byName.get("beta")?.kind).toBe("project");
     });
   });
 

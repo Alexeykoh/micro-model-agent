@@ -50,9 +50,11 @@ export interface WebUiAssets {
  * Сужение даёт реальным модулям удовлетворять их неявно, а тестам — стабить
  * без кастов (`SkillsModule`/`PluginManager` структурно совместимы).
  */
-/** Скилл для REST настроек (имя, описание, путь). */
+/** Скилл для REST настроек (имя, описание, путь, вид источника). */
 export interface WebSkillInfo {
   name: string;
+  /** `"builtin"` — из поставки (бейдж в панели); иначе внешний (`global`/`project`). */
+  kind?: "builtin" | "global" | "project";
   description?: string;
   sourcePath?: string;
 }
