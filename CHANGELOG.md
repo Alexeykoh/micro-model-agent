@@ -42,6 +42,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   доказательства (волна 21) распространяется и на файловые контракты:
   `file-exists:` / `file-modified:` на шаге, меняющем UI, блокируют `done`.
   Спека: `docs/specs/0.25.2/2026-11-10-harness-verification-defects-design.md` (F).
+- **bash: описание не советует недоступные тулы** — `bash` и `subagent_list`
+  больше не ссылаются на `process_*` (они доступны только с тегом `shell`);
+  вместо этого — `enable_tools shell`. Спека: `docs/specs/0.25.2/2026-11-10-harness-verification-defects-design.md` (E).
 
 ## [0.24.4] - 2026-11-06
 

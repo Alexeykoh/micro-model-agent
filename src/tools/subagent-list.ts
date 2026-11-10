@@ -57,7 +57,7 @@ export const subagentListTool: ToolDefinition = {
   security: { caps: [{ subagent: true }] },
   icon: "🤖",
   description:
-    "List sub-agent runs in the current session (running by default, include_finished for history). Use before claiming that no sub-agents are running: process_list shows shell processes, not sub-agents.",
+    "List sub-agent runs in the current session (running by default, include_finished for history). Use before claiming that no sub-agents are running: shell process tools show shell processes, not sub-agents.",
   tags: ["code"],
   parameters: {
     type: "object",
