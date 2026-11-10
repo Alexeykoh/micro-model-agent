@@ -1656,6 +1656,7 @@
   "config.enum.spring": "spring",
   "config.enum.summer": "summer",
   "config.enum.autumn": "autumn",
+  "config.enum.metallica": "Metallica",
   "config.enum.rg": "ripgrep",
   "config.enum.grep": "grep",
   "config.enum.js": "built-in JS",

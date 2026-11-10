@@ -23,7 +23,8 @@ var FACE_CLASS = {
   check: "c-recon st-check squint",
   warn: "c-warn st-warn squint",
   recheck: "c-recon st-recheck squint",
-  verify: "c-recon st-verify squint"
+  verify: "c-recon st-verify squint",
+  lspoff: "c-dim st-check squint"
 };
 
 // src/modules/webui/assets/js/mascot-pose.ts
@@ -76,10 +77,7 @@ var STATE_CFG = {
     pose: P({ sx: 0.94, sy: 0.94 }),
     lean: 0,
     props: [{ type: "bar" }],
-    fx: [
-      { type: "corners", when: "behind", r: 0.44, speed: 1.5, alpha: 0.6 },
-      { type: "orbit", when: "front", n: 3, r0: 0.38, r1: 0.46, speed: 0.7, size: 0.012, alpha: 0.5 }
-    ]
+    fx: [{ type: "corners", when: "behind", r: 0.44, speed: 1.5, alpha: 0.6 }]
   },
   load: {
     eye: "wake",
@@ -88,10 +86,7 @@ var STATE_CFG = {
     pose: P(),
     lean: 0,
     props: [{ type: "bar" }],
-    fx: [
-      { type: "corners", when: "front", r: 0.46, speed: 0.5, alpha: 0.35 },
-      { type: "orbit", when: "behind", n: 3, r0: 0.4, r1: 0.5, speed: 0.35, size: 0.012, alpha: 0.35 }
-    ]
+    fx: []
   },
   stop: {
     eye: "sleep",
@@ -215,6 +210,15 @@ var STATE_CFG = {
     drift: { x: 0.03, y: 0.008, speed: 0.35 },
     props: [{ type: "checklist", mode: "scan", rows: 3 }],
     fx: [{ type: "corners", when: "behind", r: 0.46, speed: 0.3, alpha: 0.2 }]
+  },
+  lspoff: {
+    eye: "squint",
+    blink: 4.4,
+    wave: "breathe",
+    pose: P({ eW: 0.17, eH: 0.2 }),
+    lean: 0,
+    props: [{ type: "badge", ch: "–", x: 0.35, y: -0.15, size: 0.1 }],
+    fx: [{ type: "aura", when: "behind", alpha: 0.16 }]
   },
   edit: {
     eye: "narrow",
@@ -463,6 +467,9 @@ function mixHex(a, b, t) {
 function rgba(hex, a) {
   const c = hexRgb(hex);
   return `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+}
+function eyeGeometry(radius, w, h) {
+  return radius === 0 ? { h: Math.max(h, w), r: 0 } : { h, r: w / 2 };
 }
 function dot(ctx, x, y, r, color, alpha) {
   ctx.globalAlpha = alpha;
@@ -1072,13 +1079,13 @@ function rounded(ctx, x, y, w, h, r) {
   ctx.beginPath();
   ctx.roundRect(x, y, w, h, Math.min(r, w / 2, h / 2));
 }
-function eye(ctx, shape, x, y, w, h, blink, tilt, color) {
+function eye(ctx, shape, x, y, w, h, blink, tilt, color, radius) {
   if (shape === "happy") {
     const hw = w * 0.74;
     ctx.save();
     ctx.strokeStyle = color;
     ctx.lineWidth = Math.max(1.5, h * 0.3);
-    ctx.lineCap = "round";
+    ctx.lineCap = radius === 0 ? "butt" : "round";
     ctx.beginPath();
     ctx.moveTo(x - hw / 2, y + h * 0.2);
     ctx.quadraticCurveTo(x, y - h * 1.05, x + hw / 2, y + h * 0.2);
@@ -1086,12 +1093,13 @@ function eye(ctx, shape, x, y, w, h, blink, tilt, color) {
     ctx.restore();
     return;
   }
-  const hh = (shape === "sleep" ? h * 0.22 : h) * blink;
+  const geo = eyeGeometry(radius, w, h);
+  const hh = (shape === "sleep" ? geo.h * 0.22 : geo.h) * blink;
   ctx.save();
   ctx.translate(x, y);
   if (tilt)
     ctx.rotate(tilt);
-  rounded(ctx, -w / 2, -hh / 2, w, Math.max(2, hh), w / 2);
+  rounded(ctx, -w / 2, -hh / 2, w, Math.max(2, hh), geo.r);
   ctx.fillStyle = color;
   ctx.fill();
   ctx.restore();
@@ -1214,13 +1222,6 @@ function renderFace(s) {
   const bw = u * BODY * sx * shapeScale;
   const bh = u * BODY * sy * shapeScale;
   const rad = Math.min(bw, bh) * s.radius;
-  const shadow = ctx.createRadialGradient(bx, by + bh * 0.55, 1, bx, by + bh * 0.55, bw * 0.75);
-  shadow.addColorStop(0, col.isLight ? "rgba(27,29,34,.20)" : "rgba(0,0,0,.45)");
-  shadow.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = shadow;
-  ctx.beginPath();
-  ctx.ellipse(bx, by + bh * 0.55, bw * 0.72, bh * 0.22, 0, 0, TAU);
-  ctx.fill();
   ctx.save();
   ctx.translate(bx, by);
   ctx.rotate(rot);
@@ -1257,15 +1258,15 @@ function renderFace(s) {
   if (m < 1 && prev.eye !== cfg.eye) {
     ctx.save();
     ctx.globalAlpha = 1 - m;
-    eye(ctx, prev.eye, -spread + ex, ey, eyeW, eyeH, blink * wake, p.tilt, col.eye);
-    eye(ctx, prev.eye, spread + ex, ey, eyeW, eyeH, blink * wake, -p.tilt, col.eye);
+    eye(ctx, prev.eye, -spread + ex, ey, eyeW, eyeH, blink * wake, p.tilt, col.eye, s.radius);
+    eye(ctx, prev.eye, spread + ex, ey, eyeW, eyeH, blink * wake, -p.tilt, col.eye, s.radius);
     ctx.globalAlpha = m;
-    eye(ctx, cfg.eye, -spread + ex, ey, eyeW, eyeH, blink * wake, p.tilt, col.eye);
-    eye(ctx, cfg.eye, spread + ex, ey, eyeW, eyeH, blink * wake, -p.tilt, col.eye);
+    eye(ctx, cfg.eye, -spread + ex, ey, eyeW, eyeH, blink * wake, p.tilt, col.eye, s.radius);
+    eye(ctx, cfg.eye, spread + ex, ey, eyeW, eyeH, blink * wake, -p.tilt, col.eye, s.radius);
     ctx.restore();
   } else {
-    eye(ctx, cfg.eye, -spread + ex, ey, eyeW, eyeH, blink * wake, p.tilt, col.eye);
-    eye(ctx, cfg.eye, spread + ex, ey, eyeW, eyeH, blink * wake, -p.tilt, col.eye);
+    eye(ctx, cfg.eye, -spread + ex, ey, eyeW, eyeH, blink * wake, p.tilt, col.eye, s.radius);
+    eye(ctx, cfg.eye, spread + ex, ey, eyeW, eyeH, blink * wake, -p.tilt, col.eye, s.radius);
   }
   ctx.restore();
   if (!showFx)
@@ -1576,7 +1577,7 @@ class Mascot {
       state: this.state,
       prevState: this.prevState,
       pose: this.pose,
-      time: reduced ? 0.9 : this.time,
+      time: this.time,
       entry: this.entry,
       seed: this.seed,
       prevSeed: this.prevSeed,
@@ -1595,8 +1596,10 @@ class Mascot {
     this.layer = null;
   }
 }
+var REDUCED_FRAME_MS = 100;
 var raf = 0;
 var last = 0;
+var lastReducedDraw = 0;
 var frames = 0;
 function loop(now) {
   const dt = last ? Math.min(0.05, (now - last) / 1000) : 0;
@@ -1606,25 +1609,23 @@ function loop(now) {
       if (!m.canvas.isConnected)
         m.destroy();
   }
+  const drawNow = !reduced || now - lastReducedDraw >= REDUCED_FRAME_MS;
+  if (drawNow)
+    lastReducedDraw = now;
   for (const m of instances) {
     if (!m.visible)
       continue;
     m.advance(dt);
-    m.draw();
+    if (drawNow)
+      m.draw();
   }
   raf = requestAnimationFrame(loop);
 }
 function start() {
-  if (raf || reduced || typeof requestAnimationFrame !== "function")
+  if (raf || typeof requestAnimationFrame !== "function")
     return;
   last = 0;
   raf = requestAnimationFrame(loop);
-}
-function stop() {
-  if (!raf || typeof cancelAnimationFrame !== "function")
-    return;
-  cancelAnimationFrame(raf);
-  raf = 0;
 }
 function attachMascot(canvas, state) {
   const m = new Mascot(canvas, state);
@@ -1648,10 +1649,7 @@ if (typeof window !== "undefined") {
   const mq = typeof window.matchMedia === "function" ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
   mq?.addEventListener("change", (e) => {
     reduced = e.matches;
-    if (reduced)
-      stop();
-    else
-      start();
+    start();
     for (const m of instances)
       m.draw();
   });

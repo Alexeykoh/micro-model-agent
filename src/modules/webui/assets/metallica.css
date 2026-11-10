@@ -1,9 +1,4 @@
-/* Metallica theme — Master of Puppets cover homage for mma web.
- *
- * The palette is taken from Don Brautigam's artwork: blackened soil, bone-white
- * crosses, brown blood-red sky (#581f14 / #883825), fiery horizon (#bd6615)
- * and tan dog-tag highlights (#b99269). `metallica-cover.svg` is the background;
- * this sheet keeps the cover visible but readable. */
+/* Metallica theme: Master of Puppets palette + SVG cover background. */
 
 body.metallica {
   position: relative;
@@ -18,13 +13,13 @@ body.metallica {
   --surface: #170d0a;
   --input-surface: #110807;
   --inp-bg: #0b0505;
-  --inp-border: #63432f;
+  --inp-border: rgba(226, 216, 205, 0.12);
   --inp-focus: #bd6615;
   --input-shadow: #bd661533;
 
-  --border: #3a2722;
-  --border-2: #632217;
-  --border-3: #3a2722;
+  --border: rgba(226, 216, 205, 0.1);
+  --border-2: rgba(226, 216, 205, 0.14);
+  --border-3: rgba(226, 216, 205, 0.1);
 
   --muted: #b99269;
   --dim-a: #907a68;
@@ -54,7 +49,7 @@ body.metallica {
 
   --u-fg: #f2ebe1;
   --u-bg: #1d0b08;
-  --u-border: #883825;
+  --u-border: rgba(189, 102, 21, 0.34);
 
   --ans: #d5c9bc;
   --ans-bg: rgba(136, 56, 37, 0.08);
@@ -65,8 +60,8 @@ body.metallica {
   --scroll-thumb-hover: #bd6615;
   --stab-thumb: #63432f;
   --stab-thumb-hover: #bd6615;
-  --pipe: #63432f;
-  --rule: #632217;
+  --pipe: rgba(226, 216, 205, 0.12);
+  --rule: rgba(226, 216, 205, 0.1);
 
   --plan-line: #63432f;
   --plan-bar-fg: #907a68;
@@ -81,7 +76,6 @@ body.metallica {
   --shadow-modal: 0 0 0 1px var(--border-2), 0 24px 60px rgba(0, 0, 0, 0.84);
 }
 
-/* Bone-paper register: same composition, inverted for the light mode toggle. */
 body.metallica.light {
   color-scheme: light;
 
@@ -93,12 +87,12 @@ body.metallica.light {
   --surface: #d2c4b4;
   --input-surface: #f3ece2;
   --inp-bg: #f6efe6;
-  --inp-border: #9c785c;
+  --inp-border: rgba(35, 26, 20, 0.14);
   --inp-focus: #883825;
   --input-shadow: #88382522;
-  --border: #b8a18a;
-  --border-2: #883825;
-  --border-3: #b8a18a;
+  --border: rgba(35, 26, 20, 0.11);
+  --border-2: rgba(35, 26, 20, 0.16);
+  --border-3: rgba(35, 26, 20, 0.11);
   --muted: #624637;
   --dim-a: #765b4c;
   --dim-b: #8d7260;
@@ -122,7 +116,7 @@ body.metallica.light {
   --x-hover-bg: #d8b6a7;
   --u-fg: #17110e;
   --u-bg: #d0bcab;
-  --u-border: #883825;
+  --u-border: rgba(136, 56, 37, 0.32);
   --ans: #2a1d17;
   --ans-bg: rgba(136, 56, 37, 0.07);
   --toggle-off: #b8a18a;
@@ -131,8 +125,8 @@ body.metallica.light {
   --scroll-thumb-hover: #883825;
   --stab-thumb: #8a694f;
   --stab-thumb-hover: #883825;
-  --pipe: #8a694f;
-  --rule: #883825;
+  --pipe: rgba(35, 26, 20, 0.12);
+  --rule: rgba(35, 26, 20, 0.1);
   --plan-line: #8a694f;
   --plan-bar-fg: #765b4c;
   --sec-h: #765b4c;
@@ -145,7 +139,6 @@ body.metallica.light {
   --shadow-modal: 0 0 0 1px var(--border-2), 0 20px 50px rgba(75, 45, 30, 0.28);
 }
 
-/* Full-bleed album art, dimmed into a usable console background. */
 body.metallica::before {
   content: "";
   position: fixed;
@@ -165,7 +158,6 @@ body.metallica.light::before {
   filter: contrast(0.78) sepia(0.18) brightness(1.12);
 }
 
-/* Album typography: Hetfield's logo is angular, condensed and uppercase. */
 body.metallica,
 body.metallica *,
 body.metallica *::before,
@@ -191,17 +183,28 @@ body.metallica h3 {
 body.metallica .bar-top,
 body.metallica .bar-sub {
   background: #120908d6;
-  border: 0;
+  border-bottom: 1px solid rgba(226, 216, 205, 0.1);
 }
-body.metallica .sb,
+body.metallica .sb {
+  border-left: 1px solid rgba(226, 216, 205, 0.08);
+}
 body.metallica .sb-tabs-bar,
 body.metallica .sb-name,
-body.metallica .sec,
-body.metallica .sec-h,
+body.metallica .sec {
+  border-color: rgba(226, 216, 205, 0.08);
+}
+body.metallica .sb-settings {
+  border-left: 1px solid rgba(226, 216, 205, 0.07);
+}
 body.metallica .sb-tab,
 body.metallica .sb-tab-toggle,
-body.metallica .sb-settings,
-body.metallica .stab,
+body.metallica .stab {
+  border-color: rgba(189, 102, 21, 0.18);
+}
+body.metallica .sb-tab.on,
+body.metallica .stab.on {
+  border-color: rgba(189, 102, 21, 0.22);
+}
 body.metallica .icon-btn,
 body.metallica .btn,
 body.metallica .linkbtn {
@@ -213,13 +216,20 @@ body.metallica .composer {
 body.metallica.light .bar-top,
 body.metallica.light .bar-sub {
   background: #f3ece2d6;
+  border-bottom-color: rgba(35, 26, 20, 0.11);
+}
+body.metallica.light .sb {
+  border-left-color: rgba(35, 26, 20, 0.08);
+}
+body.metallica.light .sb-tab,
+body.metallica.light .sb-tab-toggle,
+body.metallica.light .stab {
+  border-color: rgba(136, 56, 37, 0.14);
 }
 body.metallica.light .composer {
   background: #f6efe6e0;
 }
 
-/* Metallica logo in the topbar, used as a CSS mask so the chrome gradient
- * follows the theme instead of being a fixed-color image. */
 @media (min-width: 1040px) {
   body.metallica .bar-top::after {
     content: "";

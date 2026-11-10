@@ -7,7 +7,7 @@ import type { StateCfg } from "./mascot-pose.js";
 import { bodyDynamics, blinkFactor } from "./mascot-pose.js";
 import { drawFx } from "./mascot-fx.js";
 import { drawProp } from "./mascot-props.js";
-import { clamp, lerp, mixHex, rgba, seedAt, smooth } from "./mascot-util.js";
+import { clamp, eyeGeometry, lerp, mixHex, rgba, seedAt, smooth } from "./mascot-util.js";
 
 const BODY = 0.5;
 
@@ -51,13 +51,14 @@ function eye(
   blink: number,
   tilt: number,
   color: string,
+  radius: number,
 ): void {
   if (shape === "happy") {
     const hw = w * 0.74;
     ctx.save();
     ctx.strokeStyle = color;
     ctx.lineWidth = Math.max(1.5, h * 0.3);
-    ctx.lineCap = "round";
+    ctx.lineCap = radius === 0 ? "butt" : "round";
     ctx.beginPath();
     ctx.moveTo(x - hw / 2, y + h * 0.2);
     ctx.quadraticCurveTo(x, y - h * 1.05, x + hw / 2, y + h * 0.2);
@@ -65,11 +66,12 @@ function eye(
     ctx.restore();
     return;
   }
-  const hh = (shape === "sleep" ? h * 0.22 : h) * blink;
+  const geo = eyeGeometry(radius, w, h);
+  const hh = (shape === "sleep" ? geo.h * 0.22 : geo.h) * blink;
   ctx.save();
   ctx.translate(x, y);
   if (tilt) ctx.rotate(tilt);
-  rounded(ctx, -w / 2, -hh / 2, w, Math.max(2, hh), w / 2);
+  rounded(ctx, -w / 2, -hh / 2, w, Math.max(2, hh), geo.r);
   ctx.fillStyle = color;
   ctx.fill();
   ctx.restore();
@@ -212,15 +214,15 @@ export function renderFace(s: DrawInput): void {
   if (m < 1 && prev.eye !== cfg.eye) {
     ctx.save();
     ctx.globalAlpha = 1 - m;
-    eye(ctx, prev.eye, -spread + ex, ey, eyeW, eyeH, blink * wake, p.tilt, col.eye);
-    eye(ctx, prev.eye, spread + ex, ey, eyeW, eyeH, blink * wake, -p.tilt, col.eye);
+    eye(ctx, prev.eye, -spread + ex, ey, eyeW, eyeH, blink * wake, p.tilt, col.eye, s.radius);
+    eye(ctx, prev.eye, spread + ex, ey, eyeW, eyeH, blink * wake, -p.tilt, col.eye, s.radius);
     ctx.globalAlpha = m;
-    eye(ctx, cfg.eye, -spread + ex, ey, eyeW, eyeH, blink * wake, p.tilt, col.eye);
-    eye(ctx, cfg.eye, spread + ex, ey, eyeW, eyeH, blink * wake, -p.tilt, col.eye);
+    eye(ctx, cfg.eye, -spread + ex, ey, eyeW, eyeH, blink * wake, p.tilt, col.eye, s.radius);
+    eye(ctx, cfg.eye, spread + ex, ey, eyeW, eyeH, blink * wake, -p.tilt, col.eye, s.radius);
     ctx.restore();
   } else {
-    eye(ctx, cfg.eye, -spread + ex, ey, eyeW, eyeH, blink * wake, p.tilt, col.eye);
-    eye(ctx, cfg.eye, spread + ex, ey, eyeW, eyeH, blink * wake, -p.tilt, col.eye);
+    eye(ctx, cfg.eye, -spread + ex, ey, eyeW, eyeH, blink * wake, p.tilt, col.eye, s.radius);
+    eye(ctx, cfg.eye, spread + ex, ey, eyeW, eyeH, blink * wake, -p.tilt, col.eye, s.radius);
   }
   ctx.restore();
 
