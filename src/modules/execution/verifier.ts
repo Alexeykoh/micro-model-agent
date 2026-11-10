@@ -63,7 +63,9 @@ export class StepVerifier {
   async checkFileExists(path: string, scope?: ToolScope): Promise<VerificationItem> {
     const check = resolveCheckPath(this.baseDir, path, scope, this.pathSecurity);
     if (check.blocked) return { passed: false, message: check.blocked };
-    const exists = !!findExistingFile(this.baseDir, check.path);
+    // Контракт `file-exists:` проверяет заявленный путь, не чужой basename
+    // (дефект A); суффикс пути сохраняет вложенный проект (`src/a.ts`).
+    const exists = !!findExistingFile(this.baseDir, check.path, { mode: "suffix" });
     return {
       passed: exists,
       message: exists ? t("verify.file_exists", { path }) : t("verify.file_not_found", { path }),

@@ -30,6 +30,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   `<system-summary>` снятой директивы из активной истории, а не только из
   реестра: модель не продолжает читать «сдайся» после того, как условие снялось.
   Спека: `docs/specs/0.25.2/2026-11-10-surrender-recovery-design.md` (S4).
+- **План: `file-exists:` проверяет заявленный путь** — existence-контракт больше
+  не подтверждается чужим файлом с тем же basename (`src/app/about/page.tsx`
+  вместо `src/app/cart/page.tsx`), а auto-advance уважает `step.check`
+  (`file-exists:` / `file-modified:`). Спека: `docs/specs/0.25.2/2026-11-10-harness-verification-defects-design.md` (A).
 
 ## [0.24.4] - 2026-11-06
 
