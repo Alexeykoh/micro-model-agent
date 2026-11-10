@@ -12,7 +12,29 @@ the rules needed to avoid breaking things; this file keeps the detailed record.
 
 ---
 
-### Данные провайдера при переключении + discovery выключателя reasoning (2026-11-10)
+### Скилл-плейбуки: пользовательский builtin + разработчик для OpenCode (2026-11-10)
+
+Запрос: два скилла — (1) playbook разработчика для работы в этом репозитории,
+(2) builtin-скилл MMA о том, как работать с самим агентом (провайдеры, конфиг,
+тулзы, сессии, скиллы, безопасность, диагностика).
+
+Что сделано:
+
+- `src/modules/skills/builtin/mma-user-guide.md` — builtin-скилл `mma-user-guide`
+  (фронтматтер `mma_version: 2`, тело ~5.7K символов ≈ 1.5K токенов — влезает в
+  бюджет `skills.budget` даже на 32K-контексте). Содержимое сверено с кодом:
+  CLI-подкоманды (`src/cli/*-commands.ts`), slash-каталог (`src/core/commands/spec.ts`),
+  типы провайдеров (`src/modules/providers/presets.ts`), ключи конфига
+  (`src/config/registry-*`), реестр тулзов (`src/tools/index.ts`).
+- `.opencode/skills/mma-development/SKILL.md` — проект-скилл OpenCode: порядок
+  работы (ветка от `dev`, спека до контракта, definition of done), рецепты
+  (тулл/ключ/команда/скилл/модуль/правило-с-гейтом), ловушки, релиз. Не дублирует
+  AGENTS.md, а дополняет его операциями; при конфликте нормативен AGENTS.md.
+- Гейт `tests/modules/skills/builtin.test.ts`: каждый `.md` в `builtin/` проходит
+  загрузчик (битый frontmatter отбрасывается молча — проверка это ловит), имена
+  уникальны и в kebab-case, есть description и тело, тело ≤ 12K символов,
+  `mma-user-guide` присутствует и содержит опорные разделы.
+
 
 Дефект (живой прогон на opencode-go): после свитча провайдера/модели контекст,
 capabilities и reasoning наследовались от прошлого бэкенда; `limit.context` из
