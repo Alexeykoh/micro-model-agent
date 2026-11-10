@@ -22,6 +22,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **bash: быстрая директива при недоступном шелле** — после двух подряд «шелл
   недоступен» модель получает «смени класс инструментов» (файловые тулы вместо
   shell), раньше общего «тул падает N раз». Спека: `docs/specs/0.25.2/2026-11-10-surrender-recovery-design.md` (S2).
+- **honest-stop: директива не запрещает смену подхода** — `exec.honest_stop` велит
+  попробовать другой класс инструментов (файловые тулы вместо shell,
+  `plan_step status=skipped`, один вопрос пользователю), а не «НЕ пробуй другую
+  команду». Спека: `docs/specs/0.25.2/2026-11-10-surrender-recovery-design.md` (S3).
 
 ## [0.24.4] - 2026-11-06
 
