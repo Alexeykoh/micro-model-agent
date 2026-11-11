@@ -128,6 +128,11 @@ export class AgentBase {
     return this.deps.contextProbeRef?.current;
   }
 
+  /** Доступен ли активный эндпоинт по последней capabilities-пробе. */
+  providerReachableSnapshot(): boolean | undefined {
+    return this.deps.capabilitiesProbeRef?.reachable;
+  }
+
   /**
    * Запуск тула по имени из CLI/REPL (например, lsp_check). Обходит
    * инкапсуляцию: команды не должны лезть в приватные `deps`.

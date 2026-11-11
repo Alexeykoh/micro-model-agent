@@ -30,6 +30,8 @@ export interface ProviderProbesBox {
   probe?: import("../../config/types").ModelCapabilities;
   /** Проба поддержки reasoning для ТЕКУЩЕЙ пары провайдер+модель (B2). */
   reasoningProbe?: () => Promise<boolean>;
+  /** `false` — эндпоинт не отвечает; `undefined` — ещё не проверяли. */
+  reachable?: boolean;
 }
 
 /** Живой итог context-probe: `undefined` — ещё не устоялась, `null` — не удалось. */

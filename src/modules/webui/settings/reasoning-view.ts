@@ -26,6 +26,8 @@ export interface ReasoningView {
   mode: string;
   /** Уровни, реально доступные у провайдера+модели (INV-R7); null = не объявлены. */
   levels: string[] | null;
+  /** false — активный эндпоинт не отвечает; undefined — статус неизвестен. */
+  reachable?: boolean;
 }
 
 /** Признанные имена усилий эндпоинтов (зеркало EFFORT_OPTION из provider-context). */
@@ -61,7 +63,10 @@ function visibleLevels(
  * запоминает его в `probe.ts` до старта UI. Пока агент не резолвил (юнит-тесты,
  * самый первый кадр), падаем на пресет — стратегия не выдумывается.
  */
-export function buildReasoningView(config: AppConfig): ReasoningView {
+export function buildReasoningView(
+  config: AppConfig,
+  probe?: { reachable?: boolean },
+): ReasoningView {
   const endpoint = activeProviderEndpoint(config.provider);
   const override = config.modelCapabilities?.[config.model];
   const remembered = getRememberedReasoningMechanism(endpoint.baseUrl, config.model);
@@ -75,15 +80,17 @@ export function buildReasoningView(config: AppConfig): ReasoningView {
   const cached = getCachedProbeResult(
     cacheKey(endpoint.baseUrl, config.model, strategy, reasoningOff),
   );
+  const unreachable = probe?.reachable === false;
   return {
-    strategy,
+    strategy: unreachable ? "none" : strategy,
     reasoningOff,
-    supported: cached === undefined ? null : cached,
+    supported: unreachable ? false : (cached === undefined ? null : cached),
     mode: config.reasoning?.mode ?? "auto",
-    levels: visibleLevels(
+    levels: unreachable ? null : visibleLevels(
       remembered?.levels ?? preset.reasoningLevels,
       strategy,
       reasoningOff,
     ),
+    reachable: probe?.reachable,
   };
 }

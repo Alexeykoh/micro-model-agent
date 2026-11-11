@@ -136,6 +136,8 @@ export interface NativeProbeResult {
   /** Длина контекста загруженного инстанса (LM Studio); иначе undefined. */
   contextLength?: number;
   capabilities?: ModelCapabilities;
+  /** true — хотя бы один native/compat источник ответил. */
+  reachable?: boolean;
 }
 
 /**
@@ -158,13 +160,13 @@ export async function probeNativeCapabilities(
   // старт платит лишний сетевой round-trip к публичному эндпоинту.
   const llamaEligible =
     providerType === undefined || providerType === "openai-compat" || providerType === "lmstudio";
-  const [lm, llama, compat] = await Promise.all([
+  const [lm, llama, compatProbe] = await Promise.all([
     probeModel(baseUrl, model, timeoutMs),
     llamaEligible ? probeLlamaCppReasoning(origin, timeoutMs) : Promise.resolve(null),
     probeOpenAICompatCapabilities(baseUrl, model, apiKey, timeoutMs),
   ]);
-  if (!lm && !llama && !compat) return null;
-  const capabilities: ModelCapabilities = { ...(lm?.capabilities ?? {}), ...(compat ?? {}) };
+  if (!lm && !llama && !compatProbe.reachable) return null;
+  const capabilities: ModelCapabilities = { ...(lm?.capabilities ?? {}), ...(compatProbe.capabilities ?? {}) };
   if (llama) {
     capabilities.reasoningStrategy = llama.strategy;
     capabilities.reasoningOff = llama.reasoningOff;
@@ -175,6 +177,7 @@ export async function probeNativeCapabilities(
     model: lm?.model ?? model,
     contextLength: lm?.contextLength,
     capabilities: hasCaps ? capabilities : undefined,
+    reachable: true,
   };
 }
 

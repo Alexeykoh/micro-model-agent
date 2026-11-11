@@ -11,7 +11,10 @@ const readModule = (): string =>
 
 describe("provider switch usage refresh", () => {
   it("renders the provider in Сессия · Использование", () => {
-    expect(read("js/feed/sidebar.ts")).toContain('t("web.usage.provider")');
+    const src = read("js/feed/sidebar.ts");
+    expect(src).toContain('t("web.usage.provider")');
+    expect(src).toContain('t("web.usage.provider_unavailable")');
+    expect(src).toContain("h.providerReachable === false");
   });
 
   it("refreshes the active sidebar projection after a config event", () => {
@@ -20,7 +23,9 @@ describe("provider switch usage refresh", () => {
   });
 
   it("reads the live context probe from the agent after a switch", () => {
-    expect(readModule()).toContain("agent.contextProbeSnapshot");
-    expect(readModule()).toContain("contextProbe: currentContextProbe()");
+    const src = readModule();
+    expect(src).toContain("agent.contextProbeSnapshot");
+    expect(src).toContain("contextProbe: currentContextProbe()");
+    expect(src).toContain("live === undefined ? probe : live");
   });
 });

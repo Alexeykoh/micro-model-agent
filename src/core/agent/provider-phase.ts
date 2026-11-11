@@ -192,6 +192,7 @@ async function reprobeActiveProvider(host: ProviderPhaseHost, config: AppConfig)
       recoverable: true,
       detail: { model: config.model },
     });
+    publishContextProbe(host.deps.contextProbeRef, null);
     loggerOf(host).diagnostic(
       "warn",
       `Context probe failed for "${config.model}" — keeping configured contextWindow: ${cause}`,
@@ -207,17 +208,18 @@ async function reprobeActiveProvider(host: ProviderPhaseHost, config: AppConfig)
 function applyReasoningStrategy(host: ProviderPhaseHost, provider: AppConfig["provider"]): void {
   const cfg = host.deps.config;
   const probe = host.deps.capabilitiesProbeRef?.probe;
+  const reachable = host.deps.capabilitiesProbeRef?.reachable !== false;
   const override = cfg.modelCapabilities?.[cfg.model];
-  const caps = reasoningCapsForProvider(provider, probe, override);
-  const strategy: ReasoningStrategy = caps.reasoningStrategy ?? "none";
+  const caps = reachable ? reasoningCapsForProvider(provider, probe, override) : {};
+  const strategy: ReasoningStrategy = reachable ? caps.reasoningStrategy ?? "none" : "none";
   host.deps.reasoningStrategy = strategy;
-  host.deps.reasoningLevels = caps.reasoningLevels;
+  host.deps.reasoningLevels = reachable ? caps.reasoningLevels : undefined;
   if (strategy === "none") host.probePassed = false;
   const endpoint = activeProviderEndpoint(provider);
   rememberReasoningMechanism(endpoint.baseUrl, cfg.model, {
     strategy,
-    reasoningOff: caps.reasoningOff === true,
-    levels: caps.reasoningLevels,
+    reasoningOff: reachable && caps.reasoningOff === true,
+    levels: reachable ? caps.reasoningLevels : undefined,
   });
 }
 

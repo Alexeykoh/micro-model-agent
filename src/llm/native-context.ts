@@ -234,19 +234,25 @@ export async function probeOpenAICompatModels(
  * Выключатель здесь НЕ декларируется — он выясняется эмпирически
  * (`probeReasoningOffSwitch`), поэтому `reasoningOff` мы не ставим.
  */
+export interface OpenAICompatCapabilitiesProbe {
+  reachable: boolean;
+  capabilities?: ModelCapabilities;
+}
+
 export async function probeOpenAICompatCapabilities(
   baseUrl: string,
   model: string,
   apiKey: string | undefined,
   timeoutMs: number,
-): Promise<ModelCapabilities | null> {
+): Promise<OpenAICompatCapabilitiesProbe> {
   const list = await fetchOpenAICompatModelsList(baseUrl, apiKey, timeoutMs);
-  const found = list?.find((m) => matchesModel(m, model));
-  if (!found) return null;
+  if (list === null) return { reachable: false };
+  const found = list.find((m) => matchesModel(m, model));
+  if (!found) return { reachable: true };
   const raw = found.capabilities;
-  if (!raw || typeof raw !== "object") return null;
+  if (!raw || typeof raw !== "object") return { reachable: true };
   const reasoning = (raw as { reasoning?: unknown }).reasoning;
-  if (!reasoning || typeof reasoning !== "object") return null;
+  if (!reasoning || typeof reasoning !== "object") return { reachable: true };
   const r = reasoning as { supported?: unknown; effort?: unknown };
   const capabilities: ModelCapabilities = {};
   if (r.supported === true) capabilities.reasoningStrategy = "openai-effort";
@@ -254,7 +260,7 @@ export async function probeOpenAICompatCapabilities(
     const levels = r.effort.filter((v): v is string => typeof v === "string");
     if (levels.length > 0) capabilities.reasoningLevels = levels;
   }
-  return Object.keys(capabilities).length > 0 ? capabilities : null;
+  return { reachable: true, capabilities: Object.keys(capabilities).length > 0 ? capabilities : undefined };
 }
 
 /**

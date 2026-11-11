@@ -115,6 +115,8 @@ export interface WebUiWiring {
   saveConfig?: (config: AppConfig, key?: string) => void;
   reconfigure?: (config: AppConfig) => void | Promise<void>;
   knownModels?: () => string[];
+  /** Доступен ли активный эндпоинт по последней probe (для честного reasoning view). */
+  providerReachable?: () => boolean | undefined;
   /**
    * Модели именованной записи провайдера (`GET /api/models?provider=`).
    * Первый запрос к незакешированной записи отвечает `loading: true` и

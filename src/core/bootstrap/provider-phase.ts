@@ -120,6 +120,7 @@ export async function setupProviderPhase(
     probeOffSwitch: config.reasoning?.mode !== "none",
   });
   if (nativeProbe.capabilities) capabilitiesRef.probe = nativeProbe.capabilities;
+  capabilitiesRef.reachable = nativeProbe.reachable === true;
 
   // Значение на старте. Проба резолвится фоном — если пользователь успел
   // сменить contextWindow раньше (веб-UI до приземления пробы), побеждает его

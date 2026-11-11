@@ -271,6 +271,6 @@ export function handleModelsGet(
   // селекторов всегда отражает активных провайдера+модель без reconfigure-обвязки.
   // Без wired конфига опускается (легаси-стабы).
   const body: Record<string, unknown> = { models: s.knownModels() };
-  if (s.config) body.reasoning = buildReasoningView(s.config);
+  if (s.config) body.reasoning = buildReasoningView(s.config, { reachable: s.providerReachable?.() });
   sendJson(res, 200, body);
 }

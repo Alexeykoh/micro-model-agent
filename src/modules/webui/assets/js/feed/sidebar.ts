@@ -163,7 +163,7 @@ export function renderUsage(h: Dict): void {
   const sig = JSON.stringify([
     h.sessionId, h.model, h.provider, h.contextUsed, h.contextLimit, h.contextWindow, h.cacheHitRate, h.costUsd,
     h.promptTokensTotal, h.completionTokensTotal, h.cachedTokensTotal,
-    h.compactionCount, h.contextQuality, h.contextQualityBreakdown, h.contextProbe, h.contextBreakdown,
+    h.compactionCount, h.contextQuality, h.contextQualityBreakdown, h.contextProbe, h.contextBreakdown, h.providerReachable,
     cfg.model, cfg.provider?.active, cfg.provider?.type, cfg.contextWindow,
     I18N.locale,
   ]);
@@ -173,8 +173,12 @@ export function renderUsage(h: Dict): void {
   const sid = h.sessionId ? String(h.sessionId) : "";
   usageEl.appendChild(usageSessionRow(sid));
   usageEl.appendChild(usageRow(t("web.usage.model"), h.model || cfg.model || "—"));
-  const provider = String(h.provider || cfg.provider?.active || cfg.provider?.type || "—");
-  usageEl.appendChild(usageRow(t("web.usage.provider"), provider, provider === "—" ? "dim" : ""));
+  const providerBase = String(h.provider || cfg.provider?.active || cfg.provider?.type || "—");
+  const providerUnavailable = h.providerReachable === false;
+  const provider = providerUnavailable
+    ? `${providerBase} · ${t("web.usage.provider_unavailable")}`
+    : providerBase;
+  usageEl.appendChild(usageRow(t("web.usage.provider"), provider, providerBase === "—" || providerUnavailable ? "dim" : ""));
   const used = typeof h.contextUsed === "number" ? h.contextUsed : null;
   // Оба числа — на одной базе: `contextUsed` включает system + tools, поэтому
   // знаменатель — полное окно, а не history-бюджет (`contextLimit`, ~75% окна),
@@ -182,8 +186,10 @@ export function renderUsage(h: Dict): void {
   const bdWindow = h.contextBreakdown && typeof h.contextBreakdown.window === "number"
     ? h.contextBreakdown.window
     : null;
-  const limit = bdWindow ?? (typeof h.contextWindow === "number" ? h.contextWindow : null) ??
-    (typeof h.contextLimit === "number" ? h.contextLimit : cfg.contextWindow || null);
+  const limit = providerUnavailable
+    ? null
+    : (bdWindow ?? (typeof h.contextWindow === "number" ? h.contextWindow : null) ??
+      (typeof h.contextLimit === "number" ? h.contextLimit : cfg.contextWindow || null));
   usageEl.appendChild(usageRow(t("web.usage.context"), used != null && limit ? fmtTokens(used) + " / " + fmtTokens(limit) : "—"));
   if (used != null && limit) {
     usageEl.appendChild(contextSegBar(h, used, limit));

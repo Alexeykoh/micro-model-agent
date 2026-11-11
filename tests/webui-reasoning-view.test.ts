@@ -111,6 +111,24 @@ describe("buildReasoningView", () => {
     expect(view.levels).toEqual(["none"]);
   });
 
+  it("hides reasoning options when the active endpoint is unreachable", () => {
+    const config = testConfig();
+    config.provider.type = "lmstudio";
+    config.provider.baseUrl = "http://localhost:1234/v1";
+    config.model = "qwen/qwen3.5-9b";
+    rememberReasoningMechanism("http://localhost:1234/v1", "qwen/qwen3.5-9b", {
+      strategy: "openai-effort",
+      reasoningOff: true,
+      levels: ["low", "medium", "xhigh"],
+    });
+
+    const view = buildReasoningView(config, { reachable: false });
+    expect(view.strategy).toBe("none");
+    expect(view.supported).toBe(false);
+    expect(view.levels).toBeNull();
+    expect(view.reachable).toBe(false);
+  });
+
   it("reports the configured reasoning mode", () => {
     const config = testConfig();
     config.reasoning = { ...config.reasoning!, mode: "high" };

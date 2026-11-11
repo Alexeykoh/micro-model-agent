@@ -703,7 +703,7 @@ describe("webui assets", () => {
     const a = loadAssets();
     const sidebar = a.jsModules?.["js/feed/sidebar.js"] || "";
     expect(sidebar).toContain("h.contextBreakdown.window");
-    expect(sidebar).toContain("const limit = bdWindow ??");
+    expect(sidebar).toContain("providerUnavailable ? null : bdWindow ??");
     // The pair must share one basis: `contextUsed` already includes system+tools.
     expect(sidebar).not.toContain("const limit = typeof h.contextLimit");
   });
