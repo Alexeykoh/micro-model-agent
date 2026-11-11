@@ -6,7 +6,6 @@ const LAYER_ID = "themeWeather";
 const PARTICLES: Record<string, { chars: string[]; count: number; size: [number, number] }> = {
   winter: { chars: ["❄️", "❅", "❆"], count: 28, size: [10, 20] },
   autumn: { chars: ["🍁", "🍂", "🍃"], count: 22, size: [14, 26] },
-  metallica: { chars: ["⚡", "🎸", "💀", "🤘"], count: 24, size: [12, 28] },
 };
 
 let current = "";

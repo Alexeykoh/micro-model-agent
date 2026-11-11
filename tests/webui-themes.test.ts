@@ -57,6 +57,14 @@ describe("webui themes", () => {
     expect(css).not.toMatch(/body\.(winter|spring|summer|autumn) \.mdl::before/);
   });
 
+  it("Metallica theme uses a pulsing horizon without falling particles", () => {
+    const weather = asset("js/settings/weather.ts");
+    expect(weather).not.toMatch(/\bmetallica:\s*\{/);
+    expect(css).toContain("body.metallica::after");
+    expect(css).toContain("animation: metallica-horizon-pulse");
+    expect(css).toContain("@keyframes metallica-horizon-pulse");
+  });
+
   it("config registry lists exactly the picker themes (INV-T4)", () => {
     const themeDef = resolveConfigKey("ui.theme");
     const modeDef = resolveConfigKey("ui.themeMode");
