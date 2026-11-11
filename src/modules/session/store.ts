@@ -12,7 +12,7 @@ import { join } from "path";
 import { gzipSync } from "zlib";
 import type { SessionMeta, SessionMessage } from "./types";
 import type { TurnCheckpoint } from "./checkpoint";
-import { loadCheckpointFile, saveCheckpointFile } from "./checkpoint-io";
+import { deleteCheckpointFile, loadCheckpointFile, saveCheckpointFile } from "./checkpoint-io";
 import type { SessionEncryptionConfig } from "../../config/types";
 import { SessionFileEncryptor } from "../security/session-encryption";
 import { readHistoryFile, readRotatedHistory } from "./history-io";
@@ -225,6 +225,9 @@ export class SessionStore {
 
   /** Загрузить чекпоинт хода; нет/битая/чужая версия — null (fail-open). */
   loadCheckpoint(id: string): TurnCheckpoint | null { return loadCheckpointFile(this.getSessionDir(id), this.encryptor); }
+
+  /** Удалить чекпоинт хода (граница хода: состояние хода больше не актуально). */
+  deleteCheckpoint(id: string): void { deleteCheckpointFile(this.getSessionDir(id)); }
 
   /** Записать durable-interrupt паузы (`interrupt.json`). */
   saveInterrupt(id: string, state: InterruptState): void { saveInterruptFile(this.getSessionDir(id), state); }

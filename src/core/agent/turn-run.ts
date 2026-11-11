@@ -8,6 +8,7 @@
 import type { AgentDeps } from "../agent";
 import type { AgentResult, OnMeta, OnPhase, PromptBlock, ToolEvent } from "../types";
 import type { SessionLogger } from "../session-logger";
+import type { SessionManager } from "../../modules/session/manager";
 import { SessionLogger as SessionLoggerCtor } from "../session-logger";
 import { seedToolTags } from "../../tools/auto-tags";
 import { deriveSessionName, generateSessionTitle, TITLE_MAX_TOKENS, type TitleChat } from "../../modules/session/auto-name";
@@ -209,5 +210,33 @@ export async function runTurn(
   } catch (err) {
     emitTurnEnd(null, err);
     throw err;
+  } finally {
+    invalidateTurnCheckpoint(sessionManager, deps);
+  }
+}
+
+/**
+ * Граница хода: чекпоинт описывает незавершённый ход (его читает resume после
+ * краша). Оставленный файл восстанавливал счётчики прошлого хода в следующий —
+ * стрик молчания, лимит итераций, duplicate-детектор: новый запрос пользователя
+ * умирал на первом же молчаливом пакете («Инструменты отключены», ses_mwc2p7hh).
+ *
+ * Fail-open: ошибка удаления не ломает ход, но обязана оставить след (INV-15).
+ */
+function invalidateTurnCheckpoint(
+  sessionManager: SessionManager | undefined,
+  deps: AgentDeps,
+): void {
+  const id = sessionManager?.getActiveMeta?.()?.id;
+  if (!id) return;
+  try {
+    sessionManager.deleteCheckpoint?.(id);
+  } catch (err) {
+    deps.onDiagnostic?.({
+      source: "core",
+      operation: "agent.checkpoint.delete",
+      kind: "failed",
+      cause: err instanceof Error ? err.message : String(err),
+    });
   }
 }

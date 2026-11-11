@@ -29,6 +29,7 @@ import {
   STALL_WINDOW,
 } from "./constants";
 import { clearDirective, issueDirective } from "./directives";
+import { resetSilenceStreak } from "./silence-streak";
 import { canonicalArgsKey } from "./canonical-args";
 import { countDistinctFailingTools } from "./failure-memory";
 
@@ -267,9 +268,7 @@ export function applyBatchSignals(inp: BatchSignalsInput): BatchSignalsResult {
   // (в ses_mvpdchvi 98 шагов подряд прошли без текста, ход дважды прерван).
   const said = textContent.trim().length >= MIN_NARRATION_CHARS;
   if (said) {
-    state.consecutiveSilentBatches = 0;
-    state.narrationNudged = false;
-    clearDirective(contextManager, "narration");
+    resetSilenceStreak(state, contextManager);
   } else {
     state.consecutiveSilentBatches++;
   }

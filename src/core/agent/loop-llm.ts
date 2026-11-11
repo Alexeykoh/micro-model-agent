@@ -21,6 +21,8 @@ import type { ReasoningState } from "../../tools/set-thinking";
 import { handleLlmError } from "./loop-llm-errors";
 import { issueDirective, clearDirective } from "./directives";
 import { detectRepeatedToolCall } from "./loop-repeat";
+import { MIN_NARRATION_CHARS } from "./constants";
+import { resetSilenceStreak } from "./silence-streak";
 import { consumeLlmStream, createLlmStreamResult } from "./loop-llm-stream";
 import { predictMaxTokens } from "./harness-budget";
 import { buildLlmResponse, finalizeLlmUsage, recordLlmOutput } from "./loop-llm-usage";
@@ -249,6 +251,14 @@ export async function runLlmPhase(
       state.stopReason = "duplicate";
       return { kind: "break" };
     }
+  }
+
+  // Модель заговорила — пользователь увидел текст, серия молчания (индикатор
+  // «пользователь в темноте») прервана. Раньше счётчик копился только по пакетам
+  // тулов, и видимый ответ вне пакета тишину не прерывал: стрик доживал до
+  // жёсткого стопа «инструменты отключены» (ses_mwc2p7hh).
+  if (stream.textContent.trim().length >= MIN_NARRATION_CHARS) {
+    resetSilenceStreak(state, contextManager);
   }
 
   return {

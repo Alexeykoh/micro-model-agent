@@ -47,6 +47,9 @@ export class SessionManager {
   /** Загрузить чекпоинт хода (нет/битый — null, fail-open). */
   loadCheckpoint(id: string): TurnCheckpoint | null { return this.store.loadCheckpoint(id); }
 
+  /** Удалить чекпоинт хода: он описывает незавершённый ход (граница хода). */
+  deleteCheckpoint(id: string): void { this.store.deleteCheckpoint(id); }
+
   /** Сохранить durable-interrupt паузы (`Agent.pause/resume`). */
   saveInterrupt(id: string, paused: boolean): void { this.state.saveInterrupt(id, paused); }
 
