@@ -65,10 +65,18 @@ export interface WebSkillInfo {
   sourcePath?: string;
 }
 
+/** Узкий вид загруженного скила для SSE-индикатора (имя + источник). */
+export interface WebLoadedSkill {
+  name: string;
+  kind: "builtin" | "global" | "project";
+}
+
 /** Подмножество модуля скиллов для страницы настроек. */
 export interface WebSkillsModule {
   getAvailable(): WebSkillInfo[];
   getLoaded(): WebSkillInfo[];
+  /** Подписка на изменение загруженного набора (веб-индикатор). Возвращает отписку. */
+  onChange?(cb: (loaded: WebLoadedSkill[]) => void): () => void;
   /** Пересканировать каталоги навыков (reload); undefined — не умеет. */
   reloadSources?(): { added: number; removed: number };
 }

@@ -14,6 +14,7 @@ import { attachActivityStream } from "./core/activity-stream.js";
 // selector repaints without a second GET racing the refresh. Direct import
 // (not via `SseDeps`) keeps the composition root in `app.ts` untouched.
 import { loadModels } from "./settings/write.js";
+import { applySkillsEvent } from "./session/skills-indicator.js";
 export function connectSSE(deps: SseDeps): void {
   const {
     token,
@@ -212,6 +213,16 @@ export function connectSSE(deps: SseDeps): void {
   es.addEventListener("plugins", () => {
     sidebarPluginsEvent();
     sidebarMcpEvent();
+  });
+  // Загруженные скиллы — SSE-событие от модуля скилов (single source).
+  es.addEventListener("skills", (e) => {
+    const d = parse(e as MessageEvent);
+    if (d) applySkillsEvent(d);
+  });
+  // Загруженные скиллы — SSE-событие от модуля скилов (single source).
+  es.addEventListener("skills", (e) => {
+    const d = parse(e as MessageEvent);
+    if (d) applySkillsEvent(d);
   });
   // Config changed anywhere (settings write or a slash command) — re-read it so
   // the open Settings panel and the composer selectors never show a stale value.

@@ -10,6 +10,7 @@ import { showEmptyFeed } from "./js/feed.js";
 import { renderSessionsDropdown } from "./js/session/tabs.js";
 import { applyRailI18n } from "./js/rail.js";
 import { applySidebarI18n } from "./js/sidebar.js";
+import { refreshSkillsIndicatorI18n } from "./js/session/skills-indicator.js";
 
 export function applyStaticI18n(): void {
   document.documentElement.lang = I18N.locale;
@@ -87,6 +88,8 @@ export function applyStaticI18n(): void {
   renderSessionsDropdown();
   applyRailI18n();
   applySidebarI18n();
+  refreshSkillsIndicatorI18n();
+  refreshSkillsIndicatorI18n();
   if (msgs.querySelector(".empty")) showEmptyFeed();
   if (connStatus && !connStatus.hidden) setConnStatus(true);
   setStaleBar(undefined, true);
