@@ -34,6 +34,12 @@ export interface DirectiveSink {
   addMessage(message: { role: "user"; content: string }): void;
   setStandingDirective?: (id: string, text: string) => void;
   clearStandingDirective?: (id: string) => void;
+  /**
+   * Вычёркивает сообщение снятой директивы из активной истории (S4). Пока
+   * директива стоит, её `<system-summary>` уже в контексте; если условие снялось,
+   * сообщение должно уйти, иначе модель продолжает читать «сдайся» после успеха.
+   */
+  supersedeDirective?: (id: string) => void;
 }
 
 /**
@@ -46,7 +52,12 @@ export function issueDirective(sink: DirectiveSink, id: DirectiveId, text: strin
   sink.addMessage({ role: "user", content: `<system-summary>${text}</system-summary>` });
 }
 
-/** Снимает директиву: условие перестало выполняться (стрик сбросился). */
+/**
+ * Снимает директиву: условие перестало выполняться (стрик сбросился).
+ * Сначала вычёркиваем сообщение из активной истории (нужно сверить с текстом в
+ * реестре), затем снимаем регистрацию.
+ */
 export function clearDirective(sink: DirectiveSink, id: DirectiveId): void {
+  sink.supersedeDirective?.(id);
   sink.clearStandingDirective?.(id);
 }

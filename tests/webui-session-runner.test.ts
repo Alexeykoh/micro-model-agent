@@ -66,7 +66,6 @@ function setup() {
     lazyPromptBlocks: () => Promise.resolve([]),
     memoryStore: new MemoryStore(join(dir, "memory")),
     moduleRegistry: new ModuleRegistry(),
-    reasoningProbePromise: Promise.resolve(false),
     reasoningStrategy: "none",
     contextProbePromise: Promise.resolve(null),
     toolRegistry: new ToolRegistry(),
@@ -176,6 +175,26 @@ describe("session runner factory", () => {
     template.configRef.current.model = "switched-model";
     const second = spawn(template.sessionManager.create("second").id);
     expect(providerModel(second.agent)).toBe("switched-model");
+  });
+
+  it("spawns a runner with the LIVE reasoning probe from the shared box", async () => {
+    const { template } = setup();
+    // Бокс проб — общий с main-агентом: bootstrap сеет стартовое значение,
+    // `restartReasoningProbe` при свитче подменяет его на новую пару.
+    const box = template.capabilitiesProbeRef;
+    box.reasoningProbe = () => Promise.resolve(true);
+    const spawn = createSessionRunnerFactory(template);
+    const probeOf = (agent: unknown): Promise<boolean> | undefined =>
+      (agent as { deps: { reasoningProbe?: () => Promise<boolean> } }).deps.reasoningProbe?.();
+
+    const first = spawn(template.sessionManager.create("probe-first").id);
+    await expect(probeOf(first.agent)).resolves.toBe(true);
+
+    // Свитч провайдера: main публикует новую пробу в тот же бокс. Раннер,
+    // спавненный ПОСЛЕ, обязан читать новую, а не снимок bootstrap.
+    box.reasoningProbe = () => Promise.resolve(false);
+    const second = spawn(template.sessionManager.create("probe-second").id);
+    await expect(probeOf(second.agent)).resolves.toBe(false);
   });
 
   it("registry clone carries shared tools without touching the original", () => {

@@ -23,6 +23,12 @@ export interface WebUiAssets {
    * палитрой. Опциональна по той же причине, что и `cssConsole`.
    */
   cssGroovebox?: string;
+  /** Тема «Metallica» (`/metallica.css`) — альбомный скин Master of Puppets. */
+  cssMetallica?: string;
+  /** Обложка-оммаж для фона темы Metallica (`/metallica-cover.svg`). */
+  metallicaCover?: string;
+  /** Логотип Metallica для хэдера темы (`/metallica-logo.svg`). */
+  metallicaLogo?: string;
   /** Пакет дополнительных тем (`/themes.css`): neon/paper/contrast + сезоны. */
   cssThemes?: string;
   js: string;
@@ -50,9 +56,11 @@ export interface WebUiAssets {
  * Сужение даёт реальным модулям удовлетворять их неявно, а тестам — стабить
  * без кастов (`SkillsModule`/`PluginManager` структурно совместимы).
  */
-/** Скилл для REST настроек (имя, описание, путь). */
+/** Скилл для REST настроек (имя, описание, путь, вид источника). */
 export interface WebSkillInfo {
   name: string;
+  /** `"builtin"` — из поставки (бейдж в панели); иначе внешний (`global`/`project`). */
+  kind?: "builtin" | "global" | "project";
   description?: string;
   sourcePath?: string;
 }
@@ -107,6 +115,10 @@ export interface WebUiWiring {
   saveConfig?: (config: AppConfig, key?: string) => void;
   reconfigure?: (config: AppConfig) => void | Promise<void>;
   knownModels?: () => string[];
+  /** Стратегия reasoning и уровни активного эндпоинта (честность UI). */
+  providerReasoning?: () => { strategy?: string; levels?: string[] | null; reasoningOff?: boolean; reachable?: boolean };
+  /** Доступен ли активный эндпоинт по последней probe (для честного reasoning view). */
+  providerReachable?: () => boolean | undefined;
   /**
    * Модели именованной записи провайдера (`GET /api/models?provider=`).
    * Первый запрос к незакешированной записи отвечает `loading: true` и

@@ -105,6 +105,32 @@ describe("probeProviderContext", () => {
     expect(probe).toEqual({ model: "Qwen/Qwen3-Coder-30B", actual: 262144 });
   });
 
+  it("reads OpenCode Zen/Go-style limit.context from /models", async () => {
+    // Живой ответ opencode-go /models (2026-11-10): limit.context вместо
+    // context_length; без этого поля проба падала в models.dev по точному id
+    // и молча оставляла окно прошлого провайдера.
+    mockFetch((url) =>
+      String(url).endsWith("/v1/models")
+        ? {
+            data: [
+              {
+                id: "iceman-contributor-free",
+                owned_by: "opencode",
+                limit: { context: 262144, output: 131072 },
+                capabilities: { reasoning: { supported: true } },
+              },
+            ],
+          }
+        : null,
+    );
+    const probe = await probeProviderContext(
+      "https://opencode.ai/zen/go/v1",
+      "iceman-contributor-free",
+      { apiKey: "k", providerType: "opencode-go" },
+    );
+    expect(probe).toEqual({ model: "iceman-contributor-free", actual: 262144 });
+  });
+
   it("returns null for bare OpenAI-style id-only /models", async () => {
     mockFetch((url) => {
       if (String(url).endsWith("/api/v1/models")) return { models: [] };

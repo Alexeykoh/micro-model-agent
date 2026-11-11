@@ -652,18 +652,15 @@ body.light .sel > button { border: 1px solid var(--border); }
 .sel > button b { font-weight: 400; color: var(--purple); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .sel > button .svg-icon { width: 13px; height: 13px; color: var(--dim-a); }
 /* Selector switch pending (boot + provider/model/context/reasoning writes):
-   buttons and menus go inert while the mark shows. A5: the mark is a spinner
-   via `::after`, and after a second it becomes a wait counter — no label
-   rewrites, so the DOM never desyncs from the write funnel. */
+   buttons and menus go inert while the mark shows. The mark stays a spinner;
+   the old elapsed-time counter was removed in favor of a calmer UI. */
 .selectors[data-pending] .sel > button,
 .selectors[data-pending] .menu { pointer-events: none; }
 .sel > button.pending { cursor: wait; }
 .sel > button.pending b::after {
   content: "◐"; color: var(--dim-b); display: inline-block;
+  margin-left: 6px;
   animation: spin 1s linear infinite;
-}
-.sel > button.pending b[data-wait]::after {
-  content: attr(data-wait); animation: none; font-variant-numeric: tabular-nums;
 }
 .menu {
   display: none; position: absolute; bottom: calc(100% + 4px); left: 0; z-index: 30;
@@ -1918,6 +1915,14 @@ body.light .toggle:not(.on) { background: var(--toggle-off); }
   color: var(--fg); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .skill-head .st { margin-left: auto; color: var(--dim-a); white-space: nowrap; flex: 0 0 auto; }
+.skill-section {
+  padding: 10px 0 4px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--dim-a);
+}
+.skill-badge {
+  flex: 0 0 auto; font-size: 10.5px; color: var(--accent);
+  border: 1px solid var(--border-3); border-radius: 999px; padding: 0 7px;
+}
 .skill-src {
   color: var(--dim-a); font-size: 11.5px; margin-top: 2px; padding-left: 18px;
   overflow-wrap: anywhere; word-break: break-word;

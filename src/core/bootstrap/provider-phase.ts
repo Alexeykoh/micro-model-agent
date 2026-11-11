@@ -6,11 +6,8 @@
  * общую фабрику (с ленивым session id) → reasoning-стратегия + фоновая
  * reasoning-probe. Тяжёлые пробы — фоном, старт не блокируют.
  */
-import {
-  ModelLoader,
-  probeNativeCapabilities,
-  probeProviderContext,
-} from "../../llm/model-loader";
+import { ModelLoader, probeProviderContext } from "../../llm/model-loader";
+import { discoverCapabilities, publishContextProbe } from "../agent/provider-probes";
 import { join as joinDir } from "path";
 import type { ContextProbeResult } from "../../llm/model-loader";
 import { buildActiveProvider } from "../../modules/providers/factory";
@@ -24,7 +21,8 @@ import type { ProviderManager } from "../../modules/providers/manager";
 import type { LLMProvider } from "../../llm/provider";
 import { UserProfile } from "../../modules/user-profile/profile";
 import { t } from "../../i18n/index";
-import type { AppConfig, ModelCapabilities, ReasoningStrategy } from "../../config/types";
+import type { AppConfig, ReasoningStrategy } from "../../config/types";
+import type { ContextProbeBox, ProviderProbesBox } from "../agent/deps";
 import type { Logger } from "../../logger/app-logger";
 import type { SessionManager } from "../../modules/session/index";
 
@@ -38,7 +36,9 @@ export interface ProviderPhase {
   /** Загруженный и сохранённый профиль пользователя (для systemInfo). */
   profile: UserProfile;
   /** Живой источник capabilities модели для тулов (заполняется native-probe фоном). */
-  capabilitiesRef: { probe?: ModelCapabilities };
+  capabilitiesRef: ProviderProbesBox;
+  /** Живой итог context-probe для веб-снапшотов после смены провайдера. */
+  contextProbeRef: ContextProbeBox;
   /** Значение contextWindow на старте (для детекта ручного переопределения). */
   probeConfiguredAtStart: number;
   /** Фоновая проба реально отдаваемого контекста (null = fail-open). */
@@ -110,15 +110,17 @@ export async function setupProviderPhase(
   // асинхронно и записывает сюда, не блокируя старт. Геттер на toolCtx
   // резолвит итог при каждом обращении, поэтому смена модели/провайдера
   // через reconfigure видна тулам без пересборки контекста.
-  const capabilitiesRef: { probe?: ModelCapabilities } = {};
+  const capabilitiesRef: ProviderProbesBox = {};
+  const contextProbeRef: ContextProbeBox = {};
   // Native discovery ДО сборки: механизм reasoning нужен экземпляру сразу (INV-R2/R6).
-  const nativeProbe = await probeNativeCapabilities(
-    probeEndpoint.baseUrl,
-    config.model,
-    3000,
-    probeEndpoint.type,
-  );
-  if (nativeProbe?.capabilities) capabilitiesRef.probe = nativeProbe.capabilities;
+  // Тот же путь, что `refreshCapabilitiesProbe` при свитче: native/декларативные
+  // capabilities + эмпирический выключатель reasoning (хостед-шлюзы его не
+  // декларируют, а строгие серверы на неизвестный effort отвечают 400).
+  const nativeProbe = await discoverCapabilities(probeEndpoint, config.model, {
+    probeOffSwitch: config.reasoning?.mode !== "none",
+  });
+  if (nativeProbe.capabilities) capabilitiesRef.probe = nativeProbe.capabilities;
+  capabilitiesRef.reachable = nativeProbe.reachable === true;
 
   // Значение на старте. Проба резолвится фоном — если пользователь успел
   // сменить contextWindow раньше (веб-UI до приземления пробы), побеждает его
@@ -128,7 +130,7 @@ export async function setupProviderPhase(
   const contextProbePromise: Promise<ContextProbeResult | null> = (async () => {
     try {
       const lmContext =
-        nativeProbe?.contextLength !== undefined
+        nativeProbe.contextLength !== undefined && nativeProbe.model
           ? { model: nativeProbe.model, actual: nativeProbe.contextLength }
           : null;
       const detected =
@@ -137,7 +139,10 @@ export async function setupProviderPhase(
           apiKey: probeEndpoint.apiKey,
           providerType: probeEndpoint.type,
         }));
-      if (!detected) return null;
+      if (!detected) {
+        publishContextProbe(contextProbeRef, null);
+        return null;
+      }
       if (detected.actual === config.contextWindow) {
         logger.logSilent(
           "debug",
@@ -162,6 +167,7 @@ export async function setupProviderPhase(
         );
         config.contextWindow = detected.actual;
       }
+      publishContextProbe(contextProbeRef, detected);
       return detected;
     } catch (e) {
       // INV-15: контекстная проба упала — это не «контекст неизвестен», а
@@ -170,6 +176,7 @@ export async function setupProviderPhase(
         "warn",
         `Context probe FAILED: ${e instanceof Error ? e.message : String(e)} — keeping the configured contextWindow`,
       );
+      publishContextProbe(contextProbeRef, null);
       return null;
     }
   })();
@@ -253,10 +260,17 @@ export async function setupProviderPhase(
     })();
   }
 
+  // Проба живёт в общем боксе (INV-R2): и main-агент, и раннеры/субагенты
+  // читают ОДНО живое значение, а `restartReasoningProbe` при свитче
+  // переключает его на новую пару — новый раннер не наследует вердикт
+  // прошлого бэкенда.
+  capabilitiesRef.reasoningProbe = () => reasoningProbePromise;
+
   return {
     probeEndpoint,
     profile,
     capabilitiesRef,
+    contextProbeRef,
     probeConfiguredAtStart,
     contextProbePromise,
     providerManager,

@@ -11,35 +11,29 @@ import type { AppConfig, ProviderEntry, ReasoningStrategy } from "../../config/t
 import type { AgentDeps } from "../agent";
 import type { CostTracker } from "../../modules/pricing/index";
 import type { Logger } from "../../logger/app-logger";
+import type { ContextProbeResult } from "../../llm/provider-context";
 import {
   ProviderManager,
   activeProviderEndpoint,
-  reasoningLevelsForProvider,
-  reasoningStrategyForProvider,
 } from "../../modules/providers/manager";
+import { reasoningCapsForProvider } from "../../modules/providers/reasoning-resolve";
+import { rememberReasoningMechanism } from "../../modules/reasoning/probe";
 import { buildActiveProvider } from "../../modules/providers/factory";
 import { t } from "../../i18n/index";
 import { errMsg } from "../../utils/error";
+import {
+  probeIdentityOf,
+  sameProbeIdentity,
+  refreshCapabilitiesProbe,
+  restartReasoningProbe,
+  invalidateReasoningProbe,
+  publishContextProbe,
+  type ProbeIdentity,
+} from "./provider-probes";
 
-/** Идентичность модели/бэкенда, против которой гонялась context-probe. */
-export interface ProbeIdentity {
-  model: string;
-  baseUrl: string;
-  active?: string;
-  /** Тип записи (`lmstudio`, `openai-compat`, …) — часть идентичности (INV-W6). */
-  type?: string;
-}
-
-/** Снимок идентичности активной записи (сравнение по значению, не по ссылке). */
-export function probeIdentityOf(config: AppConfig): ProbeIdentity {
-  const endpoint = activeProviderEndpoint(config.provider);
-  return {
-    model: config.model,
-    baseUrl: endpoint.baseUrl,
-    active: config.provider?.active,
-    type: endpoint.type,
-  };
-}
+// Реэкспорт: старый импорт-путь (`agent-base`) сохранён.
+export { probeIdentityOf } from "./provider-probes";
+export type { ProbeIdentity } from "./provider-probes";
 
 /** Ключ кеша измеренного окна: `baseUrl + model + type` (INV-W6). */
 function probeCacheKey(id: ProbeIdentity): string {
@@ -61,9 +55,9 @@ export interface ProviderPhaseHost {
   costTracker: CostTracker;
   lastProbeIdentity: ProbeIdentity;
   probePassed: boolean;
-  /** Кеш «идентичность → измеренный contextWindow» (INV-W6): повторное
+  /** Кеш «идентичность → измеренное окно контекста» (INV-W6): повторное
    *  переключение на ту же идентичность сети не касается. */
-  probeWindowCache: Map<string, number>;
+  probeWindowCache: Map<string, ContextProbeResult>;
 }
 
 /** Логгер хоста (у `AgentDeps.logger` есть `.warn`/`.info`). */
@@ -82,7 +76,20 @@ export async function reconfigure(
   opts: ReconfigureOptions = {},
 ): Promise<void> {
   const { deps } = host;
-  if (opts.probe !== false) await reprobeActiveProvider(host, config);
+  // INV-R2: идентичность (model + baseUrl + active + type) — общий триггер ВСЕХ
+  // провайдер-проб. `contextAuto` гейтит только контекст (в reprobe), а
+  // capabilities — свойство бэкенда — перепрашиваются всегда.
+  const identityChanged = !sameProbeIdentity(host.lastProbeIdentity, probeIdentityOf(config));
+  if (opts.probe !== false) {
+    await Promise.all([
+      identityChanged ? refreshCapabilitiesProbe(host, config) : Promise.resolve(),
+      reprobeActiveProvider(host, config),
+    ]);
+  } else if (identityChanged) {
+    // Раннеры пула (`probe: false`) сеть не трогают, но применять вердикт
+    // reasoning-пробы прошлой пары нельзя — сбрасываем до следующего резолва.
+    invalidateReasoningProbe(host);
+  }
   const built = buildActiveProvider(config, deps.logger, {
     getSessionId: () => deps.sessionManager?.getActiveMeta()?.id,
     onDiagnostic: deps.onDiagnostic,
@@ -99,6 +106,11 @@ export async function reconfigure(
   if (deps.configRef) deps.configRef.current = config;
   host.costTracker.setModel(config.model);
   applyReasoningStrategy(host, config.provider);
+  // Новой паре — новая ленивая reasoning-проба (фон, B2): до её резолва
+  // механизм «не подтверждён», а не унаследован от прошлого бэкенда.
+  if (identityChanged && opts.probe !== false) {
+    restartReasoningProbe(host, config, newProvider);
+  }
   // Мета сессии должна отражать РЕАЛЬНОЕ окно/модель, а не снимок на create().
   deps.sessionManager?.setEffectiveContext?.(config.contextWindow, config.model);
 }
@@ -141,34 +153,31 @@ async function reprobeActiveProvider(host: ProviderPhaseHost, config: AppConfig)
     if (!identityChanged) return;
     if (config.contextAuto === false) {
       host.lastProbeIdentity = nextId;
+      publishContextProbe(host.deps.contextProbeRef, null);
       return;
     }
     const cacheKey = probeCacheKey(nextId);
-    let measured: number | undefined = host.probeWindowCache.get(cacheKey);
-    let fresh: { model: string; actual: number } | null = null;
-    if (measured === undefined) {
+    let detected: ContextProbeResult | null | undefined = host.probeWindowCache.get(cacheKey);
+    if (!detected) {
       const nextEndpoint = activeProviderEndpoint(config.provider);
       const { probeProviderContext } = await import("../../llm/model-loader");
       // Один сетевой запрос: `probeProviderContext` сам спрашивает LM Studio
       // native первым источником — отдельный `probeModel` здесь дублировал его.
-      const detected = await probeProviderContext(nextEndpoint.baseUrl, config.model, {
+      detected = (await probeProviderContext(nextEndpoint.baseUrl, config.model, {
         apiKey: nextEndpoint.apiKey,
         providerType: nextEndpoint.type,
-      });
-      if (detected) {
-        measured = detected.actual;
-        fresh = detected;
-        host.probeWindowCache.set(cacheKey, measured);
-      }
+      })) ?? null;
+      if (detected) host.probeWindowCache.set(cacheKey, detected);
     }
-    if (measured !== undefined && measured !== config.contextWindow) {
+    publishContextProbe(host.deps.contextProbeRef, detected);
+    if (detected && detected.actual !== config.contextWindow) {
       // Сначала применяем окно, потом пишем диагностику: сбой логгера не должен
       // отменять уже принятую пробу (в тестах и сторонних логгерах нет
       // `diagnostic`, и исключение раньше съедало присваивание).
       const configured = config.contextWindow;
-      config.contextWindow = measured;
+      config.contextWindow = detected.actual;
       // Окно из кеша не логируем: это не новое измерение с провайдера.
-      if (fresh) logContextProbeAutoSet(loggerOf(host), fresh.model, measured, configured);
+      logContextProbeAutoSet(loggerOf(host), detected.model, detected.actual, configured);
     }
     host.lastProbeIdentity = nextId;
   } catch (err) {
@@ -183,6 +192,7 @@ async function reprobeActiveProvider(host: ProviderPhaseHost, config: AppConfig)
       recoverable: true,
       detail: { model: config.model },
     });
+    publishContextProbe(host.deps.contextProbeRef, null);
     loggerOf(host).diagnostic(
       "warn",
       `Context probe failed for "${config.model}" — keeping configured contextWindow: ${cause}`,
@@ -190,21 +200,33 @@ async function reprobeActiveProvider(host: ProviderPhaseHost, config: AppConfig)
   }
 }
 
-/** Пересчитывает стратегию reasoning из активной записи; "none" гасит probe-флаг. */
+/**
+ * Пересчитывает стратегию reasoning из активной записи; "none" гасит probe-флаг.
+ * Механизм запоминается для пары `baseUrl|model` (INV-R8): UI читает ровно тот
+ * резолв, что применён к провайдеру, иначе селектор расходится с запросами.
+ */
 function applyReasoningStrategy(host: ProviderPhaseHost, provider: AppConfig["provider"]): void {
   const cfg = host.deps.config;
-  const strategy: ReasoningStrategy = reasoningStrategyForProvider(
-    provider,
-    host.deps.capabilitiesProbeRef?.probe,
-    cfg.modelCapabilities?.[cfg.model],
-  );
+  const probe = host.deps.capabilitiesProbeRef?.probe;
+  const reachable = host.deps.capabilitiesProbeRef?.reachable !== false;
+  const override = cfg.modelCapabilities?.[cfg.model];
+  const caps = reachable ? reasoningCapsForProvider(provider, probe, override) : {};
+  const strategy: ReasoningStrategy = reachable ? caps.reasoningStrategy ?? "none" : "none";
   host.deps.reasoningStrategy = strategy;
-  host.deps.reasoningLevels = reasoningLevelsForProvider(
-    provider,
-    host.deps.capabilitiesProbeRef?.probe,
-    cfg.modelCapabilities?.[cfg.model],
-  );
+  host.deps.reasoningLevels = reachable ? caps.reasoningLevels : undefined;
   if (strategy === "none") host.probePassed = false;
+  const endpoint = activeProviderEndpoint(provider);
+  rememberReasoningMechanism(endpoint.baseUrl, cfg.model, {
+    strategy,
+    reasoningOff: reachable && caps.reasoningOff === true,
+    levels: reachable ? caps.reasoningLevels : undefined,
+  });
+  const ref = host.deps.capabilitiesProbeRef;
+  if (ref) {
+    ref.reasoningStrategy = strategy;
+    ref.reasoningLevels = host.deps.reasoningLevels;
+    ref.reasoningOff = reachable && caps.reasoningOff === true;
+  }
 }
 
 /** Переключает активного провайдера (и модель) тем же путём, что `/config`. */
@@ -218,9 +240,20 @@ export async function setProvider(
     getSessionId: () => deps.sessionManager?.getActiveMeta()?.id,
     onDiagnostic: deps.onDiagnostic,
   });
-  manager.switch(name, model);
+  // Модель провайдера (память INV-19): без явного аргумента восстанавливаем
+  // запомненную для записи — иначе в новый бэкенд уехала бы модель прошлого
+  // (наблюалось: llama.cpp-модель в opencode-go). Ничего не запомнено —
+  // сохраняем текущую, перепроба/контекст под неё и так честнее чужой.
+  const target = model ?? manager.modelFor(name) ?? deps.config.model;
+  manager.switch(name, target);
   deps.config.provider = manager.toConfig();
-  if (model !== undefined) deps.config.model = model;
+  deps.config.model = target;
+  // Память — последняя использованная модель новой активной записи (зеркало
+  // записи через реестр: `syncProviderModelMemory` при ключе `model`).
+  deps.config.provider.models = {
+    ...(deps.config.provider.models ?? {}),
+    [name]: target,
+  };
   await reconfigure(host, deps.config);
 }
 

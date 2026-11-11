@@ -1,0 +1,874 @@
+/* ============================================================
+   MMA site — shared chrome and tokens.
+
+   One visual system for the landing page and the docs page, in the
+   register of the agent's own terminal output (STYLE.md: no boxes,
+   no panels, one monospace family, semantic colours only).
+
+   Load order: shared.css → console.css (token override for the
+   console register) → page stylesheet.
+   ============================================================ */
+
+/* ---------- tokens ---------- */
+:root {
+  --bg: #0a0a0b;
+  --panel: #0f0f10;
+  --surface: #121213;
+  --fg: #d0cecc;
+  --muted: #b6b3b0;
+  --dim-a: #8a8686;
+  --dim-b: #6a6666;
+  --dim-c: #6a6666;
+  --border: #1f1f20;
+  --border-2: #262627;
+  --accent: #d0cecc;
+  --accent-bg: #171718;
+  --green: #86d992;
+  --red: #f0837a;
+  --yellow: #e8c46a;
+  --recon: #6fd0e6;
+  --mutate: #d59cf0;
+  --exec: #9db4d6;
+  --think: #8a8686;
+  --seg-system: #8a8686;
+  --seg-tools: #6fd0e6;
+  --seg-history: #86d992;
+  --seg-reserve: #e8c46a;
+  --seg-free: #1f1f20;
+  --term-bg: #08080a;
+  --term-fg: #b6b3b0;
+  --grain-op: 0;
+  --maxw: 1120px;
+  --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+html.light {
+  --bg: #f7f7f4;
+  --panel: #ffffff;
+  --surface: #f0f0ed;
+  --fg: #1b1b19;
+  --muted: #4a4a46;
+  --dim-a: #6a6a64;
+  --dim-b: #8a8a84;
+  --dim-c: #8a8a84;
+  --border: #dcdcd6;
+  --border-2: #d2d2cb;
+  --accent: #1b1b19;
+  --accent-bg: #ecece7;
+  --green: #1a7f37;
+  --red: #cf222e;
+  --yellow: #9a6700;
+  --recon: #0c7c86;
+  --mutate: #8250df;
+  --exec: #2563eb;
+  --think: #6a6a64;
+  --seg-system: #6a6a64;
+  --seg-tools: #0c7c86;
+  --seg-history: #1a7f37;
+  --seg-reserve: #9a6700;
+  --seg-free: #e4e4df;
+  --term-bg: #f2f2ee;
+  --term-fg: #33332f;
+}
+
+/* ---------- base ---------- */
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  height: 100%;
+}
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  color-scheme: dark;
+  scroll-behavior: smooth;
+}
+html.light {
+  color-scheme: light;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 15px;
+  line-height: 1.7;
+  letter-spacing: -0.005em;
+  -webkit-font-smoothing: antialiased;
+}
+/* The landing page scrolls an inner container (see console.css); the docs
+   page scrolls the document, so it opts out of the app-shell lock. */
+html.console:not(.docs) body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+a:hover {
+  color: var(--accent);
+}
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+p {
+  margin: 0;
+}
+code,
+pre,
+kbd {
+  font-family: var(--mono);
+}
+code {
+  font-size: 0.92em;
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+::selection {
+  background: var(--accent);
+  color: var(--accent-bg);
+}
+
+/* Flat chrome: the terminal has no rounded corners and no soft shadows. */
+html.console,
+html.console *,
+html.console *::before,
+html.console *::after {
+  box-shadow: none !important;
+}
+
+/* ---------- scrollbars ---------- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-2) transparent;
+}
+*::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-2);
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--dim-b);
+  background-clip: content-box;
+}
+
+/* ---------- layout primitives ---------- */
+.wrap {
+  width: min(var(--maxw), 90vw);
+  margin: 0 auto;
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+.skip {
+  position: fixed;
+  top: calc(8px + env(safe-area-inset-top, 0px));
+  left: calc(8px + env(safe-area-inset-left, 0px));
+  z-index: 100;
+  transform: translateY(-240%);
+  background: var(--accent);
+  color: var(--accent-bg);
+  padding: 9px 15px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: transform 0.18s var(--ease);
+}
+.skip:focus {
+  transform: none;
+  color: var(--accent-bg);
+}
+.link {
+  color: var(--accent);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.link:hover {
+  border-bottom-color: var(--accent);
+}
+.note {
+  font-size: 13px;
+  color: var(--dim-b);
+}
+.mono {
+  font-family: var(--mono);
+}
+
+/* ---------- buttons ---------- */
+.iconbtn,
+.gh {
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1;
+  color: var(--dim-a);
+  background: transparent;
+  border: 1px solid var(--border-2);
+  cursor: pointer;
+  transition:
+    color 0.18s var(--ease),
+    border-color 0.18s var(--ease);
+}
+.iconbtn:hover,
+.gh:hover {
+  color: var(--fg);
+  border-color: var(--dim-b);
+}
+.gh:hover {
+  text-decoration: none;
+}
+.iconbtn svg {
+  display: block;
+}
+.burger {
+  display: none;
+  position: fixed;
+  z-index: 90;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  left: calc(12px + env(safe-area-inset-left, 0px));
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 4px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--border-2);
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+}
+.burger span {
+  display: block;
+  width: 16px;
+  height: 2px;
+  background: currentColor;
+}
+
+/* ---------- sidebar (shared by the landing page and the docs) ---------- */
+.side {
+  position: fixed;
+  z-index: 45;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 248px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: calc(18px + env(safe-area-inset-top, 0px)) 12px
+    calc(24px + env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--bg);
+  border-right: 1px solid var(--border);
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  padding: 2px 10px 4px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.brand .sub {
+  color: var(--dim-b);
+  font-weight: 400;
+}
+.brand .mdl {
+  --s: 22px;
+}
+.side-links {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.side-links a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 0 12px;
+  border-left: 2px solid transparent;
+  font-size: 13px;
+  color: var(--dim-a);
+  white-space: nowrap;
+}
+.side-links a:hover {
+  color: var(--fg);
+  background: var(--panel);
+}
+.side-links a.active {
+  color: var(--fg);
+  background: var(--panel);
+  border-left-color: var(--accent);
+}
+.side-links .ico {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.side-head {
+  padding: 0 12px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dim-b);
+}
+.side-actions {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 4px 0;
+  border-top: 1px solid var(--border);
+}
+
+/* Search lives at the top of the sidebar. */
+.search {
+  position: relative;
+  padding: 0 10px;
+}
+.search input {
+  width: 100%;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--panel);
+  border: 1px solid var(--border-2);
+  outline: none;
+}
+.search input:focus {
+  border-color: var(--dim-b);
+}
+.search-results {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 10px;
+  right: 10px;
+  z-index: 60;
+  max-height: min(60vh, 420px);
+  overflow: auto;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border-2);
+}
+.search-empty {
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--dim-b);
+}
+.search-item {
+  display: block;
+  width: 100%;
+  padding: 7px 9px;
+  text-align: left;
+  font: inherit;
+  color: var(--fg);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.search-item:hover,
+.search-item.on {
+  background: var(--surface);
+}
+.search-item .si-t {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+.search-item.on .si-t {
+  color: var(--accent);
+}
+.search-item .si-s {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--dim-a);
+  line-height: 1.4;
+}
+
+/* ---------- shared content components ---------- */
+.feat {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.feat li {
+  position: relative;
+  padding-left: 22px;
+  margin: 10px 0;
+  font-size: 14px;
+  color: var(--dim-a);
+}
+.feat li::before {
+  content: "◇";
+  position: absolute;
+  left: 0;
+  color: var(--recon);
+}
+.feat li.mutate::before {
+  color: var(--mutate);
+}
+.feat li.exec::before {
+  color: var(--exec);
+}
+.feat li.meta::before {
+  color: var(--dim-a);
+}
+.feat li.ok::before {
+  content: "✓";
+  color: var(--green);
+}
+.feat li.warn::before {
+  content: "⚠";
+  color: var(--yellow);
+}
+.feat li.err::before {
+  content: "✗";
+  color: var(--red);
+}
+.feat.inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 30px;
+}
+.feat.inline li {
+  margin: 0;
+}
+
+.rows {
+  margin: 0;
+}
+.row {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 20px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.row dt {
+  font-size: 13.5px;
+  color: var(--fg);
+}
+.row dd {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--dim-a);
+}
+.row dt code {
+  color: var(--accent);
+}
+.rows.wide .row {
+  grid-template-columns: 210px 1fr;
+}
+
+.callout {
+  margin: 16px 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--yellow);
+  background: var(--panel);
+  font-size: 13.5px;
+  color: var(--dim-a);
+}
+.callout b {
+  color: var(--fg);
+}
+.callout.warn {
+  border-left-color: var(--yellow);
+}
+.callout.err {
+  border-left-color: var(--red);
+}
+.callout.ok {
+  border-left-color: var(--green);
+}
+
+/* Terminal transcript. */
+.term {
+  border: 1px solid var(--border-2);
+  background: var(--term-bg);
+}
+.term-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.term-cap {
+  font-size: 12px;
+  color: var(--dim-b);
+}
+.term-replay {
+  margin-left: auto;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--dim-a);
+  background: var(--panel);
+  border: 1px solid var(--border-2);
+  cursor: pointer;
+}
+.term-body {
+  margin: 0;
+  padding: 18px 16px;
+  min-height: 200px;
+  font-size: 13px;
+  line-height: 1.9;
+  color: var(--term-fg);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.term-body .ln {
+  display: block;
+}
+.term-body .cmd {
+  color: var(--term-fg);
+}
+.term-body .plan {
+  color: var(--mutate);
+}
+.term-body .think {
+  color: var(--think);
+}
+.term-body .ok {
+  color: var(--green);
+}
+.term-body .meta {
+  color: var(--dim-b);
+}
+.cursor {
+  display: inline-block;
+  width: 8px;
+  height: 15px;
+  background: var(--accent);
+  vertical-align: -2px;
+  animation: mma-blink 1s steps(1) infinite;
+}
+@keyframes mma-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Install widget. */
+.install {
+  border: 1px solid var(--border-2);
+  background: var(--panel);
+}
+.install-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 8px 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.install-tabs {
+  display: flex;
+  gap: 2px;
+}
+.itab {
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--dim-a);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.itab:hover {
+  color: var(--fg);
+}
+.itab.on {
+  color: var(--fg);
+  background: var(--surface);
+}
+.install-body {
+  padding: 14px 16px;
+  overflow-x: auto;
+}
+.install-body code {
+  font-size: 13px;
+  white-space: nowrap;
+}
+.copy {
+  padding: 8px 13px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--border-2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.copy:hover {
+  border-color: var(--dim-b);
+}
+
+/* Context budget segments. */
+.segbar {
+  display: flex;
+  gap: 3px;
+  height: 12px;
+}
+.segbar i {
+  flex: 1 1 0;
+  min-width: 4px;
+  transition: flex-grow 0.25s var(--ease);
+}
+.seg-system {
+  background: var(--seg-system);
+}
+.seg-tools {
+  background: var(--seg-tools);
+}
+.seg-history {
+  background: var(--seg-history);
+}
+.seg-reserve {
+  background: var(--seg-reserve);
+}
+.seg-free {
+  background: var(--seg-free);
+}
+
+/* MMART state lab. */
+.mascot-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.mstate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px;
+  font: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+.mstate:hover {
+  border-color: var(--border-2);
+}
+.mstate.on {
+  border-color: var(--dim-b);
+  background: var(--panel);
+}
+.mstate em {
+  font-style: normal;
+  font-size: 10.5px;
+  color: var(--dim-b);
+}
+.mstate.on em {
+  color: var(--fg);
+}
+.mstate.more-hide {
+  display: none;
+}
+.mascot-strip.open .mstate.more-hide {
+  display: flex;
+}
+.mstate.more {
+  border-color: var(--border-2);
+  border-style: dashed;
+  padding: 12px 13px;
+}
+.mstate.more em {
+  color: var(--accent);
+}
+
+/* ---------- reveal + progress ---------- */
+.reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 0.5s var(--ease),
+    transform 0.5s var(--ease);
+}
+.reveal.in {
+  opacity: 1;
+  transform: none;
+}
+.progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 60;
+  pointer-events: none;
+}
+.progress i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.1s linear;
+}
+
+/* ---------- back to top ---------- */
+.totop {
+  position: fixed;
+  z-index: 61;
+  left: calc(50% + 124px);
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  height: 40px;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--dim-a);
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  border: 1px solid var(--border-2);
+  cursor: pointer;
+  opacity: 0;
+  transform: translate(-50%, 10px);
+  pointer-events: none;
+  transition:
+    opacity 0.25s var(--ease),
+    transform 0.25s var(--ease),
+    color 0.18s var(--ease);
+}
+.totop.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+.totop:hover {
+  color: var(--accent);
+  border-color: var(--dim-b);
+}
+
+/* ---------- responsive ---------- */
+@media (max-width: 1180px) {
+  .burger {
+    display: inline-flex;
+  }
+  .side {
+    width: min(84vw, 320px);
+    z-index: 80;
+    transform: translateX(-100%);
+    transition: transform 0.22s var(--ease);
+  }
+  body.nav-open .side {
+    transform: none;
+  }
+  body.nav-open .burger {
+    opacity: 0;
+    pointer-events: none;
+  }
+  body.nav-open::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    background: rgba(0, 0, 0, 0.5);
+  }
+  body.nav-open {
+    overflow: hidden;
+  }
+  .side-links a {
+    min-height: 46px;
+    font-size: 15px;
+  }
+  .totop {
+    left: 50%;
+  }
+}
+
+@media (max-width: 700px) {
+  .row,
+  .rows.wide .row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .totop {
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    min-height: 44px;
+  }
+}
+
+/* ---------- touch ergonomics (Apple HIG 44pt / Material 48dp) ---------- */
+@media (any-pointer: coarse) {
+  .iconbtn,
+  .gh,
+  .burger {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .side-links a {
+    min-height: 44px;
+  }
+  .mstate {
+    min-height: 44px;
+  }
+  .copy,
+  .itab,
+  .term-replay {
+    min-height: 40px;
+  }
+}
+
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  .cursor {
+    display: none;
+  }
+}

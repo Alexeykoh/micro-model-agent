@@ -6,6 +6,74 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Changed
+
+- **Web UI: спиннер в селекторах без счётчика ожидания.** В чипах provider /
+  model / context / reasoning во время переключения остаётся только спиннер
+  с левым отступом; секундомер ожидания убран.
+
+### Fixed
+
+- **Web UI: честный статус офлайн-провайдера.** После свитча на недоступный
+  эндпоинт сайдбар показывает `provider · недоступен`, `context` и `loaded context`
+  не наследуют окно прежнего бэкенда, а селектор reasoning скрывается вместо
+  ложных уровней из пресета.
+- **Web UI: проекция «Сессия · Использование» обновляется при смене провайдера.**
+  Живая context-probe вынесена в shared box и перечитывается web-хостом, а SSE
+  `config` дополнительно обновляет active-tab state.
+- **Актуальные данные провайдера при переключении провайдера/модели** (`mma`, `mma web`): контекст, capabilities и reasoning перепрашиваются у нового бэкенда вместо наследования прошлого.
+  - Контекст: проба читает `limit.context` из OpenAI-compat `/models` (OpenCode Zen/Go) — окно opencode-go больше не «не определяется» для моделей вне каталога models.dev.
+  - `reconfigure`/`setProvider` перепрашивают capabilities (LM Studio/llama.cpp) и reasoning-поддержку при смене идентичности; при пустом ответе — сброс к пресету, а не чужие данные. `probePassed` сбрасывается до резолва новой пробы; раннеры читают пробу из общего бокса.
+  - CLI `mma provider use` восстанавливает запомненную модель провайдера; `toConfig()` больше не теряет `provider.models`.
+  - UI-селектор reasoning показывает тот механизм, что реально применяется (`rememberReasoningMechanism` на каждом reconfigure).
+  - Спека: `docs/specs/2026-11-10-provider-switch-probes-design.md`.
+- **Discovery выключателя reasoning у хостед-эндпоинтов** (оплачен долг `hosted-reasoning-discovery`): `/models`-capabilities дают стратегию и объявленные уровни (`reasoning.effort` → INV-R7), а поддержка `reasoning_effort:"none"` выясняется одним минимальным запросом — 200 → выключатель есть, 400 про параметр → строгий (`"none"` не шлём), несвязанный 400/5xx/сеть → «не знаем» (пресет, кэш не пишется). Кэш память+диск (`~/.mma/reasoning-off-cache.json`, `MMA_REASONING_OFF_CACHE`), TTL как у reasoning-пробы; проба не гоняется при `reasoning.mode: "none"`. Спека: `docs/specs/2026-11-10-hosted-reasoning-off-discovery-design.md`.
+- **bash: честная ошибка при недоступном шелле** — не отправляет модель проверять
+  workdir, который в порядке: ошибка спавна классифицируется (шелл / workdir /
+  прочее), а с третьего подряд «шелл недоступен» команда не спавнится, а сразу
+  отдаёт текст с переходом на файловые тулы. Спека: `docs/specs/0.25.2/2026-11-10-surrender-recovery-design.md` (S1).
+- **bash: быстрая директива при недоступном шелле** — после двух подряд «шелл
+  недоступен» модель получает «смени класс инструментов» (файловые тулы вместо
+  shell), раньше общего «тул падает N раз». Спека: `docs/specs/0.25.2/2026-11-10-surrender-recovery-design.md` (S2).
+- **honest-stop: директива не запрещает смену подхода** — `exec.honest_stop` велит
+  попробовать другой класс инструментов (файловые тулы вместо shell,
+  `plan_step status=skipped`, один вопрос пользователю), а не «НЕ пробуй другую
+  команду». Спека: `docs/specs/0.25.2/2026-11-10-surrender-recovery-design.md` (S3).
+- **Снятая директива уходит из контекста** — `clearDirective` вычёркивает
+  `<system-summary>` снятой директивы из активной истории, а не только из
+  реестра: модель не продолжает читать «сдайся» после того, как условие снялось.
+  Спека: `docs/specs/0.25.2/2026-11-10-surrender-recovery-design.md` (S4).
+- **План: `file-exists:` проверяет заявленный путь** — existence-контракт больше
+  не подтверждается чужим файлом с тем же basename (`src/app/about/page.tsx`
+  вместо `src/app/cart/page.tsx`), а auto-advance уважает `step.check`
+  (`file-exists:` / `file-modified:`). Спека: `docs/specs/0.25.2/2026-11-10-harness-verification-defects-design.md` (A).
+- **Аудит перестал противоречить себе** — `summary` финального аудита согласован
+  с `passed`: при неподтверждённых шагах сообщение перечисляет причины, а не
+  печатает «[✓] Задача выполнена»; auto-advance не закрывает `manual:`-шаг без
+  заметки. Спека: `docs/specs/0.25.2/2026-11-10-harness-verification-defects-design.md` (C).
+- **План: UI-шаг не доказывается `file-exists:`** — требование поведенческого
+  доказательства (волна 21) распространяется и на файловые контракты:
+  `file-exists:` / `file-modified:` на шаге, меняющем UI, блокируют `done`.
+  Спека: `docs/specs/0.25.2/2026-11-10-harness-verification-defects-design.md` (F).
+- **bash: описание не советует недоступные тулы** — `bash` и `subagent_list`
+  больше не ссылаются на `process_*` (они доступны только с тегом `shell`);
+  вместо этого — `enable_tools shell`. Спека: `docs/specs/0.25.2/2026-11-10-harness-verification-defects-design.md` (E).
+- **Аудит на форс-финале** — ход, завершённый `failed_batches`/stalled/duplicate/
+  max_iters, теперь проходит детерминированный аудит плана (не только
+  LLM-критика): при незакрытых шагах `success:false`. Спека: `docs/specs/0.25.2/2026-11-10-surrender-recovery-design.md` (S6).
+- **Критик видит незакрытые шаги плана** — в evidence-пакет добавлен список
+  `PLAN PENDING STEPS` (кап 8, «+N more»), а промпт требует помечать незакрытую
+  работу `critical` и не наказывать за недоступный тул (`shell unavailable` /
+  `SECURITY BLOCKED`) с вопросом пользователю. Спека: `docs/specs/0.25.2/2026-11-10-surrender-recovery-design.md` (S5).
+- **LSP: каскад `implicit any` от неразрешённого алиаса не блокирует запись** —
+  на холодном индексе потерянные типы импорта давали ложные
+  `implicit any` / `cannot find name` и блокировали корректную запись (модель
+  обходила баг явными аннотациями). Спека: `docs/specs/0.25.2/2026-11-10-harness-verification-defects-design.md` (B).
+- **План: проверки привязаны к шагам** — файловая проверка
+  (`file-exists:` / `file-modified:`), не относящаяся к файлам своего шага,
+  больше не принимается: заменяется на manual + предупреждение (сдвинутый
+  массив checks давал `manual:`-ловушку). Спека: `docs/specs/0.25.2/2026-11-10-harness-verification-defects-design.md` (D).
+
 ## [0.24.4] - 2026-11-06
 
 ### Added

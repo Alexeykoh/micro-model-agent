@@ -7,7 +7,11 @@
  */
 import { describe, expect, it } from "vitest";
 import { ContextManager } from "../../src/core/context/manager";
-import { clearDirective, issueDirective } from "../../src/core/agent/directives";
+import {
+  clearDirective,
+  issueDirective,
+  type DirectiveSink,
+} from "../../src/core/agent/directives";
 
 /** Контекст с достаточным числом сообщений, чтобы компакция что-то сделала. */
 function makeContext(): ContextManager {
@@ -51,5 +55,51 @@ describe("standing directives", () => {
     expect([...cm.standingDirectives.keys()].sort()).toEqual(["cycle", "research"]);
     cm.standingDirectives.clear();
     expect(cm.standingDirectives.size).toBe(0);
+  });
+});
+
+describe("supersedeDirective (S4)", () => {
+  const needle = "<system-summary>STOP retrying and answer now</system-summary>";
+
+  it("removes the directive text from the active history when cleared", () => {
+    const cm = new ContextManager(32768);
+    cm.addMessage({ role: "system", content: "sys" });
+    issueDirective(cm, "failed_batches", "STOP retrying and answer now");
+    expect(cm.getActiveHistory().some((m) => m.content === needle)).toBe(true);
+
+    clearDirective(cm, "failed_batches");
+    expect(cm.getActiveHistory().some((m) => m.content === needle)).toBe(false);
+    expect(cm.standingDirectives.has("failed_batches")).toBe(false);
+  });
+
+  it("keeps assistant(tool_calls)↔tool pairs intact", () => {
+    const cm = new ContextManager(32768);
+    cm.addMessage({ role: "system", content: "sys" });
+    cm.addMessage({
+      role: "assistant",
+      content: "",
+      tool_calls: [{ id: "c1", type: "function", function: { name: "bash", arguments: "{}" } }],
+    });
+    cm.addMessage({ role: "tool", tool_call_id: "c1", content: "out" });
+    issueDirective(cm, "failed_batches", "STOP retrying and answer now");
+    clearDirective(cm, "failed_batches");
+
+    const hist = cm.getActiveHistory();
+    const ai = hist.findIndex((m) => m.role === "assistant" && m.tool_calls);
+    expect(ai).toBeGreaterThan(-1);
+    expect(hist[ai + 1]?.role).toBe("tool");
+    expect(hist[ai + 1]?.tool_call_id).toBe("c1");
+  });
+
+  it("clearDirective supersedes before clearing the standing registry", () => {
+    const calls: string[] = [];
+    const sink: DirectiveSink = {
+      addMessage: () => {},
+      setStandingDirective: () => {},
+      clearStandingDirective: () => calls.push("clear"),
+      supersedeDirective: () => calls.push("supersede"),
+    };
+    clearDirective(sink, "duplicate");
+    expect(calls).toEqual(["supersede", "clear"]);
   });
 });

@@ -149,6 +149,7 @@ export async function runFinalGates(host: AgentDeps, inp: GatesInput): Promise<G
     slog,
     task: input,
     planSummary: host.planSummary?.() ?? undefined,
+    planPendingSteps: host.planPendingSteps?.() ?? undefined,
     toolEvents: gatherTurnToolEvents(contextManager, state.criticHistoryMark),
     beforeFinish: true,
     // Текст ответа — только для ходов без мутаций (чат-доставка).

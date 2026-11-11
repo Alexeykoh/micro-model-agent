@@ -75,9 +75,9 @@ export class AgentBase {
    *  в конструкторе (строки до мутаций). */
   // biome-ignore lint/correctness/noUnusedPrivateClassMembers: читается через ProviderPhaseHost
   private lastProbeIdentity: ProbeIdentity;
-  /** Кеш «идентичность → измеренный contextWindow» (INV-W6); пишется фазой. */
+  /** Кеш «идентичность → измеренное окно контекста» (INV-W6); пишется фазой. */
   // biome-ignore lint/correctness/noUnusedPrivateClassMembers: читается/пишется через ProviderPhaseHost
-  private probeWindowCache = new Map<string, number>();
+  private probeWindowCache = new Map<string, import("../../llm/provider-context").ContextProbeResult>();
   /** Сжатые инструкции; снимок карты проекта на ход (см. PromptPhaseHost). */
   // biome-ignore lint/correctness/noUnusedPrivateClassMembers: читается/пишется через PromptPhaseHost
   private overflowHintBlock: PromptBlock | null = null;
@@ -121,6 +121,32 @@ export class AgentBase {
   /** Типизированный доступ к модулям для CLI/REPL (напр. /lsp). */
   getModule<T>(name: string): T | undefined {
     return getModule<T>(this.deps.moduleRegistry, name);
+  }
+
+  /** Живой итог context-probe для веб-сайдбара: `undefined` — ещё не устоялась. */
+  contextProbeSnapshot(): import("../../llm/provider-context").ContextProbeResult | null | undefined {
+    return this.deps.contextProbeRef?.current;
+  }
+
+  /** Доступен ли активный эндпоинт по последней capabilities-пробе. */
+  providerReachableSnapshot(): boolean | undefined {
+    return this.deps.capabilitiesProbeRef?.reachable;
+  }
+
+  /** Стратегия reasoning, реально применённая к активному провайдеру. */
+  providerReasoningSnapshot(): {
+    strategy?: import("../../config/types").ReasoningStrategy;
+    levels?: string[] | null;
+    reasoningOff?: boolean;
+    reachable?: boolean;
+  } {
+    const ref = this.deps.capabilitiesProbeRef;
+    return {
+      strategy: ref?.reasoningStrategy,
+      levels: ref?.reasoningLevels ?? null,
+      reasoningOff: ref?.reasoningOff,
+      reachable: ref?.reachable,
+    };
   }
 
   /**

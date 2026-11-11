@@ -59,9 +59,6 @@
       var el = document.querySelector(pair[0]);
       if (el) el.setAttribute("content", lpT(pair[1]));
     });
-    var onM = document.querySelector(".mstate.on");
-    var nameEl = document.getElementById("mascotName");
-    if (onM && nameEl) nameEl.textContent = lpT(onM.getAttribute("data-label"));
   }
   function setLang(lang) {
     root.lang = lang;
@@ -71,8 +68,8 @@
     applyI18n();
     var b = document.getElementById("langBtn");
     if (b) b.textContent = lang === "ru" ? "EN" : "RU";
-    if (window.refreshNarrow) window.refreshNarrow();
     typeTerminal(!reduce);
+    paintStage();
   }
 
   /* ---- MMART faces ---- */
@@ -83,86 +80,6 @@
       if (c.indexOf("st-") === 0) state = c.slice(3);
     });
     window.MMART.attach(el, state);
-  }
-  function initHeroFace(el) {
-    if (!el) return;
-    el.addEventListener("click", function () {
-      if (window.MMART) window.MMART.poke(el);
-    });
-  }
-
-  /* ---- scroll companion ---- */
-  var SECTION_STATE = {
-    why: "think",
-    terminal: "run",
-    context: "read",
-    tools: "find",
-    planning: "plan",
-    memory: "think",
-    safety: "run",
-    service: "run",
-    ops: "check",
-    start: "done",
-    limits: "think",
-    phil: "done",
-  };
-  function setFaceState(state) {
-    var f = document.getElementById("compFace");
-    if (!f || !window.MMART) return;
-    window.MMART.setState(f, state === "track" ? "idle" : state);
-  }
-
-  /* The companion reacts to what you actually do, then returns to whatever the
-     current section says it should be. */
-  var sectionState = "track";
-  var pulseTimer = null;
-  function pulseFace(state, ms) {
-    if (reduce) return;
-    var wrap = document.querySelector(".companion");
-    if (wrap) wrap.classList.add("show");
-    setFaceState(state);
-    clearTimeout(pulseTimer);
-    pulseState = state;
-    pulseTimer = setTimeout(function () {
-      setFaceState(sectionState);
-    }, ms || 1500);
-  }
-  var pulseState = null;
-
-  function initCompanion() {
-    var wrap = document.querySelector(".companion");
-    var face = document.getElementById("compFace");
-    if (!wrap || !face || reduce) return;
-    var shown = false;
-    if (!("IntersectionObserver" in window)) return;
-    var io = new IntersectionObserver(
-      function (entries) {
-        entries.forEach(function (e) {
-          if (e.isIntersecting) {
-            if (!shown) {
-              shown = true;
-              wrap.classList.add("show");
-            }
-            sectionState = SECTION_STATE[e.target.id] || "track";
-            setFaceState(sectionState);
-          }
-        });
-      },
-      { rootMargin: "-45% 0px -45% 0px" },
-    );
-    Object.keys(SECTION_STATE).forEach(function (id) {
-      var el = document.getElementById(id);
-      if (el) io.observe(el);
-    });
-    document.querySelectorAll(".f-node, .tag, .preset").forEach(function (n) {
-      n.addEventListener("mouseenter", function () {
-        if (!shown) {
-          shown = true;
-          wrap.classList.add("show");
-        }
-        pulseFace("find", 900);
-      });
-    });
   }
 
   /* ---- nav scroll-spy ---- */
@@ -268,7 +185,6 @@
           document.body.removeChild(ta);
           done();
         }
-        pulseFace("done", 1800);
       });
     });
   }
@@ -297,52 +213,167 @@
         });
         b.classList.add("on");
         apply(b.getAttribute("data-win"));
-        pulseFace("think", 1300);
       });
     });
     apply("32");
   }
 
-  /* ---- tool narrowing widget ---- */
-  function initNarrow() {
-    var root = document.getElementById("narrow");
-    if (!root) return;
-    var BASE = 1100,
-      FULL = 3500;
-    var bar = document.getElementById("narrowBar");
-    var costEl = document.getElementById("narrowCost");
-    var savedEl = document.getElementById("narrowSaved");
-    var tags = root.querySelectorAll(".tag");
-    function refresh() {
-      var cost = BASE;
-      tags.forEach(function (t) {
-        if (t.classList.contains("on")) cost += parseInt(t.getAttribute("data-cost"), 10) || 0;
-      });
-      if (bar) bar.style.width = Math.max(6, Math.round((cost / FULL) * 100)) + "%";
-      if (costEl) costEl.textContent = (cost / 1000).toFixed(1) + "K";
-      if (savedEl)
-        savedEl.textContent =
-          "−" + Math.round((1 - cost / FULL) * 100) + "% " + lpT("narrow.saved");
-    }
-    tags.forEach(function (t) {
-      t.addEventListener("click", function () {
-        t.classList.toggle("on");
-        refresh();
-        pulseFace("find", 1100);
+  /* ---- safety pipeline: click a stage to see what actually happens ---- */
+  var STAGES = {
+    en: {
+      call: {
+        tag: "before",
+        d: "The model returns a tool call. Nothing has touched the filesystem or the network yet — the call is still just a name and a set of arguments.",
+        list: [
+          "Tool name and arguments are read from the model response",
+          "The call is matched against the enabled tool set and the session allowlist",
+          "An interactive tool asks the user first instead of running",
+        ],
+      },
+      "plugins-in": {
+        tag: "extensibility",
+        d: "Before the validators, enabled plugins see the call. A plugin can rewrite arguments, attach metadata or refuse the call — the refusal is what the audit journal records.",
+        list: [
+          "Runs only for plugins enabled in this project",
+          "A plugin can mutate the arguments before validation",
+          "A plugin refusal is a block, not a silent skip",
+        ],
+      },
+      validators: {
+        tag: "the gate",
+        d: "One enforcement point. Every tool declares what it needs — capabilities, path arguments, URL arguments — and the validators check the call against the active policy before anything happens.",
+        list: [
+          "Command: blacklist, dangerous flags, optional allowlist, interpreter escapes",
+          "Path: always-on protected paths, workspace containment, subagent file zones",
+          "Network: SSRF policy with DNS resolution, domain blacklist, optional allowlist",
+          "Content: eval( and child_process.exec( style patterns are flagged before a write",
+        ],
+      },
+      action: {
+        tag: "execution",
+        d: "The tool runs. Path arguments are resolved with realpath so a symlink or junction cannot escape the workspace, and the result is capped before it enters the context.",
+        list: [
+          "Symlinks and junctions are resolved, not trusted",
+          "Output is truncated and control characters are stripped",
+          "A long-running command is backgrounded instead of blocking the turn",
+        ],
+      },
+      "plugins-out": {
+        tag: "extensibility",
+        d: "The result goes back through the plugin chain. This is where a plugin can redact what the model is about to see — the model-facing text and the audit record are not the same string.",
+        list: [
+          "A plugin can rewrite or truncate the result",
+          "Redaction applied here is what the model actually receives",
+          "Failures are caught per plugin: one broken plugin does not stop the others",
+        ],
+      },
+      result: {
+        tag: "after",
+        d: "The result returns to the loop with its provenance: whether it was blocked, which policy decided, and what was redacted. A block never reaches the tool, and it is never silent.",
+        list: [
+          "Blocked calls are written to the audit journal with the reason",
+          "Protected-path and egress hits are reported, not swallowed",
+          "The model sees a calm one-line summary, never the raw directive",
+        ],
+      },
+    },
+    ru: {
+      call: {
+        tag: "до",
+        d: "Модель вернула вызов инструмента. Файловая система и сеть ещё не тронуты — это только имя и набор аргументов.",
+        list: [
+          "Имя инструмента и аргументы читаются из ответа модели",
+          "Вызов сверяется с включённым набором и allowlist сессии",
+          "Интерактивный инструмент сначала спрашивает пользователя",
+        ],
+      },
+      "plugins-in": {
+        tag: "расширяемость",
+        d: "Перед валидаторами вызов видят включённые плагины. Плагин может переписать аргументы, добавить метаданные или отказать в вызове — отказ пишется в аудит-журнал.",
+        list: [
+          "Работает только для плагинов, включённых в этом проекте",
+          "Плагин может изменить аргументы до валидации",
+          "Отказ плагина — это блокировка, а не тихий пропуск",
+        ],
+      },
+      validators: {
+        tag: "шлюз",
+        d: "Одна точка enforcement. Каждый инструмент объявляет, что ему нужно — возможности, пути, URL, — и валидаторы проверяют вызов по активной политике до того, как что-то произойдёт.",
+        list: [
+          "Команды: чёрный список, опасные флаги, опциональный белый, лазейки через интерпретаторы",
+          "Пути: всегда включённые защищённые пути, удержание в рабочей папке, зоны субагентов",
+          "Сеть: SSRF-политика с DNS-резолвом, чёрный список доменов, опциональный белый",
+          "Содержимое: паттерны вроде eval( и child_process.exec( помечаются до записи",
+        ],
+      },
+      action: {
+        tag: "исполнение",
+        d: "Инструмент выполняется. Пути резолвятся через realpath, поэтому симлинк или junction не выведут за пределы рабочей папки, а результат обрезается до попадания в контекст.",
+        list: [
+          "Симлинки и junction резолвятся, а не доверяются",
+          "Вывод обрезается, управляющие символы вычищаются",
+          "Длинная команда уходит в фон вместо блокировки хода",
+        ],
+      },
+      "plugins-out": {
+        tag: "расширяемость",
+        d: "Результат возвращается через цепочку плагинов. Здесь плагин может вычистить то, что увидит модель, — текст для модели и запись в аудите не одно и то же.",
+        list: [
+          "Плагин может переписать или обрезать результат",
+          "Редакция здесь — это то, что реально получит модель",
+          "Сбои ловятся по одному: один сломанный плагин не останавливает остальные",
+        ],
+      },
+      result: {
+        tag: "после",
+        d: "Результат возвращается в петлю с происхождением: был ли вызов заблокирован, какое правило решило и что вычищено. Блокировка не доходит до инструмента и никогда не молчит.",
+        list: [
+          "Заблокированные вызовы пишутся в аудит-журнал с причиной",
+          "Срабатывания по защищённым путям и egress сообщаются, а не глотаются",
+          "Модель видит спокойную строку-итог, а не сырую директиву",
+        ],
+      },
+    },
+  };
+  var stageKey = null;
+  function paintStage() {
+    var pipe = document.getElementById("safetyPipe");
+    var panel = document.getElementById("safetyStage");
+    if (!pipe || !panel || !stageKey) return;
+    var lang = root.lang === "ru" ? "ru" : "en";
+    var data = (STAGES[lang] || STAGES.en)[stageKey];
+    if (!data) return;
+    var nodes = pipe.querySelectorAll(".pipe-node");
+    var idx = 0;
+    nodes.forEach(function (n) {
+      var on = n.getAttribute("data-stage") === stageKey;
+      n.classList.toggle("on", on);
+      n.setAttribute("aria-expanded", String(on));
+      if (on) idx = Array.prototype.indexOf.call(nodes, n) + 1;
+    });
+    document.getElementById("safetyStageN").textContent = idx + "/" + nodes.length;
+    document.getElementById("safetyStageTitle").textContent =
+      pipe.querySelector('[data-stage="' + stageKey + '"]').textContent;
+    document.getElementById("safetyStageTag").textContent = data.tag;
+    document.getElementById("safetyStageD").textContent = data.d;
+    var ul = document.getElementById("safetyStageList");
+    ul.textContent = "";
+    data.list.forEach(function (item) {
+      var li = document.createElement("li");
+      li.textContent = item;
+      ul.appendChild(li);
+    });
+    panel.hidden = false;
+  }
+  function initSafetyPipe() {
+    var pipe = document.getElementById("safetyPipe");
+    if (!pipe) return;
+    pipe.querySelectorAll(".pipe-node").forEach(function (n) {
+      n.addEventListener("click", function () {
+        stageKey = stageKey === n.getAttribute("data-stage") ? null : n.getAttribute("data-stage");
+        paintStage();
       });
     });
-    var reset = document.getElementById("narrowReset");
-    if (reset)
-      reset.addEventListener("click", function () {
-        tags.forEach(function (t) {
-          var def = t.classList.contains("file") || t.classList.contains("code");
-          t.classList.toggle("on", def);
-        });
-        refresh();
-        pulseFace("think", 1300);
-      });
-    window.refreshNarrow = refresh;
-    refresh();
   }
 
   /* ---- MMART greeting ---- */
@@ -363,8 +394,13 @@
 
   /* ---- reveal + progress ---- */
   function initReveal() {
-    if (reduce || !("IntersectionObserver" in window)) return;
     var els = document.querySelectorAll(".sec");
+    if (reduce || !("IntersectionObserver" in window)) {
+      els.forEach(function (el) {
+        el.classList.add("in");
+      });
+      return;
+    }
     var io = new IntersectionObserver(
       function (entries) {
         entries.forEach(function (e) {
@@ -380,6 +416,13 @@
       el.classList.add("reveal");
       io.observe(el);
     });
+    // Safety net: a reveal that never fires (observer unsupported, page
+    // printed, embedded in a viewer) must not leave the page blank.
+    setTimeout(function () {
+      els.forEach(function (el) {
+        el.classList.add("in");
+      });
+    }, 4000);
   }
   function initProgress() {
     var bar = document.getElementById("progressBar");
@@ -399,72 +442,6 @@
     upd();
   }
 
-  /* ---- mascot lab ---- */
-  var FACE_COLORS = [
-    "c-active",
-    "c-recon",
-    "c-mutate",
-    "c-exec",
-    "c-ok",
-    "c-warn",
-    "c-err",
-    "c-dim",
-  ];
-  function initMascot() {
-    var big = document.getElementById("mascotBig");
-    if (!big) return;
-    var nameEl = document.getElementById("mascotName");
-    var strip = document.querySelector(".mascot-strip");
-    var btns = Array.prototype.slice.call(document.querySelectorAll(".mstate"));
-    var more = document.getElementById("mstateMore");
-
-    // show the first nine; the rest live behind "more"
-    var plain = btns.filter(function (b) {
-      return !b.classList.contains("more");
-    });
-    plain.slice(9).forEach(function (b) {
-      b.classList.add("more-hide");
-    });
-
-    function paintBig(fromBtn) {
-      var face = fromBtn ? fromBtn.querySelector(".mdl") : null;
-      FACE_COLORS.forEach(function (c) {
-        big.classList.remove(c);
-      });
-      if (face) {
-        face.className.split(/\s+/).forEach(function (c) {
-          if (c.indexOf("c-") === 0) big.classList.add(c);
-        });
-      }
-    }
-
-    plain.forEach(function (b) {
-      b.addEventListener("click", function () {
-        var st = b.getAttribute("data-state");
-        plain.forEach(function (x) {
-          x.classList.remove("on");
-        });
-        b.classList.add("on");
-        if (window.MMART) window.MMART.setState(big, st === "track" ? "idle" : st);
-        paintBig(b);
-        if (nameEl) nameEl.textContent = lpT(b.getAttribute("data-label"));
-        pulseFace(st === "track" ? "find" : st, 1700);
-      });
-    });
-
-    if (more && strip) {
-      more.addEventListener("click", function () {
-        var open = strip.classList.toggle("open");
-        more.classList.toggle("on", open);
-        more.setAttribute("aria-expanded", String(open));
-        var lbl = document.getElementById("mstateMoreLabel");
-        if (lbl) lbl.textContent = lpT(open ? "mascot.less" : "mascot.more");
-        pulseFace("think", 1200);
-      });
-    }
-    paintBig(document.querySelector(".mstate.on"));
-  }
-
   /* ---- back to top ---- */
   function initToTop() {
     var btn = document.getElementById("toTop");
@@ -480,7 +457,6 @@
       var o = { top: 0, behavior: reduce ? "auto" : "smooth" };
       if (sc) sc.scrollTo(o);
       else window.scrollTo(o);
-      pulseFace("done", 1400);
     });
   }
 
@@ -502,13 +478,11 @@
     tabs.forEach(function (t) {
       t.addEventListener("click", function () {
         setOs(t.getAttribute("data-os"));
-        pulseFace("run", 1200);
       });
     });
     setOs("unix");
   }
 
-  /* ---- boot ---- */
   /* ---- mobile navigation (burger) ---- */
   function initBurger() {
     var btn = document.getElementById("burgerBtn");
@@ -540,326 +514,11 @@
     );
   }
 
-  /* ---- infinite live demo of the web chat ---- */
-  function initLiveDemo() {
-    var feed = document.getElementById("liveFeed");
-    if (!feed) return;
-    var pauseBtn = document.getElementById("livePause");
-    var speedBtn = document.getElementById("liveSpeed");
-    var resetBtn = document.getElementById("liveReset");
-    var paused = false,
-      speed = 1,
-      timer = null,
-      seq = 0;
-    var T =
-      window.lpT ||
-      function (k) {
-        return k;
-      };
-    var FILES = [
-      "src/core/agent.ts",
-      "src/core/context/manager.ts",
-      "src/tools/executor.ts",
-      "src/modules/webui/assets/app.ts",
-      "src/modules/security/data-policy/guard.ts",
-      "src/modules/mcp/module.ts",
-      "src/cli/repl.ts",
-    ];
-    var COMMANDS = ["bun test", "bun run quality", "bun run build:prod", "git status --short"];
-    var WEIGHTS = [
-      ["msg", 24],
-      ["think", 18],
-      ["read", 13],
-      ["edit", 12],
-      ["create", 9],
-      ["run", 7],
-      ["plan", 3],
-      ["ask", 6],
-      ["sec", 5],
-      ["img", 4],
-      ["dlp", 3],
-    ];
-
-    function pick() {
-      var total = 0,
-        i;
-      for (i = 0; i < WEIGHTS.length; i++) total += WEIGHTS[i][1];
-      var r = Math.random() * total;
-      for (i = 0; i < WEIGHTS.length; i++) {
-        r -= WEIGHTS[i][1];
-        if (r <= 0) return WEIGHTS[i][0];
-      }
-      return "msg";
-    }
-    function el(tag, cls, text) {
-      var n = document.createElement(tag);
-      if (cls) n.className = cls;
-      if (text !== undefined) n.textContent = text;
-      return n;
-    }
-    function file() {
-      return FILES[Math.floor(Math.random() * FILES.length)];
-    }
-    function cmd() {
-      return COMMANDS[Math.floor(Math.random() * COMMANDS.length)];
-    }
-    function atBottom() {
-      return feed.scrollHeight - feed.scrollTop - feed.clientHeight < 48;
-    }
-    function add(node) {
-      var stick = atBottom();
-      seq++;
-      node.dataset.seq = String(seq);
-      feed.appendChild(node);
-      while (feed.children.length > 28) feed.removeChild(feed.firstChild);
-      if (stick) feed.scrollTop = feed.scrollHeight;
-    }
-    function toolLine(kind, glyph, text, ok) {
-      var row = el("div", "wl-tool");
-      row.appendChild(el("span", "wl-g", glyph));
-      row.appendChild(el("span", "wl-tool-name", kind));
-      row.appendChild(el("span", "wl-tool-arg", text));
-      row.appendChild(el("span", ok ? "wl-ok" : "wl-run", ok ? "✓" : "…"));
-      return row;
-    }
-    function render(kind) {
-      if (kind === "msg") {
-        return el("div", "wl-msg", T("live.m" + (1 + Math.floor(Math.random() * 4))));
-      }
-      if (kind === "think") {
-        var d = document.createElement("details");
-        d.className = "wl-think";
-        var s = document.createElement("summary");
-        s.textContent = T("live.think") + " · " + (0.4 + Math.random() * 3).toFixed(1) + "s";
-        d.appendChild(s);
-        d.appendChild(el("p", "", T("live.t" + (1 + Math.floor(Math.random() * 2)))));
-        return d;
-      }
-      if (kind === "read") return toolLine("read_file", "◇", file(), true);
-      if (kind === "edit") return toolLine("edit_file", "◇", file(), true);
-      if (kind === "create") return toolLine("write_file", "✚", file(), true);
-      if (kind === "run") return toolLine("bash", "◇", cmd(), true);
-      if (kind === "plan") {
-        var card = el("div", "wl-plan");
-        card.appendChild(el("b", "", T("live.plan")));
-        var ol = document.createElement("ol");
-        ["live.plan1", "live.plan2", "live.plan3"].forEach(function (k) {
-          ol.appendChild(el("li", "", T(k)));
-        });
-        card.appendChild(ol);
-        return card;
-      }
-      if (kind === "ask") {
-        var q = el("div", "wl-q");
-        q.appendChild(el("p", "wl-q-t", "? " + T("live.q")));
-        var opts = el("div", "wl-q-opts");
-        ["live.qa", "live.qb"].forEach(function (k) {
-          var b = el("button", "wl-opt", T(k));
-          b.type = "button";
-          b.addEventListener("click", function () {
-            q.replaceWith(el("div", "wl-msg wl-answered", "✓ " + T("live.qdone") + ": " + T(k)));
-          });
-          opts.appendChild(b);
-        });
-        q.appendChild(opts);
-        return q;
-      }
-      if (kind === "sec") {
-        var sec = el("div", "wl-sec");
-        sec.appendChild(el("span", "wl-g", "⊘"));
-        sec.appendChild(el("span", "wl-sec-t", "block · .env"));
-        var det = el("button", "wl-more", "?");
-        det.type = "button";
-        var body = el("div", "wl-sec-body");
-        body.hidden = true;
-        body.textContent = T("live.sec");
-        det.addEventListener("click", function () {
-          body.hidden = !body.hidden;
-        });
-        sec.appendChild(det);
-        var wrap = el("div", "wl-sec-wrap");
-        wrap.appendChild(sec);
-        wrap.appendChild(body);
-        return wrap;
-      }
-      if (kind === "img") {
-        var fig = el("div", "wl-img");
-        var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        svg.setAttribute("viewBox", "0 0 160 90");
-        svg.setAttribute("aria-hidden", "true");
-        var r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-        r.setAttribute("x", "2");
-        r.setAttribute("y", "2");
-        r.setAttribute("width", "156");
-        r.setAttribute("height", "86");
-        r.setAttribute("rx", "8");
-        r.setAttribute("fill", "none");
-        r.setAttribute("stroke", "currentColor");
-        var p = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        p.setAttribute("d", "M18 66l30-28 22 20 18-14 34 26");
-        p.setAttribute("fill", "none");
-        p.setAttribute("stroke", "currentColor");
-        svg.appendChild(r);
-        svg.appendChild(p);
-        fig.appendChild(svg);
-        fig.appendChild(el("span", "wl-cap", T("live.img")));
-        return fig;
-      }
-      /* dlp */
-      var b = el("button", "wl-dlp", "DLP · " + (3 + Math.floor(Math.random() * 4)));
-      b.type = "button";
-      var pop = el("div", "wl-dlp-pop");
-      pop.hidden = true;
-      var hits = [T("live.dlph1"), T("live.dlph2"), T("live.dlph3")];
-      hits.forEach(function (h) {
-        pop.appendChild(el("div", "wl-dlp-hit", h));
-      });
-      b.addEventListener("click", function () {
-        pop.hidden = !pop.hidden;
-      });
-      var box = el("div", "wl-dlp-box");
-      box.appendChild(b);
-      box.appendChild(pop);
-      return box;
-    }
-    function tick() {
-      timer = null;
-      if (paused) return;
-      add(render(pick()));
-      timer = setTimeout(tick, (900 + Math.random() * 1300) / speed);
-    }
-    function start() {
-      if (!timer) tick();
-    }
-    function stop() {
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
-      }
-    }
-    function syncPause() {
-      if (pauseBtn) {
-        pauseBtn.textContent = paused ? T("live.resume") : T("live.pause");
-        pauseBtn.setAttribute("aria-pressed", paused ? "true" : "false");
-      }
-    }
-    if (pauseBtn)
-      pauseBtn.addEventListener("click", function () {
-        paused = !paused;
-        syncPause();
-        if (paused) stop();
-        else start();
-      });
-    if (speedBtn)
-      speedBtn.addEventListener("click", function () {
-        speed = speed === 1 ? 2 : speed === 2 ? 4 : 1;
-        speedBtn.textContent = speed + "×";
-      });
-    if (resetBtn)
-      resetBtn.addEventListener("click", function () {
-        feed.textContent = "";
-        seq = 0;
-        paused = false;
-        syncPause();
-        stop();
-        start();
-      });
-    document.addEventListener("visibilitychange", function () {
-      if (document.hidden) stop();
-      else if (!paused) start();
-    });
-    syncPause();
-    start();
-  }
-
-  /* ---- cache & cost calculator ---- */
-  function initCostCalc() {
-    var rootEl = document.getElementById("costCalc");
-    if (!rootEl) return;
-    var pIn = document.getElementById("cPrompt"),
-      oIn = document.getElementById("cOut"),
-      cIn = document.getElementById("cCache");
-    if (!pIn || !oIn || !cIn) return;
-    var pv = document.getElementById("cPromptV"),
-      ov = document.getElementById("cOutV"),
-      cv = document.getElementById("cCacheV"),
-      costEl = document.getElementById("cCost"),
-      savedEl = document.getElementById("cSaved");
-    var IN = 0.15 / 1e6,
-      OUT = 0.6 / 1e6,
-      CACHE = IN * 0.1;
-    function k(n) {
-      if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + "M";
-      if (n >= 1e3) return Math.round(n / 1e3) + "K";
-      return String(n);
-    }
-    function money(v) {
-      if (v === 0) return "$0";
-      return v < 0.01 ? "$" + v.toFixed(5) : "$" + v.toFixed(4);
-    }
-    function upd() {
-      var p = +pIn.value,
-        o = +oIn.value,
-        cache = +cIn.value / 100;
-      var cost = p * (1 - cache) * IN + p * cache * CACHE + o * OUT;
-      var base = p * IN + o * OUT;
-      pv.textContent = k(p);
-      ov.textContent = k(o);
-      cv.textContent = Math.round(cache * 100) + "%";
-      costEl.textContent = money(cost);
-      savedEl.textContent = base > 0 ? Math.round((1 - cost / base) * 100) + "%" : "0%";
-    }
-    [pIn, oIn, cIn].forEach(function (el) {
-      el.addEventListener("input", upd);
-    });
-    upd();
-  }
-
-  /* ---- local vs cloud monthly cost ---- */
-  function initCompareCalc() {
-    var box = document.getElementById("cmpCalc");
-    if (!box) return;
-    var calls = document.getElementById("mCalls"),
-      tokens = document.getElementById("mTokens");
-    if (!calls || !tokens) return;
-    var callsV = document.getElementById("mCallsV"),
-      tokensV = document.getElementById("mTokensV");
-    var cloudEl = document.getElementById("mCloud"),
-      localEl = document.getElementById("mLocal");
-    var IN = 0.15 / 1e6,
-      OUT = 0.6 / 1e6,
-      OUT_SHARE = 0.08;
-    function k(n) {
-      if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
-      if (n >= 1e3) return Math.round(n / 1e3) + "K";
-      return String(n);
-    }
-    function money(v) {
-      if (v < 1) return "$" + v.toFixed(2);
-      return "$" + Math.round(v).toLocaleString("en-US");
-    }
-    function upd() {
-      var c = +calls.value,
-        t = +tokens.value;
-      var perCall = t * (1 - OUT_SHARE) * IN + t * OUT_SHARE * OUT;
-      var month = perCall * c * 30;
-      callsV.textContent = String(c);
-      tokensV.textContent = k(t);
-      cloudEl.textContent = money(month);
-      localEl.textContent = "$0";
-    }
-    [calls, tokens].forEach(function (el) {
-      el.addEventListener("input", upd);
-    });
-    upd();
-  }
-
   function boot() {
     setTheme(currentTheme());
     setLang(currentLang());
 
     document.querySelectorAll(".mdl").forEach(mountFace);
-    initHeroFace(document.getElementById("heroFace"));
     if (!reduce) {
       addEventListener(
         "mousemove",
@@ -870,10 +529,8 @@
       );
     }
     initGreeting();
-    initMascot();
+    initSafetyPipe();
     initBudget();
-    initNarrow();
-    initCompanion();
     initNavSpy();
     initReveal();
     initProgress();
@@ -881,15 +538,11 @@
     initCopy();
     initInstall();
     initBurger();
-    initLiveDemo();
-    initCostCalc();
-    initCompareCalc();
 
     var replay = document.getElementById("termReplay");
     if (replay)
       replay.addEventListener("click", function () {
         typeTerminal(!reduce);
-        pulseFace("type", 1800);
       });
 
     if (window.MMA_VERSION) {
@@ -907,13 +560,11 @@
     if (themeBtn)
       themeBtn.addEventListener("click", function () {
         setTheme(root.classList.contains("light") ? "dark" : "light");
-        pulseFace("compact", 1200);
       });
     var langBtn = document.getElementById("langBtn");
     if (langBtn)
       langBtn.addEventListener("click", function () {
         setLang(root.lang === "ru" ? "en" : "ru");
-        pulseFace("run", 1200);
       });
   }
 

@@ -45,6 +45,8 @@ export interface HostStateSnapshot {
   sessionName?: string;
   model?: string;
   provider?: string;
+  /** `false` — активный эндпоинт не отвечает; `undefined` — ещё не проверяли. */
+  providerReachable?: boolean;
   contextUsed?: number;
   contextLimit?: number;
   costUsd?: number;

@@ -12,6 +12,7 @@ import type { StuckTracker } from "./stuck-tracker";
 /** Первичная причина застревания (приоритет recovery-гайденса). */
 export type PrimaryReason =
   | "stuck"
+  | "shell-unavailable"
   | "tool-errors"
   | "consecutive"
   | "repetitive"
@@ -32,11 +33,15 @@ function errorToolAtThreshold(
  * Единый источник правды приоритета recovery-причины. Общий для
  * `recoveryMessage()` и `hints()`, чтобы не расходились: bullet состояния,
  * которое recovery уже репортит, хинтом НЕ дублируется
- * (приоритет: stuck > tool-errors > bash-flailing > consecutive > repetitive >
- * read-only-streak — последний, мягкий nudge без фейлов).
+ * (приоритет: stuck > shell-unavailable > tool-errors > bash-flailing >
+ * consecutive > repetitive > read-only-streak — последний, мягкий nudge без
+ * фейлов).
  */
 export function primaryReason(tracker: StuckTracker): PrimaryReason {
   if (tracker.isStuck()) return "stuck";
+  // Недоступный шелл — раньше tool-errors: причина на машине, а не в команде,
+  // и совет «смени класс инструментов» важнее общего «тул падает N раз».
+  if (tracker.observations.hasShellUnavailable()) return "shell-unavailable";
   if (errorToolAtThreshold(tracker)) return "tool-errors";
   if (tracker.observations.hasBashFlailing()) return "bash-flailing";
   if (tracker.hasConsecutiveFailures()) return "consecutive";
@@ -67,6 +72,7 @@ export function repetitiveToolMessage(tracker: StuckTracker): string {
  */
 export function warningKey(tracker: StuckTracker): string {
   if (tracker.isStuck()) return "stuck";
+  if (tracker.observations.hasShellUnavailable()) return "shell-unavailable";
   const errorTool = errorToolAtThreshold(tracker);
   if (errorTool) return `tool-errors:${errorTool[0]}`;
   if (tracker.observations.hasBashFlailing()) return "bash-flailing";
@@ -84,6 +90,9 @@ export function stuckReason(tracker: StuckTracker): string {
       description: tracker.currentStepDescription,
       iterations: tracker.iterationsOnCurrentStep,
     });
+  }
+  if (tracker.observations.hasShellUnavailable()) {
+    return t("exec.shell_unavailable");
   }
   const errorTool = errorToolAtThreshold(tracker);
   if (errorTool) {
@@ -120,6 +129,10 @@ export function recoveryMessage(tracker: StuckTracker): string {
       stepId: String(tracker.currentStepId ?? "?"),
       description: tracker.currentStepDescription,
     });
+  }
+  // Недоступный шелл — сменить класс инструментов, а не перебирать команды.
+  if (reason === "shell-unavailable") {
+    return t("exec.shell_unavailable_recovery");
   }
   // Per-tool recovery (конкретнее — напр. "bash упал 3 раза")
   if (reason === "tool-errors") {
@@ -165,6 +178,12 @@ export function classifyFailure(
   switch (primary) {
     case "stuck":
       return { type: "timeout", iteration };
+    case "shell-unavailable":
+      return {
+        type: "shell_unavailable",
+        count: tracker.observations.shellUnavailableStreak,
+        iteration,
+      };
     case "tool-errors": {
       const entry = errorToolAtThreshold(tracker);
       return { type: "error_loop", tool: entry?.[0], count: entry?.[1], iteration };

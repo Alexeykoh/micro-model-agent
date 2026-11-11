@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/console.css">
   <link rel="stylesheet" href="/groovebox.css">
+  <link rel="stylesheet" href="/metallica.css">
   <link rel="stylesheet" href="/themes.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -37,7 +38,7 @@
       var locale = localStorage.getItem("mma-locale");
       if (locale === "en" || locale === "ru") document.documentElement.lang = locale;
       var ui = localStorage.getItem("mma-ui-theme") || "console";
-      var uiThemes = ["console", "groovebox", "neon", "paper", "contrast", "winter", "spring", "summer", "autumn"];
+      var uiThemes = ["console", "groovebox", "neon", "paper", "contrast", "winter", "spring", "summer", "autumn", "metallica"];
       if (uiThemes.indexOf(ui) >= 0) document.body.classList.add(ui);
     } catch (e) { /* ignore */ }
   })();

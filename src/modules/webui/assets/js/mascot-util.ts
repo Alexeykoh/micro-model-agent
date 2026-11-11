@@ -83,6 +83,14 @@ export function rgba(hex: string, a: number): string {
   return `rgba(${c[0]},${c[1]},${c[2]},${a})`;
 }
 
+/**
+ * Eye metrics follow the theme radius: `radius === 0` (console, groovebox,
+ * seasonal, Metallica) gives sharp square eyes; softer themes keep the pill.
+ */
+export function eyeGeometry(radius: number, w: number, h: number): { h: number; r: number } {
+  return radius === 0 ? { h: Math.max(h, w), r: 0 } : { h, r: w / 2 };
+}
+
 export function dot(
   ctx: CanvasRenderingContext2D,
   x: number,

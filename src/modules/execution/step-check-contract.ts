@@ -2,7 +2,7 @@
 import type { ToolResult, ToolScope } from "../../tools/types";
 import { t } from "../../i18n/index";
 import type { PlanStep } from "./planner";
-import { checkDoneEvidence, parseCheck } from "./plan-checks";
+import { checkDoneEvidence, parseCheck, staticEvidenceForBehaviorStep } from "./plan-checks";
 import type { PlanToolDeps } from "./plan-tool";
 
 /**
@@ -34,7 +34,7 @@ export async function verifyCheckContract(
         },
       };
     }
-    return { note: "", blocked: null };
+    return staticEvidenceForBehaviorStep(parsed, target, stepId);
   }
   if (parsed?.kind === "file") {
     const res = await deps.verifier.checkFileExists(parsed.target, scope);
@@ -51,7 +51,9 @@ export async function verifyCheckContract(
         },
       };
     }
-    return { note: "", blocked: null };
+    // Файловый контракт — тоже статика: на поведенческом/UI-шаге он не
+    // подтверждает шаг (дефект F).
+    return staticEvidenceForBehaviorStep(parsed, target, stepId);
   }
   if (parsed) {
     return (

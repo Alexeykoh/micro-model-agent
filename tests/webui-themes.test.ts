@@ -10,7 +10,7 @@ import { resolveConfigKey } from "../src/config/registry";
 const root = join(import.meta.dirname, "..");
 const asset = (name: string): string =>
   readFileSync(join(root, "src/modules/webui/assets", name), "utf8");
-const css = ["console.css", "groovebox.css", "themes.css"].map(asset).join("\n");
+const css = ["console.css", "groovebox.css", "metallica.css", "themes.css"].map(asset).join("\n");
 const html = asset("index.html");
 const en = JSON.parse(readFileSync(join(root, "src/i18n/en.json"), "utf8")) as Record<
   string,
@@ -22,12 +22,13 @@ const ru = JSON.parse(readFileSync(join(root, "src/i18n/ru.json"), "utf8")) as R
 >;
 
 describe("webui themes", () => {
-  it("registers ten themes with three swatches each", () => {
-    expect(UI_THEMES).toHaveLength(10);
-    expect(new Set(UI_THEMES.map((t) => t.id)).size).toBe(10);
+  it("registers eleven themes with three swatches each", () => {
+    expect(UI_THEMES).toHaveLength(11);
+    expect(new Set(UI_THEMES.map((t) => t.id)).size).toBe(11);
     for (const theme of UI_THEMES) expect(theme.colors).toHaveLength(3);
     expect(UI_THEMES.filter((t) => t.group === "seasonal")).toHaveLength(4);
     expect(UI_THEMES.filter((t) => t.group === "color")).toHaveLength(6);
+    expect(UI_THEMES.filter((t) => t.group === "themed")).toHaveLength(1);
   });
 
   it("every themed id has a body selector and a pre-paint entry", () => {
@@ -54,6 +55,14 @@ describe("webui themes", () => {
     }
     // No hand-drawn hats: they were the crooked part.
     expect(css).not.toMatch(/body\.(winter|spring|summer|autumn) \.mdl::before/);
+  });
+
+  it("Metallica theme uses a pulsing horizon without falling particles", () => {
+    const weather = asset("js/settings/weather.ts");
+    expect(weather).not.toMatch(/\bmetallica:\s*\{/);
+    expect(css).toContain("body.metallica::after");
+    expect(css).toContain("animation: metallica-horizon-pulse");
+    expect(css).toContain("@keyframes metallica-horizon-pulse");
   });
 
   it("config registry lists exactly the picker themes (INV-T4)", () => {

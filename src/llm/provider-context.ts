@@ -5,9 +5,8 @@
  *
  * Порядок: LM Studio native → Ollama native → llama.cpp `/props` →
  * OpenAI-compat `/models`-метаданные (`context_length`, vLLM `max_model_len`,
- * OpenRouter `top_provider.context_length`) → каталог models.dev (последний
- * шанс, только для OpenCode Zen/Go, чей `/models` отдаёт голые id — проверено
- * вживую: `{id, object, created, owned_by}` без context-полей).
+ * OpenRouter `top_provider.context_length`, OpenCode Zen/Go `limit.context`)
+ * → каталог models.dev (последний шанс, когда `/models` не сообщил окно).
  *
  * Null, если окно никто не сообщил — вызывающий хранит настроенный
  * `contextWindow` (fail-open).
@@ -17,6 +16,7 @@ import {
   probeOllama,
   probeLlamaCpp,
   probeLlamaCppReasoning,
+  probeOpenAICompatCapabilities,
   probeOpenAICompatModels,
   probeModelsDev,
 } from "./native-context";
@@ -72,9 +72,9 @@ interface LmStudioModelsResponse {
  * `trained_for_tool_use`), если есть — это единый источник правды вместо
  * гадания по имени.
  *
- * Хостед-эндпоинты (opencode-go и т.п.) native discovery не отдают — там
- * capabilities пустые. DEBT(hosted-reasoning-discovery): из-за этого
- * неизвестен off-switch reasoning и `"none"` не уходит (см. debt.md).
+ * Хостед-эндпоинты (opencode-go и т.п.) на этот native API отвечают 404 — их
+ * capabilities приходят из `/models` (`probeOpenAICompatCapabilities`), а
+ * выключатель reasoning добирается эмпирической пробой (`reasoning-off-probe`).
  *
  * Null, если эндпоинт недоступен (не LM Studio), модели нет/снята или запрос
  * упал — вызывающий деградирует молча.
@@ -136,31 +136,37 @@ export interface NativeProbeResult {
   /** Длина контекста загруженного инстанса (LM Studio); иначе undefined. */
   contextLength?: number;
   capabilities?: ModelCapabilities;
+  /** true — хотя бы один native/compat источник ответил. */
+  reachable?: boolean;
 }
 
 /**
  * Единая native-проба возможностей ДО сборки провайдера (INV-R2/R6): LM Studio
- * (`/api/v1/models`) и llama.cpp (`/props.chat_template_caps`) опрашиваются
- * параллельно. Механизм reasoning нужен экземпляру провайдера сразу, поэтому
- * эта проба, в отличие от context-probe, не фоновая.
+ * (`/api/v1/models`), llama.cpp (`/props.chat_template_caps`) и декларативные
+ * `/models`-capabilities OpenAI-compat шлюзов (`capabilities.reasoning` —
+ * OpenCode Zen/Go) опрашиваются параллельно. Механизм reasoning нужен
+ * экземпляру провайдера сразу, поэтому эта проба, в отличие от context-probe,
+ * не фоновая.
  */
 export async function probeNativeCapabilities(
   baseUrl: string,
   model: string,
   timeoutMs = 3000,
   providerType?: string,
+  apiKey?: string,
 ): Promise<NativeProbeResult | null> {
   const origin = baseUrl.replace(/\/$/, "").replace(/\/v1\/?$/, "");
   // `/props` — локальный llama.cpp; хостед-типы не опрашиваем синхронно, иначе
   // старт платит лишний сетевой round-trip к публичному эндпоинту.
   const llamaEligible =
     providerType === undefined || providerType === "openai-compat" || providerType === "lmstudio";
-  const [lm, llama] = await Promise.all([
+  const [lm, llama, compatProbe] = await Promise.all([
     probeModel(baseUrl, model, timeoutMs),
     llamaEligible ? probeLlamaCppReasoning(origin, timeoutMs) : Promise.resolve(null),
+    probeOpenAICompatCapabilities(baseUrl, model, apiKey, timeoutMs),
   ]);
-  if (!lm && !llama) return null;
-  const capabilities: ModelCapabilities = { ...(lm?.capabilities ?? {}) };
+  if (!lm && !llama && !compatProbe.reachable) return null;
+  const capabilities: ModelCapabilities = { ...(lm?.capabilities ?? {}), ...(compatProbe.capabilities ?? {}) };
   if (llama) {
     capabilities.reasoningStrategy = llama.strategy;
     capabilities.reasoningOff = llama.reasoningOff;
@@ -171,6 +177,7 @@ export async function probeNativeCapabilities(
     model: lm?.model ?? model,
     contextLength: lm?.contextLength,
     capabilities: hasCaps ? capabilities : undefined,
+    reachable: true,
   };
 }
 

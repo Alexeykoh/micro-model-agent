@@ -21,6 +21,30 @@ import type { Diagnostic } from "../../output/types";
 /** Сток диагностик fail-open (INV-15). */
 export type DiagnosticSink = (diag: Diagnostic) => void;
 
+/**
+ * Общий бокс ЖИВЫХ проб провайдера (INV-R2): capabilities-discovery + ленивая
+ * reasoning-проба. Один объект на main-агента, раннеры и субагентов — иначе
+ * свитч провайдера обновляет данные только у того, кто их перепробил.
+ */
+export interface ProviderProbesBox {
+  probe?: import("../../config/types").ModelCapabilities;
+  /** Проба поддержки reasoning для ТЕКУЩЕЙ пары провайдер+модель (B2). */
+  reasoningProbe?: () => Promise<boolean>;
+  /** `false` — эндпоинт не отвечает; `undefined` — ещё не проверяли. */
+  reachable?: boolean;
+  /** Стратегия, реально применённая агентом (может отличаться от пресета). */
+  reasoningStrategy?: import("../../config/types").ReasoningStrategy;
+  /** Уровни, реально объявленные эндпоинтом. */
+  reasoningLevels?: string[];
+  /** Поддерживает ли выключатель reasoning. */
+  reasoningOff?: boolean;
+}
+
+/** Живой итог context-probe: `undefined` — ещё не устоялась, `null` — не удалось. */
+export interface ContextProbeBox {
+  current?: import("../../llm/provider-context").ContextProbeResult | null;
+}
+
 /** Зависимости агента: конфиг, провайдер, тулы, контекст, логгеры, швы. */
 export interface AgentDeps {
   config: AppConfig;
@@ -84,8 +108,12 @@ export interface AgentDeps {
    * Живая проба возможностей (INV-R2): пересборка провайдера при `reconfigure`
    * и смене модели обязана видеть те же discovery-данные, что и bootstrap,
    * иначе экземпляр откатывается к пресету и молча теряет `reasoning_effort`.
+   * Общий бокс: его обновляет основной агент, читают раннеры/субагенты.
    */
-  capabilitiesProbeRef?: { probe?: import("../../config/types").ModelCapabilities };
+  capabilitiesProbeRef?: ProviderProbesBox;
+  /** Живой бокс context-probe для веб-сайдбара: свитч провайдера обновляет его
+   *  сразу, а не оставляет снимок bootstrap-промиса. */
+  contextProbeRef?: ContextProbeBox;
   /** Каталог конфига — для хинта «подними окно контекста» в варнингах. */
   configDir?: string;
   /**
@@ -94,6 +122,11 @@ export interface AgentDeps {
    * (дружелюбен KV-кешу). Null, если активного плана нет.
    */
   planSummary?: () => string | null;
+  /**
+   * Незакрытые шаги плана (S5) — улика для критика, что работа не завершена.
+   * Те же критерии `isUnconfirmed`, что у финального аудита.
+   */
+  planPendingSteps?: () => string[];
   /** Тестовый шов — подменяет настоящий verify критика (моки Bun глобальны). */
   criticOverride?: {
     verify: (pack: import("../../modules/critic/types").EvidencePack, signal?: AbortSignal) => Promise<import("../../modules/critic/types").CriticVerdict | null>;

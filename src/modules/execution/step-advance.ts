@@ -9,6 +9,8 @@ import { t } from "../../i18n/index";
 import { extractFileLikeTokens, stripUrls } from "../../core/hallucination/js-identifiers";
 import { findExistingFile } from "./auditor";
 import { stepTypecheckGate } from "./plugin-plan";
+import { isBehaviorStep, parseCheck } from "./plan-checks";
+import type { PlanStep } from "./planner";
 import type { PlanTracker } from "./tracker";
 import type { PlanStore } from "./plan-store";
 
@@ -68,6 +70,38 @@ export interface StepAdvanceDeps {
   typecheckFailures: ReadonlyMap<string, string>;
   flushSessionPlan(): void;
   setPendingAutoArchive(): void;
+}
+
+/**
+ * Check-контракт шага — та же строгость, что у `plan update status=done`:
+ * auto-advance не закрывает шаг, чьё проверяемое имя не подтверждено точным
+ * резолвом (дефект A). `manual:` и прочие самоподтверждаемые виды здесь не
+ * проверяются — их гард живёт в `step-guards.ts`.
+ */
+function checkContractHolds(d: StepAdvanceDeps, step: PlanStep): boolean {
+  if (!step.check) return true;
+  const parsed = parseCheck(step.check);
+  if (!parsed) return true;
+  if (parsed.kind === "manual") {
+    // `manual:` требует наблюдения (INV-G2); без заметки шаг не подтверждён —
+    // auto-advance не вправе закрывать его молча (дефект C, причина 2).
+    if (!isBehaviorStep(step.description)) return true;
+    return String(step.note || "").trim().length > 0;
+  }
+  if (parsed.kind === "file") {
+    const resolved = findExistingFile(d.baseDir, parsed.target, { mode: "suffix" });
+    return step.kind === "delete" ? resolved === null : resolved !== null;
+  }
+  if (parsed.kind === "file-modified") {
+    const resolved = findExistingFile(d.baseDir, parsed.target, { mode: "suffix" });
+    if (!resolved) return false;
+    const plan = d.tracker?.getPlan();
+    if (!plan) return true;
+    // Файл обязан измениться с момента создания плана — иначе это вакуумная
+    // истина (тот же принцип, что `provablyStale` для описанных токенов).
+    return !provablyStale([resolved], Date.parse(plan.createdAt));
+  }
+  return true;
 }
 
 /**
@@ -188,6 +222,16 @@ export function advancePlanIfStepComplete(
     sessionLog?.plan(
       "auto-advance-blocked",
       `Step ${step.id} typecheck gate: ${tcFail.slice(0, 200)}`,
+    );
+    return;
+  }
+
+  // Check-контракт шага: auto-advance не закрывает шаг с неподтверждённым
+  // проверяемым путём (дефект A). Тот же контракт, что у `plan update done`.
+  if (!checkContractHolds(d, step)) {
+    sessionLog?.plan(
+      "auto-advance-blocked",
+      `Step ${step.id} check not satisfied: ${step.check}`,
     );
     return;
   }

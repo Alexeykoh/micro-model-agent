@@ -1,16 +1,14 @@
 // Финальный аудитор: файлы done-шагов, тесты, typecheck, сводка честности.
-import { existsSync, readdirSync } from "fs";
-import type { Dirent } from "fs";
-import { resolve, join, basename } from "path";
 import { t } from "../../i18n/index";
 import type { Plan } from "./planner";
 import { extractFileLikeTokens, stripUrls } from "../../core/hallucination/js-identifiers";
-import { toForwardSlash } from "../../tools/path-utils";
-import { SKIP_DIRS, findTypecheckRoot, runTypecheck } from "./audit-runners";
+import { findTypecheckRoot, runTypecheck } from "./audit-runners";
 import type { TestRunCheck } from "./audit-runners";
 import { resolveTestRun, testRunNote } from "./audit-test-run";
+import { findExistingFile } from "./file-resolve";
 
 export { parseTypecheckErrors } from "./audit-runners";
+export { findExistingFile } from "./file-resolve";
 
 const MASS_EDIT_THRESHOLD = 10;
 
@@ -24,23 +22,6 @@ export interface AuditOptions {
   mutated?: boolean;
 }
 
-/** Кап глубины обхода поддерева для резолва файлов. */
-const RESOLVE_MAX_DEPTH = 8;
-
-/**
- * Резолвит файловый токен шага плана в существующий файл.
- *
- * Описание шага часто называет файл голым basename ("App.tsx") или частично
- * префиксным путём ("src/App.tsx"), а реальный файл лежит во вложенной папке
- * проекта относительно baseDir агента (напр. `bicycle-shop/src/App.tsx`).
- * Наивный резолв от baseDir репортит файл пропавшим — было в ses_mssl5izw:
- * финальный audit-gate вечно реджектил полностью готовую задачу с "1 files
- * missing", загоняя модель в read/retry-петлю.
- *
- * Стратегия: сначала точный резолв, затем ограниченный обход поддерева с
- * матчем точного basename или суффикса пути ("App.tsx" и "src/App.tsx"
- * находят "bicycle-shop/src/App.tsx").
- */
 /** Имя для сверки «создан/удалён»: basename без ведущих `_`/`.`. */
 function artifactName(filePath: string): string {
   const normalized = filePath.replace(/\\/g, "/");
@@ -70,42 +51,6 @@ export function isTransientArtifact(token: string): boolean {
     normalized.includes(".mma/") ||
     normalized.includes("node_modules/")
   );
-}
-
-export function findExistingFile(baseDir: string, filePath: string): string | null {
-  const direct = resolve(baseDir, filePath);
-  if (existsSync(direct)) return direct;
-
-  const name = basename(filePath).toLowerCase();
-  const suffix = toForwardSlash(filePath).toLowerCase();
-  let found: string | null = null;
-
-  const walk = (dir: string, depth: number): void => {
-    if (found || depth > RESOLVE_MAX_DEPTH) return;
-    let entries: Dirent[];
-    try {
-      entries = readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const e of entries) {
-      if (found) return;
-      const full = join(dir, e.name);
-      if (e.isDirectory()) {
-        if (SKIP_DIRS.has(e.name)) continue;
-        walk(full, depth + 1);
-      } else if (
-        e.name.toLowerCase() === name ||
-        toForwardSlash(full).toLowerCase().endsWith(`/${suffix}`)
-      ) {
-        found = full;
-        return;
-      }
-    }
-  };
-
-  walk(baseDir, 0);
-  return found;
 }
 
 /** Результат аудита: фейлы файлов, тесты, typecheck, сводка, варнинги. */

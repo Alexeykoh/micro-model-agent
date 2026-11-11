@@ -6,6 +6,7 @@
  */
 import type { ToolContext, ToolResult } from "./types";
 import { t } from "../i18n/index";
+import { platform } from "os";
 import {
   BASH_GRACE_MS as CANONICAL_BASH_GRACE_MS,
   /** Короткое окно для явного `background: true` — ловит ошибки спавна. */
@@ -17,6 +18,17 @@ import { logBashCommand } from "../modules/security/audit-log";
 import type { BashSecurityConfig } from "../config/types";
 import { decorateCommandOutput, detectTestResults } from "./bash-output";
 import { memoWrite } from "./bash-memo";
+import {
+  SHELL_UNAVAILABLE_ERROR_CODE,
+  classifySpawnError,
+  shellUnavailableOutput,
+} from "./bash-spawn-error";
+import {
+  SHELL_STOP_THRESHOLD,
+  recordShellUnavailable,
+  resetShellUnavailable,
+  shellUnavailableStreak,
+} from "./bash-failures";
 
 /**
  * Команда, живая после окна ожидания, уходит в фон. Решение — по поведению
@@ -52,6 +64,16 @@ export interface RunBashCommandOptions {
 export async function runBashCommand(opts: RunBashCommandOptions): Promise<ToolResult> {
   const { ctx, command, originalCommand, workdir, securityConfig, memoizable, memoKey } = opts;
 
+  // S1: два подряд «шелл недоступен» — третий спавн не вызываем, он заведомо
+  // упадёт. Итерации жалеть нечем: причина на машине, а не в команде.
+  if (shellUnavailableStreak(ctx) >= SHELL_STOP_THRESHOLD - 1) {
+    return {
+      success: false,
+      output: shellUnavailableOutput(),
+      errorMeta: { code: SHELL_UNAVAILABLE_ERROR_CODE, retryable: false },
+    };
+  }
+
   const entry = processRegistry.start(command, workdir, ctx.sessionId, {
     force: opts.force,
   });
@@ -67,6 +89,16 @@ export async function runBashCommand(opts: RunBashCommandOptions): Promise<ToolR
     if (exited) {
       // Команда уложилась в окно (включая ошибку спавна).
       if (entry.spawnError) {
+        // S1: различаем «сломан шелл» и «плохой workdir» — раньше оба получали
+        // ложный совет проверить workdir (сломанный шелл не чинится workdir).
+        if (classifySpawnError(entry.spawnError, platform(), workdir) === "shell") {
+          recordShellUnavailable(ctx);
+          return {
+            success: false,
+            output: shellUnavailableOutput(entry.spawnError),
+            errorMeta: { code: SHELL_UNAVAILABLE_ERROR_CODE, retryable: false },
+          };
+        }
         return {
           success: false,
           output: `[process error] ${entry.spawnError}\nHint: check the "workdir" path exists and the command is valid for this OS.`,
@@ -76,6 +108,11 @@ export async function runBashCommand(opts: RunBashCommandOptions): Promise<ToolR
       const code = entry.exitCode;
       let output = entry.log.join("\n");
       processRegistry.remove(entry.id);
+
+      // Шелл снова работает — снимаем серию «шелл недоступен».
+      if (code === 0) {
+        resetShellUnavailable(ctx);
+      }
 
       // Подсказки, аудит и обрезка вывода — единая точка (decorateCommandOutput).
       const testRun = detectTestResults(output);
@@ -97,7 +134,8 @@ export async function runBashCommand(opts: RunBashCommandOptions): Promise<ToolR
       return { success: code === 0, output };
     }
 
-    // Всё ещё жива — в фоновые процессы.
+    // Всё ещё жива — в фоновые процессы. Процесс стартовал, значит шелл работает.
+    resetShellUnavailable(ctx);
     const preview = entry.log
       .filter((l) => l.trim() !== "")
       .slice(0, BG_OUTPUT_PREVIEW_LINES)

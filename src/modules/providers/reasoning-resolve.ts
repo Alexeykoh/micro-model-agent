@@ -14,6 +14,19 @@ function resolveCaps(config?: ProviderRef, probe?: ModelCapabilities, override?:
 }
 
 /**
+ * Полный резолв capabilities reasoning АКТИВНОЙ записи (тот же трёхслойный
+ * приоритет, что у стратегии/уровней). Нужен там, где требуется и `reasoningOff`
+ * (сверка UI с применённым резолвом), а не только стратегия.
+ */
+export function reasoningCapsForProvider(
+  config?: ProviderRef,
+  probe?: ModelCapabilities,
+  override?: ModelCapabilities,
+): ModelCapabilities {
+  return resolveCaps(config, probe, override);
+}
+
+/**
  * Стратегия reasoning АКТИВНОЙ записи провайдера, трёхслойно: оверрайд модели
  * → проба → пресет. Неизвестный тип → "none".
  */

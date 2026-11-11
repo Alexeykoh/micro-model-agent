@@ -123,6 +123,7 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
     toolRegistry,
     toolCtx,
     contextProbe,
+    contextProbeRef,
     spawnSessionRunner,
     logger,
   } = await bootstrap(...webBootstrapArgs(opts));
@@ -150,6 +151,7 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
     indexer: indexerModule,
     lsp: lspModule,
     contextProbe,
+    contextProbeRef,
     host: opts.host,
     token: opts.token,
     setupRequired: virgin,

@@ -6,7 +6,7 @@
  * (reconfigure под окно провайдера) → регистрация тула set_thinking.
  */
 import { Agent } from "../agent";
-import type { AgentDeps } from "../agent";
+import type { AgentDeps, ContextProbeBox } from "../agent";
 import { moduleOf } from "../../output";
 import type { AppConfig, ReasoningStrategy, ModelCapabilities } from "../../config/types";
 import type { Logger } from "../../logger/app-logger";
@@ -87,6 +87,8 @@ export interface AgentPhaseInput {
   toolCtx: ToolContext;
   /** Фоновая context-probe (поздний reconfigure). */
   contextProbePromise: Promise<ContextProbeResult | null>;
+  /** Живой итог context-probe для снапшотов после свитча. */
+  contextProbeRef: ContextProbeBox;
   /** Живая проба возможностей для пересборки провайдера (INV-R2). */
   capabilitiesProbeRef: { probe?: ModelCapabilities };
 }
@@ -130,6 +132,7 @@ export async function assembleAgent(
     execModule,
     toolCtx,
     contextProbePromise,
+    contextProbeRef,
     capabilitiesProbeRef,
   } = input;
 
@@ -177,7 +180,9 @@ export async function assembleAgent(
     reasoningProbe: () => reasoningProbePromise,
     reasoningStrategy,
     capabilitiesProbeRef,
+    contextProbeRef,
     planSummary: () => execModule.getPlanSummary(),
+    planPendingSteps: () => execModule.getPlanPendingSteps(),
     toolCtx,
     // INV-15: деградации проверки заявлений идут в сессию тем же стоком,
     // что и прочие сигналы петли.

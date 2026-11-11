@@ -5,18 +5,13 @@ window.LP_I18N = {
     "meta.desc":
       "An agent harness that keeps local 32K–64K models on task: context budget, structural compaction, real execution guarantees.",
 
+    "nav.try": "Try",
     "nav.why": "Why",
-    "nav.terminal": "Interfaces",
     "nav.context": "Context",
-    "nav.tools": "Tools",
-    "nav.planning": "Planning",
-    "nav.memory": "Memory",
+    "nav.interfaces": "Interfaces",
     "nav.safety": "Safety",
-    "nav.service": "Service",
-    "nav.ops": "Operations",
     "nav.limits": "Limits",
     "nav.docs": "Docs",
-    "nav.github": "GitHub",
 
     "hero.kicker": "open source · local-first · general purpose",
     "hero.headline": "Small models.<br>Real work.",
@@ -30,12 +25,6 @@ window.LP_I18N = {
     "a11y.skip": "Skip to content",
     "a11y.top": "Back to top",
     greet: "Hi! I'm MMART",
-    "budget.pick": "Pick a model's context window",
-    "narrow.pick": "Toggle the tags you need",
-    "narrow.cost": "in context",
-    "narrow.full": "vs 3.5K for the full set",
-    "narrow.saved": "saved",
-    "narrow.reset": "Reset",
 
     "stats.ctx": "32K–64K",
     "stats.ctx.l": "target context window",
@@ -47,31 +36,12 @@ window.LP_I18N = {
     "stats.license.l": "open source, no telemetry",
 
     "s1.n": "01",
-    "s1.k": "Why",
-    "why.title": "The context window is the constraint",
-    "why.p1":
-      "A 32K–64K context fills up quickly. Without a strategy for it, an agent can lose track of the task, re-read the same files, and report results before they are verified.",
-    "why.p2":
-      "MMA takes that constraint as given. The rule is simple: nothing important should live only in the context.",
-    "why.before": "A plain chat agent",
-    "why.b1": "Task drifts after a couple of compactions",
-    "why.b2": "The same files are read again and again",
-    "why.b3": "“Done” with no file and no exit code",
-    "why.after": "MMA",
-    "why.a1": "Task, plan and changed files survive every compaction",
-    "why.a2": "Irrelevant tool schemas stay out of the context window",
-    "why.a3": "Claims are checked against real files and command results",
-
-    "s2.n": "02",
-    "s2.k": "Interfaces",
-    "terminal.title": "Watch it work",
-    "terminal.lead":
-      "One core, two interfaces. The terminal and the browser drive the same agent — same sessions, same plugins, same safety.",
+    "s1.k": "Try",
+    "try.title": "Thirty seconds in the terminal",
+    "try.lead":
+      "One command installs a self-contained build. One line runs a task. This is what a turn looks like in quiet mode — one line per action, nothing else.",
     "terminal.caption": "an MMA turn · quiet mode",
     "terminal.replay": "Replay",
-    "web.caption": "mma web · parallel sessions",
-    "web.note":
-      "The browser interface is a second host over the same Agent — per-session runners, so several tasks run at once, and six panes: session, files, lsp, trace, plugins and map.",
     "term.l1": '$ mma "fix the failing tests"',
     "term.l2": "qwen3.5-9b · lmstudio · 32K · plugins 2 · mcp 1",
     "term.l3": "◇ plan · 3 steps",
@@ -81,15 +51,45 @@ window.LP_I18N = {
     "term.l7": "◇ running command · bun test  ✓ 14 passed",
     "term.l8": "✦ thinking · 2.1s",
     "term.l9": "✓ done · 3/3 steps · 6.2K tok · 18%",
+    "try.q1": "one-shot: a single request, then exit",
+    "try.q2": "the interactive terminal — sessions, hotkeys, slash commands",
+    "try.q3": "the first-run provider wizard",
+    "try.q4": "the same agent in a browser, per-session runners",
+
+    "s2.n": "02",
+    "s2.k": "Why",
+    "why.title": "Built for the context ceiling",
+    "why.lead":
+      "A 32K–64K window fills fast. Without a strategy, an agent loses the task, re-reads the same files and reports results before they are verified. MMA takes that constraint as given.",
+    "why.r1.t": "Context that does not collapse",
+    "why.r1.d":
+      "Budgets come from the model's window. Compaction is structural: it keeps the task, the plan, the files and the errors — not a summary of the conversation. A [Tool ledger] stops re-reads.",
+    "why.r2.t": "Results you can check",
+    "why.r2.d":
+      "A plan step carries a machine-checkable criterion and closes only when its files really changed on disk. Claims are checked against real paths and real exit codes, then reviewed by a second pass.",
+    "why.r3.t": "Honest failures",
+    "why.r3.d":
+      "Loops, repeated calls and failing command streaks stop the run with a truthful status. Fail-open paths are logged with a reason, so a breakdown is never indistinguishable from success.",
+    "why.p1":
+      "The rule is simple: nothing important lives only in the context. Anchors are re-injected after every compaction, and the plan checklist is read back from disk.",
+    "why.before": "A plain chat agent",
+    "why.b1": "Task drifts after a couple of compactions",
+    "why.b2": "The same files are read again and again",
+    "why.b3": "“Done” with no file and no exit code",
+    "why.after": "MMA",
+    "why.a1": "Task, plan and changed files survive every compaction",
+    "why.a2": "Irrelevant tool schemas stay out of the context window",
+    "why.a3": "Claims are checked against real files and command results",
 
     "s3.n": "03",
     "s3.k": "Context",
-    "context.title": "Context that doesn't collapse",
+    "context.title": "The budget is derived, not guessed",
     "context.lead":
-      "Budgets are derived from the model's context window, and compaction is structural: it keeps the task, the plan, the files and the errors — rather than a summary of the conversation.",
+      "The window is detected from the provider or pinned by hand. From it MMA derives the system share, the response reserve and the history budget — and compacts structurally before the window overflows.",
+    "budget.pick": "Pick a model's context window",
     "ctx.th.system": "System",
-    "ctx.th.reserve": "Reserve",
     "ctx.th.history": "History",
+    "ctx.th.reserve": "Reserve",
     "ctx.note":
       "Compaction fires at 75% of the history budget, and the last six exchanges always stay intact. A quality score with a floor prevents the compaction death-spiral.",
     "ctx.anchor.title": "Anchors, re-injected after every compaction",
@@ -100,104 +100,31 @@ window.LP_I18N = {
     "ctx.a5": "repeated errors and what was already tried",
 
     "s4.n": "04",
-    "s4.k": "Tools",
-    "tools.title": "Tools, narrowed on demand",
-    "tools.lead":
-      "A full toolset is roughly 3.5K tokens on every single request — about a ninth of a 32K context window. So only the relevant schemas sit in context; the rest are listed compactly and enabled when asked.",
-    "tools.always.title": "Always visible",
-    "tools.always.d":
-      "plan · plan_step · todo · verify · project_map · lsp_check · question · approve · load_skill · enable_tools · set_thinking · session_info · define_capability — structural tools cannot be switched off by accident.",
-    "tools.list.title": "A slice of the toolset",
-    "tools.r1.k": "Files",
-    "tools.r1.v": "read, write, edit, move, delete, glob, grep",
-    "tools.r2.k": "Shell",
-    "tools.r2.v": "bash with automatic backgrounding for long processes",
-    "tools.r3.k": "Web",
-    "tools.r3.v": "search, fetch, and a real Playwright browser",
-    "tools.r4.k": "Delegation",
-    "tools.r4.v": "subagents with their own file zone",
-    "tools.r5.k": "Memory",
-    "tools.r5.v": "remember, recall, and full-text search over past sessions",
-    "tools.r6.k": "Text",
-    "tools.r6.v": "chunk_query splits a large document and processes it in parallel",
-    "tools.r7.k": "Navigation",
-    "tools.r7.v": "project_map: languages, exports, symbol lookup, file outline",
-    "tools.r8.k": "Diagnostics",
-    "tools.r8.v": "lsp_check verifies code without a full build",
-    "tools.r9.k": "Planning",
-    "tools.r9.v":
-      "plan, plan_step, todo and verify: the checklist lives on disk, and a step closes only when its files really changed",
-    "tools.r10.k": "Interaction",
-    "tools.r10.v":
-      "question, approve, set_thinking and session_info: ask, confirm, or let the user steer the run",
-    "tools.r11.k": "Documents",
-    "tools.r11.v":
-      "document_index, document_map, document_read and document_find: scan a folder, summarize it, and pull out just the relevant part",
-    "tools.r12.k": "Images",
-    "tools.r12.v": "attach_image hands a picture to a vision-capable model",
-
-    "extend.title": "Extend it",
-    "extend.lead":
-      "The core stays small; capability arrives as plugins, MCP servers and skills — each switchable per project.",
-    "extend.c1.t": "Plugins",
-    "extend.c1.d":
-      "built-in lint-on-write, notify and angular11; enable them with mma plugins or a web toggle",
-    "extend.c2.t": "MCP",
-    "extend.c2.d":
-      "external tools over the Model Context Protocol, exposed to the agent as mcp_call",
-    "extend.c3.t": "Skills",
-    "extend.c3.d": "reusable instruction packs loaded on demand with load_skill",
-    "extend.c4.t": "Pipelines",
-    "extend.c4.d":
-      "multi-step scripts (pipeline_run) and corpus scans (scan_corpus) for repeatable jobs",
+    "s4.k": "Interfaces",
+    "ifaces.title": "One core, four ways to drive it",
+    "ifaces.lead":
+      "The same agent, the same sessions, the same tools and the same enforcement — only the transport changes. Pick by who is driving.",
+    "ifaces.i1":
+      "One-shot. A single request, machine-readable --json, a sandboxed -d directory, exit on the first answer.",
+    "ifaces.i2":
+      "Terminal. A persistent REPL with sessions, hotkeys, slash commands and markdown→ANSI rendering. No TUI.",
+    "ifaces.i3":
+      "Browser. SSE + REST over the same core: per-session runners, so several tasks run at once, plus panes for files, LSP, trace, plugins and map.",
+    "ifaces.i4":
+      "HTTP service. Agent Service API v1 — sessions, tasks, SSE, HMAC webhooks, and a live OpenAPI 3.1 spec at /v1/openapi.json.",
+    "ifaces.tools.title": "The toolset is narrowed to the task",
+    "ifaces.tools.lead":
+      "A full toolset costs roughly 3.5K tokens on every request — about a ninth of a 32K window. Only the relevant schemas sit in context; the rest are listed compactly and enabled when asked. Structural tools are always visible.",
+    "ifaces.tools.always":
+      "plan · plan_step · todo · verify · project_map · lsp_check · question · approve · load_skill · enable_tools · set_thinking · session_info · define_capability",
+    "ifaces.more":
+      "Files, shell, web search and a real Playwright browser, subagents with their own file zone, memory, pipelines, MCP, LSP diagnostics, documents and images — the full list and the per-tool contracts are in the documentation.",
 
     "s5.n": "05",
-    "s5.k": "Planning",
-    "plan.title": "Plan, then prove it",
-    "plan.lead":
-      "The model decides when a task needs a plan. Each step carries a machine-checkable criterion, and a step cannot be closed until its files really exist on disk.",
-    "plan.f1": "checklist stored on disk, not in the chat",
-    "plan.f2": "criteria: file-exists, command, or an explicit manual mark",
-    "plan.f3": "self-certification blocked — a file must change after the step begins",
-    "plan.f4": "an audit gate runs before any final answer",
-    "plan.f5": "stuck detection: loops, repeated calls, failing command streaks",
-    "verify.title": "Three gates before “done”",
-    "verify.lead":
-      "A small model will happily call a half-finished turn done. MMA does not take the model's word for it: every claim is checked against the disk, the command output, and a second reviewer.",
-    "verify.flow1": "Claim",
-    "verify.flow2": "Evidence",
-    "verify.flow3": "Critic",
-    "verify.flow4": "Audit",
-    "verify.flow5": "Answer",
-    "verify.n1":
-      "Claims about a file or a command are checked against the real path and the real exit code, not against the model's memory.",
-    "verify.n2":
-      "An in-loop critic reviews the turn before the answer leaves the model; its failure is logged, never silently ignored.",
-    "verify.n3":
-      "The audit gate runs before any final answer, and a plan step cannot close until its files have actually changed.",
-    "verify.n4":
-      "Stuck loops, repeated calls and failing command streaks are detected and surfaced instead of being retried forever.",
-
-    "s6.n": "06",
-    "s6.k": "Memory",
-    "memory.title": "Three horizons of memory",
-    "memory.h1.t": "Working context",
-    "memory.h1.d":
-      "The model's context window. Short-lived and compacted — but anchored so the task can't fall out of it.",
-    "memory.h2.t": "Session on disk",
-    "memory.h2.d":
-      "history.jsonl and session.jsonl: every tool call, its raw result, usage and cache per request, context and compaction events.",
-    "memory.h3.t": "Project memory",
-    "memory.h3.d":
-      "conventions.md, decisions.md, errors.md in the home folder — markdown that outlives sessions and is layered into every new one.",
-    "memory.note":
-      "Plus explicit memory: remember / recall, and full-text search across all past sessions.",
-
-    "s7.n": "07",
-    "s7.k": "Safety",
+    "s5.k": "Safety",
     "safety.title": "Safe by default",
     "safety.lead":
-      "Every tool call passes a validation pipeline before it touches the disk or the network. A blocked call never reaches the filesystem, and the block is written to an audit journal.",
+      "Every tool call passes one validation pipeline before it touches the disk or the network. A blocked call never reaches the filesystem, and the block is written to an audit journal.",
     "safety.pipe": "call → plugins → validators → action → plugins → result",
     "safety.step1": "call",
     "safety.step2": "plugins",
@@ -205,112 +132,48 @@ window.LP_I18N = {
     "safety.step4": "action",
     "safety.step5": "plugins",
     "safety.step6": "result",
-    "safety.v1.t": "Command validator",
-    "safety.v1.d":
-      "command blacklist, dangerous-flag blocking, optional allowlist, interpreter escapes closed",
-    "safety.v2.t": "Path validator",
-    "safety.v2.d":
-      "global bans (.git, .env, keys), containment inside the workspace, subagent file zones",
-    "safety.v3.t": "Network validator",
-    "safety.v3.d":
-      "domain blacklist plus optional allowlist; sensitive query parameters stripped before the request",
-    "safety.v4.t": "Content scan",
-    "safety.v4.d": "patterns such as eval( or child_process.exec( are flagged before a write",
-    "safety.v5.t": "Egress policy (DLP)",
-    "safety.v5.d":
-      "before a call leaves for an external provider, absolute paths, machine and user names, environment values, secrets, PII and the contents of hidden files are replaced with stable tokens; loopback and trusted hosts keep the real values",
-    "safety.v6.t": "DLP visibility and taint",
-    "safety.v6.d":
-      "Trace shows the exact request that left for the provider, the DLP badge points at each redacted location, and a Security tab streams live blocks; text derived from protected files on a local model stays tainted and leaves as [FILE] if the provider switches to an external one",
-    "safety.presets": "Presets",
-    "live.caption": "mma web · live demo",
-    "live.hint":
-      "Blocks arrive on their own — a plan is rare, messages and reasoning are common. Click a question, a thinking block or the DLP badge.",
-    "live.pause": "pause",
-    "live.resume": "resume",
-    "live.think": "thinking",
-    "live.m1": "Reading the spec first, then I will change only the failing branch.",
-    "live.m2": "Found it: the cache key ignored the policy version, so a stale mask was reused.",
-    "live.m3": "Applied the fix and added a regression test for the canary case.",
-    "live.m4": "Running the suite once more before I call this done.",
-    "live.t1": "Weighing two options: patch the handler, or move the check into the executor.",
-    "live.t2": "The executor is the single enforcement point — that is where the check belongs.",
-    "live.plan": "plan · 3 steps",
-    "live.plan1": "guard.ts — reject token ids in snapshots",
-    "live.plan2": "project.ts — mask before clipping",
-    "live.plan3": "tests — canary must not leave",
-    "live.q": "Delete the stale cache before rebuilding?",
-    "live.qa": "yes, delete",
-    "live.qb": "keep it",
-    "live.qdone": "answered",
-    "live.sec": "Protected path: .env — blocked before the tool ran; audit event security_block.",
-    "live.img": "browser screenshot · rendered inline",
-    "live.dlph1": "message 3 · tool · content[0–142] → [FILE]",
-    "live.dlph2": "message 1 · system · content[88–139] → ‹PATH›",
-    "live.dlph3": "message 5 · user · content[41–52] → ‹PII›",
-    "calc.title": "Cache & cost",
-    "calc.prompt": "prompt tokens",
-    "calc.output": "output tokens",
-    "calc.cache": "cache hit",
-    "calc.cost": "cost / call",
-    "calc.saved": "saved",
-    "calc.note": "Example prices: $0.15 / 1M input, $0.60 / 1M output, cache read at 10% of input.",
-    "cmp.title": "Local vs cloud / month",
-    "cmp.calls": "calls per day",
-    "cmp.tokens": "tokens per call",
-    "cmp.cloud": "cloud",
-    "cmp.local": "local",
-    "cmp.note":
-      "Local runs on your hardware: no per-token bill, only electricity. Cloud uses the same example prices as above.",
-    "safety.p1": "strict",
-    "safety.p2": "balanced — default",
-    "safety.p3": "permissive",
-    "safety.more":
+    "safety.f4":
+      "Egress policy (DLP): before a call leaves for an external provider, absolute paths, machine and user names, environment values, secrets and PII are replaced with stable tokens. Loopback keeps the real values.",
+    "safety.f5":
       "Session files can be encrypted with AES-256-GCM, logs are scrubbed of secrets, and an audit notifier can ship events to a file or a webhook.",
-    "safety.dlp":
-      "In mma web every answer carries a DLP badge with the exact redacted locations (message, field, range) and a Trace popup with the request that left after DLP; the Security tab streams blocks, redactions and approvals live. The kill switch is security.dataPolicy.enabled: false.",
+    "safety.more":
+      "Presets: strict · balanced (default) · permissive. The kill switch for egress redaction is security.dataPolicy.enabled: false.",
 
-    "s8.n": "08",
-    "s8.k": "Service",
-    "service.title": "Serve it as an API",
-    "service.lead":
-      "mma serve exposes a versioned HTTP contract over the same core — for your own systems, not only your terminal. One task is one turn over a session.",
-    "service.endpoints": "Endpoints",
-    "service.f1": "job and interactive tasks",
-    "service.f2": "structured output against a schema",
-    "service.f3": "HMAC-signed webhooks",
-    "service.f4": "per-tenant process isolation",
-    "service.f5": "RFC 9457 problem+json errors",
-    "service.f6": "bearer-token auth, idempotency keys and a per-session queue",
-    "service.f7": "cancel, interactive answers, and resumable SSE via Last-Event-ID",
-    "service.docs":
-      "The service describes itself: OpenAPI 3.1 at /v1/openapi.json and a human page at /v1/docs.",
+    "s6.n": "06",
+    "s6.k": "Limits",
+    "lim.title": "Honest limits",
+    "lim.lead":
+      "What MMA does not do — so you can decide whether it fits before you invest an afternoon.",
+    "lim.l1":
+      "Disabling a plugin is not a sandbox. The module is already loaded, and its declared permissions are shown, not enforced.",
+    "lim.l2":
+      "It helps a small model; it cannot hand a small model a bigger context window. The real ceiling still depends on the model you run.",
+    "lim.l3":
+      "A local backend is the bottleneck: one model on one machine. Parallel sessions share the same engine, so they do not make it faster.",
+    "lim.l4":
+      "Local-first means you own the compute and the uptime. There is no hosted SLA behind it.",
+    "lim.l5":
+      "The context probe is best-effort. A bare /models endpoint reports nothing, so the configured window simply stands.",
 
-    "s9.n": "09",
-    "s9.k": "Operations",
-    "ops.title": "Keep it honest after the demo",
-    "ops.lead":
-      "The harness is meant to run for months, not for a screenshot. So the boring parts are built in: model checks, cost visibility, updates and diagnostics.",
-    "ops.c1.t": "Certification",
-    "ops.c1.d":
-      "run a scenario suite and a security suite against a model before you trust it with real work",
-    "ops.c2.t": "Cost & usage",
-    "ops.c2.d":
-      "tokens, cache hits and spend per request — visible in the session panel and via mma usage",
-    "ops.c3.t": "Self-update",
-    "ops.c3.d": "versionless release assets and latest.json; updates are opt-in, never silent",
-    "ops.c4.t": "Diagnostics",
-    "ops.c4.d": "a trace pane, mma doctor and a session log you can replay after a bad turn",
-    "ops.r1.d": "certifies a model against the benchmark and security suites",
-    "ops.r2.d": "shows provider balance and spend for the current period",
-    "ops.r3.d": "checks config, providers, tools and the environment",
-    "ops.r4.d": "reads a session log and reports what went wrong, with --json for scripts",
+    "s7.n": "07",
+    "s7.k": "FAQ",
+    "faq.title": "Before you install",
+    "faq.q1": "Do I need Node.js or Bun?",
+    "faq.a1":
+      "No. The installer downloads a self-contained build with a bundled Bun runtime, the agent and its dependencies. Nothing else is required.",
+    "faq.q2": "Which backend should I use?",
+    "faq.a2":
+      "Any OpenAI-compatible server. LM Studio on localhost:1234 and Ollama on localhost:11434 work out of the box; llama.cpp, vLLM and hosted providers work too. Tool-calling support is required.",
+    "faq.q3": "Does it work offline?",
+    "faq.a3":
+      "Yes, if the model and the provider are local. Web search, the browser tool and hosted providers need a network.",
+    "faq.q4": "Is there telemetry?",
+    "faq.a4":
+      "No. Sessions, memory and logs stay in ~/.mma. The only outbound calls are the ones you configure — the provider, web tools and updates.",
+    "faq.q5": "How do I update?",
+    "faq.a5":
+      "Re-run the same install command. It downloads the newest release into ~/.mma/versions/ and flips current; the previous version stays for a rollback.",
 
-    "s10.n": "10",
-    "s10.k": "First steps",
-    "install.title": "Then run it",
-    "install.lead":
-      "The line above installs a self-contained build with a bundled runtime. From there the same binary is your one-shot command, your terminal, your browser chat, and an HTTP service.",
     "install.copy": "Copy",
     "install.copied": "Copied",
     "install.or": "or download a build",
@@ -318,119 +181,6 @@ window.LP_I18N = {
     "install.manual_note":
       "The archives already contain the runtime. Extract anywhere and run the launcher — no admin rights, no Node.js, no npm.",
     "install.manual_more": "Checksums, PATH setup, updates, Gatekeeper/SmartScreen",
-    "install.c1.d": "one-shot a single request",
-    "install.c2.d": "the interactive terminal",
-    "install.c3.d": "the browser chat",
-    "install.c4.d": "the HTTP service",
-    "install.c5.d": "the first-run provider wizard",
-    "install.c6.d": "an onboarding interview that becomes project memory",
-    "install.c7.d": "create or improve AGENTS.md for a repository",
-    "install.c8.d": "list, inspect and diagnose past sessions",
-    "install.req":
-      "Requires a local backend — LM Studio on localhost:1234, or Ollama. A hosted provider works too; no cloud account is required.",
-
-    "s11.n": "11",
-    "s11.k": "Limits",
-    "s12.n": "12",
-    "s12.k": "Philosophy",
-    "phil.title": "A universal agent, not just a coding tool",
-    "phil.p":
-      "Coding is one use case. Weather, the smart home, APIs, research and personal assistance are others. Prompts, tool descriptions and onboarding are deliberately domain-neutral, so the agent fits whatever you point it at.",
-    "phil.b1": "General by design",
-    "phil.b2": "Quiet by default: one line per action, detail one keystroke away",
-    "phil.b3": "Local-first: your models, your data, your machine",
-
-    "mascot.title": "MMART — the face of the agent",
-    "mascot.lead":
-      "The browser UI gives the agent one face. It reflects what is actually happening right now — thinking, reading, searching, running, failing — and the same component lives in the boot splash, the feed, the activity rail, the setup wizard and the trace panel.",
-    "mascot.pick": "Click a state",
-    "mascot.more": "more",
-    "mascot.less": "less",
-    "mascot.count": "25 states — the same set the web UI ships",
-    "ms.idle": "idle",
-    "ms.think": "thinking",
-    "ms.read": "reading",
-    "ms.find": "searching",
-    "ms.web": "on the web",
-    "ms.edit": "editing",
-    "ms.type": "composing",
-    "ms.create": "creating",
-    "ms.run": "running",
-    "ms.tests": "testing",
-    "ms.compact": "compacting",
-    "ms.plan": "planning",
-    "ms.ask": "asking",
-    "ms.done": "done",
-    "ms.error": "failed",
-    "ms.stop": "stopped",
-    "ms.queued": "queued",
-    "ms.boot": "booting",
-    "ms.load": "loading",
-    "ms.check": "checking",
-    "ms.warn": "warning",
-    "ms.lspoff": "lsp off",
-    "ms.verify": "verifying",
-    "ms.recheck": "re-checking",
-    "ms.update": "updating",
-
-    "mem.files": "What actually lands on disk",
-    "mem.f1.d": "the conversation: your prompts, the answers, tool digests",
-    "mem.f2.d":
-      "the full journal: every tool call with its raw result and duration, usage and cache, context and compaction events",
-    "mem.f3.d": "the session passport: name, model, counters, timestamps",
-    "mem.f4.d": "project conventions and key decisions, layered into every new session",
-    "mem.f5.d": "learned failures — written automatically when the same tool keeps breaking",
-
-    "svc.cases": "What people build on it",
-    "svc.c1.t": "Issue triage",
-    "svc.c1.d": "a CI bot that reads new issues, reproduces them and replies",
-    "svc.c2.t": "Chat bridge",
-    "svc.c2.d": "route messages from a messenger into a session and get the answer back",
-    "svc.c3.t": "Scheduled research",
-    "svc.c3.d": "a nightly job that condenses docs or a changelog into one page",
-    "svc.c4.t": "Internal tooling",
-    "svc.c4.d": "your own scripts call the agent over HTTP, one process per tenant",
-
-    "lim.title": "Honest limits",
-    "lim.lead":
-      "What MMA does not do — so you can decide whether it fits before you invest an afternoon.",
-    "lim.l1":
-      "Disabling a plugin is not a sandbox. The module is already loaded, and its declared permissions are shown, not enforced.",
-    "lim.l2":
-      "It helps a small model; it cannot hand a small model a bigger context window. Real ceiling still depends on the model you run.",
-    "lim.l3":
-      "A local backend is the bottleneck: one model on one machine. Parallel sessions share the same engine, so they do not make it faster.",
-    "lim.l4":
-      "Local-first means you own the compute and the uptime. There is no hosted SLA behind it.",
-    "lim.l5":
-      "The context probe is best-effort. A bare /models endpoint reports nothing, so the configured context window simply stands.",
-    "lim.l6":
-      "Path and permission quirks of your OS can still surprise you — especially across Windows drive boundaries.",
-
-    "cmp.title": "Where it fits",
-    "cmp.h2": "plain chat agent",
-    "cmp.h3": "MMA + local model",
-    "cmp.h4": "hosted frontier",
-    "cmp.a1": "cost",
-    "cmp.b1": "subscription",
-    "cmp.c1": "electricity",
-    "cmp.d1": "per token",
-    "cmp.a2": "privacy",
-    "cmp.b2": "prompts leave your machine",
-    "cmp.c2": "stays local",
-    "cmp.d2": "prompts leave your machine",
-    "cmp.a3": "ceiling",
-    "cmp.b3": "fixed",
-    "cmp.c3": "your model",
-    "cmp.d3": "the strongest available",
-    "cmp.a4": "control",
-    "cmp.b4": "a chat window",
-    "cmp.c4": "files, tools, scripts",
-    "cmp.d4": "an API and nothing else",
-    "cmp.a5": "setup",
-    "cmp.b5": "install",
-    "cmp.c5": "backend + one line",
-    "cmp.d5": "an API key",
 
     "footer.tagline": "An open-source harness for small language models.",
     "footer.project": "Project",
@@ -441,9 +191,6 @@ window.LP_I18N = {
     "footer.releases": "Releases",
     "footer.issues": "Issues",
     "footer.license": "MIT License",
-    "footer.features": "Feature overview",
-    "footer.architecture": "Architecture",
-    "footer.serviceapi": "Service API",
     "footer.changelog": "Changelog",
   },
 
@@ -452,18 +199,13 @@ window.LP_I18N = {
     "meta.desc":
       "Агент-харнесс, удерживающий локальные модели 32K–64K в задаче: бюджет контекста, структурная компакция, реальные гарантии исполнения.",
 
+    "nav.try": "Попробовать",
     "nav.why": "Почему",
-    "nav.terminal": "Интерфейсы",
     "nav.context": "Контекст",
-    "nav.tools": "Инструменты",
-    "nav.planning": "Планирование",
-    "nav.memory": "Память",
+    "nav.interfaces": "Интерфейсы",
     "nav.safety": "Безопасность",
-    "nav.service": "Сервис",
-    "nav.ops": "Эксплуатация",
     "nav.limits": "Ограничения",
     "nav.docs": "Документация",
-    "nav.github": "GitHub",
 
     "hero.kicker": "open source · local-first · универсальный",
     "hero.headline": "Маленькие модели.<br>Настоящая работа.",
@@ -477,12 +219,6 @@ window.LP_I18N = {
     "a11y.skip": "К основному содержимому",
     "a11y.top": "Наверх",
     greet: "Привет! Я MMART",
-    "budget.pick": "Выберите контекстное окно модели",
-    "narrow.pick": "Включите нужные теги",
-    "narrow.cost": "в контексте",
-    "narrow.full": "против 3.5K за полный набор",
-    "narrow.saved": "сэкономлено",
-    "narrow.reset": "Сброс",
 
     "stats.ctx": "32K–64K",
     "stats.ctx.l": "целевое контекстное окно",
@@ -494,31 +230,12 @@ window.LP_I18N = {
     "stats.license.l": "открытый код, без телеметрии",
 
     "s1.n": "01",
-    "s1.k": "Почему",
-    "why.title": "Главное ограничение — размер контекстного окна",
-    "why.p1":
-      "Контекстное окно 32K–64K быстро заполняется. Без стратегии агент может потерять нить задачи, перечитывать одни и те же файлы и сообщать результат, не проверив его.",
-    "why.p2":
-      "MMA исходит из этого ограничения. Правило простое: ничто важное не должно жить только в контексте.",
-    "why.before": "Обычный чат-агент",
-    "why.b1": "Задача уплывает после пары сжатий",
-    "why.b2": "Одни и те же файлы читаются снова и снова",
-    "why.b3": "«Готово» без файла и без кода возврата",
-    "why.after": "MMA",
-    "why.a1": "Задача, план и изменённые файлы переживают каждое сжатие",
-    "why.a2": "Ненужные схемы инструментов не занимают контекстное окно",
-    "why.a3": "Утверждения сверяются с реальными файлами и командами",
-
-    "s2.n": "02",
-    "s2.k": "Интерфейсы",
-    "terminal.title": "Посмотрите в работе",
-    "terminal.lead":
-      "Одно ядро, два интерфейса. Терминал и браузер ведут один и тот же агент — одни сессии, одни плагины, одна безопасность.",
+    "s1.k": "Попробовать",
+    "try.title": "Тридцать секунд в терминале",
+    "try.lead":
+      "Одна команда ставит самодостаточную сборку. Одна строка запускает задачу. Так выглядит ход в тихом режиме — одна строка на действие, ничего лишнего.",
     "terminal.caption": "ход MMA · тихий режим",
     "terminal.replay": "Повторить",
-    "web.caption": "mma web · параллельные сессии",
-    "web.note":
-      "Браузерный интерфейс — это второй хост над тем же Agent: раннеры на сессию, поэтому несколько задач идут одновременно, и шесть панелей — session, files, lsp, trace, plugins и map.",
     "term.l1": '$ mma "почини падающие тесты"',
     "term.l2": "qwen3.5-9b · lmstudio · 32K · плагины 2 · mcp 1",
     "term.l3": "◇ план · 3 шага",
@@ -528,15 +245,45 @@ window.LP_I18N = {
     "term.l7": "◇ запуск команды · bun test  ✓ 14 passed",
     "term.l8": "✦ размышляю · 2.1s",
     "term.l9": "✓ готово · 3/3 шага · 6.2K tok · 18%",
+    "try.q1": "разовый запуск: один запрос и выход",
+    "try.q2": "интерактивный терминал — сессии, хоткеи, slash-команды",
+    "try.q3": "мастер первичной настройки провайдера",
+    "try.q4": "тот же агент в браузере, раннеры на сессию",
+
+    "s2.n": "02",
+    "s2.k": "Почему",
+    "why.title": "Сделан под потолок контекста",
+    "why.lead":
+      "Окно 32K–64K заполняется быстро. Без стратегии агент теряет задачу, перечитывает одни и те же файлы и сообщает результат до проверки. MMA исходит из этого ограничения.",
+    "why.r1.t": "Контекст не рассыпается",
+    "why.r1.d":
+      "Бюджеты выводятся из окна модели. Компакция структурная: она сохраняет задачу, план, файлы и ошибки, а не краткий пересказ переписки. [Tool ledger] не даёт перечитывать одно и то же.",
+    "why.r2.t": "Результат можно проверить",
+    "why.r2.d":
+      "У шага плана есть машинно-проверяемый критерий, и он закрывается только когда его файлы реально изменились на диске. Утверждения сверяются с реальными путями и кодами возврата, затем проходят вторую проверку.",
+    "why.r3.t": "Честные отказы",
+    "why.r3.d":
+      "Циклы, повторные вызовы и серии падающих команд останавливают прогон с правдивым статусом. Fail-open пути пишут причину, поэтому поломка неотличима от успеха только на бумаге.",
+    "why.p1":
+      "Правило простое: ничто важное не живёт только в контексте. Якоря вставляются заново после каждого сжатия, а чеклист плана перечитывается с диска.",
+    "why.before": "Обычный чат-агент",
+    "why.b1": "Задача уплывает после пары сжатий",
+    "why.b2": "Одни и те же файлы читаются снова и снова",
+    "why.b3": "«Готово» без файла и без кода возврата",
+    "why.after": "MMA",
+    "why.a1": "Задача, план и изменённые файлы переживают каждое сжатие",
+    "why.a2": "Ненужные схемы инструментов не занимают контекстное окно",
+    "why.a3": "Утверждения сверяются с реальными файлами и командами",
 
     "s3.n": "03",
     "s3.k": "Контекст",
-    "context.title": "Контекст, который не рассыпается",
+    "context.title": "Бюджет выводится, а не угадывается",
     "context.lead":
-      "Бюджеты выводятся из размера контекстного окна модели, а компакция структурная: она сохраняет задачу, план, файлы и ошибки — а не краткий пересказ переписки.",
+      "Окно определяется от провайдера или задаётся вручную. Из него MMA выводит долю системы, резерв ответа и бюджет истории — и сжимает структурно до переполнения окна.",
+    "budget.pick": "Выберите контекстное окно модели",
     "ctx.th.system": "Система",
-    "ctx.th.reserve": "Запас",
     "ctx.th.history": "История",
+    "ctx.th.reserve": "Запас",
     "ctx.note":
       "Сжатие срабатывает на 75% бюджета истории, а последние шесть обменов всегда остаются целиком. Оценка качества с нижним порогом не даёт уйти в спираль бесконечных сжатий.",
     "ctx.anchor.title": "Якоря, вставляемые заново после каждого сжатия",
@@ -547,103 +294,31 @@ window.LP_I18N = {
     "ctx.a5": "повторяющиеся ошибки и то, что уже пробовали",
 
     "s4.n": "04",
-    "s4.k": "Инструменты",
-    "tools.title": "Инструменты, сужённые по требованию",
-    "tools.lead":
-      "Полный набор — это примерно 3.5K токенов на каждый запрос, около девятой части контекстного окна 32K. Поэтому в контексте только нужные схемы; остальные кратко перечислены и включаются по запросу.",
-    "tools.always.title": "Всегда видны",
-    "tools.always.d":
-      "plan · plan_step · todo · verify · project_map · lsp_check · question · approve · load_skill · enable_tools · set_thinking · session_info · define_capability — структурные инструменты нельзя отключить случайно.",
-    "tools.list.title": "Часть набора",
-    "tools.r1.k": "Файлы",
-    "tools.r1.v": "чтение, запись, правка, перемещение, удаление, glob, grep",
-    "tools.r2.k": "Команды",
-    "tools.r2.v": "bash с автоматическим уходом длинных процессов в фон",
-    "tools.r3.k": "Веб",
-    "tools.r3.v": "поиск, чтение страниц и настоящий браузер Playwright",
-    "tools.r4.k": "Делегирование",
-    "tools.r4.v": "субагенты со своей зоной файлов",
-    "tools.r5.k": "Память",
-    "tools.r5.v": "remember, recall и полнотекстовый поиск по прошлым сессиям",
-    "tools.r6.k": "Текст",
-    "tools.r6.v": "chunk_query режет большой документ и обрабатывает его параллельно",
-    "tools.r7.k": "Навигация",
-    "tools.r7.v": "project_map: языки, экспорты, поиск символов, оглавление файла",
-    "tools.r8.k": "Диагностика",
-    "tools.r8.v": "lsp_check проверяет код без полной сборки",
-    "tools.r9.k": "Планирование",
-    "tools.r9.v":
-      "plan, plan_step, todo и verify: чеклист живёт на диске, а шаг закрывается только когда его файлы реально изменились",
-    "tools.r10.k": "Взаимодействие",
-    "tools.r10.v":
-      "question, approve, set_thinking и session_info: спросить, подтвердить или дать пользователю повести прогон",
-    "tools.r11.k": "Документы",
-    "tools.r11.v":
-      "document_index, document_map, document_read и document_find: просканировать папку, свести её в сводку и достать только нужное",
-    "tools.r12.k": "Изображения",
-    "tools.r12.v": "attach_image отдаёт картинку модели со зрением",
-
-    "extend.title": "Расширяется",
-    "extend.lead":
-      "Ядро остаётся маленьким; возможности приходят плагинами, MCP-серверами и скиллами — каждый включается отдельно для проекта.",
-    "extend.c1.t": "Плагины",
-    "extend.c1.d":
-      "встроенные lint-on-write, notify и angular11; включаются через mma plugins или переключатель в вебе",
-    "extend.c2.t": "MCP",
-    "extend.c2.d": "внешние инструменты по Model Context Protocol — агент видит их как mcp_call",
-    "extend.c3.t": "Скиллы",
-    "extend.c3.d": "переиспользуемые наборы инструкций, загружаемые по требованию через load_skill",
-    "extend.c4.t": "Пайплайны",
-    "extend.c4.d":
-      "многошаговые скрипты (pipeline_run) и сканы корпуса (scan_corpus) для повторяемых задач",
+    "s4.k": "Интерфейсы",
+    "ifaces.title": "Одно ядро — четыре способа управления",
+    "ifaces.lead":
+      "Тот же агент, те же сессии, те же инструменты и тот же enforcement — меняется только транспорт. Выбирайте по тому, кто водит.",
+    "ifaces.i1":
+      "Разовый запуск. Один запрос, машиночитаемый --json, песочница -d, выход по первому ответу.",
+    "ifaces.i2":
+      "Терминал. Постоянный REPL с сессиями, хоткеями, slash-командами и markdown→ANSI. Без TUI.",
+    "ifaces.i3":
+      "Браузер. SSE + REST поверх того же ядра: раннеры на сессию, поэтому несколько задач идут одновременно, плюс панели файлов, LSP, Trace, плагинов и карты.",
+    "ifaces.i4":
+      "HTTP-сервис. Agent Service API v1 — сессии, задачи, SSE, вебхуки с HMAC и живой OpenAPI 3.1 в /v1/openapi.json.",
+    "ifaces.tools.title": "Набор инструментов сужается под задачу",
+    "ifaces.tools.lead":
+      "Полный набор — это примерно 3.5K токенов на каждый запрос, около девятой части окна 32K. В контексте только нужные схемы; остальные кратко перечислены и включаются по запросу. Структурные инструменты видны всегда.",
+    "ifaces.tools.always":
+      "plan · plan_step · todo · verify · project_map · lsp_check · question · approve · load_skill · enable_tools · set_thinking · session_info · define_capability",
+    "ifaces.more":
+      "Файлы, команды, веб-поиск и настоящий браузер Playwright, субагенты со своей зоной файлов, память, пайплайны, MCP, LSP-диагностика, документы и изображения — полный список и контракты инструментов в документации.",
 
     "s5.n": "05",
-    "s5.k": "Планирование",
-    "plan.title": "Планируй — и докажи",
-    "plan.lead":
-      "Модель сама решает, когда задаче нужен план. У каждого шага есть машинно-проверяемый критерий, и шаг нельзя закрыть, пока его файлы реально не существуют на диске.",
-    "plan.f1": "чеклист хранится на диске, а не в чате",
-    "plan.f2": "критерии: file-exists, command или явная пометка manual",
-    "plan.f3": "самосертификация запрещена — файл должен измениться после начала шага",
-    "plan.f4": "аудит-шлюз прогоняется перед любым финальным ответом",
-    "plan.f5": "детектор застревания: циклы, повторные вызовы, серии падающих команд",
-    "verify.title": "Три шлюза перед «готово»",
-    "verify.lead":
-      "Маленькая модель охотно называет готовым недоделанный ход. MMA не верит ей на слово: каждое утверждение сверяется с диском, выводом команды и вторым ревьюером.",
-    "verify.flow1": "Утверждение",
-    "verify.flow2": "Доказательство",
-    "verify.flow3": "Критик",
-    "verify.flow4": "Аудит",
-    "verify.flow5": "Ответ",
-    "verify.n1":
-      "Утверждения о файле или команде сверяются с реальным путём и реальным кодом возврата, а не с памятью модели.",
-    "verify.n2":
-      "Встроенный критик смотрит ход до того, как ответ уйдёт из модели; его сбой пишется в лог, а не замалчивается.",
-    "verify.n3":
-      "Аудит-шлюз работает перед любым финальным ответом, а шаг плана не закрывается, пока его файлы действительно не изменились.",
-    "verify.n4":
-      "Зацикливания, повторные вызовы и серии падающих команд распознаются и показываются, а не повторяются бесконечно.",
-
-    "s6.n": "06",
-    "s6.k": "Память",
-    "memory.title": "Три горизонта памяти",
-    "memory.h1.t": "Рабочий контекст",
-    "memory.h1.d":
-      "Контекстное окно модели. Недолговечно и сжимается — но с якорями, поэтому задача не выпадает из него.",
-    "memory.h2.t": "Сессия на диске",
-    "memory.h2.d":
-      "history.jsonl и session.jsonl: каждый вызов инструмента, его сырой результат, расход и кэш по каждому запросу, события контекста и сжатий.",
-    "memory.h3.t": "Память проекта",
-    "memory.h3.d":
-      "conventions.md, decisions.md, errors.md в домашней папке — markdown, который живёт дольше сессий и подмешивается в каждую новую.",
-    "memory.note":
-      "Плюс явная память: remember / recall и полнотекстовый поиск по всем прошлым сессиям.",
-
-    "s7.n": "07",
-    "s7.k": "Безопасность",
+    "s5.k": "Безопасность",
     "safety.title": "Безопасно по умолчанию",
     "safety.lead":
-      "Каждый вызов инструмента проходит конвейер валидации, прежде чем коснуться диска или сети. Заблокированный вызов не доходит до файловой системы, а блокировка пишется в аудит-журнал.",
+      "Каждый вызов инструмента проходит один конвейер валидации, прежде чем коснуться диска или сети. Заблокированный вызов не доходит до файловой системы, а блокировка пишется в аудит-журнал.",
     "safety.pipe": "вызов → плагины → валидаторы → действие → плагины → результат",
     "safety.step1": "вызов",
     "safety.step2": "плагины",
@@ -651,198 +326,18 @@ window.LP_I18N = {
     "safety.step4": "действие",
     "safety.step5": "плагины",
     "safety.step6": "результат",
-    "safety.v1.t": "Валидатор команд",
-    "safety.v1.d":
-      "чёрный список команд, блок опасных флагов, опциональный белый список, лазейки через интерпретаторы закрыты",
-    "safety.v2.t": "Валидатор путей",
-    "safety.v2.d":
-      "глобальные запреты (.git, .env, ключи), удержание внутри рабочей папки, зоны файлов субагентов",
-    "safety.v3.t": "Валидатор сети",
-    "safety.v3.d":
-      "чёрный список доменов плюс опциональный белый; чувствительные query-параметры вырезаются до запроса",
-    "safety.v4.t": "Сканер содержимого",
-    "safety.v4.d": "паттерны вроде eval( или child_process.exec( помечаются до записи",
-    "safety.v5.t": "Политика egress (DLP)",
-    "safety.v5.d":
-      "перед отправкой вызова внешнему провайдеру абсолютные пути, имя машины и пользователя, переменные окружения, секреты, ПДн и содержимое скрытых файлов заменяются стабильными токенами; loopback и доверенные хосты видят реальные значения",
-    "safety.v6.t": "Видимость DLP и taint",
-    "safety.v6.d":
-      "Trace показывает точный запрос, ушедший провайдеру, бейдж DLP указывает каждое вычищенное место, а вкладка «Безопасность» транслирует блокировки вживую; текст, произведённый локальной моделью по защищённым файлам, остаётся tainted и уходит как [FILE], если провайдер сменился на внешний",
-    "safety.presets": "Пресеты",
-    "live.caption": "mma web · живое демо",
-    "live.hint":
-      "Блоки появляются сами — план выпадает редко, сообщения и рассуждения часто. Нажми на вопрос, блок «thinking» или бейдж DLP.",
-    "live.pause": "пауза",
-    "live.resume": "продолжить",
-    "live.think": "думаю",
-    "live.m1": "Сначала дочитаю спеку, потом поменяю только сломанную ветку.",
-    "live.m2":
-      "Нашёл: ключ кеша не учитывал версию политики, поэтому старая маска переиспользовалась.",
-    "live.m3": "Исправил и добавил регресс-тест на canary.",
-    "live.m4": "Прогоняю набор ещё раз, прежде чем сказать «готово».",
-    "live.t1": "Выбираю между двумя вариантами: патч хендлера или проверка в исполнителе.",
-    "live.t2": "Исполнитель — единственная точка enforcement; проверка должна жить там.",
-    "live.plan": "план · 3 шага",
-    "live.plan1": "guard.ts — не отдавать token id в снимках",
-    "live.plan2": "project.ts — маскировать до обрезки",
-    "live.plan3": "тесты — canary не должен уходить",
-    "live.q": "Удалить устаревший кеш перед пересборкой?",
-    "live.qa": "да, удалить",
-    "live.qb": "оставить",
-    "live.qdone": "ответ",
-    "live.sec":
-      "Защищённый путь: .env — заблокирован до запуска тула; событие аудита security_block.",
-    "live.img": "скриншот браузера · показан inline",
-    "live.dlph1": "сообщение 3 · tool · content[0–142] → [FILE]",
-    "live.dlph2": "сообщение 1 · system · content[88–139] → ‹PATH›",
-    "live.dlph3": "сообщение 5 · user · content[41–52] → ‹PII›",
-    "calc.title": "Кеш и стоимость",
-    "calc.prompt": "токены промпта",
-    "calc.output": "токены ответа",
-    "calc.cache": "попадание в кеш",
-    "calc.cost": "стоимость / вызов",
-    "calc.saved": "экономия",
-    "calc.note": "Пример цен: $0.15 / 1M входа, $0.60 / 1M выхода, чтение кеша — 10% входа.",
-    "cmp.title": "Локально против облака / месяц",
-    "cmp.calls": "вызовов в день",
-    "cmp.tokens": "токенов на вызов",
-    "cmp.cloud": "облако",
-    "cmp.local": "локально",
-    "cmp.note":
-      "Локальный запуск идёт на вашем железе: нет счёта за токены, только электричество. Облако считается по тем же примерным ценам выше.",
-    "safety.p1": "strict",
-    "safety.p2": "balanced — по умолчанию",
-    "safety.p3": "permissive",
-    "safety.more":
+    "safety.f4":
+      "Политика egress (DLP): перед отправкой внешнему провайдеру абсолютные пути, имена машины и пользователя, переменные окружения, секреты и ПДн заменяются стабильными токенами. Loopback видит реальные значения.",
+    "safety.f5":
       "Файлы сессий можно шифровать AES-256-GCM, логи очищаются от секретов, а аудит-нотификатор умеет отдавать события в файл или вебхук.",
-    "safety.dlp":
-      "В mma web каждый ответ несёт бейдж DLP с точными местами редакции (сообщение, поле, диапазон) и поп-ап Trace с запросом, ушедшим после DLP; вкладка «Безопасность» транслирует блокировки, редакции и подтверждения вживую. Выключатель — security.dataPolicy.enabled: false.",
+    "safety.more":
+      "Пресеты: strict · balanced (по умолчанию) · permissive. Выключатель редакции egress — security.dataPolicy.enabled: false.",
 
-    "s8.n": "08",
-    "s8.k": "Сервис",
-    "service.title": "Отдай это как API",
-    "service.lead":
-      "mma serve выставляет версионируемый HTTP-контракт поверх того же ядра — для ваших систем, а не только для терминала. Одна задача — это один ход над сессией.",
-    "service.endpoints": "Эндпоинты",
-    "service.f1": "задачи job и interactive",
-    "service.f2": "структурный вывод по схеме",
-    "service.f3": "вебхуки с подписью HMAC",
-    "service.f4": "изоляция процессов по тенантам",
-    "service.f5": "ошибки RFC 9457 problem+json",
-    "service.f6": "bearer-токен, ключи идемпотентности и очередь на сессию",
-    "service.f7": "отмена, интерактивные ответы и возобновляемый SSE через Last-Event-ID",
-    "service.docs":
-      "Сервис описывает себя сам: OpenAPI 3.1 в /v1/openapi.json и человеческая страница в /v1/docs.",
-
-    "s9.n": "09",
-    "s9.k": "Эксплуатация",
-    "ops.title": "Честность не заканчивается на демо",
-    "ops.lead":
-      "Харнесс рассчитан на месяцы, а не на скриншот. Поэтому скучные вещи встроены: проверка моделей, видимость расходов, обновления и диагностика.",
-    "ops.c1.t": "Сертификация",
-    "ops.c1.d":
-      "прогнать набор сценариев и security-сьют на модели, прежде чем доверять ей реальную работу",
-    "ops.c2.t": "Расход и цена",
-    "ops.c2.d":
-      "токены, попадания в кэш и стоимость каждого запроса — в панели сессии и через mma usage",
-    "ops.c3.t": "Самообновление",
-    "ops.c3.d":
-      "версионно-независимые ассеты релиза и latest.json; обновление только по включению, никогда молча",
-    "ops.c4.t": "Диагностика",
-    "ops.c4.d":
-      "панель Trace, mma doctor и журнал сессии, который можно переиграть после плохого хода",
-    "ops.r1.d": "сертифицирует модель на бенчмарк- и security-сьютах",
-    "ops.r2.d": "показывает баланс провайдера и расход за текущий период",
-    "ops.r3.d": "проверяет конфиг, провайдеров, инструменты и окружение",
-    "ops.r4.d": "читает журнал сессии и объясняет, что пошло не так; с --json — для скриптов",
-
-    "s10.n": "10",
-    "s10.k": "Первые шаги",
-    "install.title": "Дальше — запусти",
-    "install.lead":
-      "Строка выше ставит самодостаточную сборку со встроенным рантаймом. Дальше тот же бинарь — это и разовый запрос, и терминал, и браузерный чат, и HTTP-сервис.",
-    "install.copy": "Копировать",
-    "install.copied": "Скопировано",
-    "install.or": "или скачайте сборку",
-    "install.manual": "Ручная установка из архива (без скрипта)",
-    "install.manual_note":
-      "В архиве уже есть runtime. Распакуйте в любой каталог и запустите — без прав администратора, без Node.js и npm.",
-    "install.manual_more": "Контрольные суммы, PATH, обновления, Gatekeeper/SmartScreen",
-    "install.c1.d": "разовый одиночный запрос",
-    "install.c2.d": "интерактивный терминал",
-    "install.c3.d": "браузерный чат",
-    "install.c4.d": "HTTP-сервис",
-    "install.c5.d": "мастер первичной настройки провайдера",
-    "install.c6.d": "онбординг-интервью, которое становится памятью проекта",
-    "install.c7.d": "создать или улучшить AGENTS.md для репозитория",
-    "install.c8.d": "список, просмотр и диагностика прошлых сессий",
-    "install.req":
-      "Нужен бэкенд: локальный — LM Studio на localhost:1234 или Ollama — либо hosted-провайдер. Облачный аккаунт не требуется.",
-
-    "s11.n": "11",
-    "s11.k": "Ограничения",
-    "s12.n": "12",
-    "s12.k": "Философия",
-    "phil.title": "Универсальный агент — не только для кода",
-    "phil.p":
-      "Разработка — лишь один сценарий. Погода, умный дом, API, поиск и персональный ассистент — другие. Промпты, описания инструментов и онбординг намеренно домен-нейтральны, поэтому агент подходит под что угодно.",
-    "phil.b1": "Универсален по замыслу",
-    "phil.b2": "Тишина по умолчанию: одна строка на действие, детали — одним нажатием",
-    "phil.b3": "Local-first: ваши модели, данные и машина",
-
-    "mascot.title": "MMART — лицо агента",
-    "mascot.lead":
-      "В браузерном интерфейсе у агента одно лицо. Оно отражает, что происходит прямо сейчас — размышляет, читает, ищет, выполняет, падает. Тот же компонент живёт в загрузочном экране, ленте, индикаторе активности, мастере настройки и панели Trace.",
-    "mascot.pick": "Нажми на состояние",
-    "mascot.more": "ещё",
-    "mascot.less": "свернуть",
-    "mascot.count": "25 состояния — тот же набор, что в приложении",
-    "ms.idle": "ожидает",
-    "ms.think": "размышляет",
-    "ms.read": "читает",
-    "ms.find": "ищет",
-    "ms.web": "в вебе",
-    "ms.edit": "правит",
-    "ms.type": "печатает",
-    "ms.create": "создаёт",
-    "ms.run": "выполняет",
-    "ms.tests": "тесты",
-    "ms.compact": "сжатие",
-    "ms.plan": "планирует",
-    "ms.ask": "спрашивает",
-    "ms.done": "готово",
-    "ms.error": "ошибка",
-    "ms.stop": "остановлен",
-    "ms.queued": "в очереди",
-    "ms.boot": "загрузка",
-    "ms.load": "ждёт ответа",
-    "ms.check": "проверяет",
-    "ms.warn": "предупреждение",
-    "ms.lspoff": "LSP выключен",
-    "ms.verify": "сверяю",
-    "ms.recheck": "перепроверяю",
-    "ms.update": "обновляется",
-
-    "mem.files": "Что реально лежит на диске",
-    "mem.f1.d": "переписка: ваши запросы, ответы, сводки инструментов",
-    "mem.f2.d":
-      "полный журнал: каждый вызов инструмента с сырым результатом и длительностью, расход и кэш, события контекста и сжатий",
-    "mem.f3.d": "паспорт сессии: имя, модель, счётчики, временные метки",
-    "mem.f4.d": "соглашения проекта и ключевые решения, подмешиваемые в каждую новую сессию",
-    "mem.f5.d": "выученные ошибки — пишутся автоматически, когда один и тот же инструмент ломается",
-
-    "svc.cases": "Что на этом строят",
-    "svc.c1.t": "Триаж задач",
-    "svc.c1.d": "бот в CI: читает новые issues, воспроизводит и отвечает",
-    "svc.c2.t": "Мост в чат",
-    "svc.c2.d": "сообщения из мессенджера уходят в сессию, ответ возвращается обратно",
-    "svc.c3.t": "Ночной ресёрч",
-    "svc.c3.d": "задача по расписанию сводит доки или changelog в одну страницу",
-    "svc.c4.t": "Внутренние инструменты",
-    "svc.c4.d": "ваши скрипты зовут агента по HTTP, отдельный процесс на тенанта",
-
+    "s6.n": "06",
+    "s6.k": "Ограничения",
     "lim.title": "Честные ограничения",
-    "lim.lead": "Чего MMA не делает — чтобы вы решили, подходит ли он, прежде чем тратить вечер.",
+    "lim.lead":
+      "Чего MMA не делает — чтобы вы решили, подходит ли он, прежде чем тратить вечер.",
     "lim.l1":
       "Отключение плагина — не песочница. Модуль уже загружен, а заявленные права показываются, но не принуждаются.",
     "lim.l2":
@@ -852,34 +347,34 @@ window.LP_I18N = {
     "lim.l4":
       "Local-first — значит вы владеете железом и его простоями. За этим не стоит облачный SLA.",
     "lim.l5":
-      "Проба контекста работает по возможности. Голый /models ничего не сообщает — тогда просто остаётся настроенное контекстное окно.",
-    "lim.l6":
-      "Особенности путей и прав вашей ОС всё ещё могут удивить — особенно на границах дисков Windows.",
+      "Проба контекста работает по возможности. Голый /models ничего не сообщает — тогда просто остаётся настроенное окно.",
 
-    "cmp.title": "Где это уместно",
-    "cmp.h2": "обычный чат-агент",
-    "cmp.h3": "MMA + локальная модель",
-    "cmp.h4": "облачный фронтир",
-    "cmp.a1": "цена",
-    "cmp.b1": "подписка",
-    "cmp.c1": "электричество",
-    "cmp.d1": "за токены",
-    "cmp.a2": "приватность",
-    "cmp.b2": "запросы уходят с машины",
-    "cmp.c2": "остаётся локально",
-    "cmp.d2": "запросы уходят с машины",
-    "cmp.a3": "потолок",
-    "cmp.b3": "фиксированный",
-    "cmp.c3": "ваша модель",
-    "cmp.d3": "сильнейшая доступная",
-    "cmp.a4": "контроль",
-    "cmp.b4": "чат-окно",
-    "cmp.c4": "файлы, тулы, скрипты",
-    "cmp.d4": "только API",
-    "cmp.a5": "старт",
-    "cmp.b5": "установить",
-    "cmp.c5": "бэкенд + одна строка",
-    "cmp.d5": "API-ключ",
+    "s7.n": "07",
+    "s7.k": "FAQ",
+    "faq.title": "Перед установкой",
+    "faq.q1": "Нужны ли Node.js или Bun?",
+    "faq.a1":
+      "Нет. Установщик скачивает самодостаточную сборку со встроенным Bun runtime, агентом и зависимостями. Больше ничего не требуется.",
+    "faq.q2": "Какой бэкенд выбрать?",
+    "faq.a2":
+      "Любой OpenAI-совместимый сервер. LM Studio на localhost:1234 и Ollama на localhost:11434 работают из коробки; llama.cpp, vLLM и hosted-провайдеры тоже. Нужна поддержка tool-calling.",
+    "faq.q3": "Работает ли офлайн?",
+    "faq.a3":
+      "Да, если модель и провайдер локальные. Веб-поиск, браузерный инструмент и hosted-провайдеры требуют сети.",
+    "faq.q4": "Есть ли телеметрия?",
+    "faq.a4":
+      "Нет. Сессии, память и логи остаются в ~/.mma. Исходящие вызовы — только те, что вы настроили: провайдер, веб-инструменты и обновления.",
+    "faq.q5": "Как обновляться?",
+    "faq.a5":
+      "Запустите ту же установочную команду. Она скачает новый релиз в ~/.mma/versions/ и переключит current; прежняя версия останется для отката.",
+
+    "install.copy": "Копировать",
+    "install.copied": "Скопировано",
+    "install.or": "или скачайте сборку",
+    "install.manual": "Ручная установка из архива (без скрипта)",
+    "install.manual_note":
+      "В архиве уже есть runtime. Распакуйте в любой каталог и запустите — без прав администратора, без Node.js и npm.",
+    "install.manual_more": "Контрольные суммы, PATH, обновления, Gatekeeper/SmartScreen",
 
     "footer.tagline": "Открытый харнесс для маленьких языковых моделей.",
     "footer.project": "Проект",
@@ -890,9 +385,6 @@ window.LP_I18N = {
     "footer.releases": "Релизы",
     "footer.issues": "Issues",
     "footer.license": "Лицензия MIT",
-    "footer.features": "Обзор возможностей",
-    "footer.architecture": "Архитектура",
-    "footer.serviceapi": "Service API",
     "footer.changelog": "Changelog",
   },
 };

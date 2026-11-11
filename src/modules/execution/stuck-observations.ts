@@ -19,6 +19,13 @@ import { normalizeErrorSignature } from "./stuck-signals";
 const BASH_FLAIL_WINDOW = 6;
 const BASH_FLAIL_THRESHOLD = 4;
 
+/**
+ * Порог подряд идущих «шелл недоступен» для быстрой директивы «смени класс
+ * инструментов» (S2). 2 — раньше полного окна flailing (4/6): недоступный шелл
+ * не чинится повторами, ждать нечего.
+ */
+const SHELL_UNAVAILABLE_STREAK_THRESHOLD = 2;
+
 /** Наблюдения: bash-вывод/попытки и счётчики сигнатур ошибок. */
 export class StuckObservations {
   webSearchThreshold: number;
@@ -26,6 +33,8 @@ export class StuckObservations {
   lastBashOutput = "";
   emptyBashRunCount = 0;
   bashRecent: boolean[] = [];
+  /** Подряд идущих «шелл недоступен» (по классификатору S1, не парсингом). */
+  shellUnavailableStreak = 0;
   errorSignatureCounts: Map<string, number> = new Map();
   searchedErrorSignatures: Set<string> = new Set();
 
@@ -49,10 +58,19 @@ export class StuckObservations {
     this.lastBashOutput = output;
   }
 
-  /** Исход одной bash-попытки (успех/фейл) — для детекции флейлинга. */
-  recordBashAttempt(success: boolean): void {
+  /**
+   * Исход одной bash-попытки (успех/фейл) — для детекции флейлинга.
+   * `shellUnavailable` приходит из классификатора S1 (через `errorMeta` тула),
+   * не парсингом вывода: обычный фейл команды не увеличивает счётчик шелла.
+   */
+  recordBashAttempt(success: boolean, shellUnavailable = false): void {
     this.bashRecent.push(success);
     if (this.bashRecent.length > BASH_FLAIL_WINDOW) this.bashRecent.shift();
+    if (success) {
+      this.shellUnavailableStreak = 0;
+    } else if (shellUnavailable) {
+      this.shellUnavailableStreak++;
+    }
   }
 
   /** True, если свежие bash-попытки в массе фейлятся — модель флейлит. */
@@ -61,6 +79,11 @@ export class StuckObservations {
     let failures = 0;
     for (const ok of this.bashRecent) if (!ok) failures++;
     return failures >= BASH_FLAIL_THRESHOLD;
+  }
+
+  /** True, если шелл недоступен подряд достаточно раз — смени класс инструментов. */
+  hasShellUnavailable(): boolean {
+    return this.shellUnavailableStreak >= SHELL_UNAVAILABLE_STREAK_THRESHOLD;
   }
 
   /** Запоминает сигнатуру ошибки тула (вход автопоиска в вебе). */
@@ -111,6 +134,7 @@ export class StuckObservations {
     this.lastBashOutput = "";
     this.emptyBashRunCount = 0;
     this.bashRecent = [];
+    this.shellUnavailableStreak = 0;
     this.errorSignatureCounts.clear();
     this.searchedErrorSignatures.clear();
   }

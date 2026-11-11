@@ -26,6 +26,8 @@ export interface EvidenceToolEvent {
 export interface EvidenceInput {
   task: string;
   planSummary?: string;
+  /** Незакрытые шаги плана (S5) — режутся до MAX_PENDING_STEPS. */
+  planPendingSteps?: string[];
   toolEvents: EvidenceToolEvent[];
   /** Корень проекта — если задан, изменённые файлы дочитываются (ограниченные выдержки), чтобы критик проверял контент, а не пути. */
   baseDir?: string;
@@ -38,6 +40,8 @@ const MAX_DIGEST_LINES = 40;
 const MAX_DIGEST_OUTPUT_CHARS = 300;
 const MAX_EXCERPT_FILES = 5;
 const MAX_EXCERPT_CHARS = 1200;
+/** Кап незакрытых шагов в пакете критика; остальное — «+N more» в рендере. */
+const MAX_PENDING_STEPS = 8;
 /** Выдержка ответа модели в пакете (у критика свой бюджет; секреты редактируются). */
 const MAX_ANSWER_CHARS = 2000;
 /** Минимальный объём вывода web_fetch, считающийся содержательным (не навбар/шелл). */
@@ -89,6 +93,8 @@ export function buildEvidencePack(input: EvidenceInput): EvidencePack {
   return {
     task: input.task,
     planSummary: input.planSummary,
+    planPendingSteps: input.planPendingSteps?.slice(0, MAX_PENDING_STEPS),
+    planPendingStepsTotal: input.planPendingSteps?.length,
     changedFiles: [...changedFiles],
     commands,
     toolDigest: digest.slice(-MAX_DIGEST_LINES).join("\n"),

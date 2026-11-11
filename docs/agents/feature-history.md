@@ -10,6 +10,115 @@ the rules needed to avoid breaking things; this file keeps the detailed record.
 
 ---
 
+### Web UI: офлайн-провайдер не притворяется живым (2026-11-11)
+
+- Дефект: после переключения на `llama.cpp` без запущенного сервера сайдбар
+  продолжал показывать контекст от прежнего бэкенда, а reasoning-селектор
+  предлагал варианты из пресета, хотя эндпоинт не отвечал.
+- Поведение:
+  - `ProviderProbesBox.reachable` отличает «эндпоинт не ответил» от «ответил,
+    но ничего не объявил»;
+  - при недоступном эндпоинте `reasoningStrategy` принудительно `none`,
+    `levels` не публикуются;
+  - `contextProbeRef` очищается при провале пробы окна;
+  - сайдбар показывает `provider · недоступен` и `context —` вместо старого
+    знаменателя;
+  - active-tab state дополнительно перезапрашивается по SSE `config`.
+- Проверки: `provider-switch-probes`, `webui-reasoning-view`,
+  `webui-sidebar-provider-switch`; живая проверка через Playwright.
+
+### Web UI: спиннер в селекторах без счётчика ожидания (2026-11-11)
+
+- Запрос: убрать отсчёт таймаута/ожидания из загрузок в селекторах модели,
+  провайдера, контекста и reasoning; оставить спокойный спиннер.
+- Удалён модуль `assets/js/settings/pending-wait.ts` и его вызов из
+  `selectors-write.ts`; CSS `.sel > button.pending b::after` больше не
+  переключается на `data-wait`, а показывает `◐` с `margin-left: 6px`.
+- Проверки: `tests/webui-loading-indicators.test.ts` фиксирует спиннер,
+  отступ слева и отсутствие `content: attr(data-wait)`.
+
+### Расширение mma-user-guide + бейдж «встроенный» в панели веба (2026-11-10)
+
+- `src/modules/skills/builtin/mma-user-guide.md` дополнен по живому разбору
+  вопросов: флаги one-shot и эргономика REPL, память, картинки (Ctrl+V,
+  `/image`), плагины/MCP (ловушка «disable ≠ sandbox»), `mma agents init`,
+  обновления (панель → About, `updater.autoInstall`), `mma usage`, логи,
+  `mma session export` для репортов. Тело 7.4K символов — в бюджете (гейт
+  `tests/modules/skills/builtin.test.ts`, потолок 12K).
+- Панель «Навыки» разделяет встроенные и внешние скиллы и помечает встроенные
+  бейджем: загрузчик присваивает `SkillMeta.kind` по источнику
+  (`builtin`/`global`/`project`, при дедупе победитель сохраняет свой kind),
+  `GET /api/skills` аддитивно несёт `kind` (старые клиенты не ломаются),
+  фронтенд рендерит секции только с непустыми группами. Спека
+  `2026-11-10-skills-panel-builtin-design.md`. Проверки:
+  `tests/modules/skills/kind.test.ts`, `tests/webui-skills-panel-dom.test.ts`,
+  расширенные `webui-settings`/`builtin`. Живая проверка: dist-сборка +
+  Playwright (секции ВСТРОЕННЫЕ/ВНЕШНИЕ, бейдж у `mma-user-guide`).
+
+### Скилл-плейбуки: пользовательский builtin + разработчик для OpenCode (2026-11-10)
+
+
+Запрос: два скилла — (1) playbook разработчика для работы в этом репозитории,
+(2) builtin-скилл MMA о том, как работать с самим агентом (провайдеры, конфиг,
+тулзы, сессии, скиллы, безопасность, диагностика).
+
+Что сделано:
+
+- `src/modules/skills/builtin/mma-user-guide.md` — builtin-скилл `mma-user-guide`
+  (фронтматтер `mma_version: 2`, тело ~5.7K символов ≈ 1.5K токенов — влезает в
+  бюджет `skills.budget` даже на 32K-контексте). Содержимое сверено с кодом:
+  CLI-подкоманды (`src/cli/*-commands.ts`), slash-каталог (`src/core/commands/spec.ts`),
+  типы провайдеров (`src/modules/providers/presets.ts`), ключи конфига
+  (`src/config/registry-*`), реестр тулзов (`src/tools/index.ts`).
+- `.opencode/skills/mma-development/SKILL.md` — проект-скилл OpenCode: порядок
+  работы (ветка от `dev`, спека до контракта, definition of done), рецепты
+  (тулл/ключ/команда/скилл/модуль/правило-с-гейтом), ловушки, релиз. Не дублирует
+  AGENTS.md, а дополняет его операциями; при конфликте нормативен AGENTS.md.
+- Гейт `tests/modules/skills/builtin.test.ts`: каждый `.md` в `builtin/` проходит
+  загрузчик (битый frontmatter отбрасывается молча — проверка это ловит), имена
+  уникальны и в kebab-case, есть description и тело, тело ≤ 12K символов,
+  `mma-user-guide` присутствует и содержит опорные разделы.
+
+
+Дефект (живой прогон на opencode-go): после свитча провайдера/модели контекст,
+capabilities и reasoning наследовались от прошлого бэкенда; `limit.context` из
+`/models` не читался (окно не определялось для моделей вне models.dev); CLI
+`provider use` терял память моделей (`toConfig()` без `models`) и не
+восстанавливал модель провайдера; хостед-эндпоинты не могли получить
+`reasoning_effort:"none"`, потому что `reasoningOff` нигде не декларирован.
+
+Что сделано (спеки
+`2026-11-10-provider-switch-probes-design.md`,
+`2026-11-10-hosted-reasoning-off-discovery-design.md`):
+
+- Идентичность (`model + baseUrl + active + type`) — единственный триггер
+  перепробы; `contextAuto` гейтит только контекст, capabilities — всегда
+  (`refreshCapabilitiesProbe` перезаписывает бокс, включая сброс в `undefined`).
+- Общий `ProviderProbesBox` (`capabilitiesProbeRef`): `probe` + ленивая
+  `reasoningProbe`. `restartReasoningProbe` публикует в него новую пробу,
+  `invalidateReasoningProbe` (путь `probe: false`) сбрасывает вердикт без сети;
+  новый раннер читает актуальное, а не снимок bootstrap.
+- `rememberReasoningMechanism` пишется на каждом `applyReasoningStrategy` —
+  UI-селектор и применяемая стратегия не расходятся (INV-R8).
+- `discoverCapabilities` = native (LM Studio/llama.cpp) + декларативные
+  `/models`-capabilities (`probeOpenAICompatCapabilities`: стратегия и уровни,
+  INV-R7) + эмпирическая проба выключателя (`reasoning-off-probe.ts`: один
+  минимальный `reasoning_effort:"none"`; 200 → true, 400-про-параметр → false,
+  прочее/несвязанный 400 → `null` не кэшируется; кэш 24ч/1ч
+  `~/.mma/reasoning-off-cache.json`, `MMA_REASONING_OFF_CACHE`). Один путь для
+  bootstrap и reconfigure.
+- `pickContextField` читает `limit.context` (OpenCode Zen/Go) — окно больше не
+  зависит от точного id в каталоге.
+- `setProvider` восстанавливает `provider.models[active]` и дописывает факт
+  использования; `toConfig()` сохраняет `models`.
+
+Гварды: `tests/core/provider-switch-probes.test.ts`,
+`tests/llm/reasoning-off-probe.test.ts`,
+`tests/core/provider-setprovider.test.ts`,
+`tests/llm/provider-context-probe.test.ts` (`limit.context`),
+`tests/webui-session-runner.test.ts` (живая reasoning-проба у нового раннера).
+Долг `hosted-reasoning-discovery` закрыт (debt.md).
+
 ### Эксперты: наследование модели и выбор «провайдер → модель» (2026-11-01)
 
 Дефект: `experts[*].model` был обязательным и в дефолтах стоял

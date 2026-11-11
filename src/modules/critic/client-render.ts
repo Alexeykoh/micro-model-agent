@@ -8,6 +8,14 @@ export function renderWebGrounding(g: EvidencePack["webGrounding"]): string {
   return `WEB GROUNDING: attempted=${g.attempted}, verified=${g.verified}${claims}`;
 }
 
+/** Незакрытые шаги плана (S5): список с капом «+N more». */
+export function renderPendingSteps(pack: EvidencePack): string {
+  if (!pack.planPendingSteps || pack.planPendingSteps.length === 0) return "";
+  const total = pack.planPendingStepsTotal ?? pack.planPendingSteps.length;
+  const more = total > pack.planPendingSteps.length ? ` (+${total - pack.planPendingSteps.length} more)` : "";
+  return `PLAN PENDING STEPS: ${pack.planPendingSteps.join("; ")}${more}`;
+}
+
 /** Единый текст пакета, который видит критик. */
 export function renderPack(pack: EvidencePack): string {
   const cmdLines = pack.commands.map((c) => {
@@ -18,6 +26,7 @@ export function renderPack(pack: EvidencePack): string {
   return [
     `TASK: ${pack.task}`,
     pack.planSummary ? `PLAN: ${pack.planSummary}` : "",
+    renderPendingSteps(pack),
     `CHANGED FILES: ${pack.changedFiles.join(", ") || "(none)"}`,
     `COMMANDS: ${cmdLines.join("; ") || "(none)"}`,
     renderWebGrounding(pack.webGrounding),

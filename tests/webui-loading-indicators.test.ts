@@ -16,11 +16,11 @@ describe("loading indicators (INV-W8/W9)", () => {
     expect(css).toContain("cursor: progress");
   });
 
-  it("replaces the static pending mark with a spinner and a wait counter", () => {
+  it("uses a spaced-out spinner for selector pending state", () => {
     expect(css).toContain('content: "◐"');
+    expect(css).toMatch(/\.sel > button\.pending b::after \{[^}]*margin-left: 6px/);
     expect(css).toMatch(/\.sel > button\.pending b::after \{[^}]*animation: spin/);
-    // Счётчик берёт своё значение из `data-wait` — разметку не переписывает.
-    expect(css).toContain("content: attr(data-wait)");
+    expect(css).not.toContain("content: attr(data-wait)");
   });
 
   it("keeps loading indicators alive under prefers-reduced-motion", () => {

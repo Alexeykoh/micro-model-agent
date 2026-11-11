@@ -39,6 +39,13 @@
 - [webui sidebar tabs](./2026-09-30-webui-sidebar-tabs-design.md)
 - [lsp doctor](./2026-10-02-lsp-doctor-design.md)
 
+## Папки версий
+
+Спеки, собранные под конкретный релиз, живут в папке с номером версии:
+
+- [0.25.2](./0.25.2/README.md) — surrender-recovery: честная ошибка недоступного шелла,
+  директивы без паралича, улики критика, аудит на форс-финале
+
 ## Активные работы
 
 Спеки за последнюю неделю (2026-10-30 …) — текущий контекст, а не вечный контракт:
@@ -75,3 +82,4 @@
 - [observability gaps](./2026-11-05-observability-gaps-design.md)
 - [webui activity phase](./2026-11-05-webui-activity-phase-design.md)
 - [critic transparency and fixes](./2026-11-05-critic-transparency-and-fixes-design.md)
+- [monolith split](./2026-11-10-monolith-split-design.md) — полное разделение UI / runtime

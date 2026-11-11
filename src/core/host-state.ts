@@ -52,6 +52,8 @@ export interface HostStateInput {
   execModule?: Pick<ExecutionModule, "getActivePlan">;
   usage?: UsageSnapshot;
   contextProbe?: { model: string; actual: number } | null;
+  /** Доступен ли активный эндпоинт по последней пробе. */
+  providerReachable?: boolean;
   workspace?: string;
   instructions?: { files: string[]; disabled: boolean };
   projectMap?: ProjectMapInfo | null;
@@ -187,6 +189,7 @@ export function buildHostState(deps: HostStateInput, busy: boolean): HostStateSn
     contextBreakdown: deps.usage?.contextBreakdown,
     llmSpeed: deps.usage?.llmSpeed,
     contextProbe: deps.contextProbe,
+    providerReachable: deps.providerReachable,
     workspace: deps.workspace,
     version: readMmaVersion(),
     dev: isDevBuild(),

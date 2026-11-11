@@ -235,6 +235,7 @@ export async function executeAgentLoop(
       slog,
       task: input,
       planSummary: ctx.deps.planSummary?.() ?? undefined,
+      planPendingSteps: ctx.deps.planPendingSteps?.() ?? undefined,
       toolEvents: gatherTurnToolEvents(contextManager, state.criticHistoryMark),
       beforeFinish: true,
       answerText: text,
@@ -249,6 +250,25 @@ export async function executeAgentLoop(
     if (action === "retry") {
       // Критик потребовал починки: один форс-вызов с его требованием.
       await ctx.finalizeWithoutTools(state, tokenTracker, onChunk, slog);
+    }
+    // S6: детерминированный аудит на форс-финале. Критик — LLM-гейт, он может
+    // таймаутнуть; без аудита самый рискованный ход остаётся единственным
+    // непроверенным. `exhausted` сам взводит `auditFailed`.
+    const auditVerdict = await auditGate.evaluate({
+      state,
+      iteration: state.iteration,
+      maxIterations: config.maxToolIterations,
+      logger,
+      contextManager,
+      slog,
+      onMeta,
+    });
+    if (auditVerdict?.action === "reject") {
+      // Аудит отклонил ответ: один форс-вызов с его требованием. Бюджет гейтов
+      // уже потрачен, поэтому прогон завершается честным провалом, а не
+      // «успехом» с незакрытым планом.
+      await ctx.finalizeWithoutTools(state, tokenTracker, onChunk, slog);
+      state.auditFailed = true;
     }
     state.stopReason = reason;
   }
