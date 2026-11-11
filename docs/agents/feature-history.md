@@ -10,6 +10,16 @@ the rules needed to avoid breaking things; this file keeps the detailed record.
 
 ---
 
+### Web UI: спиннер в селекторах без счётчика ожидания (2026-11-11)
+
+- Запрос: убрать отсчёт таймаута/ожидания из загрузок в селекторах модели,
+  провайдера, контекста и reasoning; оставить спокойный спиннер.
+- Удалён модуль `assets/js/settings/pending-wait.ts` и его вызов из
+  `selectors-write.ts`; CSS `.sel > button.pending b::after` больше не
+  переключается на `data-wait`, а показывает `◐` с `margin-left: 6px`.
+- Проверки: `tests/webui-loading-indicators.test.ts` фиксирует спиннер,
+  отступ слева и отсутствие `content: attr(data-wait)`.
+
 ### Расширение mma-user-guide + бейдж «встроенный» в панели веба (2026-11-10)
 
 - `src/modules/skills/builtin/mma-user-guide.md` дополнен по живому разбору
