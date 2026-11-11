@@ -3,7 +3,7 @@
  * `store.ts` (попелка 300): атомарный write temp+rename, шифр при включённой
  * опции. Fail-open: битый/чужая версия → null.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, rmSync } from "fs";
 import { join } from "path";
 import { parseTurnCheckpoint, type TurnCheckpoint } from "./checkpoint";
 import type { SessionFileEncryptor } from "../security/session-encryption";
@@ -26,6 +26,17 @@ export function saveCheckpointFile(
   const tmp = `${target}.${process.pid}.tmp`;
   writeFileSync(tmp, body, { encoding: "utf-8", mode: 0o600 });
   renameSync(tmp, target);
+}
+
+/**
+ * Удаление чекпоинта хода. Чекпоинт описывает НЕЗАВЕРШЁННЫЙ ход (его читает
+ * resume после краша) — на границе хода он больше не актуален: оставленный
+ * файл восстанавливал бы счётчики прошлого хода (стрик молчания, лимит
+ * итераций, duplicate-детектор) в следующий, и новый запрос пользователя
+ * умирал на первом же пакете (ses_mwc2p7hh_…, 2026-11-11).
+ */
+export function deleteCheckpointFile(sessionDir: string): void {
+  rmSync(checkpointPathOf(sessionDir), { force: true });
 }
 
 /** Чтение чекпоинта; нет/битая/чужая версия — null. */
