@@ -1,453 +1,282 @@
 # MMA — Micro Models Agent
 
-General-purpose AI agent harness for small models (Qwen3.5-9B, 32K–64K context). Не только код.
+General-purpose AI agent harness for small models (Qwen3.5-9B, 32K–64K context). Не только код:
+разработка, погода, умный дом, API, ассистент, поиск. Промпты, тулы и дефолты **не** предполагают
+репозиторий с кодом; онбординг спрашивает о профиле и домене, а не о языке.
 
-> **Архитектура (нормативно):** [architecture v2](./docs/specs/2026-10-12-architecture-v2-design.md)
-> · **Описание текущего состояния:** [architecture.md](./docs/agents/architecture.md)
-> · **Канон стиля чата:** [STYLE.md](./docs/design/ui/STYLE.md)
-> · **Changelog:** [CHANGELOG.md](./CHANGELOG.md) · **Лог фич:** [feature-history.md](./docs/agents/feature-history.md)
+> **Нормативно:** [architecture v2](./docs/specs/2026-10-12-architecture-v2-design.md) ·
+> **Текущее состояние:** [architecture.md](./docs/agents/architecture.md) ·
+> **Гейты:** [gates.md](./docs/agents/gates.md) · **Стиль чата:** [STYLE.md](./docs/design/ui/STYLE.md) ·
+> **Карта документации:** [docs/README.md](./docs/README.md) · **Changelog:** [CHANGELOG.md](./CHANGELOG.md)
 
-> ## ⚠️ BETA — версии только `0.x.y`
->
-> `1.0.0` запрещён, пока проект в бете; автобамп в `1.x.x` запрещён. Выход из беты —
-> отдельное осознанное решение. Гвард: `tests/version-beta.test.ts` падает при version ≥ `1.0.0`.
+> **⚠️ BETA — версии только `0.x.y`.** `1.0.0` запрещён, пока проект в бете; автобамп в `1.x.x` —
+> тоже. Выход из беты — отдельное осознанное решение. Гвард: `tests/version-beta.test.ts`.
 
-> ## 🔴 Архитектура в переходном состоянии
->
-> Спека **architecture v2** описывает целевой каркас; код ему соответствует **частично**.
-> Инварианты из спеки помечены `INV-N` — они нормативны для нового кода. Перед правкой
-> в `src/core/`, `src/tools/executor.ts`, `src/modules/security/`, `src/config/` прочитай
-> §1 спеки. Разбор текущего состояния и 13 находок, которых не было в аудите, — там же.
-
----
-
-## Позиционирование
-
-MMA применяют для чего угодно: разработка, погода, умный дом, API, ассистент, поиск.
-Промпты, тулы и дефолты **не** предполагают задачу про репозиторий с кодом; онбординг
-спрашивает о профиле и домене, а не о языке. Код (файлы, bash, LSP) — частный случай.
+> **🔴 Архитектура в переходном состоянии.** Спека architecture v2 — целевой каркас; код
+> соответствует **частично**. Инварианты `INV-N` нормативны для нового кода. Перед правкой в
+> `src/core/`, `src/tools/executor.ts`, `src/modules/security/`, `src/config/` прочитай §1 спеки.
 
 ---
 
 ## Как устроена разработка
 
 ```bash
-bun test              # тесты (vitest, ~3800)
-bun run quality       # гейт: typecheck + typecheck:frontend + lint + fallow
-bun run mma "<промпт>"   # прогнать агента вживую
+bun test                                  # вся сюита
+bun test tests/core/agent.test.ts         # один файл
+bun test tests/core/agent.test.ts -t "имя" # один тест
+bun run quality                           # typecheck + frontend + arch-гейты + lint + fallow
+bun run mma "<промпт>"                    # живой прогон агента
 ```
 
-Инварианты §1 спеки под гвардами (`tests/arch/*`, `tests/output/*`,
-`tests/tools/security-decl.test.ts`); они прогоняются в `bun run quality` шагом
-`check:arch` (`bun test tests/arch tests/output`). Правило «≤300 строк» — гейт
-`tests/arch/file-size.test.ts` + `.arch-allowlist.json` (потолки только уменьшаются).
-[docs/agents/debt.md](./docs/agents/debt.md) (правило 9).
+`quality` **не** заменяет `bun test`: он гоняет `tests/arch` и `tests/output` (`check:arch`), но не
+всю сюиту. Что какой гейт держит — [gates.md](./docs/agents/gates.md).
 
-Прочие: `bun run dev` (watch) · `bun run web:dev` · `bun run build:prod` (релиз) ·
+CI (`.github/workflows/quality.yml`) строже локали: coverage-порог **87% funcs / 90% lines**,
+`bun run evals:check`, `bun test tests/replay`, POSIX-полоса `bun run quality:posix`. pre-push на
+`master`/`main` гоняет `quality && bun test`; обход — `--no-verify`, только осознанно.
+
+Прочее: `bun run dev` (watch) · `bun run web:dev` · `bun run test:integration` ·
 `bun run test:e2e` (Playwright, **только по явной команде**).
 
-**CLI:** `bun run mma setup` (мастер провайдера) · `mma meet` · `mma agents init` ·
-`mma session list|show|delete`.
+**CLI:** `bun run mma setup` · `mma meet` · `mma agents init` · `mma session list|show|delete`.
 
-|                 |                                                                                |
-| --------------- | ------------------------------------------------------------------------------ |
-| **Runtime**     | Bun + TypeScript (strict, NodeNext)                                            |
-| **Тесты**       | vitest через `bun test`                                                        |
-| **Линт**        | Biome (linter only; формат — Prettier)                                         |
-| **Фронтенд**    | TypeScript в `src/modules/webui/assets/**`, отдельный `tsconfig.frontend.json` |
-| **Зависимости** | commander, js-tiktoken, jsonrepair, picocolors, playwright, string-width, yaml |
+|                 |                                                                                                      |
+| --------------- | ---------------------------------------------------------------------------------------------------- |
+| **Runtime**     | Bun + TypeScript (strict, NodeNext)                                                                  |
+| **Тесты**       | `bun test` — раннер Bun (vitest-совместимый API); vitest — только integration/e2e                     |
+| **Линт**        | Biome (только линтер; формат — Prettier, в гейт не входит; фронтенд `assets/**` вне Biome)           |
+| **Фронтенд**    | TypeScript в `src/modules/webui/assets/**`, отдельный `tsconfig.frontend.json`                       |
+| **Зависимости** | commander, fast-xml-parser, js-tiktoken, jsonrepair, pdfjs-dist, picocolors, playwright, string-width, yaml |
 
 ---
 
 ## Правила работы
 
+По умолчанию — **минимальная правка, которая решает задачу**. Всё остальное — в реестр долгов.
+
 ### 1. Три измерения — обязательны
 
 Изменение не завершено, пока явно проверены:
-**пользователь** (UX, i18n, предсказуемость, обратимость, читаемость) ·
+**пользователь** (UX, i18n, предсказуемость, обратимость) ·
 **модель** (формулировки тулов, объём tool-output, устранимость ошибок, бюджет контекста) ·
-**смежные модули** (провайдеры, сессии, плагины, security, контракты типов/событий/конфига,
-`session.jsonl`).
+**смежные модули** (провайдеры, сессии, плагины, security, контракты, `session.jsonl`).
 
-### 2. Спека — до кода, если меняется система
+### 2. Спека — только при смене контракта
 
-Правка, которая меняет **контракт** (путь данных, границу модуля, точку enforcement,
-формат события, схему конфига), сначала получает спеку в
-`docs/specs/<YYYY-MM-DD>-<тема>-design.md`. Правка в пределах существующего контракта —
-спеки не требует.
+Спека нужна, если меняется **публичный** контракт: API модулей (`src/core/api/`), формат
+`session.jsonl` или конфига, точка enforcement, REST/SSE-событие, контракт плагина. Файл —
+`docs/specs/<YYYY-MM-DD>-<тема>-design.md`, в той же ветке.
 
-Спека отвечает на «что правильно», план — на «в каком порядке». Не смешивать.
+Внутренний рефакторинг, багфикс, UI-текст, новый ключ конфига по существующей схеме — **без спеки**.
+Спека отвечает «что правильно», план — «в каком порядке».
 
-### 3. Одна задача — одна ветка, один контракт
+### 3. Одна ветка — одна связная правка
 
-Интеграционная ветка проекта — **`dev`**. Любая задача — **отдельная ветка** от `dev`:
-`<type>/<краткое>` (`feat/`, `fix/`, `docs/`, `refactor/`, `chore/`). В `dev` коммитим
-только слиянием задачи; в `master` не коммитим и не пушим — это ветка релиза, в неё
-`dev` попадает осознанным merge после стабилизации. Спека коммитится в той же ветке.
-Интеграция задачи — merge/PR в `dev` после зелёных `bun test` + `bun run quality`.
+Интеграционная ветка — **`dev`**. Задача — отдельная ветка от `dev`: `<type>/<краткое>`
+(`feat/`, `fix/`, `docs/`, `refactor/`, `chore/`); в `dev` попадает слиянием, в `master` не
+коммитим. Интеграция — после зелёных `bun test` + `bun run quality`.
 
-**Задача, которая правит 6 файлов, — это 6 задач.** Если правка затрагивает и ядро, и модуль,
-и веб, и конфиг — раздели на волны, у каждой проверяемый результат. Массовая правка
-«заодно» в рамках одной ветки недопустима: её невозможно откатить частично и невозможно
-ревьюить.
+Если правка тянет ядро **и** модуль **и** веб **и** конфиг — раздели на волны: каждая зелёная и
+откатывается отдельно. Делить «по файлам» не нужно: связная правка на 4–6 файлов — норма.
 
 ### 4. Не чинить симптом, если он следствие
 
-Перед правкой ответь на вопрос: **этот дефект — следствие структуры или самостоятельный баг?**
-Ответ «следствие» означает: либо фикс не поможет и вернётся, либо нужен архитектурный шаг
-(см. спеку architecture v2), а не патч. Признаки «это архитектура»:
-
-- дефект повторялся на 2+ фиксах в этой подсистеме;
-- «неправильный» код трудно объяснить — значит, неверна граница, а не автор;
-- две подсистемы решают одну задачу по-разному (сборка промпта в трёх местах);
-- отказ модуля неотличим от «модуль не нужен»;
-- проверка живёт в хендлере, а не в точке исполнения.
+Перед правкой ответь: **дефект — следствие структуры или самостоятельный баг?** Признаки
+«это архитектура»: повторялся на 2+ фиксах; «неправильный» код трудно объяснить; две подсистемы
+решают одну задачу по-разному; отказ модуля неотличим от «модуль не нужен»; проверка живёт в
+хендлере, а не в точке исполнения. Тогда нужен архитектурный шаг, а не патч.
 
 ### 5. Инвариант — это проверка, а не текст
 
-Если правило можно нарушить незаметно — оно будет нарушено. Любое новое правило
-архитектуры сразу получает проверку: тест или guard (гейты — `tests/arch/*`,
-`tests/output/*`, прогоняются в `quality` шагом `check:arch`).
-Правило без проверки живёт максимум до следующего большого изменения.
-
-Сейчас проверками являются: `tests/output/no-direct-console.test.ts`,
-`tests/webui-boundaries.test.ts`, `tests/webui-frontend-graph.test.ts`,
-`tests/core/command-catalog.test.ts`, `tests/version-beta.test.ts`,
-`tests/no-moe-surface.test.ts`, `tests/output/source-filled.test.ts`,
-`tests/arch/module-boundaries.test.ts`, `tests/tools/security-decl.test.ts`,
-`tests/arch/egress-guard.test.ts`, `tests/arch/debt-register.test.ts`, `tests/arch/outbound-policy.test.ts`,
-`tests/core/session-diagnose.test.ts`, `tests/arch/observability-coverage.test.ts`,
-`tests/arch/double-honesty.test.ts`, `tests/replay/invariants.test.ts`, `tests/arch/guidance-enforcement.test.ts`, `tests/arch/timeout-relations.test.ts`, `tests/arch/session-provenance.test.ts`, `tests/arch/default-single-source.test.ts`, `tests/compaction-cooldown-invariant.test.ts`, `tests/arch/platform-skips.test.ts`, `tests/arch/style-rules.test.ts`, `tests/arch/llm-call-options.test.ts`, `tests/core/reasoning-strategy-resolve.test.ts`.
-
-Данные провайдера при смене идентичности (INV-R2/R8, спеки
-`2026-11-10-provider-switch-probes-design.md` и
-`2026-11-10-hosted-reasoning-off-discovery-design.md`) держат:
-`tests/core/provider-switch-probes.test.ts` (capabilities-перепроба, `probePassed`,
-remember для новой пары, `probe: false` без сети, discovery выключателя хостеда),
-`tests/llm/reasoning-off-probe.test.ts` (эмпирика `none`: 200/400-про-параметр/
-несвязанный 400, кэш), `tests/core/provider-setprovider.test.ts` (память моделей
-провайдера, INV-19), `tests/llm/provider-context-probe.test.ts` (`limit.context`).
-
-Границы безопасности тулов (аудит harness-модулей, волна W3) держат:
-`tests/tools/bash-scope.test.ts` (workdir-jail), `tests/tools/write-path-allowlist.test.ts`
-(allowlist записи во всех мутирующих тулах), `tests/tools/glob-scope.test.ts`
-(выдача glob по скоупу/protected), `tests/tools/process-session-scope.test.ts`
-(изоляция фоновых процессов), `tests/security/ads-and-case.test.ts` (ADS и регистр),
-`tests/security/command-blacklist.test.ts` (чёрные списки команд),
-`tests/ui/output-sanitize.test.ts` (control-символы в выводе).
-
-Веб-контур (волна W4) держат: `tests/tools/web-search-status.test.ts` (HTTP-статус),
-`tests/tools/web-browse-parity.test.ts` (паритет web_browse/web_fetch),
-`tests/tools/web-error-urlish.test.ts` (формат ошибок и кап),
-`tests/tools/html-shell-detection.test.ts` (детект JS-шелла),
-`tests/tools/untrusted-content-framing.test.ts` (рамка недоверенного контента),
-`tests/security/dns-guard.test.ts` (DNS-резолв в SSRF-политике),
-`tests/security/attach-image-redirect.test.ts` (редиректы и размер картинки),
-`tests/modules/browser/session-ssrf.test.ts` (приватные адреса в браузере),
-`tests/modules/browser/bridge-runtime.test.ts` (рантайм моста),
-`tests/modules/browser/preflight.test.ts` (Chromium не установлен),
-`tests/modules/skills/prompt-and-loader.test.ts` (скиллы),
-`tests/tools/subagent-max-tokens.test.ts` (кап токенов субагента),
-`tests/tools/subagent-expert-tag.test.ts` (список `expert_tag` в схеме и отказ в audit),
-`tests/tools/subagent-session-log.test.ts` (журнал прогона `subagent` в `session.jsonl`).
-
-Конфиг, CLI и сессии (волна W7) держат: `tests/config/migration.test.ts`
-(миграция v1), `tests/config/atomic-save.test.ts` (атомарная запись доменов),
-`tests/cli/config-reset.test.ts` (сброс json/list), `tests/providers/fallback-model.test.ts`
-(failover и общие лимиты), `tests/webui-busy-guard.test.ts` (гейт занятости),
-`tests/cli/exit-codes.test.ts` (коды возврата), `tests/modules/setup/apply.test.ts`
-(setup-мастер), `tests/session/rotate-and-prune.test.ts` (ротация лога и prune),
-`tests/cli/background-children.test.ts` (гашение фоновых детей).
-
-LSP и индексатор (волна W8) держат: `tests/modules/lsp/connection-kill.test.ts`
-(pid и tree-kill), `tests/modules/lsp/stderr-drain.test.ts` (чтение stderr),
-`tests/modules/lsp/version-skew.test.ts` (версии диагностик и устаревший exit),
-`tests/modules/lsp/check-honesty.test.ts` (честность `lsp_check`),
-`tests/modules/lsp/check-cold-start.test.ts` (холодный старт не ждёт 30 с),
-`tests/modules/lsp/cache-invalidation.test.ts` (правка файлов мимо write-хуков
-пересинкается, кэш диагностик не отдаётся после изменения другого файла,
-заблокированный pre-write черновик не остаётся в сервере),
-`tests/cli/provider-add-limits.test.ts` (лимиты провайдера),
-`tests/modules/indexer/incremental-rebuild.test.ts` (инкрементальная пересборка).
-
-Терминал, i18n и комплитер (волна W9) держат: `tests/ui/question-modal.test.ts`
-(меню вопроса видно сразу), `tests/ui/line-editor-lifecycle.test.ts` (Ctrl+D и
-resize), `tests/ui/md-terminal-parity.test.ts` (терминал и веб понимают один
-Markdown), `tests/ui/table-fit.test.ts` (таблицы влезают в терминал),
-`tests/cli/completer-cursor.test.ts` (комплитер по курсору), `tests/i18n.test.ts`
-(паритет ключей и плейсхолдеров).
-
-Service API и updater (волна W10) держат: `tests/service/tenant-authz.test.ts`
-(тенант процесса и 403 на чужой заголовок), `tests/service/idempotency-tenant.test.ts`
-(principal/вопросы), `tests/service/retention.test.ts` (prune/кап событий/waiter),
-`tests/service/webhook-ssrf.test.ts` (https/SSRF, подпись, дедлайн),
-`tests/service/output-strict.test.ts` и `output-attempt.test.ts` (строгая схема,
-первая попытка не в SSE), `tests/service/sse-limits.test.ts` (ready-кэш/троттл,
-кап и idle SSE, отмена последним подписчиком), `tests/updater-install-atomic.test.ts`
-(sha256+size, staged/flip, tar, `stop()`), `tests/session/session-id.test.ts`
-(криптостойкий id без PII-серий).
-
-Петля и контекст (волна W1/W2) держат: `tests/core/loop-duplicate-stop.test.ts`
-(жёсткий стоп по status-тулу → `stopReason=duplicate` + форс-ответ),
-`tests/core/directive-survives-compaction.test.ts` (директивы переживают
-компакцию), `tests/core/tool-batch-recovery-throttle.test.ts` (троттлинг
-recovery-директивы и кап файлов памяти), `tests/core/context-w2.test.ts`
-(evidence по ходу, токены картинок по пикселям, очередь картинок,
-`overcommitted`), `tests/core/compaction-no-reduction.test.ts`
-(`skipped_no_reduction`), `tests/modules/execution/stuck-turn-scope.test.ts`
-(окно `recentOutcomes`, per-turn сброс и кулдаун recovery),
-`tests/core/tool-batch-research-convergence.test.ts` (стойкость research-стрика),
-`tests/core/loop-repeat.test.ts` (каноническая подпись повтора),
-`tests/core/history-budget-threshold.test.ts` (пороги «история против истории»),
-`tests/core/tool-ledger-bounds.test.ts` (границы леджера тулов),
-`tests/core/llm-truncation-recovery.test.ts` (обрыв генерации до ответа: повтор
-с выключенным reasoning и удвоенным бюджетом, одна попытка).
-
-Живой прогон на 9B (2026-10-22) вскрыл два дефекта, закрытых гвардами:
-`tests/core/system-prompt-freeze.test.ts` (карта проекта — снимок на ход:
-изменение карты рвало KV-кеш префикса, стабильность 51% → 99%) и
-`tests/modules/lsp/write-check-cold-start.test.ts` (холодный старт LSP не
-блокирует запись: было 30–31 с на write, стало 0.1–4 с).
-
-Веб-поверхность (волна W6) держат: `tests/webui-security-headers.test.ts`
-(заголовки и auth на статику), `tests/webui-body-limits.test.ts` (капы тела и
-памяти, SSRF проб), `tests/webui-error-propagation.test.ts` (коды ошибок),
-`tests/webui-svg-and-questions.test.ts` (SVG и отмена вопроса),
-`tests/webui-rate-limit.test.ts` (троттл по сессиям),
-`tests/webui-pool-lru.test.ts` (вытеснение раннеров),
-`tests/webui-log-incremental.test.ts` (инкрементальное чтение лога),
-`tests/webui-feed-lifecycle-dom.test.ts` (таймеры и параллельный busy),
-`tests/webui-command-session.test.ts` (вывод slash-команды),
-`tests/webui-xss-guard.test.ts` (HTML-стоки во фронтенде).
+Новое архитектурное правило сразу получает гейт: тест в `tests/arch/` (или `tests/output/`).
+Правило без проверки живёт максимум до следующего большого изменения. Существующие гейты и
+инварианты — [gates.md](./docs/agents/gates.md); перечень файлов там не дублируется, чтобы не гнить.
 
 ### 6. Не расширять файл «заодно»
 
-Правило ≤300 строк действует там, где есть чистый шов. Файл >300 строк — повод
-разрезать, а не «дописать»: запись в `.arch-allowlist.json` — явный долг, и его
-потолок только уменьшается.
-
-Осознанных исключений сейчас нет: `.arch-allowlist.json` пуст, каждый файл ≤300
-строк. Гейт — `tests/arch/file-size.test.ts`.
+Файл >300 строк — повод разрезать, а не «дописать». `.arch-allowlist.json` пуст; потолки только
+уменьшаются. Гейт — `tests/arch/file-size.test.ts`.
 
 ### 7. Определение «готово»
 
-Пункта «работает у меня» нет. Задача закрыта, когда:
-`bun test` зелёный · `bun run quality` зелёный · для изменения поведения — тест, который
-**падал бы** без правки · для UI/CLI — живой прогон · для текста, видимого модели или
-пользователю, — запись в `session.jsonl` или логе, по которой видно, что произошло.
+Нет пункта «работает у меня». Задача закрыта, когда:
 
-### 8. Playwright и фоновые процессы
+- `bun test` и `bun run quality` зелёные;
+- для изменения поведения есть тест, который **падал бы** без правки;
+- для UI/CLI — живой прогон;
+- для текста, видимого модели или пользователю, — запись в `session.jsonl` или логе;
+- для docs-only — ссылки резолвятся (`tests/docs-link-check.test.ts`).
 
-- **Браузер — только по явной команде пользователя.** Сам не гоняй UI-сценарии.
-- **Фоновые процессы — контролируемо:** `Start-Process` фоном, логи в файл, PID сохранён,
-  readiness-поллинг, остановка строго по `Stop-Process -Id`. Не убивай пачкой.
+### 8. Долг платится один раз
+
+Костыль допустим, но не молча: запись в [debt.md](./docs/agents/debt.md) — `id`, что именно,
+почему отложено, критерий выхода (обычно гейт), триггер, дата. В коде — пометка `DEBT(<id>)`;
+гвард `tests/arch/debt-register.test.ts` не даёт осиротеть ни пометке, ни записи.
+
+Пришёл триггер — долг **оплачивается** (убрать костыль или добавить проверку), а не переносится.
+Реестр должен оставаться коротким: длинный список — сигнал, что задача нарезана неправильно.
+
+### 9. Браузер и фоновые процессы
+
+- **Playwright — только по явной команде пользователя.** Сам UI-сценарии не гоняй.
+- Фоновые процессы: лог в файл, PID сохранён, readiness-поллинг, остановка строго по PID.
 - Пишущие проверки изолируй через `MMA_CONFIG_DIR` — не пиши в реальный `~/.mma`.
 
-### 9. Долг платится один раз (pay-once)
-
-Костыль, временное решение, отложенная правка — **допустимы**, но не **молча**. Долг,
-которого нет в реестре ([`docs/agents/debt.md`](./docs/agents/debt.md)), не существует:
-«оставим на потом» без записи — дефект процесса, а не экономия.
-
-Каждая запись: `id` · что именно · **почему** отложено · **критерий выхода** (что значит
-«заплачено» — обычно проверка из правила 5) · **триггер** (какая задача/волна платит) · дата.
-
-- **Отложить можно один раз.** Когда названный триггер трогает этот код или волна
-  наступила — долг **оплачивается**, а не переносится. Повторный перенос — нарушение;
-  требует явного решения пользователя и причины в реестре.
-- **Заплатить = убрать костыль или добавить проверку.** Для изменения поведения —
-  тест, который падал бы до правки (правило 7).
-- В месте кода/спеки долг помечен `DEBT(<id>)`; гвард `tests/arch/debt-register.test.ts`
-  не даёт осиротеть ни пометке, ни записи.
-- Реестр должен оставаться **коротким**. Растущий реестр — сигнал, что задача нарезана
-  неправильно (правило 3), а не что «долг нормален».
+Детали и команды — [testing.md](./docs/agents/testing.md).
 
 ---
 
 ## Архитектура
 
-Полное описание и нормативные инварианты — в
-[architecture v2](./docs/specs/2026-10-12-architecture-v2-design.md). Здесь — карта.
-
-### Слои
+Полное описание и нормативные инварианты — в [architecture v2](./docs/specs/2026-10-12-architecture-v2-design.md).
 
 ```
 Поверхности (Host)     REPL · mma web · mma serve · one-shot
                               ▼
 ЯДРО  src/core          Agent (петля+фазы) · ToolExecutor (ENFORCEMENT)
-                        ContextManager · PromptAssembler · ConfigStore
+                        ContextManager · PromptAssembler · Config (registry+effects)
                         Observability (Logger/SessionLog) · ModuleHost
                         публичный API модулей: src/core/api/**
                               ▼
-МОДУЛИ src/modules      lsp · browser · indexer · skills · mcp · memory
-                        critic(service) · execution(plan) · onboarding · service · …
+МОДУЛИ src/modules      lsp · browser · indexer · skills · mcp · memory · providers
+                        evals · otel · documents · session(checkpoint) · service · …
 ```
 
-**Критерий «ядро или модуль»:** можно ли отключить и продолжить работать?
-Нет → ядро. Да → модуль. Границы, проведённые не по этому критерию, — источник
-половины дефектов аудита.
+**Критерий «ядро или модуль»:** можно ли отключить и продолжить работать? Нет → ядро. Да → модуль.
+Модуль видит ядро только через `src/core/api/`.
 
-`context/` и `hallucination/` переехали в **ядро** (`src/core/context/`,
-`src/core/hallucination/`, W4). В **модулях** остаётся всё отключаемое; модуль видит
-ядро только через `src/core/api/`.
+**Зависимости.** Ядро → модули. Модуль не импортирует `core/agent/*` и не вызывает чужие
+`tool.handler` напрямую. Гейт — `tests/arch/module-boundaries.test.ts` (INV-3/4).
 
-### Направление зависимостей
+**Enforcement — одна точка.** `ToolExecutor.execute()` — единственное место allowlist, тегов,
+scope/protected-путей, SSRF и rate-limit (INV-9/10). Новый тул объявляет
+`security: { caps, pathArgs?, urlArgs?, manual? }`; поле обязательное, форму стережёт
+`tests/tools/security-decl.test.ts`.
 
-Ядро → модули. **Модуль не импортирует `core/agent/*` и не вызывает чужие `tool.handler`
-напрямую.** Держит гвард `tests/arch/module-boundaries.test.ts` (INV-3/INV-4): текущие
-зависимости — явный allowlist, который может только сокращаться.
+**Наблюдаемость — один позвоночник.** События несут `source` (`mma` | `module:<name>` |
+`tool:<name>` | `core`); ошибки — объект `module/operation/kind/cause`, не строка. Fail-open
+обязан оставить запись с причиной, иначе поломка неотличима от успеха.
 
-### Enforcement — одна точка
+**Конфигурация — один путь записи.** `setConfigValue` (`src/config/registry.ts`) возвращает
+**эффекты** (`context.resize`, `provider.rebuild`…), а не флаг `reconfigure: boolean`; применяет
+их `applyConfigEffects`. Модуль объявляет свои ключи сам.
 
-`ToolExecutor.execute()` — единственное место, где применяются allowlist, теги,
-scope/protected-пути, SSRF, rate-limit (W2, INV-9/10). Хендлер тула политику **не**
-реализует и не импортирует security-примитивы. Новый тул объявляет
-`security: { caps, pathArgs?, urlArgs?, manual? }` — поле обязательное (без него не
-компилируется); форму стережёт `tests/tools/security-decl.test.ts`, применение —
-`tests/tools/enforcement-*.test.ts`.
-
-### Наблюдаемость — один позвоночник
-
-Все события несут `source` (`mma` | `module:<name>` | `tool:<name>` | `core`).
-Все ошибки — объект с `module/operation/kind/cause`, не строка. Fail-open обязан оставить
-запись с причиной, иначе поломка неотличима от успеха.
-
-### Конфигурация — один путь записи
-
-`ConfigStore.set` возвращает **эффекты** (`context.resize`, `provider.rebuild`…), а не
-флаг `reconfigure: boolean`. Модуль объявляет свои ключи сам.
-
-### Петля
-
-```
-INIT → THINK → OBSERVE → VERIFY → OUTPUT → ERROR
-```
-
-Развилки нет: `Agent.run` вызывает петлю ровно один раз, все гейты (hallucination →
-critic → audit) стоят внутри. MoE удалён 2026-10-12 — он был вторым путём исполнения
-и обходил гейты ([спека](./docs/specs/2026-10-12-remove-moe-design.md)).
-Параллельные сабагенты — не развилка: `parallelizable` на `subagent` гонит их через
+**Петля.** `INIT → THINK → OBSERVE → VERIFY → OUTPUT → ERROR`. Развилок нет: `Agent.run` вызывает
+петлю один раз, гейты (hallucination → critic → audit) внутри. Параллельные сабагенты идут через
 `ToolExecutor.fork()` в той же фазе Observe.
 
 ---
 
 ## Карта кода
 
-| Область            | Путь                                             | Что знать перед правкой                                    |
-| ------------------ | ------------------------------------------------ | ---------------------------------------------------------- |
-| Петля агента       | `src/core/agent.ts`, `src/core/agent/*`          | разбор на фазы — W5 спеки                                  |
-| Контекст/компакция | `src/core/context/` (переехал из `modules/`, W4) | `getContextTokens()` — единственный вход порогов           |
-| Провайдеры         | `src/modules/providers/`                         | резолв активной **записи** из `entries[]`, не legacy-полей |
-| Конфиг             | `src/config/registry.ts` + `registry-extra.ts`   | `registry.ts` grandfathered; новые дефы — в `-extra`       |
-| Тулы               | `src/tools/`                                     | `ToolExecutor` — единственный путь исполнения              |
-| Модули             | `src/modules/*`                                  | подключаются в bootstrap-фазах `src/core/bootstrap/`       |
-| Терминал           | `src/ui/`, `src/output/`                         | `OutputChannel` — единственный владелец терминала          |
-| Веб                | `src/modules/webui/`                             | SSE + REST; состояние event-sourced                        |
-| Сервис             | `src/modules/service/`                           | HTTP API v1; `1 тенант = 1 процесс`                        |
-| Плагины            | `src/modules/plugins/`                           | контракт экспортируется из `src/index.ts`                  |
-| Репл/CLI           | `src/cli/`                                       | каталог команд — `src/core/commands/`                      |
+| Область            | Путь                                                    | Что знать перед правкой                                  |
+| ------------------ | ------------------------------------------------------- | -------------------------------------------------------- |
+| Петля агента       | `src/core/agent.ts`, `src/core/agent/*`                 | фазы, гейты, восстановление после сбоев                  |
+| Контекст/компакция | `src/core/context/`                                     | `getContextTokens()` — единственный вход порогов         |
+| Промпт             | `src/core/prompt-*.ts`                                  | сборка системного промпта, снимок карты на ход           |
+| Провайдеры         | `src/modules/providers/`, `src/llm/`                    | активная **запись** из `entries[]`; адаптеры и пробы — `llm/` |
+| Конфиг             | `src/config/`                                           | ключ — `registry*.ts`, значение — `defaults.ts`          |
+| Тулы               | `src/tools/`                                            | `ToolExecutor` — единственный путь исполнения            |
+| Модули             | `src/modules/*`                                         | подключаются в bootstrap-фазах `src/core/bootstrap/`     |
+| Терминал           | `src/ui/`, `src/output/`                                | `OutputChannel` — единственный владелец терминала        |
+| Веб                | `src/modules/webui/`                                    | SSE + REST; состояние event-sourced; фронтенд `assets/**` |
+| Сервис             | `src/modules/service/`                                  | HTTP API v1; 1 тенант = 1 процесс                        |
+| Плагины            | `src/modules/plugins/`                                  | контракт экспортируется из `src/index.ts`                |
+| CLI/REPL           | `src/cli/`, `src/core/commands/`                        | каталог команд; подкоманды — handler-map                 |
+| Тексты             | `src/i18n/*.json`, `src/modules/webui/assets/app-i18n.ts` | **два** словаря: CLI и веб                            |
+| Сборка/CI          | `scripts/`, `.github/workflows/`                        | build, release, гейты                                    |
 
 ---
 
 ## Инварианты, которые легко сломать
 
-- **Single-writer терминала.** Продюсеры эмитят `OutputEvent` в `OutputBus`. Прямой
-  `console.*`/`process.*.write` в `src/` запрещён — гвард `tests/output/no-direct-console.test.ts`.
-  Allowlist: crash-handler, machine JSON, browser bridge, non-TTY fallback.
-- **Стиль чата — только STYLE.md.** Никаких boxed-панелей (`┌─┐`, `│─┼`); системные имена
-  тулов не показываем **никогда** (только `tool.friendly.*`); один глиф действия `◇`;
-  quiet by default. Расхождение со STYLE.md = баг.
-- **Allowlist тулов строгий.** `alwaysOn` и теги его **не** обходят.
-- **Защищённые пути — always-on** (`protected-paths.ts`): `.git/`, `.env*`, `*.key|pem|p12|crt`,
-  `.npmrc`, `.netrc` — независимо от `security.paths.enabled`.
-- **Правило #17:** подкоманды REPL/CLI и REST-маршруты — через карту хендлеров
-  (`Record<string, …>`), не цепочкой `if`. Каталог команд — `src/core/commands/`.
-- **Единственный источник правды:** конфиг-ключи в `registry-extra.ts`; секции веб-панели в
-  `PANEL_SECTIONS`; провайдеры в `BUILTIN_PROVIDERS`; состояние веба — в SSE-событии.
-- **Типизация:** никаких `as any` (см. [code-style.md](./docs/agents/code-style.md)).
-- **i18n:** все пользовательские строки через `t()`. Хардкод в чат/CLI = баг.
-  Ключи `en`/`ru` симметричны (`tests/i18n.test.ts`).
+- **Single-writer терминала.** Продюсеры эмитят `OutputEvent` в `OutputBus`; прямой
+  `console.*`/`process.*.write` в `src/` запрещён (`tests/output/no-direct-console.test.ts`).
+- **Стиль чата — только STYLE.md.** Никаких boxed-панелей; системные имена тулов не показываем
+  никогда (только `tool.friendly.*`); один глиф действия `◇`; quiet by default.
+- **Allowlist тулов строгий.** `alwaysOn` и теги его не обходят.
+- **Защищённые пути — always-on** (`src/modules/security/protected-paths.ts`): `.git/`, `.env*`,
+  `*.key|pem|p12|crt`, `.npmrc`, `.netrc` — независимо от `security.paths.enabled`.
+- **Подкоманды и маршруты — через handler-map** (`Record<string, …>`), не цепочкой `if`.
+  Каталог команд — `src/core/commands/`.
+- **Единственный источник правды:** ключ конфига — `registry*.ts` (+ значение в `defaults.ts`);
+  секции веб-панели — `PANEL_SECTIONS` (`src/modules/webui/assets/js/settings/controls.ts`); провайдеры —
+  `BUILTIN_PROVIDERS` (у фронтенда есть зеркало `PROVIDER_TYPES` — обновляй оба); состояние веба —
+  в SSE-событии.
+- **Типизация:** никаких `as any` ([code-style.md](./docs/agents/code-style.md)).
+- **i18n:** пользовательские строки — через `t()`; ключи `en`/`ru` симметричны (`tests/i18n.test.ts`);
+  строки веба — в `app-i18n.ts` (`tests/webui-i18n.test.ts`).
+- **Сгенерированное не редактируем:** `dist/`, `gh-pages/`, `certification/`, `tmp/`, `*.log`.
 
 ---
 
 ## Рецепты
 
-**Новый тул** — `src/tools/<name>.ts` → добавить в массив `registerAllTools`
-(`src/tools/index.ts:93`). В `ToolDefinition`: `tags` (сужение набора), `alwaysOn`,
-`interactive`, `timeoutMs`, `boundedOutput`, **`security: { caps, pathArgs?, urlArgs?,
-manual? }`** (INV-9/10; поле обязательно — enforcement в `ToolExecutor.execute()`).
+**Новый тул** — `src/tools/<name>.ts` → массив в `registerAllTools` (`src/tools/index.ts`).
+В `ToolDefinition`: `tags`, `alwaysOn`, `interactive`, `timeoutMs`, `boundedOutput` и обязательный
+`security: { caps, pathArgs?, urlArgs?, manual? }`.
 
-**Ключ конфига** — деф в `src/config/registry-extra.ts`. Типы:
-`string/int/share/bool/enum/json/list`. `editor` задаёт подсказку UI, не меняя значение.
+**Ключ конфига** — определение в `src/config/registry-extra.ts`, **значение в `src/config/defaults.ts`**
+(иначе падает `tests/arch/default-single-source.test.ts`). Типы: `string/int/share/bool/enum/json/list`.
 
-**Slash-команда** — каталог `src/core/commands/catalog.ts` + хендлер в
-`src/cli/repl-commands*.ts` (через handler-map, правило #17).
+**Slash-команда** — каталог `src/core/commands/catalog.ts` + хендлер в `src/cli/repl-commands*.ts`
+через handler-map.
 
-**Событие в логе** — тип в `src/core/types.ts` + запись через `SessionLogger` +
-указать `module` (INV-13).
+**Событие в логе** — тип в `src/core/types.ts` + запись через `SessionLogger` + `module` (INV-13).
 
-**Модуль** — `src/modules/<name>/`, подключается в bootstrap-фазе. Появление нового
-модуля требует решения: `critical?` и `teardown?` (§3.3 спеки).
+**Модуль** — `src/modules/<name>/`, подключение в bootstrap-фазе. Новый модуль требует решения:
+`critical?` и `teardown?` (§3.3 спеки).
 
 ---
 
 ## Ловушки
 
-- **Глобальный `mma` перехватывает прогоны вне репо.** Из папки без `package.json`
-  запускается старый `dist/`, а не `src/`. Запускай из корня репо с `-d <песочница>` и
-  сверяй версию в строке `Environment: … mma <версия>` с `package.json`.
-- **`disable` плагина ≠ sandbox.** Модуль уже `require`-нут, код верхнего уровня уже
-  выполнился. `permissions` — декларация для показа, **не** enforcement.
+- **Глобальный `mma` перехватывает прогоны вне репо.** Из папки без `package.json` запускается
+  старый `dist/`, а не `src/`. Запускай из корня с `-d <песочница>` и сверяй `mma <версия>` в
+  строке `Environment: …` с `package.json`.
+- **`tests/integration/**` исключён из `bun test`** (`bunfig.toml`). Тест, положенный туда, молча
+  не запустится — либо клади в `tests/`, либо гоняй `bun run test:integration`.
+- **`CHANGELOG.md` — 450 КБ.** Не читай целиком; новая запись — сверху.
+- **`disable` плагина ≠ sandbox.** Модуль уже `require`-нут; `permissions` — декларация для показа,
+  не enforcement.
 - **`vi.mock` в Bun глобален на процесс** — не использовать в тестах агента; есть швы
   (`ToolContext.agentFactory`, `criticOverride`, `finalAudit`).
-- **`gh-pages/` исключён из гейтов** намеренно (нет графа импортов; вёрстка даёт 59 ошибок).
-- **Три i18n-ключа есть только в `ru.json`** — `cli.config_value`, `cli.show_secrets`,
-  `cli.context_size_arg`. Не добавляй новые такие.
+- **`gh-pages/` исключён из гейтов** намеренно (нет графа импортов).
 
 ---
 
 ## Документация
 
-| Документ                                                                         | О чём                                                                              |
-| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| [docs/README.md](./docs/README.md)                                               | **Карта документации**: что читать, что нормативно, где история                    |
-| [CONTRIBUTING.md](./CONTRIBUTING.md)                                             | Как контрибьютить: ветки, гейты, PR                                                |
-| [architecture v2](./docs/specs/2026-10-12-architecture-v2-design.md)             | **Целевая архитектура, инварианты INV-1…23, план миграции**                        |
-| [architecture v2 — схемы](./docs/specs/2026-10-12-architecture-v2-schematics.md) | Схемы boot/ход/enforcement/наблюдаемость/конфиг + матрица контрактов               |
-| [remove-moe](./docs/specs/2026-10-12-remove-moe-design.md)                       | Удаление MoE: что снято, что осталось, порядок шагов                               |
-| [handoff](./docs/plans/2026-10-12-architecture-v2-handoff.md)                    | **Точка входа для следующей сессии**: статус W0–W2, порядок волн, открытые решения |
-| [debt.md](./docs/agents/debt.md)                                                 | **Реестр долгов (pay-once)**: что отложено, критерий выхода, триггер (правило 9)   |
-| [observability.md](./docs/agents/observability.md)                               | Инвентарь fail-open путей и их сигналов (INV-15)                                   |
-| [w1-module-host](./docs/specs/2026-10-13-w1-module-host-design.md)               | Контракт `ModuleHost`, миграция модулей, гейт (INV-2/5/7/8/16)                     |
-| [w2-enforcement](./docs/specs/2026-10-13-w2-enforcement-design.md)               | Единая точка enforcement, `ToolSecurityDecl` (INV-9/10)                            |
-| [reasoning-strategy](./docs/specs/2026-10-15-reasoning-strategy-design.md)       | Стратегия reasoning — свойство провайдера (INV-R1…R5, W3)                          |
-| [architecture.md](./docs/agents/architecture.md)                                 | Текущее состояние: Output, Host-seam, Security, контракт `LLMProvider`             |
-| [code-style.md](./docs/agents/code-style.md)                                     | Форматирование, типы, async/error, именование, i18n                                |
-| [tools.md](./docs/agents/tools.md)                                               | Question/Browser, изображения, сужение набора, процессы                            |
-| [modules.md](./docs/agents/modules.md)                                           | Сессии, project map, UI-рендер, плагины, бюджет, стоимость                         |
-| [execution.md](./docs/agents/execution.md)                                       | Гарантии петли, состояния, оркестратор, MoE, галлюцинации                          |
-| [testing.md](./docs/agents/testing.md)                                           | Тесты из консоли, веб через Playwright, сертификация моделей                       |
-| [service-api.md](./docs/agents/service-api.md)                                   | `mma serve`: endpoints, envelope, конфиг, ошибки, webhook                          |
-| [versioning.md](./docs/agents/versioning.md)                                     | Правила версий, релизный процесс                                                   |
-| [STYLE.md](./docs/design/ui/STYLE.md)                                            | **Канон** стиля чат-вывода                                                         |
-| [feature-history.md](./docs/agents/feature-history.md)                           | Как реализовывались фичи (вынесено из AGENTS.md 2026-10-12)                        |
+| Документ                                                | О чём                                                        |
+| ------------------------------------------------------- | ------------------------------------------------------------ |
+| [docs/README.md](./docs/README.md)                      | карта документации: что нормативно, где история              |
+| [CONTRIBUTING.md](./CONTRIBUTING.md)                    | клонирование, ветки, PR, DoD                                 |
+| [architecture v2](./docs/specs/2026-10-12-architecture-v2-design.md) | целевая архитектура, INV-1…23                  |
+| [architecture v2 — схемы](./docs/specs/2026-10-12-architecture-v2-schematics.md) | boot/ход/enforcement/конфиг |
+| [architecture.md](./docs/agents/architecture.md)        | текущее состояние: Output, Host-seam, Security, `LLMProvider` |
+| [gates.md](./docs/agents/gates.md)                      | инвариант → гейт, CI-гейты                                   |
+| [debt.md](./docs/agents/debt.md)                        | реестр долгов (pay-once)                                     |
+| [testing.md](./docs/agents/testing.md)                  | живые прогоны, Playwright, сертификация                      |
+| [code-style.md](./docs/agents/code-style.md)            | форматирование, типы, async/error, i18n                      |
+| [STYLE.md](./docs/design/ui/STYLE.md)                   | канон стиля чат-вывода                                       |
+
+Остальное: [execution](./docs/agents/execution.md) · [tools](./docs/agents/tools.md) ·
+[modules](./docs/agents/modules.md) · [service-api](./docs/agents/service-api.md) ·
+[versioning](./docs/agents/versioning.md) · [observability](./docs/agents/observability.md) ·
+[ModuleHost](./docs/specs/2026-10-13-w1-module-host-design.md) ·
+[enforcement](./docs/specs/2026-10-13-w2-enforcement-design.md) ·
+[reasoning](./docs/specs/2026-10-15-reasoning-strategy-design.md) ·
+[handoff](./docs/plans/2026-10-12-architecture-v2-handoff.md).
 
 ---
 
 ## Релиз
 
 Версии — вехи, не счётчик PR. **PATCH** — баги, i18n, доки, тесты. **MINOR** — новые
-команды/тулы/модули/ключи конфига. **MAJOR** — только реальная поломка без пути
-совместимости, и он **запрещён в бете**.
+команды/тулы/модули/ключи конфига. **MAJOR** — только реальная поломка без пути совместимости, и он
+**запрещён в бете**.
 
-Релиз: обновить `CHANGELOG.md` + `package.json` → тег `vX.Y.Z` → GitHub Actions соберёт
-артефакты под 5 платформ и опубликует Release с `latest.json`.
-**npm publish не используется** — раздача только через GitHub Releases.
-Релизный коммит и тег ставятся на `master`; перед этим `dev` сливается в `master`
-(обычный merge, без переноса рабочих веток).
-
-**Gitea не используется.** Единственный remote — `origin` (GitHub
-`Alexeykoh/micro-model-agent`). Зеркало `gitea` (`10.253.232.147`, из прошлой
-инфраструктуры) в этом репозитории больше не поддерживается: не пушить туда, не
-держать в синхронизации, не чинить его недоступность. Если оно понадобится
-снова — это отдельное осознанное решение, а не «дожать зеркало».
+Релиз: `CHANGELOG.md` + `package.json` → тег `vX.Y.Z` → GitHub Actions собирает артефакты под 5
+платформ и публикует Release с `latest.json`. npm publish не используется. Релизный коммит и тег —
+на `master`, перед этим `dev` сливается в `master` обычным merge. Единственный remote — `origin`
+(GitHub); зеркал нет.

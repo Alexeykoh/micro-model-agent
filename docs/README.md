@@ -26,6 +26,7 @@
 | [`archive/plans/`](./archive/plans)                        | Закрытые планы и планы из старых воркфлоу                               | История   |
 | [`agents/`](./agents)                                      | Описание текущего состояния подсистем                                   | **Живое** |
 | [`agents/architecture.md`](./agents/architecture.md)       | Текущее устройство: Output, Host-seam, Security, контракт `LLMProvider` | **Живое** |
+| [`agents/gates.md`](./agents/gates.md)                     | Инвариант → гейт, ворота CI                                             | **Живое** |
 | [`agents/debt.md`](./agents/debt.md)                       | Реестр долгов (pay-once)                                                | **Живое** |
 | [`agents/feature-history.md`](./agents/feature-history.md) | Как реализовывались фичи                                                | История   |
 | [`analysis/`](./analysis)                                  | Аудиты и разовые исследования                                           | История   |
