@@ -201,6 +201,11 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   trackContextProbe(deps.contextProbe, (p) => {
     probe = p;
   });
+  // Live provider switches update the shared context-probe box. The old
+  // bootstrap promise only carries the initial value; the web host must not
+  // freeze the first provider's measurement in the sidebar.
+  const currentContextProbe = (): ProbeValue | null | undefined =>
+    deps.agent.contextProbeSnapshot?.() ?? probe;
 
   const host = new WebHost({
     isBusy: () => state.pool.anyBusy(),
@@ -221,7 +226,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
           execModule: activeExecModule(state, deps.execModule, sessionId),
           usage: activeUsage(state, sessionId),
           updateAvailable: state.updateAvailable,
-          contextProbe: probe,
+          contextProbe: currentContextProbe(),
           workspace: deps.baseDir,
           instructions: deps.agentsMd,
           projectMap: deps.indexer?.mapInfo?.(),

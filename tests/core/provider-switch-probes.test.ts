@@ -242,6 +242,25 @@ describe("provider switch re-probes capabilities (INV-R2)", () => {
     expect(probePassedOf(agent)).toBe(true);
   });
 
+  it("publishes the new context probe for the web sidebar after a provider switch", async () => {
+    const base = startLmStub();
+    const config = testConfig([
+      { type: "lmstudio", label: "oldprov", baseUrl: "http://127.0.0.1:1/v1" },
+      { type: "lmstudio", label: "newprov", baseUrl: base },
+    ]);
+    const deps = stubDeps(config, {
+      capabilitiesProbeRef: {},
+      contextProbeRef: { current: { model: "old-model", actual: 8192 } },
+    });
+    const agent = new Agent(deps as never);
+    config.provider.active = "newprov";
+    await agent.reconfigure(config);
+
+    expect(agent.contextProbeSnapshot()).toEqual({ model: "new-model", actual: 65536 });
+    expect(deps.contextProbeRef?.current).toEqual({ model: "new-model", actual: 65536 });
+    expect(config.contextWindow).toBe(65536);
+  });
+
   it("probe:false path does not touch the network and invalidates the stale verdict", async () => {    const base = startLmStub();
     const config = testConfig([
       { type: "lmstudio", label: "oldprov", baseUrl: "http://127.0.0.1:1/v1" },

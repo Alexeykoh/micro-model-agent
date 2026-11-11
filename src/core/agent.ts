@@ -24,7 +24,7 @@ import type { SessionLogger } from "./session-logger";
 import type { LoopState } from "./agent/loop-state";
 import type { TokenTracker } from "./agent/token-tracker";
 
-export type { AgentDeps, DiagnosticSink } from "./agent/deps";
+export type { AgentDeps, ContextProbeBox, DiagnosticSink } from "./agent/deps";
 export { toolOutputCharLimit, compactToolError } from "./agent/tool-output";
 
 // `mutationTargetKey` переехал в `agent/loop-nudges.ts`; реэкспорт — для совместимости.

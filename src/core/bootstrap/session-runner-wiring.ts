@@ -10,7 +10,7 @@ import { join } from "path";
 import { Agent } from "../agent";
 import type { AgentDeps } from "../agent";
 import type { AppConfig, ReasoningStrategy } from "../../config/types";
-import type { ProviderProbesBox } from "../agent/deps";
+import type { ContextProbeBox, ProviderProbesBox } from "../agent/deps";
 import type { Logger } from "../../logger/app-logger";
 import type { LLMProvider } from "../../llm/provider";
 import type { ProviderManager } from "../../modules/providers/manager";
@@ -54,6 +54,8 @@ export interface SessionRunnerTemplate {
   moduleRegistry: ModuleRegistry;
   reasoningStrategy: ReasoningStrategy;
   contextProbePromise: Promise<ContextProbeResult | null>;
+  /** Живой бокс context-probe: раннеры читают итог после свитча, а не снимок старта. */
+  contextProbeRef: ContextProbeBox;
   /** Живой реестр main-агента (клон на спавн; question/approve уже внутри). */
   toolRegistry: ToolRegistry;
   /** Живой менеджер main-агента (инстансы плагинов переиспользуются). */
@@ -124,6 +126,7 @@ interface AssembleRunnerAgentInput {
   runnerExec: ExecutionModule;
   toolCtx: ToolContext;
   contextProbePromise: Promise<ContextProbeResult | null>;
+  contextProbeRef: ContextProbeBox;
   registry: ToolRegistry;
   capabilitiesProbeRef: ProviderProbesBox;
 }
@@ -158,6 +161,7 @@ export function assembleRunnerAgent(input: AssembleRunnerAgentInput): Agent {
     runnerExec,
     toolCtx,
     contextProbePromise,
+    contextProbeRef,
     registry,
     capabilitiesProbeRef,
   } = input;
@@ -189,6 +193,7 @@ export function assembleRunnerAgent(input: AssembleRunnerAgentInput): Agent {
     reasoningProbe: () => capabilitiesProbeRef.reasoningProbe?.() ?? Promise.resolve(false),
     reasoningStrategy,
     capabilitiesProbeRef,
+    contextProbeRef,
     planSummary: () => runnerExec.getPlanSummary(),
     planPendingSteps: () => runnerExec.getPlanPendingSteps(),
     toolCtx,

@@ -32,6 +32,11 @@ export interface ProviderProbesBox {
   reasoningProbe?: () => Promise<boolean>;
 }
 
+/** Живой итог context-probe: `undefined` — ещё не устоялась, `null` — не удалось. */
+export interface ContextProbeBox {
+  current?: import("../../llm/provider-context").ContextProbeResult | null;
+}
+
 /** Зависимости агента: конфиг, провайдер, тулы, контекст, логгеры, швы. */
 export interface AgentDeps {
   config: AppConfig;
@@ -98,6 +103,9 @@ export interface AgentDeps {
    * Общий бокс: его обновляет основной агент, читают раннеры/субагенты.
    */
   capabilitiesProbeRef?: ProviderProbesBox;
+  /** Живой бокс context-probe для веб-сайдбара: свитч провайдера обновляет его
+   *  сразу, а не оставляет снимок bootstrap-промиса. */
+  contextProbeRef?: ContextProbeBox;
   /** Каталог конфига — для хинта «подними окно контекста» в варнингах. */
   configDir?: string;
   /**

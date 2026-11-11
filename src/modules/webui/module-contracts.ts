@@ -41,6 +41,8 @@ export interface WebUiDeps {
    * не задерживал бинд сервера.
    */
   contextProbe?: Promise<{ model: string; actual: number } | null>;
+  /** Живой бокс context-probe из bootstrap: web обязан видеть свитч провайдера. */
+  contextProbeRef?: { current?: { model: string; actual: number } | null };
   /** Id моделей активного провайдера (дефолт — фоновый кеш). */
   knownModels?: () => string[];
   /**

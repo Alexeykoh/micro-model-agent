@@ -85,6 +85,7 @@ export function createSessionRunnerFactory(
       moduleRegistry,
       reasoningStrategy,
       contextProbePromise,
+      contextProbeRef,
       toolRegistry,
       pluginManager,
       draftHost,
@@ -236,6 +237,7 @@ export function createSessionRunnerFactory(
       runnerExec,
       toolCtx,
       contextProbePromise,
+      contextProbeRef,
       registry,
       capabilitiesProbeRef,
     });

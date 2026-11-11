@@ -10,9 +10,10 @@
  * Триггер — `probeIdentityOf` (model + baseUrl + active + type). `contextAuto`
  * гейтит только контекстную пробу; capabilities обновляются всегда.
  */
-import type { AgentDeps, ProviderProbesBox } from "./deps";
+import type { AgentDeps, ContextProbeBox, ProviderProbesBox } from "./deps";
 import type { AppConfig, ModelCapabilities, ReasoningStrategy } from "../../config/types";
 import type { LLMProvider } from "../../llm/provider";
+import type { ContextProbeResult } from "../../llm/provider-context";
 import { activeProviderEndpoint } from "../../modules/providers/manager";
 import { BUILTIN_PROVIDERS } from "../../modules/providers/presets";
 import { t } from "../../i18n/index";
@@ -247,4 +248,12 @@ function publishReasoningProbe(
 export function invalidateReasoningProbe(host: SwitchProbeHost): void {
   host.probePassed = false;
   publishReasoningProbe(host.deps, () => Promise.resolve(false));
+}
+
+/** Публикует живой результат context-probe в общий бокс для web/раннеров. */
+export function publishContextProbe(
+  box: ContextProbeBox | undefined,
+  value: ContextProbeResult | null,
+): void {
+  if (box) box.current = value;
 }

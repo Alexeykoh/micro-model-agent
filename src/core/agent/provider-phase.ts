@@ -11,6 +11,7 @@ import type { AppConfig, ProviderEntry, ReasoningStrategy } from "../../config/t
 import type { AgentDeps } from "../agent";
 import type { CostTracker } from "../../modules/pricing/index";
 import type { Logger } from "../../logger/app-logger";
+import type { ContextProbeResult } from "../../llm/provider-context";
 import {
   ProviderManager,
   activeProviderEndpoint,
@@ -26,6 +27,7 @@ import {
   refreshCapabilitiesProbe,
   restartReasoningProbe,
   invalidateReasoningProbe,
+  publishContextProbe,
   type ProbeIdentity,
 } from "./provider-probes";
 
@@ -53,9 +55,9 @@ export interface ProviderPhaseHost {
   costTracker: CostTracker;
   lastProbeIdentity: ProbeIdentity;
   probePassed: boolean;
-  /** Кеш «идентичность → измеренный contextWindow» (INV-W6): повторное
+  /** Кеш «идентичность → измеренное окно контекста» (INV-W6): повторное
    *  переключение на ту же идентичность сети не касается. */
-  probeWindowCache: Map<string, number>;
+  probeWindowCache: Map<string, ContextProbeResult>;
 }
 
 /** Логгер хоста (у `AgentDeps.logger` есть `.warn`/`.info`). */
@@ -151,34 +153,31 @@ async function reprobeActiveProvider(host: ProviderPhaseHost, config: AppConfig)
     if (!identityChanged) return;
     if (config.contextAuto === false) {
       host.lastProbeIdentity = nextId;
+      publishContextProbe(host.deps.contextProbeRef, null);
       return;
     }
     const cacheKey = probeCacheKey(nextId);
-    let measured: number | undefined = host.probeWindowCache.get(cacheKey);
-    let fresh: { model: string; actual: number } | null = null;
-    if (measured === undefined) {
+    let detected: ContextProbeResult | null | undefined = host.probeWindowCache.get(cacheKey);
+    if (!detected) {
       const nextEndpoint = activeProviderEndpoint(config.provider);
       const { probeProviderContext } = await import("../../llm/model-loader");
       // Один сетевой запрос: `probeProviderContext` сам спрашивает LM Studio
       // native первым источником — отдельный `probeModel` здесь дублировал его.
-      const detected = await probeProviderContext(nextEndpoint.baseUrl, config.model, {
+      detected = (await probeProviderContext(nextEndpoint.baseUrl, config.model, {
         apiKey: nextEndpoint.apiKey,
         providerType: nextEndpoint.type,
-      });
-      if (detected) {
-        measured = detected.actual;
-        fresh = detected;
-        host.probeWindowCache.set(cacheKey, measured);
-      }
+      })) ?? null;
+      if (detected) host.probeWindowCache.set(cacheKey, detected);
     }
-    if (measured !== undefined && measured !== config.contextWindow) {
+    publishContextProbe(host.deps.contextProbeRef, detected);
+    if (detected && detected.actual !== config.contextWindow) {
       // Сначала применяем окно, потом пишем диагностику: сбой логгера не должен
       // отменять уже принятую пробу (в тестах и сторонних логгерах нет
       // `diagnostic`, и исключение раньше съедало присваивание).
       const configured = config.contextWindow;
-      config.contextWindow = measured;
+      config.contextWindow = detected.actual;
       // Окно из кеша не логируем: это не новое измерение с провайдера.
-      if (fresh) logContextProbeAutoSet(loggerOf(host), fresh.model, measured, configured);
+      logContextProbeAutoSet(loggerOf(host), detected.model, detected.actual, configured);
     }
     host.lastProbeIdentity = nextId;
   } catch (err) {

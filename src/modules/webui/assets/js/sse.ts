@@ -57,6 +57,7 @@ export function connectSSE(deps: SseDeps): void {
     updateHooks,
     setTabStatus,
     loadConfig,
+    refreshSidebar,
     applyState,
     session,
     renderSessionsDropdown,
@@ -214,8 +215,11 @@ export function connectSSE(deps: SseDeps): void {
   });
   // Config changed anywhere (settings write or a slash command) — re-read it so
   // the open Settings panel and the composer selectors never show a stale value.
+  // Sidebar usage is a projection too: a provider switch may change the live
+  // context probe without a following turn, so re-read the active tab state.
   es.addEventListener("config", () => {
     void loadConfig();
+    void refreshSidebar?.();
   });
   // The model list finished its background refresh (provider/model switch) —
   // re-read it so the selectors repaint with the new provider's models.
