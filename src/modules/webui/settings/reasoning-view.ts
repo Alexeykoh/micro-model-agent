@@ -65,7 +65,12 @@ function visibleLevels(
  */
 export function buildReasoningView(
   config: AppConfig,
-  probe?: { reachable?: boolean },
+  probe?: {
+    reachable?: boolean;
+    strategy?: ReasoningStrategy;
+    levels?: string[] | null;
+    reasoningOff?: boolean;
+  },
 ): ReasoningView {
   const endpoint = activeProviderEndpoint(config.provider);
   const override = config.modelCapabilities?.[config.model];
@@ -75,22 +80,42 @@ export function buildReasoningView(
     undefined,
     override,
   );
-  const strategy = remembered?.strategy ?? preset.reasoningStrategy ?? "none";
-  const reasoningOff = remembered?.reasoningOff ?? preset.reasoningOff === true;
+  const endpointReachable = probe?.reachable === true;
+  const endpointUnavailable = probe?.reachable === false;
+  const hasProbeStrategy = probe?.strategy !== undefined;
+  const rememberedStrategy = remembered?.strategy;
+  const strategy =
+    endpointUnavailable
+      ? "none"
+      : hasProbeStrategy
+        ? (probe?.strategy ?? "none")
+        : probe?.reachable === true
+          ? "none"
+          : (rememberedStrategy ?? preset.reasoningStrategy ?? "none");
+  const reasoningOff =
+    endpointUnavailable
+      ? false
+      : hasProbeStrategy
+        ? (probe?.reasoningOff ?? false)
+        : probe?.reachable === true
+          ? false
+          : (remembered?.reasoningOff ?? preset.reasoningOff === true);
+  const declaredLevels = endpointUnavailable
+    ? null
+    : endpointReachable && hasProbeStrategy
+      ? (probe?.levels ?? remembered?.levels ?? preset.reasoningLevels)
+      : (probe?.reachable === true ? null : (remembered?.levels ?? preset.reasoningLevels));
   const cached = getCachedProbeResult(
     cacheKey(endpoint.baseUrl, config.model, strategy, reasoningOff),
   );
-  const unreachable = probe?.reachable === false;
   return {
-    strategy: unreachable ? "none" : strategy,
+    strategy,
     reasoningOff,
-    supported: unreachable ? false : (cached === undefined ? null : cached),
+    supported: endpointUnavailable ? false : (cached === undefined ? null : cached),
     mode: config.reasoning?.mode ?? "auto",
-    levels: unreachable ? null : visibleLevels(
-      remembered?.levels ?? preset.reasoningLevels,
-      strategy,
-      reasoningOff,
-    ),
+    levels: endpointUnavailable || (endpointReachable && !hasProbeStrategy)
+      ? null
+      : visibleLevels(declaredLevels ?? undefined, strategy, reasoningOff),
     reachable: probe?.reachable,
   };
 }

@@ -115,6 +115,8 @@ export interface WebUiWiring {
   saveConfig?: (config: AppConfig, key?: string) => void;
   reconfigure?: (config: AppConfig) => void | Promise<void>;
   knownModels?: () => string[];
+  /** Стратегия reasoning и уровни активного эндпоинта (честность UI). */
+  providerReasoning?: () => { strategy?: string; levels?: string[] | null; reasoningOff?: boolean; reachable?: boolean };
   /** Доступен ли активный эндпоинт по последней probe (для честного reasoning view). */
   providerReachable?: () => boolean | undefined;
   /**

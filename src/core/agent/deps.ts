@@ -32,6 +32,12 @@ export interface ProviderProbesBox {
   reasoningProbe?: () => Promise<boolean>;
   /** `false` — эндпоинт не отвечает; `undefined` — ещё не проверяли. */
   reachable?: boolean;
+  /** Стратегия, реально применённая агентом (может отличаться от пресета). */
+  reasoningStrategy?: import("../../config/types").ReasoningStrategy;
+  /** Уровни, реально объявленные эндпоинтом. */
+  reasoningLevels?: string[];
+  /** Поддерживает ли выключатель reasoning. */
+  reasoningOff?: boolean;
 }
 
 /** Живой итог context-probe: `undefined` — ещё не устоялась, `null` — не удалось. */

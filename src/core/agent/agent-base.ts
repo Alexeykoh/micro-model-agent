@@ -133,6 +133,22 @@ export class AgentBase {
     return this.deps.capabilitiesProbeRef?.reachable;
   }
 
+  /** Стратегия reasoning, реально применённая к активному провайдеру. */
+  providerReasoningSnapshot(): {
+    strategy?: import("../../config/types").ReasoningStrategy;
+    levels?: string[] | null;
+    reasoningOff?: boolean;
+    reachable?: boolean;
+  } {
+    const ref = this.deps.capabilitiesProbeRef;
+    return {
+      strategy: ref?.reasoningStrategy,
+      levels: ref?.reasoningLevels ?? null,
+      reasoningOff: ref?.reasoningOff,
+      reachable: ref?.reachable,
+    };
+  }
+
   /**
    * Запуск тула по имени из CLI/REPL (например, lsp_check). Обходит
    * инкапсуляцию: команды не должны лезть в приватные `deps`.

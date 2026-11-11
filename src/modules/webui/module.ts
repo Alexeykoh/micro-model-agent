@@ -185,6 +185,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   state.knownModels = deps.knownModels ?? modelCache!.get;
   state.knownModelsFor = modelCache?.getFor;
   state.providerReachable = () => deps.agent.providerReachableSnapshot?.();
+  state.providerReasoning = () => deps.agent.providerReasoningSnapshot?.();
   if (modelCache) void modelCache.refresh();
   state.reconfigure = makeReconfigure(
     state,

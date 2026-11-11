@@ -221,6 +221,12 @@ function applyReasoningStrategy(host: ProviderPhaseHost, provider: AppConfig["pr
     reasoningOff: reachable && caps.reasoningOff === true,
     levels: reachable ? caps.reasoningLevels : undefined,
   });
+  const ref = host.deps.capabilitiesProbeRef;
+  if (ref) {
+    ref.reasoningStrategy = strategy;
+    ref.reasoningLevels = host.deps.reasoningLevels;
+    ref.reasoningOff = reachable && caps.reasoningOff === true;
+  }
 }
 
 /** Переключает активного провайдера (и модель) тем же путём, что `/config`. */
