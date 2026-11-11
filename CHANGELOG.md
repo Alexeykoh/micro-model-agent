@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Changed
+
+- **Web UI: спиннер в селекторах без счётчика ожидания.** В чипах provider /
+  model / context / reasoning во время переключения остаётся только спиннер
+  с левым отступом; секундомер ожидания убран.
+
 ### Fixed
 
 - **Актуальные данные провайдера при переключении провайдера/модели** (`mma`, `mma web`): контекст, capabilities и reasoning перепрашиваются у нового бэкенда вместо наследования прошлого.
