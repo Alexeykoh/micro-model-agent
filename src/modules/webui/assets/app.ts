@@ -171,6 +171,7 @@ function connectSSE(): void {
     updateHooks,
     setTabStatus,
     loadConfig,
+    refreshSidebar: refresh,
     applyState,
     session,
     renderSessionsDropdown,

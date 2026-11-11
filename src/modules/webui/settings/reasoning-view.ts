@@ -26,6 +26,8 @@ export interface ReasoningView {
   mode: string;
   /** Уровни, реально доступные у провайдера+модели (INV-R7); null = не объявлены. */
   levels: string[] | null;
+  /** false — активный эндпоинт не отвечает; undefined — статус неизвестен. */
+  reachable?: boolean;
 }
 
 /** Признанные имена усилий эндпоинтов (зеркало EFFORT_OPTION из provider-context). */
@@ -61,7 +63,15 @@ function visibleLevels(
  * запоминает его в `probe.ts` до старта UI. Пока агент не резолвил (юнит-тесты,
  * самый первый кадр), падаем на пресет — стратегия не выдумывается.
  */
-export function buildReasoningView(config: AppConfig): ReasoningView {
+export function buildReasoningView(
+  config: AppConfig,
+  probe?: {
+    reachable?: boolean;
+    strategy?: ReasoningStrategy;
+    levels?: string[] | null;
+    reasoningOff?: boolean;
+  },
+): ReasoningView {
   const endpoint = activeProviderEndpoint(config.provider);
   const override = config.modelCapabilities?.[config.model];
   const remembered = getRememberedReasoningMechanism(endpoint.baseUrl, config.model);
@@ -70,20 +80,42 @@ export function buildReasoningView(config: AppConfig): ReasoningView {
     undefined,
     override,
   );
-  const strategy = remembered?.strategy ?? preset.reasoningStrategy ?? "none";
-  const reasoningOff = remembered?.reasoningOff ?? preset.reasoningOff === true;
+  const endpointReachable = probe?.reachable === true;
+  const endpointUnavailable = probe?.reachable === false;
+  const hasProbeStrategy = probe?.strategy !== undefined;
+  const rememberedStrategy = remembered?.strategy;
+  const strategy =
+    endpointUnavailable
+      ? "none"
+      : hasProbeStrategy
+        ? (probe?.strategy ?? "none")
+        : probe?.reachable === true
+          ? "none"
+          : (rememberedStrategy ?? preset.reasoningStrategy ?? "none");
+  const reasoningOff =
+    endpointUnavailable
+      ? false
+      : hasProbeStrategy
+        ? (probe?.reasoningOff ?? false)
+        : probe?.reachable === true
+          ? false
+          : (remembered?.reasoningOff ?? preset.reasoningOff === true);
+  const declaredLevels = endpointUnavailable
+    ? null
+    : endpointReachable && hasProbeStrategy
+      ? (probe?.levels ?? remembered?.levels ?? preset.reasoningLevels)
+      : (probe?.reachable === true ? null : (remembered?.levels ?? preset.reasoningLevels));
   const cached = getCachedProbeResult(
     cacheKey(endpoint.baseUrl, config.model, strategy, reasoningOff),
   );
   return {
     strategy,
     reasoningOff,
-    supported: cached === undefined ? null : cached,
+    supported: endpointUnavailable ? false : (cached === undefined ? null : cached),
     mode: config.reasoning?.mode ?? "auto",
-    levels: visibleLevels(
-      remembered?.levels ?? preset.reasoningLevels,
-      strategy,
-      reasoningOff,
-    ),
+    levels: endpointUnavailable || (endpointReachable && !hasProbeStrategy)
+      ? null
+      : visibleLevels(declaredLevels ?? undefined, strategy, reasoningOff),
+    reachable: probe?.reachable,
   };
 }

@@ -163,10 +163,16 @@ export type SessionStore = Pick<
   | "logger"
 >;
 
-/** Роль: конфиг (живой объект, запись, reconfigure, список моделей). */
+/** Роль: конфиг (живой объект, запись, reconfigure, список моделей, доступность). */
 export type ConfigStore = Pick<
   WebUiState,
-  "config" | "saveConfig" | "reconfigure" | "knownModels" | "knownModelsFor"
+  | "config"
+  | "saveConfig"
+  | "reconfigure"
+  | "knownModels"
+  | "knownModelsFor"
+  | "providerReachable"
+  | "providerReasoning"
 >;
 
 /** Роль: рабочее окружение и настройки (workspace, память, скиллы, плагины, LSP, setup). */

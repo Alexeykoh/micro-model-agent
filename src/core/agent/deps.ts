@@ -30,6 +30,19 @@ export interface ProviderProbesBox {
   probe?: import("../../config/types").ModelCapabilities;
   /** Проба поддержки reasoning для ТЕКУЩЕЙ пары провайдер+модель (B2). */
   reasoningProbe?: () => Promise<boolean>;
+  /** `false` — эндпоинт не отвечает; `undefined` — ещё не проверяли. */
+  reachable?: boolean;
+  /** Стратегия, реально применённая агентом (может отличаться от пресета). */
+  reasoningStrategy?: import("../../config/types").ReasoningStrategy;
+  /** Уровни, реально объявленные эндпоинтом. */
+  reasoningLevels?: string[];
+  /** Поддерживает ли выключатель reasoning. */
+  reasoningOff?: boolean;
+}
+
+/** Живой итог context-probe: `undefined` — ещё не устоялась, `null` — не удалось. */
+export interface ContextProbeBox {
+  current?: import("../../llm/provider-context").ContextProbeResult | null;
 }
 
 /** Зависимости агента: конфиг, провайдер, тулы, контекст, логгеры, швы. */
@@ -98,6 +111,9 @@ export interface AgentDeps {
    * Общий бокс: его обновляет основной агент, читают раннеры/субагенты.
    */
   capabilitiesProbeRef?: ProviderProbesBox;
+  /** Живой бокс context-probe для веб-сайдбара: свитч провайдера обновляет его
+   *  сразу, а не оставляет снимок bootstrap-промиса. */
+  contextProbeRef?: ContextProbeBox;
   /** Каталог конфига — для хинта «подними окно контекста» в варнингах. */
   configDir?: string;
   /**

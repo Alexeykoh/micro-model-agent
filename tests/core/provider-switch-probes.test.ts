@@ -154,15 +154,19 @@ describe("provider switch re-probes capabilities (INV-R2)", () => {
       "iceman-contributor-free",
     );
     const deps = stubDeps(config, {
-      capabilitiesProbeRef: { probe: { ...STALE_PROBE } },
+      capabilitiesProbeRef: { probe: { ...STALE_PROBE }, reachable: true },
+      contextProbeRef: { current: { model: "old-model", actual: 123456 } },
     });
     const agent = new Agent(deps as never);
     config.provider.active = "newprov";
     await agent.reconfigure(config);
 
-    // Чужие данные опаснее отсутствия: probe сброшен → пресет opencode-go.
+    // Чужие данные опаснее отсутствия: probe и статус доступности сброшены.
     expect(deps.capabilitiesProbeRef?.probe).toBeUndefined();
-    expect(deps.reasoningStrategy).toBe("openai-effort");
+    expect(deps.capabilitiesProbeRef?.reachable).toBe(false);
+    expect(agent.providerReachableSnapshot()).toBe(false);
+    expect(agent.contextProbeSnapshot()).toBeNull();
+    expect(deps.reasoningStrategy).toBe("none");
     expect(deps.reasoningLevels).toBeUndefined();
     // Fail-open: контекст не тронут недоступным бэкендом.
     expect(config.contextWindow).toBe(32768);
@@ -236,10 +240,29 @@ describe("provider switch re-probes capabilities (INV-R2)", () => {
 
     // Сразу после свитча вердикт прошлой пары не применяется.
     expect(probePassedOf(agent)).toBe(false);
-    // openai-effort без off-switch подтверждается без сети → фоновая проба
-    // возвращает probePassed в true для новой пары.
+    // Эндпоинт недоступен: не выдаём preset/reasoning за подтверждённый.
+    expect(deps.reasoningStrategy).toBe("none");
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(probePassedOf(agent)).toBe(true);
+    expect(probePassedOf(agent)).toBe(false);
+  });
+
+  it("publishes the new context probe for the web sidebar after a provider switch", async () => {
+    const base = startLmStub();
+    const config = testConfig([
+      { type: "lmstudio", label: "oldprov", baseUrl: "http://127.0.0.1:1/v1" },
+      { type: "lmstudio", label: "newprov", baseUrl: base },
+    ]);
+    const deps = stubDeps(config, {
+      capabilitiesProbeRef: {},
+      contextProbeRef: { current: { model: "old-model", actual: 8192 } },
+    });
+    const agent = new Agent(deps as never);
+    config.provider.active = "newprov";
+    await agent.reconfigure(config);
+
+    expect(agent.contextProbeSnapshot()).toEqual({ model: "new-model", actual: 65536 });
+    expect(deps.contextProbeRef?.current).toEqual({ model: "new-model", actual: 65536 });
+    expect(config.contextWindow).toBe(65536);
   });
 
   it("probe:false path does not touch the network and invalidates the stale verdict", async () => {    const base = startLmStub();

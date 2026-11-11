@@ -14,6 +14,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **Web UI: честный статус офлайн-провайдера.** После свитча на недоступный
+  эндпоинт сайдбар показывает `provider · недоступен`, `context` и `loaded context`
+  не наследуют окно прежнего бэкенда, а селектор reasoning скрывается вместо
+  ложных уровней из пресета.
+- **Web UI: проекция «Сессия · Использование» обновляется при смене провайдера.**
+  Живая context-probe вынесена в shared box и перечитывается web-хостом, а SSE
+  `config` дополнительно обновляет active-tab state.
 - **Актуальные данные провайдера при переключении провайдера/модели** (`mma`, `mma web`): контекст, capabilities и reasoning перепрашиваются у нового бэкенда вместо наследования прошлого.
   - Контекст: проба читает `limit.context` из OpenAI-compat `/models` (OpenCode Zen/Go) — окно opencode-go больше не «не определяется» для моделей вне каталога models.dev.
   - `reconfigure`/`setProvider` перепрашивают capabilities (LM Studio/llama.cpp) и reasoning-поддержку при смене идентичности; при пустом ответе — сброс к пресету, а не чужие данные. `probePassed` сбрасывается до резолва новой пробы; раннеры читают пробу из общего бокса.

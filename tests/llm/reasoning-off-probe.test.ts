@@ -152,13 +152,16 @@ describe("probeOpenAICompatCapabilities", () => {
         ],
       }),
     })) as unknown as typeof globalThis.fetch;
-    const caps = await probeOpenAICompatCapabilities(
+    const probe = await probeOpenAICompatCapabilities(
       "https://opencode.ai/zen/go/v1",
       "deepseek-v4.1-flash",
       "k",
       3000,
     );
-    expect(caps).toEqual({ reasoningStrategy: "openai-effort", reasoningLevels: ["low", "high", "max"] });
+    expect(probe).toEqual({
+      reachable: true,
+      capabilities: { reasoningStrategy: "openai-effort", reasoningLevels: ["low", "high", "max"] },
+    });
   });
 
   it("reports supported-only models without inventing levels", async () => {
@@ -169,15 +172,28 @@ describe("probeOpenAICompatCapabilities", () => {
       }),
     })) as unknown as typeof globalThis.fetch;
     expect(await probeOpenAICompatCapabilities("http://x/v1", "m", undefined, 3000)).toEqual({
-      reasoningStrategy: "openai-effort",
+      reachable: true,
+      capabilities: { reasoningStrategy: "openai-effort" },
     });
   });
 
-  it("returns null when the entry declares nothing", async () => {
+  it("marks an answered endpoint reachable when the entry declares nothing", async () => {
     globalThis.fetch = (async () => ({
       ok: true,
       json: async () => ({ data: [{ id: "m" }] }),
     })) as unknown as typeof globalThis.fetch;
-    expect(await probeOpenAICompatCapabilities("http://x/v1", "m", undefined, 3000)).toBeNull();
+    expect(await probeOpenAICompatCapabilities("http://x/v1", "m", undefined, 3000)).toEqual({
+      reachable: true,
+      capabilities: undefined,
+    });
+  });
+
+  it("marks a failed list probe unreachable", async () => {
+    globalThis.fetch = (async () => {
+      throw new Error("offline");
+    }) as unknown as typeof globalThis.fetch;
+    expect(await probeOpenAICompatCapabilities("http://x/v1", "m", undefined, 3000)).toEqual({
+      reachable: false,
+    });
   });
 });

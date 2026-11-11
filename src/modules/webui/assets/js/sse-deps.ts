@@ -45,6 +45,8 @@ export interface SseDeps {
   updateHooks: Parameters<typeof import("./update-ui.js").applyUpdateEvent>[1];
   setTabStatus: typeof import("./session/tabs.js").setTabStatus;
   loadConfig: typeof import("./settings.js").loadConfig;
+  /** Перечитать проекцию active-таба (сайдбар) после серверных смен конфига. */
+  refreshSidebar?: () => Promise<void>;
   applyState: (d: Dict) => void;
   session: typeof import("./store.js").session;
   renderSessionsDropdown: typeof import("./session/tabs.js").renderSessionsDropdown;

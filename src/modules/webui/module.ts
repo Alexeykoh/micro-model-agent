@@ -184,6 +184,8 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   const modelCache = deps.knownModels ? null : makeModelCache(deps.agent, deps.config);
   state.knownModels = deps.knownModels ?? modelCache!.get;
   state.knownModelsFor = modelCache?.getFor;
+  state.providerReachable = () => deps.agent.providerReachableSnapshot?.();
+  state.providerReasoning = () => deps.agent.providerReasoningSnapshot?.();
   if (modelCache) void modelCache.refresh();
   state.reconfigure = makeReconfigure(
     state,
@@ -201,6 +203,13 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   trackContextProbe(deps.contextProbe, (p) => {
     probe = p;
   });
+  // Live provider switches update the shared context-probe box. The old
+  // bootstrap promise only carries the initial value; the web host must not
+  // freeze the first provider's measurement in the sidebar.
+  const currentContextProbe = (): ProbeValue | null | undefined => {
+    const live = deps.agent.contextProbeSnapshot?.();
+    return live === undefined ? probe : live;
+  };
 
   const host = new WebHost({
     isBusy: () => state.pool.anyBusy(),
@@ -221,7 +230,8 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
           execModule: activeExecModule(state, deps.execModule, sessionId),
           usage: activeUsage(state, sessionId),
           updateAvailable: state.updateAvailable,
-          contextProbe: probe,
+          contextProbe: currentContextProbe(),
+          providerReachable: deps.agent.providerReachableSnapshot?.(),
           workspace: deps.baseDir,
           instructions: deps.agentsMd,
           projectMap: deps.indexer?.mapInfo?.(),

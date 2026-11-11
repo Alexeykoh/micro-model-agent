@@ -10,6 +10,7 @@ import type { Agent } from "./agent";
 import type { ToolContext } from "../tools/types";
 import type { ToolRegistry } from "../tools/index";
 import type { ContextProbeResult } from "../llm/model-loader";
+import type { ContextProbeBox } from "./agent/deps";
 import { initConfigPhase } from "./bootstrap/config-phase";
 import { setupProviderPhase } from "./bootstrap/provider-phase";
 import { installEgressGuard } from "./bootstrap/egress-guard";
@@ -58,6 +59,8 @@ export interface BootstrapResult {
   /** Фоновая проба длины контекста, с которой модель РЕАЛЬНО загружена
    *  (LM Studio native API). Null, если неприменимо. */
   contextProbe: Promise<ContextProbeResult | null>;
+  /** Живой бокс той же пробы: web-сайдбар обязан видеть результат после свитча. */
+  contextProbeRef: ContextProbeBox;
   /** Общий глобальный стор памяти — один инстанс у модуля памяти и цикла,
    *  поэтому UI (`mma web` `/memory`) читают/пишут живые данные. */
   memoryStore: MemoryStore;
@@ -186,6 +189,7 @@ export async function bootstrap(
       execModule: modules.execModule,
       toolCtx: session.toolCtx,
       contextProbePromise: provider.contextProbePromise,
+      contextProbeRef: provider.contextProbeRef,
       capabilitiesProbeRef: provider.capabilitiesRef,
     },
     workspace.toolRegistry,
@@ -207,6 +211,7 @@ export async function bootstrap(
     envReport: workspace.envReport,
     legacyDetected,
     contextProbe: provider.contextProbePromise,
+    contextProbeRef: provider.contextProbeRef,
     memoryStore: modules.memoryStore,
     indexerModule: workspace.indexerModule,
     lspModule: modules.lspModule,
@@ -227,6 +232,7 @@ export async function bootstrap(
       moduleRegistry: modules.moduleRegistry,
       reasoningStrategy: provider.reasoningStrategy,
       contextProbePromise: provider.contextProbePromise,
+      contextProbeRef: provider.contextProbeRef,
       toolRegistry: workspace.toolRegistry,
       pluginManager: workspace.pluginManager,
       draftHost: workspace.draftHost,

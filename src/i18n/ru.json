@@ -1571,6 +1571,8 @@
   "web.usage.session": "сессия",
   "web.usage.copy_id": "скопировать ID сессии",
   "web.usage.model": "модель",
+  "web.usage.provider": "провайдер",
+  "web.usage.provider_unavailable": "недоступен",
   "web.usage.context": "контекст",
   "web.usage.context_overcommitted": "контекст больше окна",
   "ui.context_overcommitted": "контекст больше окна",
