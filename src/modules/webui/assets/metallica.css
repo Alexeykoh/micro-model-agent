@@ -158,6 +158,44 @@ body.metallica.light::before {
   filter: contrast(0.78) sepia(0.18) brightness(1.12);
 }
 
+/* Living horizon: a soft radial glow behind the field, breathing slowly. */
+body.metallica::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(42% 12% at 50% 54%, rgba(255, 189, 78, 0.5), rgba(189, 102, 21, 0.26) 44%, transparent 74%);
+  mix-blend-mode: screen;
+  opacity: 0.34;
+  transform-origin: 50% 54%;
+  animation: metallica-horizon-pulse 8s ease-in-out infinite;
+}
+body.metallica.light::after {
+  background: radial-gradient(42% 12% at 50% 54%, rgba(189, 102, 21, 0.32), rgba(136, 56, 37, 0.16) 45%, transparent 74%);
+  mix-blend-mode: multiply;
+  opacity: 0.28;
+}
+
+@keyframes metallica-horizon-pulse {
+  0%, 100% {
+    opacity: 0.24;
+    transform: scale(0.985);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.025);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.metallica::after {
+    animation: none;
+    opacity: 0.32;
+    transform: none;
+  }
+}
+
 body.metallica,
 body.metallica *,
 body.metallica *::before,
@@ -298,6 +336,3 @@ body.metallica .mdl::after {
   background-clip: text;
 }
 
-body.metallica .wx-p {
-  filter: drop-shadow(0 0 6px rgba(189, 102, 21, 0.38));
-}
