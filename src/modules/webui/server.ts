@@ -8,6 +8,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createWebUiState, type WebUiState, type WebUiAssets } from "./state";
 import { sessionStatus } from "./session/session-status";
+import { skillsEventPayload } from "./skills-events";
 import {
   checkAuth,
   isLoopback,
@@ -65,6 +66,9 @@ function handleEvents(req: IncomingMessage, res: ServerResponse, s: WebUiState):
   if (!greeted) {
     res.end();
     return;
+  }
+  if (s.skills) {
+    res.write(`event: skills\ndata: ${JSON.stringify(skillsEventPayload(s.skills))}\n\n`);
   }
   s.clients.add(res);
   const hb = setInterval(() => {

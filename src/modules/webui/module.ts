@@ -16,6 +16,7 @@ import { createAssetSource } from "./asset-cache";
 import { makeWebCommands } from "./chat/commands";
 import { makeReconfigure } from "./settings/reconfigure";
 import { installWebForwarding } from "./event-forward";
+import { installSkillsEvents } from "./skills-events";
 import { installWebPromptIO } from "./session/prompt-io";
 import { startServer, stopServer } from "./server";
 import { makeModelCache } from "./settings/model-cache";
@@ -102,6 +103,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   });
   state.memory = deps.memory;
   state.skills = deps.skills;
+  const detachSkillsEvents = installSkillsEvents(state, deps.skills);
   state.plugins = deps.plugins;
   state.workspace = deps.baseDir;
   state.gitCache = createGitCache();
@@ -260,6 +262,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     stop: () => {
       detachIndexWatcher();
       detachRenameListener?.();
+      detachSkillsEvents();
       cancelPendingQuestions(state);
       stopForwarding();
       state.pool.clear();

@@ -2,7 +2,8 @@
 import type { AgentModule, AgentPlugin } from "../types";
 import type { PromptBlock } from "../../core/types";
 import { SkillsLoader, type SkillMeta } from "./loader";
-import { buildCatalogBlock } from "./catalog";
+import { buildCatalogBlock, buildLoadedBlock } from "./catalog";
+import { LoadedEvents, type LoadedSkillRef } from "./loaded-events";
 import type { SkillUsage } from "./usage";
 import { t } from "../../i18n/index";
 import { estimateTokens } from "../../llm/token-counter";
@@ -27,6 +28,8 @@ export class SkillsModule implements AgentModule {
 
   private availableSkills: SkillMeta[];
   private loadedSkills: Map<string, SkillMeta> = new Map();
+  /** Hub подписки на изменение загруженного набора (веб-индикатор). */
+  private readonly loadedEvents = new LoadedEvents();
   private budget: number;
   private currentTokens = 0;
   /** Каталоги для `reload()`; без них пересканировать навыки нечем. */
@@ -88,9 +91,11 @@ export class SkillsModule implements AgentModule {
     const before = new Set(this.availableSkills.map((s) => s.name));
     const after = new Set(next.map((s) => s.name));
     // Загруженные скиллы, которых больше нет на диске, уходят из бюджета.
+    let unloadedAny = false;
     for (const name of [...this.loadedSkills.keys()]) {
-      if (!after.has(name)) this.unload(name);
+      if (!after.has(name)) { this.unload(name); unloadedAny = true; }
     }
+    if (unloadedAny) this.loadedEvents.notify([...this.loadedSkills.values()]);
     this.availableSkills = next;
     this.currentTokens = 0;
     for (const skill of this.loadedSkills.values()) {
@@ -140,6 +145,7 @@ export class SkillsModule implements AgentModule {
     if (!skill) return false;
     this.loadedSkills.delete(name);
     this.currentTokens -= this.estimateTokens(skill.content);
+    this.loadedEvents.notify([...this.loadedSkills.values()]);
     return true;
   }
 
@@ -151,6 +157,11 @@ export class SkillsModule implements AgentModule {
   /** Все доступные (загруженные и нет) скиллы. */
   getAvailable(): SkillMeta[] {
     return this.availableSkills;
+  }
+
+  /** Подписка на изменение загруженного набора (веб-индикатор, REPL). Возвращает отписку. */
+  onChange(cb: (loaded: LoadedSkillRef[]) => void): () => void {
+    return this.loadedEvents.subscribe(cb);
   }
 
   /** Ищет скилл по точному имени среди доступных. */
@@ -214,22 +225,7 @@ export class SkillsModule implements AgentModule {
 
   /** Тела загруженных скиллов: низкий приоритет и хвост промпта. */
   getLoadedBlock(): PromptBlock | null {
-    if (this.loadedSkills.size === 0) return null;
-    const lines = ["[Loaded Skills]"];
-    for (const skill of this.loadedSkills.values()) {
-      lines.push(`--- ${skill.name} ---`);
-      lines.push(skill.content);
-      lines.push("");
-    }
-    const content = lines.join("\n");
-    return {
-      content,
-      label: "loaded skills",
-      priority: "low",
-      essential: false,
-      estimatedTokens: this.estimateTokens(content),
-      tail: true,
-    };
+    return buildLoadedBlock([...this.loadedSkills.values()]);
   }
 
   /** Плагин-заглушка: модуль работает через системный блок, хуки не нужны. */
@@ -271,6 +267,7 @@ export class SkillsModule implements AgentModule {
     this.loadedSkills.set(skill.name, skill);
     this.currentTokens += tokens;
     this.usage?.recordLoad(skill.name);
+    this.loadedEvents.notify([...this.loadedSkills.values()]);
 
     return {
       success: true,

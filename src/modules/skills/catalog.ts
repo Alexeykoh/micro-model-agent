@@ -52,3 +52,23 @@ export function buildCatalogBlock(skills: SkillMeta[], usage?: SkillUsage): Prom
     degraded: hidden > 0 ? { reason: `${hidden} more skills not listed` } : undefined,
   };
 }
+
+/** Блок тел загруженных скиллов (низкий приоритет, хвост промпта). */
+export function buildLoadedBlock(loaded: SkillMeta[]): PromptBlock | null {
+  if (loaded.length === 0) return null;
+  const lines = ["[Loaded Skills]"];
+  for (const skill of loaded) {
+    lines.push(`--- ${skill.name} ---`);
+    lines.push(skill.content);
+    lines.push("");
+  }
+  const content = lines.join("\n");
+  return {
+    content,
+    label: "loaded skills",
+    priority: "low",
+    essential: false,
+    estimatedTokens: estimateTokens(content),
+    tail: true,
+  };
+}
