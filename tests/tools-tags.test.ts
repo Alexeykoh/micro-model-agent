@@ -45,6 +45,15 @@ describe("buildHiddenToolsBlock", () => {
     expect(buildHiddenToolsBlock([], ["file"])).toBe("");
   });
 
+  it("returns empty string for the wide set: empty tags mean all tools are visible (L4)", () => {
+    const tools = [
+      tool("read_file", ["file"]),
+      tool("web_search", ["research"]),
+      tool("plan", undefined, true),
+    ];
+    expect(buildHiddenToolsBlock(tools, [])).toBe("");
+  });
+
   it("groups hidden tools by their first tag and sorts names", () => {
     const tools = [
       tool("web_fetch", ["research"]),
@@ -101,6 +110,17 @@ describe("enableToolsTool", () => {
     // Without activeToolTags the handler must not crash; push into nothing and
     // still resolve via toolExecutor if present.
     expect(res.success).toBe(false);
+  });
+
+  it("is a no-op when all tools are already visible (wide mode, L4)", async () => {
+    const activeToolTags: string[] = [];
+    const ctx = {
+      activeToolTags,
+      toolExecutor: { getToolDefinitions: () => [] },
+    } as unknown as ToolContext;
+    const res = await enableToolsTool.handler(ctx, { tags: ["research"] });
+    expect(res.success).toBe(true);
+    expect(activeToolTags).toEqual([]);
   });
 });
 

@@ -1264,6 +1264,7 @@
   "tools.enable_no_executor": "Tool executor is not available — cannot enumerate enabled tools.",
   "tools.enable_already_active": "Tool tags already active: {tags}.",
   "tools.enable_added": "Enabled tool tags: {tags}. Available tools now: {tools}",
+  "tools.enable_all_visible": "All tools are already visible in this session — nothing to enable.",
   "tools.hidden_header": "Additional tools (enable on demand via enable_tools or route to subagent tool_tags):",
   "tool.friendly.enable_tools": "Enable tools",
   "tool.friendly.set_thinking": "Set reasoning level",
