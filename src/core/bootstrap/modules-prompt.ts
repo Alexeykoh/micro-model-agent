@@ -5,7 +5,6 @@
  * (systemInfo + модули + AGENTS.md + plan-напоминание), стартовый dry-run
  * переполнения и динамические/ленивые блоки каждого хода.
  */
-import { buildHiddenToolsBlock } from "../../tools/hidden-tools-block";
 import { pluginCapabilitiesBlock } from "../../modules/plugins/capabilities-block";
 import { estimateTokens } from "../../llm/token-counter";
 import type { ExecutionModule } from "../../modules/execution/module";
@@ -71,31 +70,56 @@ export function buildStaticPromptBlocks(
 }
 
 /**
- * Стартовый dry-run переполнения (баннер, A3): тот же набор блоков, что возьмёт
- * первая сборка Agent (статика + скиллы + карта + скрытые тулы), наружу —
+ * Синхронный аудит-набор первой сборки: динамика (`collectDynamicPromptBlocks` —
+ * model/session/skills/map/capabilities/hidden через единый `assemble…`, INV-16)
+ * плюс `onBuildPrompt` плагинов — тот же контент, что `prompt-phase.buildSystemPrompt`
+ * возьмёт на первом ходу (без lazy-блока, overrides и hint — их на момент
+ * dry-run ещё нет, см. `dryRunStartupOverflow`).
+ */
+export function buildStartupAuditBlocks(
+  input: ModulesPhaseInput,
+  sessionModule: SessionModule,
+): PromptBlock[] {
+  const blocks = collectDynamicPromptBlocks(input, sessionModule);
+  const pluginContents = input.pluginManager.runOnBuildPrompt?.() ?? [];
+  for (const content of pluginContents) {
+    if (!content || content.trim() === "") continue;
+    // B2-зазор: `buildSystemPrompt` считает эти блоки через
+    // `llmProvider.countTokens`, здесь провайдера нет — estimateTokens.
+    // Контент 1:1, учёт унифицируется следующим фиксом (B2).
+    blocks.push({
+      source: "plugin",
+      label: "capabilities",
+      content,
+      priority: "low",
+      essential: false,
+      estimatedTokens: estimateTokens(content),
+    });
+  }
+  return blocks;
+}
+
+/**
+ * Стартовый dry-run переполнения (баннер, A3): тот же синхронный набор блоков,
+ * что возьмёт первая сборка Agent (статика + динамика через
+ * `collectDynamicPromptBlocks` + `onBuildPrompt` плагинов), наружу —
  * невместившиеся instructions/project-map. Agent сожмёт их перед первым
  * LLM-вызовом; варнинг говорит ПОЛЬЗОВАТЕЛЮ почему и как вернуть полный текст.
+ *
+ * Известный остаточный зазор: ленивый health-check (`lazyPromptBlocks`)
+ * на момент dry-run ещё не резолвнут (фоновая проверка), в набор не входит —
+ * первая сборка в `session-start` его добавит. Блок мал, переполнение через
+ * него отслеживается вторым проходом `omittedBlocksNote`.
  */
 export function dryRunStartupOverflow(
   input: ModulesPhaseInput,
   promptBlocks: PromptBlock[],
+  sessionModule: SessionModule,
 ): void {
-  const { config, logger, dir, toolRegistry, activeToolTags, skillsModule, indexerModule } = input;
-  const dynamicBlocks: PromptBlock[] = [];
-  for (const block of skillsModule.getPromptBlocks()) dynamicBlocks.push(block);
-  const mapBlock = indexerModule.getSystemPromptBlock();
-  if (mapBlock) dynamicBlocks.push(mapBlock);
-  const hiddenToolsBlock = buildHiddenToolsBlock(toolRegistry.getAll(), activeToolTags);
-  if (hiddenToolsBlock) {
-    dynamicBlocks.push({
-      content: hiddenToolsBlock,
-      priority: "low",
-      essential: false,
-      estimatedTokens: estimateTokens(hiddenToolsBlock),
-    });
-  }
+  const { config, logger, dir, activeToolTags } = input;
+  const auditBlocks = buildStartupAuditBlocks(input, sessionModule);
   const systemBudget = Math.floor(config.contextWindow * config.contextBudget.systemPrompt);
-  const dry = dryRunOverflow(filterBlocksForTags([...promptBlocks, ...dynamicBlocks], activeToolTags), systemBudget);
+  const dry = dryRunOverflow(filterBlocksForTags([...promptBlocks, ...auditBlocks], activeToolTags), systemBudget);
   if (dry.overflow.length === 0) return;
   const overflowTokens = dry.overflow.reduce((s, b) => s + b.estimatedTokens, 0);
   const needed = dry.includedTokens + overflowTokens;
