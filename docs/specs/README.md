@@ -18,6 +18,7 @@
 
 - [outbound policy](./2026-10-15-outbound-policy-design.md)
 - [corporate data policy](./2026-10-19-corporate-data-policy-design.md)
+- [enterprise auth](./2026-11-12-enterprise-auth-design.md) — домен → сервер: identity, policy, actor
 
 Провайдеры и LLM:
 
