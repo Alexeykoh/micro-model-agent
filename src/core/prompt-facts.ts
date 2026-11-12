@@ -45,7 +45,28 @@ export interface PromptEnvironmentFacts {
   activeToolTags: string[];
   autoPlan: boolean;
   security: AppConfig["security"];
-  now: { iso: string; timeZone: string; utcOffset: string };
+  now: {
+    iso: string;
+    timeZone: string;
+    utcOffset: string;
+    /**
+     * B18: чьё это время. `server` — локаль процесса (для веба может не
+     * совпадать с пользователем — промпт маркирует это явно); `client` —
+     * часовой пояс прислал фронтенд. Опционально: старые литералы без поля
+     * считаются серверными.
+     */
+    source?: "server" | "client";
+  };
+}
+
+/**
+ * Часовой пояс клиента (B18): присылает фронтенд (`Intl` + `getTimezoneOffset`).
+ * Формат offset — строгий `±HH:MM`, иначе значение игнорируется (fail-open
+ * в серверное время, а не падение сборки промпта).
+ */
+export interface ClientTz {
+  timeZone: string;
+  utcOffset: string;
 }
 
 /** Вход сборки фактов: отчёт окружения уже собран фазой workspace. */
@@ -54,11 +75,30 @@ export interface PromptFactsInput {
   baseDir: string;
   envReport: EnvironmentReport;
   activeToolTags?: string[];
+  /** Часовой пояс клиента (веб); нет — серверное время с меткой (B18). */
+  clientTz?: ClientTz;
 }
 
-/** Локальное время с явным offset: UTC без метки вводит модель в заблуждение. */
-export function localNow(date = new Date()): PromptEnvironmentFacts["now"] {
+/**
+ * Локальное время с явным offset: UTC без метки вводит модель в заблуждение.
+ * С override считает время клиента по его offset (B18); кривой override —
+ * fail-open в серверное.
+ */
+export function localNow(date = new Date(), override?: ClientTz): PromptEnvironmentFacts["now"] {
   const pad = (n: number) => String(n).padStart(2, "0");
+  if (override) {
+    const m = /^([+-])(\d{2}):(\d{2})$/.exec(override.utcOffset);
+    if (m && override.timeZone) {
+      const mins = (m[1] === "+" ? 1 : -1) * (parseInt(m[2], 10) * 60 + parseInt(m[3], 10));
+      if (Math.abs(mins) <= 14 * 60) {
+        const shifted = new Date(date.getTime() + mins * 60_000);
+        const iso =
+          `${shifted.getUTCFullYear()}-${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())} ` +
+          `${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}:${pad(shifted.getUTCSeconds())} ${override.utcOffset}`;
+        return { iso, timeZone: override.timeZone, utcOffset: override.utcOffset, source: "client" };
+      }
+    }
+  }
   const offsetMinutes = -date.getTimezoneOffset();
   const sign = offsetMinutes >= 0 ? "+" : "-";
   const abs = Math.abs(offsetMinutes);
@@ -67,7 +107,7 @@ export function localNow(date = new Date()): PromptEnvironmentFacts["now"] {
     `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
     `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())} ${utcOffset}`;
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "local";
-  return { iso, timeZone, utcOffset };
+  return { iso, timeZone, utcOffset, source: "server" };
 }
 
 /** `present` для версии/пути, `missing` для явного `missing`, иначе unknown. */
@@ -189,19 +229,21 @@ export function collectPromptFacts(input: PromptFactsInput): PromptEnvironmentFa
     activeToolTags: input.activeToolTags ?? config.tools?.defaultTags ?? [],
     autoPlan: config.autoPlan,
     security: config.security,
-    now: localNow(),
+    now: localNow(new Date(), input.clientTz),
   };
 }
 
 /**
  * Факты-заглушка для вызовов без отчёта окружения (тесты, старые поверхности).
  * Ничего не утверждает о наличии Bun/команд: `unknown`/пусто.
- * @param config конфиг; @param baseDir workspace; @param profile сжатый профиль.
+ * @param config конфиг; @param baseDir workspace; @param profile сжатый профиль;
+ * @param clientTz часовой пояс клиента (веб, опционально).
  */
 export function fallbackPromptFacts(
   config: AppConfig,
   baseDir: string,
   profile: string,
+  clientTz?: ClientTz,
 ): PromptEnvironmentFacts {
   // B7: платформа — из `process.platform`, а не из угадайки по строке профиля
   // (`"darwin"` в имени профиля — не macOS). Параметр `profile` оставлен для
@@ -234,6 +276,6 @@ export function fallbackPromptFacts(
     activeToolTags: config.tools?.defaultTags ?? [],
     autoPlan: config.autoPlan,
     security: config.security,
-    now: localNow(),
+    now: localNow(new Date(), clientTz),
   };
 }

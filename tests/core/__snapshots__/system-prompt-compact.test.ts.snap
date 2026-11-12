@@ -1,7 +1,7 @@
 // Bun Snapshot v1, https://bun.sh/docs/test/snapshots
 
 exports[`system prompt: compact core matches the golden snapshot 1`] = `
-"You are MMA, an AI agent for small models. Date: 2026-10-31 12:00:00 +00:00.
+"You are MMA, an AI agent for small models. Date: 2026-10-31 12:00:00 +00:00 (server local time).
 Workspace: /tmp/proj. linux.
 Reply in the user's language. Explain briefly if not obvious.
 

@@ -126,7 +126,11 @@ export function buildSystemInfo(
   facts?: PromptEnvironmentFacts,
 ): string {
   const env = facts ?? fallbackPromptFacts(config, baseDir, profileCompressed);
-  const now = env.now.iso;
+  // B18: чьё время — в промпт явно. Серверное для веба может отличаться от
+  // пользовательского на часы; без метки малая модель уверенно планирует
+  // «сегодня» по чужому поясу. Клиентское маркируем как пользовательское.
+  const nowNote = env.now.source === "client" ? "user local time" : "server local time";
+  const now = `${env.now.iso} (${nowNote})`;
   const isBunProject =
     env.project.packageManager === "bun" && env.tools.bun === "present";
   const baselineCommands = [env.project.testCommand, env.project.typecheckCommand]
