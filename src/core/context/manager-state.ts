@@ -5,6 +5,7 @@
  */
 import type { ContextBudget as ConfigContextBudget } from "../../config/types";
 import { DEFAULTS } from "../../config/defaults";
+import { LARGE_WINDOW_THRESHOLD } from "../system-prompt";
 import type { TokenCounter } from "../../llm/token-counter";
 import { ContextCalibrator } from "../../core/api";
 import { FactExtractor } from "./fact-extractor";
@@ -114,18 +115,41 @@ export interface ContextState {
   tokenCache: CachedTokenEstimator;
 }
 
+/** Порог компакции на больших окнах (L3): рано резать нечего — room есть. */
+export const LARGE_COMPACTION_THRESHOLD = 0.9;
+/** Хранимых тул-результатов на больших окнах (L3): 6 душат длинные ходы. */
+export const LARGE_TOOL_RESULT_KEEP = 20;
+
 /** Резолвит тюнинг-параметры бюджета с безопасными дефолтами. */
-export function resolveTuning(b: ConfigContextBudget | undefined): ContextTuning {
+export function resolveTuning(
+  b: ConfigContextBudget | undefined,
+  contextWindow?: number,
+): ContextTuning {
   const merged = {
     ...DEFAULTS.contextBudget,
     ...(b ?? {}),
   } as Required<ConfigContextBudget>;
+  // L3: дефолты настроены под тесноту 32K. На больших окнах те же дефолты
+  // режут полезное (компакция на 75% выбрасывает контекст, 6 тул-результатов
+  // при room для 20). Явные значения конфига побеждают всегда.
+  const dflt = DEFAULTS.contextBudget;
+  const isLarge = (contextWindow ?? 0) >= LARGE_WINDOW_THRESHOLD;
   return {
-    compactionThreshold: merged.compactionThreshold,
+    compactionThreshold:
+      merged.compactionThreshold !== dflt.compactionThreshold
+        ? merged.compactionThreshold
+        : isLarge
+          ? LARGE_COMPACTION_THRESHOLD
+          : merged.compactionThreshold,
     compactionMinLoad: merged.compactionMinLoad,
     policy: merged.policy,
     overflowCooldown: merged.overflowCooldown,
-    toolResultKeep: merged.toolResultKeep,
+    toolResultKeep:
+      merged.toolResultKeep !== dflt.toolResultKeep
+        ? merged.toolResultKeep
+        : isLarge
+          ? LARGE_TOOL_RESULT_KEEP
+          : merged.toolResultKeep,
     calibrationWarmup: merged.calibrationWarmup,
     ratioFloor: merged.ratioFloor,
     compactionSummary: merged.compactionSummary,
@@ -157,7 +181,7 @@ export function createContextState(
   contextBudget?: ConfigContextBudget,
   tokenCounter?: TokenCounter | null,
 ): ContextState {
-  const tuning = resolveTuning(contextBudget);
+  const tuning = resolveTuning(contextBudget, contextWindow);
   const calibrationOptions = {
     warmup: tuning.calibrationWarmup,
     ratioFloor: tuning.ratioFloor,

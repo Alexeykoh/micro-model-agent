@@ -39,6 +39,27 @@ export interface IndexerModuleOptions {
 /** Дефолтный токен-бюджет списка файлов карты. */
 const MAP_TOKEN_BUDGET = 1500;
 
+/**
+ * Бюджет карты на больших окнах (L2): 1500 токенов — это 1% окна 200K,
+ * модель получает выжимку вместо карты. Явное значение конфига побеждает;
+ * дефолт масштабируется (см. `effectiveMapTokenBudget` в workspace-фазе).
+ */
+export const LARGE_MAP_TOKEN_BUDGET = 6000;
+
+/**
+ * Эффективный бюджет карты (L2): явный конфиг — как есть; дефолт на большом
+ * окне поднимается до `LARGE_MAP_TOKEN_BUDGET`. Чистая — тестируется отдельно.
+ */
+export function effectiveMapTokenBudget(
+  configured: number | undefined,
+  defaultBudget: number,
+  contextWindow: number,
+  largeWindowThreshold: number,
+): number {
+  if (configured !== undefined && configured !== defaultBudget) return configured;
+  return contextWindow >= largeWindowThreshold ? LARGE_MAP_TOKEN_BUDGET : defaultBudget;
+}
+
 /** Модуль индексатора: кэш, карта проекта для промпта, тул project_map, вотчер. */
 export class IndexerModule implements AgentModule {
   name = "indexer";

@@ -84,13 +84,16 @@ export function contextWindowHint(config: AppConfig, configDir: string, recommen
 }
 
 /**
- * Ближайший стандартный размер контекста, чей системный бюджет (10%)
- * вмещает `neededSystemTokens`. Фолбэк — крупнейший известный.
+ * Ближайший стандартный размер контекста, чей системный бюджет
+ * (`systemFraction`, по умолчанию 10%) вмещает `neededSystemTokens`.
+ * Фолбэк — крупнейший известный (L1: шкала продлена до 1M — хостед-модели
+ * с окнами 500K–1M раньше упирались в потолок 262K).
  */
-export function recommendContextSize(neededSystemTokens: number): number {
-  const sizes = [8192, 16384, 32768, 65536, 131072, 262144];
+export function recommendContextSize(neededSystemTokens: number, systemFraction = 0.1): number {
+  const sizes = [8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576];
+  const fraction = systemFraction > 0 ? systemFraction : 0.1;
   return (
-    sizes.find((s) => Math.floor(s * 0.1) >= neededSystemTokens) ?? sizes[sizes.length - 1]
+    sizes.find((s) => Math.floor(s * fraction) >= neededSystemTokens) ?? sizes[sizes.length - 1]
   );
 }
 
@@ -117,7 +120,9 @@ export function overflowHint(
 ): string {
   const fraction = config.contextBudget?.systemPrompt ?? 0.1;
   const budget = Math.floor(config.contextWindow * fraction);
-  const recommended = recommendContextSize(neededTokens);
+  // L1: доля из живого конфига, а не захардкоженные 10% — иначе хинт врёт
+  // при нестандартном systemPrompt.
+  const recommended = recommendContextSize(neededTokens, fraction);
   const requiredWindow = requiredContextWindow(neededTokens, fraction);
   const requiredFraction = requiredSystemFraction(neededTokens, config.contextWindow);
   const how = configDir

@@ -7,12 +7,13 @@
  */
 import { join, resolve } from "path";
 import { statSync } from "fs";
-import { buildSystemInfo, resolvePromptProfile } from "../system-prompt";
+import { buildSystemInfo, resolvePromptProfile, LARGE_WINDOW_THRESHOLD } from "../system-prompt";
 import { collectPromptFacts } from "../prompt-facts";
 import { collectEnvironment, logEnvironment } from "../environment";
 import type { EnvironmentReport } from "../environment";
-import { IndexerModule } from "../../modules/indexer/index";
-import { SkillsLoader, SkillsModule, SkillUsage } from "../../modules/skills/index";
+import { IndexerModule, effectiveMapTokenBudget } from "../../modules/indexer/index";
+import { DEFAULTS } from "../../config/defaults";
+import { SkillsLoader, SkillsModule, SkillUsage, LARGE_CATALOG_LIMIT } from "../../modules/skills/index";
 import { ToolRegistry, registerAllTools } from "../../tools/index";
 import { PluginManager } from "../../modules/plugins/manager";
 import {
@@ -106,12 +107,19 @@ export async function setupWorkspacePhase(
   }
 
   const projectMapCacheDir = projectMmaDir(baseDir);
+  // L2: бюджет карты масштабируется с окном (явный конфиг побеждает).
+  const mapTokenBudget = effectiveMapTokenBudget(
+    config.indexer?.mapTokenBudget,
+    DEFAULTS.indexer.mapTokenBudget,
+    config.contextWindow,
+    LARGE_WINDOW_THRESHOLD,
+  );
   const indexerModule = new IndexerModule({
     baseDir,
     cacheDir: projectMapCacheDir,
     maxFiles: config.indexer?.maxFiles,
     respectGitignore: config.indexer?.respectGitignore,
-    mapTokenBudget: config.indexer?.mapTokenBudget,
+    mapTokenBudget,
     logger: logger.child("indexer"),
   });
   try {
@@ -148,6 +156,8 @@ export async function setupWorkspacePhase(
       projectDir: projectSkillsDir,
     },
     skillUsage,
+    // L2: каталог шире на больших окнах (модель держит выбор из 25 без потерь).
+    config.contextWindow >= LARGE_WINDOW_THRESHOLD ? LARGE_CATALOG_LIMIT : undefined,
   );
 
   const toolRegistry = new ToolRegistry();

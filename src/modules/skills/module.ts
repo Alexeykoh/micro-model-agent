@@ -2,7 +2,7 @@
 import type { AgentModule, AgentPlugin } from "../types";
 import type { PromptBlock } from "../../core/types";
 import { SkillsLoader, type SkillMeta } from "./loader";
-import { buildCatalogBlock, buildLoadedBlock } from "./catalog";
+import { buildCatalogBlock, buildLoadedBlock, CATALOG_LIMIT } from "./catalog";
 import { LoadedEvents, type LoadedSkillRef } from "./loaded-events";
 import type { SkillUsage } from "./usage";
 import { t } from "../../i18n/index";
@@ -14,6 +14,15 @@ export interface LoadResult {
   message: string;
   skill?: SkillMeta;
 }
+
+/**
+ * Абсолютный потолок суммарного веса загруженных тел скиллов (L2): хвост
+ * промпта, каждая загрузка рвёт prefix-cache. Долевой бюджет
+ * (`skills.budget` × окно) на больших окнах даёт десятки тысяч токенов хвоста;
+ * cap держит его в разумных рамках. На малом окне доля меньше cap —
+ * поведение 1:1 со старым.
+ */
+export const SKILLS_LOADED_TOKENS_CAP = 6000;
 
 /** Каталоги-источники скиллов в порядке приоритета (builtin → global → project). */
 export interface SkillSources {
@@ -36,17 +45,24 @@ export class SkillsModule implements AgentModule {
   private sources?: SkillSources;
   /** Счётчики использования: каталог в промпте показывает топ-10. */
   private usage?: SkillUsage;
+  /**
+   * Сколько имён показывает каталог (L2): дефолт — small-канон (10),
+   * workspace-фаза ставит 25 на больших окнах.
+   */
+  catalogLimit: number;
 
   constructor(
     availableSkills: SkillMeta[],
     budget: number,
     sources?: SkillSources,
     usage?: SkillUsage,
+    catalogLimit: number = CATALOG_LIMIT,
   ) {
     this.availableSkills = availableSkills;
     this.budget = budget;
     this.sources = sources;
     this.usage = usage;
+    this.catalogLimit = catalogLimit;
   }
 
   /**
@@ -223,9 +239,9 @@ export class SkillsModule implements AgentModule {
     return blocks;
   }
 
-  /** Компактный каталог: топ-10 по использованию, имена без описаний. */
+  /** Компактный каталог: топ-N по использованию, имена без описаний. */
   getCatalogBlock(): PromptBlock | null {
-    return buildCatalogBlock(this.availableSkills, this.usage);
+    return buildCatalogBlock(this.availableSkills, this.usage, this.catalogLimit);
   }
 
   /** Тела загруженных скиллов: низкий приоритет и хвост промпта. */
@@ -245,6 +261,10 @@ export class SkillsModule implements AgentModule {
 
   private tryLoad(skill: SkillMeta): LoadResult {
     const tokens = this.estimateTokens(skill.content);
+    // L2: тела скиллов живут в хвосте промпта и рвут prefix-cache при росте —
+    // абсолютный cap поверх долевого бюджета (на малом окне доля меньше cap
+    // и поведение не меняется).
+    const effectiveBudget = Math.min(this.budget, SKILLS_LOADED_TOKENS_CAP);
 
     if (tokens > this.budget) {
       return {
@@ -257,8 +277,8 @@ export class SkillsModule implements AgentModule {
       };
     }
 
-    if (this.currentTokens + tokens > this.budget) {
-      const remaining = this.budget - this.currentTokens;
+    if (this.currentTokens + tokens > effectiveBudget) {
+      const remaining = Math.max(0, effectiveBudget - this.currentTokens);
       return {
         success: false,
         message: t("skill.exceeds_budget", {
@@ -279,7 +299,7 @@ export class SkillsModule implements AgentModule {
       message: t("skill.loaded", {
         name: skill.name,
         tokens,
-        remaining: this.budget - this.currentTokens,
+        remaining: effectiveBudget - this.currentTokens,
       }),
       skill,
     };
