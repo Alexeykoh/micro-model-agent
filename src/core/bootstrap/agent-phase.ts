@@ -91,6 +91,8 @@ export interface AgentPhaseInput {
   contextProbeRef: ContextProbeBox;
   /** Живая проба возможностей для пересборки провайдера (INV-R2). */
   capabilitiesProbeRef: { probe?: ModelCapabilities };
+  /** Сжатый профиль пользователя (B14: пересборка статики при reconfigure). */
+  profileCompressed?: string;
 }
 
 /**
@@ -134,6 +136,7 @@ export async function assembleAgent(
     contextProbePromise,
     contextProbeRef,
     capabilitiesProbeRef,
+    profileCompressed,
   } = input;
 
   // Fail-open верификатора плана (INV-15/W0.6): `verify_error` пишем в session.jsonl
@@ -187,6 +190,8 @@ export async function assembleAgent(
     // INV-15: деградации проверки заявлений идут в сессию тем же стоком,
     // что и прочие сигналы петли.
     onDiagnostic: admissionDiagnosticSink(sessionManager),
+    // B14: сжатый профиль со старта — по нему reconfigure пересобирает статику.
+    profileCompressed,
   };
 
   const agent = new Agent(agentDeps);

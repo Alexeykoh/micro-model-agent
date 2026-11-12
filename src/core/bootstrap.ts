@@ -191,6 +191,8 @@ export async function bootstrap(
       contextProbePromise: provider.contextProbePromise,
       contextProbeRef: provider.contextProbeRef,
       capabilitiesProbeRef: provider.capabilitiesRef,
+      // B14: сжатый профиль со старта — reconfigure пересобирает статику.
+      profileCompressed: provider.profile.compress(),
     },
     workspace.toolRegistry,
   );
@@ -242,6 +244,7 @@ export async function bootstrap(
       activeToolTags: session.activeToolTags,
       capabilitiesProbeRef: provider.capabilitiesRef,
       contextLogEnabled: session.contextLogger !== undefined,
+      profileCompressed: provider.profile.compress(),
     }),
   };
 }

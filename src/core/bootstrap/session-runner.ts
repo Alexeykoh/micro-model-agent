@@ -95,6 +95,7 @@ export function createSessionRunnerFactory(
       activeToolTags,
       capabilitiesProbeRef,
       contextLogEnabled,
+      profileCompressed,
     } = template;
 
     // Запиненный sibling поверх общего стора: пишет только свою сессию,
@@ -240,6 +241,7 @@ export function createSessionRunnerFactory(
       contextProbeRef,
       registry,
       capabilitiesProbeRef,
+      profileCompressed,
     });
     seedRunnerHistory(agent, pinned, sessionId);
 

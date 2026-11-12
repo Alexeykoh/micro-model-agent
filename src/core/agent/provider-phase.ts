@@ -19,6 +19,7 @@ import {
 import { reasoningCapsForProvider } from "../../modules/providers/reasoning-resolve";
 import { rememberReasoningMechanism } from "../../modules/reasoning/probe";
 import { buildActiveProvider } from "../../modules/providers/factory";
+import { refreshSystemInfoBlock } from "../system-prompt";
 import { t } from "../../i18n/index";
 import { errMsg } from "../../utils/error";
 import {
@@ -105,6 +106,10 @@ export async function reconfigure(
   deps.config = config;
   if (deps.configRef) deps.configRef.current = config;
   host.costTracker.setModel(config.model);
+  // B14: живой конфиг сменился — статика системного промпта (тест-команда,
+  // autoPlan, security, runtime/LSP-строки) stale с bootstrap: пересобрать.
+  // Best-effort: без profileCompressed старые поверхности молча пропускают.
+  refreshSystemInfoBlock(deps);
   applyReasoningStrategy(host, config.provider);
   // Новой паре — новая ленивая reasoning-проба (фон, B2): до её резолва
   // механизм «не подтверждён», а не унаследован от прошлого бэкенда.

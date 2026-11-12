@@ -92,6 +92,13 @@ export interface AgentDeps {
   exitOnComplete?: boolean;
   envReport?: EnvironmentReport;
   /**
+   * Сжатый профиль пользователя на старт процесса (B14): по нему
+   * `refreshSystemInfoBlock` пересобирает статику при `reconfigure`.
+   * Опционально — старые поверхности и тесты живут без него (статика
+   * тогда не обновляется, как раньше).
+   */
+  profileCompressed?: string;
+  /**
    * Прошёл ли механизм reasoning-effort валидацию пробой. Только стартовое
    * значение — живой итог даёт `reasoningProbe` (B2), который агент лениво
    * ждёт перед первым LLM-вызовом.

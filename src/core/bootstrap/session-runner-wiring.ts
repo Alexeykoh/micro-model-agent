@@ -56,6 +56,8 @@ export interface SessionRunnerTemplate {
   contextProbePromise: Promise<ContextProbeResult | null>;
   /** Живой бокс context-probe: раннеры читают итог после свитча, а не снимок старта. */
   contextProbeRef: ContextProbeBox;
+  /** Сжатый профиль пользователя (B14: пересборка статики при reconfigure). */
+  profileCompressed?: string;
   /** Живой реестр main-агента (клон на спавн; question/approve уже внутри). */
   toolRegistry: ToolRegistry;
   /** Живой менеджер main-агента (инстансы плагинов переиспользуются). */
@@ -129,6 +131,7 @@ interface AssembleRunnerAgentInput {
   contextProbeRef: ContextProbeBox;
   registry: ToolRegistry;
   capabilitiesProbeRef: ProviderProbesBox;
+  profileCompressed?: string;
 }
 
 /**
@@ -164,6 +167,7 @@ export function assembleRunnerAgent(input: AssembleRunnerAgentInput): Agent {
     contextProbeRef,
     registry,
     capabilitiesProbeRef,
+    profileCompressed,
   } = input;
   const agentDeps: AgentDeps = {
     config,
@@ -198,6 +202,8 @@ export function assembleRunnerAgent(input: AssembleRunnerAgentInput): Agent {
     planPendingSteps: () => runnerExec.getPlanPendingSteps(),
     toolCtx,
     onDiagnostic: admissionDiagnosticSink(sessionManager),
+    // B14: тот же стартовый профиль, что у main (пересборка статики).
+    profileCompressed,
   };
   const agent = new Agent(agentDeps);
 
