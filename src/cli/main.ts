@@ -54,6 +54,23 @@ async function main(): Promise<void> {
   // ~/.mma/logs/crash.jsonl (с env-репортом), а не голым стеком в stderr.
   installCrashHandlers();
 
+  // Windows: переключаем консоль на UTF-8, чтобы кириллица в changelog/
+  // релизных заметках не превращалась в mojibake.
+  if (process.platform === "win32") {
+    try {
+      const { execSync } = await import("node:child_process");
+      execSync("chcp 65001", { stdio: "ignore" });
+    } catch {
+      // ignore
+    }
+    try {
+      process.stdout.setDefaultEncoding?.("utf8");
+      process.stderr.setDefaultEncoding?.("utf8");
+    } catch {
+      // ignore
+    }
+  }
+
   // Канал-дефолт создаём жадно, чтобы подписался на `defaultOutputBus` ДО того, как
   // конфиг/bootstrap что-то эмитит (варнинги конфига, сводка миграции, апдейтер).
   // Канал ленив через `getDefaultChannel()`: без этого вызова каждое событие шины
