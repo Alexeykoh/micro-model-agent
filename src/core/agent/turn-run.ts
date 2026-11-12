@@ -26,6 +26,11 @@ export interface TurnRunHost {
   systemPromptAdded: boolean;
   overflowResolved: boolean;
   probePassed: boolean;
+  /**
+   * Отпечаток входов последнего резолва переполнения (B16/B17): null/unknown —
+   * сверить заново. Сбрасывается только заменой (не per-turn).
+   */
+  overflowFingerprint: string | null;
   /** Снимок карты проекта на ход (имутабельный промпт внутри хода). */
   frozenMapBlock: PromptBlock | null;
   setScope(): void;
@@ -94,6 +99,7 @@ export async function runTurn(
       deps,
       systemPromptAdded: host.systemPromptAdded,
       overflowResolved: host.overflowResolved,
+      overflowFingerprint: host.overflowFingerprint,
       buildSystemPrompt: () => host.buildSystemPrompt(),
       resolvePromptOverflowOnce: () => host.resolvePromptOverflowOnce(),
       refreshSystemPrompt: () => host.refreshSystemPrompt(),
@@ -104,6 +110,7 @@ export async function runTurn(
     host.systemPromptAdded = start.systemPromptAdded;
     host.overflowResolved = start.overflowResolved;
     if (start.probePassed !== undefined) host.probePassed = start.probePassed;
+    if (start.overflowFingerprint !== undefined) host.overflowFingerprint = start.overflowFingerprint;
   }
 
   // Новое сообщение — новый интервал компакции: итерации прошлого хода не должны
