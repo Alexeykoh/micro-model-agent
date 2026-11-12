@@ -203,14 +203,18 @@ export function fallbackPromptFacts(
   baseDir: string,
   profile: string,
 ): PromptEnvironmentFacts {
-  const p = profile.toLowerCase();
-  const platform: PromptPlatform = p.includes("win32")
-    ? "win32"
-    : p.includes("darwin") || p.includes("mac")
-      ? "darwin"
-      : p.includes("linux")
-        ? "linux"
-        : "unknown";
+  // B7: платформа — из `process.platform`, а не из угадайки по строке профиля
+  // (`"darwin"` в имени профиля — не macOS). Параметр `profile` оставлен для
+  // совместимости сигнатуры; платформа машины от него не зависит.
+  void profile;
+  const platform: PromptPlatform =
+    process.platform === "win32"
+      ? "win32"
+      : process.platform === "darwin"
+        ? "darwin"
+        : process.platform === "linux"
+          ? "linux"
+          : "unknown";
   const shell: PromptShell = platform === "win32" ? "cmd" : platform === "unknown" ? "unknown" : "sh";
   return {
     baseDir,

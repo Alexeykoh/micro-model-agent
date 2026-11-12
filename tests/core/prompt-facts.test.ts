@@ -85,8 +85,20 @@ describe("prompt facts: safe fallback", () => {
   it("does not claim tools that were not probed", () => {
     const f = fallbackPromptFacts(structuredClone(DEFAULTS), "/tmp", "linux");
     expect(f.tools).toEqual({ bun: "unknown", git: "unknown", python: "unknown" });
-    expect(f.platform).toBe("linux");
-    expect(f.shell).toBe("sh");
+  });
+
+  it("derives platform from the machine, not the profile text (B7)", () => {
+    const f = fallbackPromptFacts(structuredClone(DEFAULTS), "/tmp", "definitely-win32-darwin");
+    const expected =
+      process.platform === "win32"
+        ? "win32"
+        : process.platform === "darwin"
+          ? "darwin"
+          : process.platform === "linux"
+            ? "linux"
+            : "unknown";
+    expect(f.platform).toBe(expected);
+    expect(f.shell).toBe(expected === "win32" ? "cmd" : expected === "unknown" ? "unknown" : "sh");
   });
 
   it("renders local time with an offset", () => {

@@ -84,7 +84,7 @@ export function buildSystemPrompt(host: PromptPhaseHost): SystemPromptBuild {
   // Выбор линейки под класс модели — задача L6.
   if (host.promptProfile === "service-job") {
     const tools = deps.toolExecutor.getToolDefinitions(deps.toolTags).map((t) => t.name);
-    const prompt = buildServiceJobPrompt(deps.config.model, tools);
+    const prompt = buildServiceJobPrompt(deps.config.model, tools, deps.config.security);
     return {
       prompt,
       excluded: [],

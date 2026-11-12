@@ -43,6 +43,15 @@ const PRIORITY_ORDER: Record<string, number> = {
 };
 
 /**
+ * Числовой ранг приоритета. Неизвестный (опечатка плагина/скилла) — как
+ * `normal`, а не `undefined`: иначе разность даёт NaN и порядок сортировки
+ * негарантирован (B15) — бюджет начинал выбрасывать случайные блоки.
+ */
+function priorityRank(priority: string): number {
+  return PRIORITY_ORDER[priority] ?? PRIORITY_ORDER.normal;
+}
+
+/**
  * Убирает блоки, которым нужен неактивный тег тулов (напр. `browser`).
  * Пустой/неизвестный набор — legacy-режим «все тулы», блоки не фильтруются.
  * B12: при суженном наборе (allowlist) тег может быть «активен», но ни один
@@ -143,7 +152,7 @@ export class PromptBuilder {
     const essential = this.blocks.filter((block) => block.essential);
     const nonEssential = this.blocks
       .filter((block) => !block.essential)
-      .sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]);
+      .sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority));
     // Стабильный префикс → per-turn → волатильный хвост. Essential-tail
     // (план) — последним: он меняется на каждом шаге.
     const ordered = [
