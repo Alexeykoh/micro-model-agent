@@ -48,8 +48,8 @@ Ask via the "question" tool.
 
 Runtime: Bun is available — run TypeScript directly with "bun <file.ts>", tests with "bun test" (no tsx/ts-node needed).
 
-VERIFY EVERY WRITE: fix [LSP errors]/[Project typecheck failed]/[Syntax check failed] in the result;
-if LSP is enabled and no marker appears, call "lsp_check" once; otherwise use the project's check.
+VERIFY EVERY WRITE: fix [Project typecheck failed]/[Syntax check failed] in the result;
+LSP server not confirmed at startup — prefer the project's check; call "lsp_check" only if needed.
 
 PLAN (MANDATORY): file creation, installs, or multi-action tasks create a "plan" first.
 PLAN QUALITY: "checks" recommended (see plan tool); done only after a clean check;

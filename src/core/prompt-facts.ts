@@ -36,6 +36,11 @@ export interface PromptEnvironmentFacts {
     languages: string[];
   };
   mcp: { configured: string[]; connected: string[] };
+  /**
+   * B6: `hasServer` — подтверждённый сервер, НЕ копия `enabled`. Факты
+   * собираются до старта LSP, поэтому оба конструктора ставят `false`;
+   * `true` ставит только тот, кто реально видел сервер (задача B14).
+   */
   lsp: { enabled: boolean; hasServer: boolean };
   activeToolTags: string[];
   autoPlan: boolean;
@@ -155,6 +160,10 @@ export function collectPromptFacts(input: PromptFactsInput): PromptEnvironmentFa
   const mcpConfigured = Object.entries(config.mcpServers ?? {})
     .filter(([, server]) => server.enabled !== false)
     .map(([name]) => name);
+  // B6: hasServer — НЕ равен enabled. Факты собираются до старта LSP-модуля
+  // (workspace-фаза раньше modules-фазы), состояние сервера неизвестно —
+  // честно false («не подтверждён»), а не копия флага. Промпт решает по паре
+  // (enabled, hasServer), чтобы не слать модель в `lsp_check` без сервера.
   const lspEnabled = config.lsp?.enabled ?? true;
 
   return {
@@ -174,7 +183,9 @@ export function collectPromptFacts(input: PromptFactsInput): PromptEnvironmentFa
       languages: [],
     },
     mcp: { configured: mcpConfigured, connected: [] },
-    lsp: { enabled: lspEnabled, hasServer: lspEnabled },
+    // B6: сервер на момент фактов ещё не стартовал — `false`, заполнение
+    // реальным состоянием после LSP-probe — задача B14 (статика stale).
+    lsp: { enabled: lspEnabled, hasServer: false },
     activeToolTags: input.activeToolTags ?? config.tools?.defaultTags ?? [],
     autoPlan: config.autoPlan,
     security: config.security,
@@ -214,7 +225,8 @@ export function fallbackPromptFacts(
         .map(([name]) => name),
       connected: [],
     },
-    lsp: { enabled: config.lsp?.enabled ?? true, hasServer: config.lsp?.enabled ?? true },
+    // B6: вне bootstrap состояние сервера неизвестно — честно false.
+    lsp: { enabled: config.lsp?.enabled ?? true, hasServer: false },
     activeToolTags: config.tools?.defaultTags ?? [],
     autoPlan: config.autoPlan,
     security: config.security,

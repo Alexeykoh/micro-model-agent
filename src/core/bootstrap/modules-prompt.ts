@@ -119,7 +119,10 @@ export function dryRunStartupOverflow(
   const { config, logger, dir, activeToolTags } = input;
   const auditBlocks = buildStartupAuditBlocks(input, sessionModule);
   const systemBudget = Math.floor(config.contextWindow * config.contextBudget.systemPrompt);
-  const dry = dryRunOverflow(filterBlocksForTags([...promptBlocks, ...auditBlocks], activeToolTags), systemBudget);
+  // B12: тот же allowlist-aware гейт, что в первой сборке (иначе баннер
+  // считал бы по другому набору, чем `buildSystemPrompt`).
+  const visibleTags = input.toolRegistry.visibleTagsOf(activeToolTags, input.toolCtx.toolAllowlist);
+  const dry = dryRunOverflow(filterBlocksForTags([...promptBlocks, ...auditBlocks], activeToolTags, visibleTags), systemBudget);
   if (dry.overflow.length === 0) return;
   const overflowTokens = dry.overflow.reduce((s, b) => s + b.estimatedTokens, 0);
   const needed = dry.includedTokens + overflowTokens;

@@ -236,6 +236,12 @@ export class ToolExecutor {
     return result;
   }
 
+  /** Теги тулов, реально попавших в схему LLM (allowlist-aware, гейт B12). */
+  getVisibleTags(tags?: string[]): Set<string> {
+    const allow = allowedToolNames(this.ctx);
+    return this.registry.visibleTagsOf(tags, allow ? [...allow] : undefined);
+  }
+
   /** Определения тулов с учётом allowlist (для схемы LLM). */
   getToolDefinitions(tags?: string[]): Array<{
     name: string;

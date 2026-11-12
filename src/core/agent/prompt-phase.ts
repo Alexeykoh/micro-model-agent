@@ -80,8 +80,11 @@ export function buildSystemPrompt(host: PromptPhaseHost): SystemPromptBuild {
   const builder = new PromptBuilder(systemBudget);
   const applyOverrides = (blocks: PromptBlock[]): PromptBlock[] =>
     blocks.map((b) => (b.kind && host.promptOverrides.has(b.kind) ? host.promptOverrides.get(b.kind)! : b));
-  builder.addBlocks(applyOverrides(filterBlocksForTags(deps.promptBlocks, deps.toolTags)));
-  const dynamic = filterBlocksForTags(deps.getDynamicPromptBlocks?.() ?? [], deps.toolTags);
+  // B12: гейт по реально видимым тегам схемы (allowlist-aware), а не только
+  // по активным — иначе блок рекламирует тул, которого нет в схеме LLM.
+  const visibleTags = deps.toolExecutor.getVisibleTags(deps.toolTags);
+  builder.addBlocks(applyOverrides(filterBlocksForTags(deps.promptBlocks, deps.toolTags, visibleTags)));
+  const dynamic = filterBlocksForTags(deps.getDynamicPromptBlocks?.() ?? [], deps.toolTags, visibleTags);
   const stableDynamic = freezeProjectMap(host, applyOverrides(dynamic));
   if (stableDynamic.length > 0) {
     builder.addBlocks(stableDynamic);
