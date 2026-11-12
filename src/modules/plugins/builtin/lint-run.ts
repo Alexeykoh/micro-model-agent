@@ -9,6 +9,20 @@ import { settleChildClose } from "../../../utils/child-run";
 // поэтому пропускаем до конца процесса.
 const missingLintBinaries = new Set<string>();
 
+/** Ошибка дочернего процесса (settleChildClose): статус + захваченные потоки. */
+export type ChildProcessError = Error & {
+  status?: number;
+  stdout?: unknown;
+  stderr?: unknown;
+};
+
+/** Приводит пойманное к {@link ChildProcessError} без any-каста. */
+export function childErr(err: unknown): ChildProcessError {
+  return err instanceof Error
+    ? (err as ChildProcessError)
+    : (new Error(String(err)) as ChildProcessError);
+}
+
 function lintCacheKey(baseDir: string, lintScript: string): string {
   return `${baseDir}::${lintScript}`;
 }
@@ -164,7 +178,14 @@ export function runAsync(
         resolve({ stdout, stderr });
         return;
       }
-      settleChildClose(code, stdout, stderr, `Command failed with exit code ${code}`, resolve, reject);
+      settleChildClose(
+        code,
+        stdout,
+        stderr,
+        `Command failed with exit code ${code}`,
+        resolve,
+        reject,
+      );
     });
   });
 }
