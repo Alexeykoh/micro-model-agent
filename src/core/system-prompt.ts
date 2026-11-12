@@ -14,8 +14,9 @@
  */
 import type { AppConfig } from "../config/types";
 import type { PromptBlock } from "./types";
+import type { AgentDeps } from "./agent/deps";
 import { estimateTokens } from "../llm/token-counter";
-import { fallbackPromptFacts, type PromptEnvironmentFacts } from "./prompt-facts";
+import { collectPromptFacts, fallbackPromptFacts, type PromptEnvironmentFacts } from "./prompt-facts";
 /**
  * Динамический блок идентичности активной модели. Собирается свежим на
  * каждом билде системного промпта, поэтому переживает `/model use`/
@@ -62,6 +63,37 @@ export function buildServiceJobPrompt(model: string, tools: readonly string[]): 
 /** Обрезает длинную команду в промпте, сохраняя строку ≤120 символов. */
 function clip(value: string, max = 60): string {
   return value.length <= max ? value : `${value.slice(0, max - 1)}…`;
+}
+
+/**
+ * Пересборка статичного system-блока из живых зависимостей (B14).
+ * Bootstrap фиксирует systemInfo один раз — тест-команда, autoPlan, security,
+ * runtime/Bun, LSP-строки; после `reconfigure` всё это stale. Факты собираются
+ * заново (package.json читается с диска, теги/конфиг — живые), блок меняется
+ * на месте: порядок и приоритет сохраняются, prefix-cache рвётся один раз.
+ * Профиль — строкой со старта (смена профиля mid-process вне скоупа).
+ * @param deps живые зависимости агента.
+ * @returns true — блок найден и пересобран; false — нечего обновлять.
+ */
+export function refreshSystemInfoBlock(deps: AgentDeps): boolean {
+  if (!deps.profileCompressed) return false;
+  const idx = deps.promptBlocks.findIndex((b) => b.source === "core" && b.label === "system");
+  if (idx < 0) return false;
+  const facts = deps.envReport
+    ? collectPromptFacts({
+        config: deps.config,
+        baseDir: deps.baseDir,
+        envReport: deps.envReport,
+        activeToolTags: deps.toolTags,
+      })
+    : fallbackPromptFacts(deps.config, deps.baseDir, deps.profileCompressed);
+  const content = buildSystemInfo(deps.config, deps.baseDir, deps.profileCompressed, facts);
+  deps.promptBlocks[idx] = {
+    ...deps.promptBlocks[idx]!,
+    content,
+    estimatedTokens: estimateTokens(content),
+  };
+  return true;
 }
 
 /**
