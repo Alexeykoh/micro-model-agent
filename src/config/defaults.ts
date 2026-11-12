@@ -142,6 +142,7 @@ export const DEFAULTS: AppConfig = {
   maxToolIterations: 200,
   stuckThreshold: 6,
   autoPlan: true,
+  promptProfile: "auto",
   execution: {
     autoAdvance: true,
     profile: "local-trusted",

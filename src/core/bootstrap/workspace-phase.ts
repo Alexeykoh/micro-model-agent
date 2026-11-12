@@ -7,7 +7,7 @@
  */
 import { join, resolve } from "path";
 import { statSync } from "fs";
-import { buildSystemInfo } from "../system-prompt";
+import { buildSystemInfo, resolvePromptProfile } from "../system-prompt";
 import { collectPromptFacts } from "../prompt-facts";
 import { collectEnvironment, logEnvironment } from "../environment";
 import type { EnvironmentReport } from "../environment";
@@ -175,6 +175,9 @@ export async function setupWorkspacePhase(
 
   // SystemInfo собирается здесь из готового профиля (в исходнике — сразу
   // после создания pluginManager; сайд-эффектов чтения профиля тут уже нет).
+  // Профиль промпта — классом по окну (L5); языки — топ индексатора (B6).
+  const mapInfo = indexerModule.mapInfo();
+  const languages = mapInfo.indexed ? (mapInfo.languages ?? []).map((l) => l.language) : [];
   const systemInfoContent = buildSystemInfo(
     config,
     baseDir,
@@ -184,7 +187,9 @@ export async function setupWorkspacePhase(
       baseDir,
       envReport,
       activeToolTags: config.tools?.defaultTags,
+      languages,
     }),
+    resolvePromptProfile(config.promptProfile, config),
   );
   const systemInfoPrompt: PromptBlock = {
     source: "core",

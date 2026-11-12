@@ -18,9 +18,12 @@ export type PromptBlockKind = "instructions" | "project-map";
 /**
  * Профиль системного промпта (S-04). `service-job` — короткая поверхность для
  * одной задачи сервиса: без карты проекта, скиллов, AGENTS.md и харнесс-директив.
- * REPL/web/one-shot — `full`.
+ * `full` — поверхность REPL/web/one-shot. `large` — тот же `full` плюс строки
+ * богатого контекста для больших окон (платформа, MCP, языки): малая модель
+ * в них тонет, большой — недополучает без них (L5). Выбор — через
+ * `config.promptProfile` (`auto` — класс по окну контекста).
  */
-export type PromptProfile = "full" | "service-job";
+export type PromptProfile = "full" | "service-job" | "large";
 
 /** Блок системного промпта: контент, приоритет, оценка токенов. */
 export interface PromptBlock {

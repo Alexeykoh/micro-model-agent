@@ -2562,6 +2562,8 @@
   "config.desc.reasoning.overrideCooldown": "Ходов до повторного принятия переопределения рассуждений (1-60).",
   "config.key.autoPlan": "автоплан",
   "config.desc.autoPlan": "Позволять агенту автоматически строить план для многошаговых задач.",
+  "config.key.promptProfile": "профиль промпта",
+  "config.desc.promptProfile": "Профиль системного промпта: auto (богатый профиль для больших окон), full или large.",
   "config.key.execution.autoAdvance": "авто-завершение шагов плана",
   "config.desc.execution.autoAdvance": "Автоматически закрывать шаг плана при наличии его деливераблов. Выкл: модель закрывает шаги сама.",
   "config.key.tools.enableOnDemand": "тулы по требованию",

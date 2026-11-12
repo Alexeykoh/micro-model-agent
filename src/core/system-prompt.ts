@@ -81,12 +81,44 @@ function clip(value: string, max = 60): string {
 }
 
 /**
+ * Окно контекста, с которого промпт считается large (L5): модель держит
+ * богатый контекст и полный набор тулов без сужения. Ниже — small-канон
+ * (короткие HEADER-строки, минимум шума).
+ */
+export const LARGE_WINDOW_THRESHOLD = 128_000;
+
+/**
+ * Эффективный профиль промпта (L5): явный выбор из конфига или авто-класс
+ * по окну. `service-job` сюда не приходит — его ставит сервис на время задачи.
+ */
+export function resolvePromptProfile(
+  explicit: AppConfig["promptProfile"],
+  config: AppConfig,
+): "full" | "large" {
+  if (explicit === "full" || explicit === "large") return explicit;
+  return config.contextWindow >= LARGE_WINDOW_THRESHOLD ? "large" : "full";
+}
+
+/** Топ языков проекта из индексатора для large-профиля (B6: поле больше не мёртвое). */
+function topLanguages(deps: AgentDeps): string[] {
+  try {
+    const indexer = deps.moduleRegistry?.get("indexer") as
+      | { mapInfo?: () => { languages?: Array<{ language: string }> } }
+      | undefined;
+    return (indexer?.mapInfo?.().languages ?? []).map((l) => l.language).slice(0, 3);
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Пересборка статичного system-блока из живых зависимостей (B14).
  * Bootstrap фиксирует systemInfo один раз — тест-команда, autoPlan, security,
  * runtime/Bun, LSP-строки; после `reconfigure` всё это stale. Факты собираются
  * заново (package.json читается с диска, теги/конфиг — живые), блок меняется
  * на месте: порядок и приоритет сохраняются, prefix-cache рвётся один раз.
- * Профиль — строкой со старта (смена профиля mid-process вне скоупа).
+ * Профиль (`full`/`large`) резолвится из живого конфига — смена окна или
+ * ручной override подхватываются следующим reconfigure (L5).
  * @param deps живые зависимости агента.
  * @returns true — блок найден и пересобран; false — нечего обновлять.
  */
@@ -101,9 +133,16 @@ export function refreshSystemInfoBlock(deps: AgentDeps): boolean {
         envReport: deps.envReport,
         activeToolTags: deps.toolTags,
         clientTz: deps.clientTz,
+        languages: topLanguages(deps),
       })
     : fallbackPromptFacts(deps.config, deps.baseDir, deps.profileCompressed, deps.clientTz);
-  const content = buildSystemInfo(deps.config, deps.baseDir, deps.profileCompressed, facts);
+  const content = buildSystemInfo(
+    deps.config,
+    deps.baseDir,
+    deps.profileCompressed,
+    facts,
+    resolvePromptProfile(deps.config.promptProfile, deps.config),
+  );
   deps.promptBlocks[idx] = {
     ...deps.promptBlocks[idx]!,
     content,
@@ -135,7 +174,9 @@ export function applyClientTz(deps: AgentDeps, tz: ClientTz | undefined): boolea
  * @param config конфиг приложения; @param baseDir workspace;
  * @param profileCompressed сжатый профиль окружения;
  * @param facts факты окружения (Bun/shell/LSP/команды проекта); без них —
- *   безопасные `unknown`, а не догадки.
+ *   безопасные `unknown`, а не догадки;
+ * @param promptProfile `full` — small-канон, `large` — плюс строки богатого
+ *   контекста для больших окон (L5).
  * @returns текст системного сообщения для модели.
  */
 export function buildSystemInfo(
@@ -143,6 +184,7 @@ export function buildSystemInfo(
   baseDir: string,
   profileCompressed: string,
   facts?: PromptEnvironmentFacts,
+  promptProfile: "full" | "large" = "full",
 ): string {
   const env = facts ?? fallbackPromptFacts(config, baseDir, profileCompressed);
   // B18: чьё время — в промпт явно. Серверное для веба может отличаться от
@@ -244,6 +286,22 @@ export function buildSystemInfo(
     );
   }
   lines.push(``);
+
+  // L5: богатый контекст только для больших окон — малая модель в нём тонет,
+  // большой без него недополучает (B6: platform/shell/MCP/языки собирались,
+  // но в промпт не попадали). Строки короткие, как в small-каноне.
+  if (promptProfile === "large") {
+    lines.push(`Platform: ${env.platform} (shell: ${env.shell}).`);
+    if (env.mcp.configured.length > 0) {
+      lines.push(
+        `MCP servers configured: ${env.mcp.configured.slice(0, 8).join(", ")} — call their tools directly when the task fits.`,
+      );
+    }
+    if (env.project.languages.length > 0) {
+      lines.push(`Project languages: ${env.project.languages.slice(0, 3).join(", ")}.`);
+    }
+    lines.push(``);
+  }
 
   if (env.autoPlan) {
     lines.push(

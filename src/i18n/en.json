@@ -2562,6 +2562,8 @@
   "config.desc.reasoning.overrideCooldown": "Turns before a fresh reasoning override is accepted again (1-60).",
   "config.key.autoPlan": "auto-plan",
   "config.desc.autoPlan": "Let the agent draft a plan automatically for multi-step tasks.",
+  "config.key.promptProfile": "prompt profile",
+  "config.desc.promptProfile": "System prompt profile: auto (large windows get the rich profile), full, or large.",
   "config.key.execution.autoAdvance": "auto-advance plan steps",
   "config.desc.execution.autoAdvance": "Mark a plan step done automatically when its deliverables exist. Off: the model closes steps itself.",
   "config.key.tools.enableOnDemand": "on-demand tools",

@@ -123,6 +123,12 @@ export interface AppConfig {
   maxToolIterations: number;
   stuckThreshold: number;
   autoPlan: boolean;
+  /**
+   * Профиль системного промпта (L5): `auto` — класс по окну контекста
+   * (≥128K → `large`), `full`/`large` — вручную. `service-job` ставит
+   * только сервис на время задачи и в конфиг не входит.
+   */
+  promptProfile: "auto" | "full" | "large";
   /** Настройки execution-модуля: autoAdvance — автопометка done по файлам (дефолт true).
    * + профиль исполнения (P0 изоляция): profile — local-trusted = хост, sandbox = Docker. */
   execution?: {

@@ -77,6 +77,8 @@ export interface PromptFactsInput {
   activeToolTags?: string[];
   /** Часовой пояс клиента (веб); нет — серверное время с меткой (B18). */
   clientTz?: ClientTz;
+  /** Топ языков проекта из индексатора (large-профиль, B6/L5). */
+  languages?: string[];
 }
 
 /**
@@ -220,7 +222,7 @@ export function collectPromptFacts(input: PromptFactsInput): PromptEnvironmentFa
       packageManager,
       testCommand: commands.testCommand,
       typecheckCommand: commands.typecheckCommand,
-      languages: [],
+      languages: input.languages ?? [],
     },
     mcp: { configured: mcpConfigured, connected: [] },
     // B6: сервер на момент фактов ещё не стартовал — `false`, заполнение
