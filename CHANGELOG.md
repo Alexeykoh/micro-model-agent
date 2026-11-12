@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ## [Unreleased]
 
 ### Added
+
 - **Web UI: индикатор загруженных скиллов в композере.** Иконка `biceps-flexed` (Lucide) рядом с кнопками ввода — скрыта при 0 скиллов, появляется акцентным цветом со счётчиком при ≥1. Hover → тултип «загруженные скилы» со списком «имя · источник» (builtin/global/project). Live-обновляется по SSE-событию `skills` от модуля скиллов; состояние синглтонное (процессный набор, который реально попал в системный промпт). Спека: `docs/specs/2026-11-11-webui-skills-indicator-design.md`.
 - **Web UI: акцентное подчёркивание у `@`-упоминаний в поле ввода.** К существующей заливке `--accent-bg` добавлено акцентное подчёркивание (text-decoration в слое зеркала, выровненное с текстом textarea).
 
@@ -18,6 +19,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- **Web UI: сессии другого проекта больше не видны и не продолжаются.** Дропдаун
+  брал `sessionManager.list()` целиком из общего `~/.mma/sessions`, а ход в такой
+  сессии строился контекстом ЕЁ `projectDir`: в webui одного проекта висели
+  чужие сессии, и «продолжить» правило файлы другого репозитория
+  (ses_mwdlv8tg_…, `C:\projects\script-city-mvp` в `micor-models-agent`). Теперь
+  `/api/sessions` и SSE `sessions` отдают только сессии текущего workspace (с
+  `projectDir` в item), а `activate` и `POST /api/message` чужой сессии
+  отвечают `403 foreign_project`. Сессии без `projectDir` (старые) остаются
+  видимыми — fail-open. Спека:
+  `docs/specs/2026-11-12-webui-sessions-project-scope-design.md`.
 - **Петля: «Инструменты отключены» больше не приходит в новом ходе.** Чекпоинт
   хода переживал его границу, поэтому счётчики прошлого хода (стрик молчания,
   лимит итераций, duplicate-детектор) восстанавливались в следующий: новый
@@ -160,7 +171,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - **Read-only git-контур в `mma web`.** Состояние репозитория (ветка, число
   изменений) показывается бейджем в строке футера и git-чипами в ленте;
   отображение только для чтения — веб не выполняет git-операции.
+
 ## [0.25.0] - 2026-11-09
+
 ## [0.25.1] - 2026-11-09
 
 ### Changed

@@ -6,54 +6,26 @@
 // однo-сессионного main-агента удалён. Главный агент обслуживает только CLI/REPL
 // (и хост-команды/плагины), не ходы браузера.
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { SessionStore, RuntimeState, ConfigStore, HttpTransport, SseTransport, WorkspaceStore, SseEvent } from "../state";
+import type {
+  SessionStore,
+  RuntimeState,
+  ConfigStore,
+  HttpTransport,
+  SseTransport,
+  WorkspaceStore,
+  SseEvent,
+} from "../state";
 import { broadcast } from "../state";
 import { pushState, releaseBusy, reserveBusy, syncBusy } from "./session-status";
 import { makeForwarder } from "./forward";
 import { makeRunAgent } from "./run-agent";
+import { parsePost } from "./session-post";
 import type { SessionRunner } from "../../../core/bootstrap/session-runner";
 import { beginEgressTurn, endEgressTurn } from "../../security/data-policy/turn-journal";
 import { attachEgressTurn } from "./egress-turn";
-import {
-  parseMessageBody,
-  readBody,
-  requestError,
-  scrubError,
-  sendJson,
-} from "../util";
+import { readBody, requestError, scrubError, sendJson } from "../util";
 import type { ClientTz } from "../../../core/prompt-facts";
 import { t } from "../../../i18n/index";
-
-/**
- * Достаёт `sessionId` из сырого JSON-тела (фронт шлёт вкладку-владельца).
- * Пусто/мусор → null (фолбэк — тогда-активная). Битый JSON отдаст
- * `parseMessageBody`, здесь не шумим. Прямой `JSON.parse`, а не `parseJsonBody`:
- * `body.ts` импортирует `readBody` из `util.ts`, обратный импорт дал бы цикл.
- */
-function extractSessionId(raw: string): string | null {
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed === "object" && parsed !== null) {
-      const id = (parsed as Record<string, unknown>).sessionId;
-      if (typeof id === "string" && id.trim()) return id.trim();
-    }
-  } catch {
-    /* invalid JSON — разберёт parseMessageBody */
-  }
-  return null;
-}
-
-/** Тогда-активная сессия (фолбэк, когда фронт sessionId не прислал). */
-function activeSessionOf(s: SessionStore & RuntimeState & ConfigStore & HttpTransport & SseTransport & WorkspaceStore): string | null {
-  try {
-    const manager = s.sessionManager as unknown as
-      | { getActive?: () => string | null; getActiveMeta?: () => { id: string } | null }
-      | undefined;
-    return manager?.getActive?.() ?? manager?.getActiveMeta?.()?.id ?? s.activeSessionId ?? null;
-  } catch {
-    return s.activeSessionId ?? null;
-  }
-}
 
 /**
  * Стартует ход в уже зарезервированном слоте сессии: спавн/подъём её раннера.
@@ -148,7 +120,10 @@ function runRunnerTurn(
  * Вызывается из форвардерного `onTurnEnd` (слот уже сброшен форвардером,
  * вызов синхронен, вклиниться некому). Возвращает, стартовал ли ход.
  */
-export function finishTurn(s: SessionStore & RuntimeState & ConfigStore & HttpTransport & SseTransport & WorkspaceStore, id: string | null): boolean {
+export function finishTurn(
+  s: SessionStore & RuntimeState & ConfigStore & HttpTransport & SseTransport & WorkspaceStore,
+  id: string | null,
+): boolean {
   s.pool.forceRelease(id);
   syncBusy(s);
   pushState(s, id);
@@ -165,10 +140,7 @@ export function finishTurn(s: SessionStore & RuntimeState & ConfigStore & HttpTr
   } catch {
     // Спавн упал после резерва (сессия испарилась): слот уже отпущен
     // в startTurn, запись дропнута — сообщаем владельцу в ленту.
-    broadcast(
-      { type: "error", ts: Date.now(), sessionId: id, error: "spawn_failed" },
-      s,
-    );
+    broadcast({ type: "error", ts: Date.now(), sessionId: id, error: "spawn_failed" }, s);
     return false;
   }
   return true;
@@ -186,28 +158,6 @@ export function finishTurn(s: SessionStore & RuntimeState & ConfigStore & HttpTr
  * (`202 {queued: n}`) и выполняется следующим ходом по завершении текущего.
  * Хвост сверх `MAX_QUEUE_LENGTH` — `429 queue_full`.
  */
-/** Разобранное тело `POST /api/message`: текст, картинки, сессия-владелец. */
-type ParsedPost =
-  | { text: string; images: string[]; target: string; clientTz?: ClientTz }
-  | { error: string; status: number };
-
-/**
- * Валидирует тело сообщения: формат, существование сессии, наличие раннера.
- * Чистая (без записи состояния) — решение о резерве/очереди принимает диспетчер.
- */
-function parsePost(s: SessionStore & RuntimeState & ConfigStore & HttpTransport & SseTransport & WorkspaceStore, raw: string): ParsedPost {
-  const body = parseMessageBody(raw);
-  if ("error" in body) return { error: body.error, status: 400 };
-  const target = extractSessionId(raw) ?? activeSessionOf(s);
-  if (!target) return { error: "no_session", status: 503 };
-  if (s.sessionManager && !s.sessionManager.get(target)) {
-    return { error: "not_found", status: 404 };
-  }
-  // Web всегда через раннер: без фабрики исполнителя нет.
-  if (!s.pool.hasFactory()) return { error: "no_runner", status: 503 };
-  return { text: body.text, images: body.images, target, clientTz: body.clientTz };
-}
-
 /**
  * Диспатчит валидное сообщение: в очередь занятого слота или сразу в ход.
  * Проверка занятости и резерв/постановка — синхронно, без await между:
@@ -234,7 +184,8 @@ function dispatchPost(
     pushState(s, target);
     sendJson(res, 202, {
       ok: true,
-      queued: s.pool.totalQueued(),      sessionId: target,
+      queued: s.pool.totalQueued(),
+      sessionId: target,
       queuedForSession: s.pool.queueLen(target),
       id: queued.id,
     });
@@ -251,7 +202,11 @@ function dispatchPost(
   sendJson(res, 202, { ok: true, sessionId: target });
 }
 
-export function handleMessagePost(req: IncomingMessage, res: ServerResponse, s: SessionStore & RuntimeState & ConfigStore & HttpTransport & SseTransport & WorkspaceStore): void {
+export function handleMessagePost(
+  req: IncomingMessage,
+  res: ServerResponse,
+  s: SessionStore & RuntimeState & ConfigStore & HttpTransport & SseTransport & WorkspaceStore,
+): void {
   if (s.setupRequired) {
     sendJson(res, 409, { error: "setup_required" });
     return;

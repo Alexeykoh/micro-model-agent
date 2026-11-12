@@ -33,17 +33,13 @@ export function initSessionsMenu(d: Partial<SessionsMenuDeps>): void {
 // biome-ignore lint/suspicious/noExplicitAny: opaque timer handle.
 let sessionsErrTimer: any = null;
 
-// Live filter text of the sessions dropdown. Module-level so `sessions`-event
-// and state re-renders never wipe an in-progress query: the
-// `<input id="sessSearch">` itself lives statically in `index.html` and only
-// the row lists are redrawn.
+// Live filter text: module-level so `sessions`-event and state re-renders never
+// wipe an in-progress query (`#sessSearch` is static in `index.html`).
 let sessQuery = "";
 let sessSearchWired = false;
 
-// U14: pinned sessions live in localStorage (survive a server restart, scoped
-// to this browser) and are rendered in their own section above `recent`.
-// DEBT(webui-sessions-project-groups): no project field in `/api/sessions`, so
-// the list cannot be grouped by project yet.
+// U14: pins live in localStorage (own section above `recent`); the server scopes
+// the list to the open workspace, so a foreign project's session never arrives.
 import { isSessionPinned, pinnedSessionIds, toggleSessionPin as flipPin } from "./pins.js";
 import { renderPruneNotice } from "./prune-notice.js";
 
@@ -88,7 +84,9 @@ function ensureSessSearch(): HTMLInputElement | null {
         }
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
-        const first = document.querySelector<HTMLElement>("#sessActiveList .si-row .dd-row-main, #sessRecentList .si-row .dd-row-main");
+        const first = document.querySelector<HTMLElement>(
+          "#sessActiveList .si-row .dd-row-main, #sessRecentList .si-row .dd-row-main",
+        );
         if (first) first.focus();
       }
     });
@@ -112,11 +110,14 @@ export function renderSessionsDropdown(): void {
   const q = sessQuery.trim();
   const activeId = session.activeSessionId;
   const pinned = pinnedSessionIds();
-  const sorted = session.sessions.slice().sort((a: Dict, b: Dict) => {
-    const at = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
-    const bt = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
-    return bt - at;
-  }).filter((s: Dict) => matchesQuery((s.name || "") + " " + String(s.id || ""), q));
+  const sorted = session.sessions
+    .slice()
+    .sort((a: Dict, b: Dict) => {
+      const at = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      const bt = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      return bt - at;
+    })
+    .filter((s: Dict) => matchesQuery((s.name || "") + " " + String(s.id || ""), q));
   let activePlaced = false;
   let pinnedPlaced = false;
   let recentPlaced = false;
@@ -159,7 +160,6 @@ export function renderSessionsDropdown(): void {
     recentList.appendChild(el("div", "dd-err", session.sessionsError));
   }
 }
-
 
 function sessionRow(s: Dict, isActive: boolean): HTMLElement {
   const row = el("div", "si si-row" + (isActive ? " on" : ""));
