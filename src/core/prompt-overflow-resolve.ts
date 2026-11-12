@@ -1,6 +1,6 @@
 /** Резолвинг переполнения промпта: суммаризация/усечение блоков и disk-кэш. */
 import { createHash } from "crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import type { PromptBlock, PromptBlockKind } from "./types";
 import type { OverflowResolution, OverflowWarning } from "./prompt-overflow";
@@ -12,8 +12,94 @@ import { t } from "../i18n/index";
 /** Цена model-facing hint-блока в токенах (верхняя граница для аллокации). */
 export const HINT_BLOCK_TOKENS = 60;
 
-/** Грубый фактор символов на токен для жёсткого усечения. */
+/** Грубый фактор символов на токен для стартовой догадки усечения (B8: латиница). */
 const CHARS_PER_TOKEN = 4;
+
+/** Запись дискового кэша суммаризаций (B9: с атрибутами для sibling-reuse). */
+interface SummaryCacheEntry {
+  mode: OverflowWarning["mode"];
+  text: string;
+  /** Класс блока — переиспользуем только внутри своего класса. */
+  kind?: PromptBlockKind;
+  /** Модель-суммаризатор — чужая выжимка не переиспользуется. */
+  model?: string;
+  /** Хеш исходного контента — инвалидация правками. */
+  contentHash?: string;
+  /** Бюджет, под который писалась выжимка. */
+  maxTokens?: number;
+}
+
+function contentHash(content: string): string {
+  return createHash("sha256").update(content).digest("hex").slice(0, 24);
+}
+
+function cacheKey(kind: PromptBlockKind, content: string, maxTokens: number, model: string): string {
+  return createHash("sha256").update(`${kind}|${model}|${maxTokens}|${content}`).digest("hex").slice(0, 24);
+}
+
+function parseCacheEntry(raw: string): SummaryCacheEntry | null {
+  const text = raw.trim();
+  if (!text) return null;
+  try {
+    const parsed = JSON.parse(text) as SummaryCacheEntry;
+    if ((parsed.mode === "summary" || parsed.mode === "truncate") && typeof parsed.text === "string" && parsed.text) {
+      return parsed;
+    }
+  } catch {
+    // Легаси plain-text запись — считаем попаданием суммаризации
+    return { mode: "summary", text };
+  }
+  return null;
+}
+
+function readCache(cacheDir: string, key: string): SummaryCacheEntry | null {
+  try {
+    const path = join(cacheDir, `${key}.md`);
+    if (!existsSync(path)) return null;
+    return parseCacheEntry(readFileSync(path, "utf-8"));
+  } catch {
+    // Битый кэш — идём на повторную суммаризацию
+  }
+  return null;
+}
+
+/**
+ * Sibling-reuse (B9): точный ключ промахнулся (сменился бюджет), но в кэше
+ * лежит выжимка того же контента той же моделью под другой бюджет.
+ * Влезает — переиспользуем без LLM-вызова; чуть больше — докомпрессия
+ * усечением вместо полной пересуммаризации (видимое зависание старта).
+ */
+function readSiblingCache(
+  cacheDir: string,
+  kind: PromptBlockKind,
+  model: string,
+  hash: string,
+  maxTokens: number,
+  logger?: Logger,
+): SummaryCacheEntry | null {
+  let entries: string[];
+  try {
+    entries = readdirSync(cacheDir).filter((f) => f.endsWith(".md"));
+  } catch {
+    return null;
+  }
+  let best: SummaryCacheEntry | null = null;
+  for (const file of entries) {
+    let entry: SummaryCacheEntry | null = null;
+    try {
+      entry = parseCacheEntry(readFileSync(join(cacheDir, file), "utf-8"));
+    } catch {
+      continue;
+    }
+    if (!entry || entry.kind !== kind || entry.model !== model || entry.contentHash !== hash) continue;
+    if (estimateTokens(entry.text) <= maxTokens && (!best || (best.maxTokens ?? 0) < (entry.maxTokens ?? 0))) {
+      best = entry;
+    }
+  }
+  if (!best) return null;
+  logger?.debug(`Prompt overflow: sibling cache hit for ${kind} (model ${model}, fits ${maxTokens} tok)`);
+  return best;
+}
 
 const KIND_ORDER: PromptBlockKind[] = ["instructions", "project-map"];
 
@@ -27,39 +113,25 @@ const KIND_SOURCE_FILE: Record<PromptBlockKind, string> = {
   "project-map": "",
 };
 
-function cacheKey(kind: PromptBlockKind, content: string, maxTokens: number): string {
-  return createHash("sha256").update(`${kind}|${maxTokens}|${content}`).digest("hex").slice(0, 24);
-}
-
-function readCache(cacheDir: string, key: string): { mode: OverflowWarning["mode"]; text: string } | null {
-  try {
-    const path = join(cacheDir, `${key}.md`);
-    if (!existsSync(path)) return null;
-    const raw = readFileSync(path, "utf-8").trim();
-    if (!raw) return null;
-    try {
-      const parsed = JSON.parse(raw) as { mode: OverflowWarning["mode"]; text: string };
-      if ((parsed.mode === "summary" || parsed.mode === "truncate") && typeof parsed.text === "string" && parsed.text) {
-        return parsed;
-      }
-    } catch {
-      // Легаси plain-text запись — считаем попаданием суммаризации
-      return { mode: "summary", text: raw };
-    }
-    return null;
-  } catch {
-    // Битый кэш — идём на повторную суммаризацию
-  }
-  return null;
-}
-
-function writeCache(cacheDir: string, key: string, entry: { mode: OverflowWarning["mode"]; text: string }): void {
+function writeCache(cacheDir: string, key: string, entry: SummaryCacheEntry): void {
   try {
     mkdirSync(cacheDir, { recursive: true });
     writeFileSync(join(cacheDir, `${key}.md`), JSON.stringify(entry), "utf-8");
   } catch {
     // Best-effort — падение кэша не должно ронять агента
   }
+}
+
+/**
+ * Потолок запроса генерации под окно контекста (B10): просить `2×maxTokens`
+ * вслепую опасно на малых окнах — вход (целый AGENTS.md) плюс запрос могут
+ * не влезть, и суммаризация упадёт целиком. Без окна — старое поведение.
+ */
+function capCompletion(requested: number, promptText: string, contextWindow?: number): number {
+  if (!contextWindow || contextWindow <= 0) return requested;
+  const cap = contextWindow - estimateTokens(promptText) - 256;
+  if (cap < 256) return Math.min(requested, 256);
+  return Math.min(requested, cap);
 }
 
 /** Собирает полный текстовый ответ через стриминговый API провайдера. */
@@ -73,9 +145,10 @@ async function collectText(
   // Reasoning выкл. Механизм ("none" → /no_think у prompt-tag, reasoning_effort
   // у openai-effort) выбирает САМ провайдер из своей стратегии (INV-R1) — здесь
   // её знать не нужно и нельзя забыть.
-  // 2x запас: оценки эвристичны, clamp ниже держит реальный cap.
+  // 2x запас: оценки эвристичны, clamp ниже держит реальный cap (B10: cap —
+  // на вызывающей стороне, сюда приходит уже финальное число).
   for await (const chunk of provider.chat([{ role: "user", content: prompt }], undefined, undefined, {
-    maxTokens: maxTokens * 2,
+    maxTokens,
     reasoningEffort: "none",
     sessionId,
   })) {
@@ -84,13 +157,32 @@ async function collectText(
   return text.trim();
 }
 
+/**
+ * Жёсткое усечение с гарантией бюджета (B8): фиксированный делитель врёт на
+ * нелатинице (кириллица ~2.5 симв/ток — срез «до N×4 символов» даёт ~1.6×N
+ * токенов и бюджет рвётся именно на русском тексте). Поэтому режем итеративно
+ * до `estimateTokens(cut) ≤ maxTokens`, маркер обрезки входит в бюджет.
+ */
 function truncateToTokens(content: string, maxTokens: number): string {
-  const maxChars = Math.max(200, maxTokens * CHARS_PER_TOKEN);
-  if (content.length <= maxChars) return content;
-  let cut = content.slice(0, maxChars);
-  const lastBreak = cut.lastIndexOf("\n");
-  if (lastBreak > maxChars * 0.5) cut = cut.slice(0, lastBreak);
-  return `${cut.trimEnd()}\n\n[...truncated — read the full file for details...]`;
+  if (estimateTokens(content) <= maxTokens) return content;
+  const suffix = "\n\n[...truncated — read the full file for details...]";
+  const suffixTokens = estimateTokens(suffix);
+  const bodyBudget = Math.max(1, maxTokens - suffixTokens);
+  let maxChars = Math.max(200, bodyBudget * CHARS_PER_TOKEN);
+  let cut = content;
+  for (let i = 0; i < 3; i++) {
+    cut = content.slice(0, maxChars);
+    const lastBreak = cut.lastIndexOf("\n");
+    if (lastBreak > maxChars * 0.5) cut = cut.slice(0, lastBreak);
+    const tokens = estimateTokens(cut);
+    if (tokens <= bodyBudget) break;
+    maxChars = Math.max(200, Math.floor((maxChars * bodyBudget) / tokens));
+  }
+  cut = cut.trimEnd();
+  while (estimateTokens(cut + suffix) > maxTokens && cut.length > 200) {
+    cut = cut.slice(0, Math.floor(cut.length * 0.8)).trimEnd();
+  }
+  return `${cut}${suffix}`;
 }
 
 /** Однострочная метка по первой строке (для варнингов/логов). */
@@ -112,8 +204,13 @@ export async function resolvePromptOverflow(opts: {
   logger?: Logger;
   /** Id сессии-владельца: прокидывается в LLM-вызовы для cache/session-заголовков. */
   sessionId?: string;
+  /** Модель-суммаризатор: чужая выжимка не переиспользуется (B9). */
+  model?: string;
+  /** Окно контекста: потолок запроса генерации на малых окнах (B10). */
+  contextWindow?: number;
 }): Promise<OverflowResolution> {
   const { overflow, includedTokens, systemBudget, provider, cacheDir, logger, sessionId } = opts;
+  const model = opts.model ?? "unknown";
 
   const sorted = [...overflow].sort(
     (a, b) => KIND_ORDER.indexOf(a.kind as PromptBlockKind) - KIND_ORDER.indexOf(b.kind as PromptBlockKind),
@@ -142,45 +239,56 @@ export async function resolvePromptOverflow(opts: {
     let mode: OverflowWarning["mode"] = "summary";
     let text = "";
 
-    const key = cacheKey(kind, block.content, maxTokens);
+    const hash = contentHash(block.content);
+    const key = cacheKey(kind, block.content, maxTokens, model);
     const cached = readCache(cacheDir, key);
     if (cached) {
       text = cached.text;
       mode = cached.mode;
       logger?.debug(`Prompt overflow: cache hit for ${kind} (${key}, ${mode})`);
-    } else if (provider) {
-      const targetChars = Math.floor(maxTokens * (CHARS_PER_TOKEN - 1));
-      logger?.warn(
-        t("prompt.overflow.summarizing", {
-          label: blockLabel(block.content),
-          original: String(block.estimatedTokens),
-          budget: String(maxTokens),
-        }),
-      );
-      try {
-        const prompt = [
-          `Summarize the following ${KIND_LABEL[kind]} document.`,
-          // 3 символа/токен (не 4): нелатиница (кириллица и т.п.) — ~2–3 символа
-          // на токен, поэтому цель x4 уводит суммаризацию за clamp.
-          `Target length: at most ${targetChars} characters (~${maxTokens} tokens). Be strict about it.`,
-          `Preserve concrete facts: file paths, commands, rules, naming conventions, workflow steps.`,
-          `Keep the structure (headings / bullet lists). Output ONLY the summary text.`,
-          ``,
-          `--- DOCUMENT START ---`,
-          block.content,
-          `--- DOCUMENT END ---`,
-        ].join("\n");
-        text = await collectText(provider, prompt, maxTokens, sessionId);
-        // Маленькие модели регулярно игнорируют лимит длины (наблюдалось: 9B
-        // выдала ~4700 символов при цели 3170). Один retry самокомпрессии на
-        // перелёт — короткий вход резко повышает послушание — затем жёсткий clamp.
-        let retries = 0;
-        while (text && estimateTokens(text) > maxTokens && retries < 1) {
-          retries++;
-          logger?.debug(`Prompt overflow: ${kind} summary overshot (${estimateTokens(text)} > ${maxTokens} tok), compressing (retry ${retries})`);
-          text = await collectText(
-            provider,
-            [
+      // Перелёт под новый бюджет режет финальный clamp ниже (режим честно
+      // переключится в truncate) — как раньше, без нового LLM-вызова.
+    } else {
+      // Точный ключ промахнулся (сменился бюджет), но подходит выжимка того же
+      // контента той же моделью под другой бюджет — без LLM-вызова (B9).
+      const sibling = readSiblingCache(cacheDir, kind, model, hash, maxTokens, logger);
+      if (sibling) {
+        text = sibling.text;
+        mode = sibling.mode;
+      } else if (provider) {
+        const targetChars = Math.floor(maxTokens * (CHARS_PER_TOKEN - 1));
+        logger?.warn(
+          t("prompt.overflow.summarizing", {
+            label: blockLabel(block.content),
+            original: String(block.estimatedTokens),
+            budget: String(maxTokens),
+          }),
+        );
+        // B10: 2× запас поверх бюджета, но в пределах окна (на малых окнах
+        // вслепую просить 2× — уронить весь вызов суммаризации).
+        const contextWindow = opts.contextWindow;
+        try {
+          const prompt = [
+            `Summarize the following ${KIND_LABEL[kind]} document.`,
+            // 3 символа/токен (не 4): нелатиница (кириллица и т.п.) — ~2–3 символа
+            // на токен, поэтому цель x4 уводит суммаризацию за clamp.
+            `Target length: at most ${targetChars} characters (~${maxTokens} tokens). Be strict about it.`,
+            `Preserve concrete facts: file paths, commands, rules, naming conventions, workflow steps.`,
+            `Keep the structure (headings / bullet lists). Output ONLY the summary text.`,
+            ``,
+            `--- DOCUMENT START ---`,
+            block.content,
+            `--- DOCUMENT END ---`,
+          ].join("\n");
+          text = await collectText(provider, prompt, capCompletion(maxTokens * 2, prompt, contextWindow), sessionId);
+          // Маленькие модели регулярно игнорируют лимит длины (наблюдалось: 9B
+          // выдала ~4700 символов при цели 3170). Один retry самокомпрессии на
+          // перелёт — короткий вход резко повышает послушание — затем жёсткий clamp.
+          let retries = 0;
+          while (text && estimateTokens(text) > maxTokens && retries < 1) {
+            retries++;
+            logger?.debug(`Prompt overflow: ${kind} summary overshot (${estimateTokens(text)} > ${maxTokens} tok), compressing (retry ${retries})`);
+            const retryPrompt = [
               `Compress the following text to at most ${targetChars} characters.`,
               `Keep the structure (headings / bullet lists) and all concrete facts: file paths, commands, rules.`,
               `Output ONLY the compressed text.`,
@@ -188,19 +296,23 @@ export async function resolvePromptOverflow(opts: {
               `--- TEXT START ---`,
               text,
               `--- TEXT END ---`,
-            ].join("\n"),
-            maxTokens,
-            sessionId,
+            ].join("\n");
+            text = await collectText(
+              provider,
+              retryPrompt,
+              capCompletion(maxTokens * 2, retryPrompt, contextWindow),
+              sessionId,
+            );
+          }
+        } catch (err: unknown) {
+          logger?.warn(
+            t("prompt.overflow.summarize_failed", {
+              label: blockLabel(block.content),
+              error: err instanceof Error ? err.message : String(err),
+            }),
           );
+          text = "";
         }
-      } catch (err: unknown) {
-        logger?.warn(
-          t("prompt.overflow.summarize_failed", {
-            label: blockLabel(block.content),
-            error: err instanceof Error ? err.message : String(err),
-          }),
-        );
-        text = "";
       }
     }
 
@@ -225,7 +337,7 @@ export async function resolvePromptOverflow(opts: {
     }
     const resolvedTokens = estimateTokens(text);
     used += resolvedTokens;
-    writeCache(cacheDir, key, { mode, text });
+    writeCache(cacheDir, key, { mode, text, kind, model, contentHash: hash, maxTokens });
     replacements.push({
       content: text,
       priority: "high",

@@ -246,6 +246,8 @@ export async function resolvePromptOverflowOnce(host: PromptPhaseHost): Promise<
     cacheDir: join(projectMmaDir(deps.baseDir), "cache", "prompt-summaries"),
     logger: deps.logger,
     sessionId: deps.sessionManager?.getActiveMeta()?.id,
+    model: deps.config.model,
+    contextWindow: cfg.contextWindow,
   });
   for (const r of res.replacements) {
     if (r.kind) host.promptOverrides.set(r.kind, r);
