@@ -7,11 +7,13 @@ import { findProjectRoot, resolveTscCommand } from "../../lsp/project-root";
 import { autoFixErrors, parseTscOutput } from "../../../tools/auto-fixer";
 import { LINT_TYPE_CHECK_DEBOUNCE_MS as TYPE_CHECK_DEBOUNCE_MS } from "../../../config/timeouts";
 import {
+  childErr,
   isLintBinaryMissing,
   isMissingBinaryError,
   markLintBinaryMissing,
   runAsync,
 } from "./lint-run";
+import { checkSyntax } from "./lint-syntax";
 import {
   autoFixedBlock,
   lintFailureBlock,
@@ -20,41 +22,6 @@ import {
   typecheckFailureBlock,
 } from "./lint-format";
 import { LINT_ON_WRITE_SCHEMA, lintOnWriteSettings } from "./plugin-settings";
-
-// Пофайловые синтаксис-проверки кешируются по (путь, хеш содержимого): перезапись
-// файла с тем же содержимым скипает (дорогую) проверку. Смена контента →
-// промах кеша → свежая проверка.
-/** Ошибка дочернего процесса (settleChildClose): статус + захваченные потоки. */
-type ChildProcessError = Error & {
-  status?: number;
-  stdout?: unknown;
-  stderr?: unknown;
-};
-
-function childErr(err: unknown): ChildProcessError {
-  return err instanceof Error
-    ? (err as ChildProcessError)
-    : (new Error(String(err)) as ChildProcessError);
-}
-
-const syntaxCache = new Map<string, { hash: string; error: string | null }>();
-
-/**
- * Исполняемый Bun для `bun build`. Под самим Bun — `process.execPath`: на
- * Windows, где `bun` стоит npm-шимом (`bun.ps1`/`bun.cmd`), `spawn("bun")` не
- * находит файл, и проверка синтаксиса молча пропускалась (`ENOENT` → null).
- */
-function bunExecutable(): string {
-  return process.versions.bun ? process.execPath : "bun";
-}
-
-function contentHash(content: string): string {
-  let h = 5381;
-  for (let i = 0; i < content.length; i++) {
-    h = ((h << 5) + h + content.charCodeAt(i)) | 0;
-  }
-  return String(h);
-}
 
 /** Встроенный плагин: проверяет каждую запись/правку файла (синтаксис, lint, типы). */
 export class LintOnWritePlugin implements AgentPlugin {
@@ -89,7 +56,7 @@ export class LintOnWritePlugin implements AgentPlugin {
 
     const ext = extname(fullPath);
     const syntaxError = settings.syntaxCheck
-      ? await this.checkSyntax(fullPath, ext, tctx.baseDir, signal)
+      ? await checkSyntax(fullPath, ext, tctx.baseDir, signal)
       : null;
     if (signal?.aborted) return;
 
@@ -101,71 +68,6 @@ export class LintOnWritePlugin implements AgentPlugin {
     if (settings.projectLint) await this.runProjectLint(tctx, result, signal);
     if (signal?.aborted) return;
     if (settings.typeCheck) await this.runProjectTypeCheck(fullPath, tctx.baseDir, result, signal);
-  }
-
-  private async checkSyntax(
-    filePath: string,
-    ext: string,
-    baseDir: string,
-    signal?: AbortSignal,
-  ): Promise<string | null> {
-    if (ext === ".ts" || ext === ".tsx" || ext === ".cts" || ext === ".mts") {
-      // Проверка только синтаксиса парсером bun (~200мс) вместо `npx tsc`
-      // (~3-5с на запись). Полные ошибки типов всё равно отдаёт дебаунснутый
-      // проектный typecheck ниже, когда есть tsconfig.
-      let content = "";
-      try {
-        content = readFileSync(filePath, "utf-8");
-      } catch {
-        return null;
-      }
-      const hash = contentHash(content);
-      const cached = syntaxCache.get(filePath);
-      if (cached && cached.hash === hash) {
-        return cached.error;
-      }
-      try {
-        await runAsync(
-          { file: bunExecutable(), args: ["build", "--no-bundle", "--target=bun", filePath] },
-          baseDir,
-          10000,
-          signal,
-        );
-        // Прерванная проверка (interrupt) файл не валидировала — не кешируем.
-        if (signal?.aborted) return null;
-        syntaxCache.set(filePath, { hash, error: null });
-        return null;
-      } catch (rawErr: unknown) {
-        const err = childErr(rawErr);
-        if (
-          err.status === 127 ||
-          err.message.includes("not found") ||
-          err.message.includes("ENOENT")
-        ) {
-          return null;
-        }
-        const stderr = String(err.stderr ?? "") || String(err.stdout ?? "");
-        const firstError =
-          stderr.split("\n").find((line: string) => line.trim()) || "TypeScript syntax error";
-        syntaxCache.set(filePath, { hash, error: firstError.trim() });
-        return firstError.trim();
-      }
-    }
-
-    if (ext === ".js" || ext === ".jsx" || ext === ".cjs" || ext === ".mjs") {
-      try {
-        await runAsync({ file: "node", args: ["--check", filePath] }, baseDir, 5000, signal);
-        return null;
-      } catch (rawErr: unknown) {
-        const err = childErr(rawErr);
-        const stderr = String(err.stderr ?? "");
-        const firstError =
-          stderr.split("\n").find((line: string) => line.trim()) || "JavaScript syntax error";
-        return firstError.trim();
-      }
-    }
-
-    return null;
   }
 
   private async runProjectLint(
