@@ -36,18 +36,28 @@ export const OUTBOUND_FETCH_ALLOWLIST: Record<string, string> = {
   "src/llm/model-loader.ts": "ollama load endpoint from config baseUrl",
   "src/llm/models-dev.ts": "hardcoded models.dev registry URL",
   "src/llm/native-context.ts": "native context endpoint from provider config",
-  "src/llm/reasoning-off-probe.ts": "provider chat endpoint from config baseUrl (same target as openai-request); reasoning off-switch probe",
+  "src/llm/openai-compat-models.ts":
+    "provider /models endpoint from config baseUrl (context + capabilities probe)",
+  "src/llm/reasoning-off-probe.ts":
+    "provider chat endpoint from config baseUrl (same target as openai-request); reasoning off-switch probe",
   "src/modules/providers/preflight.ts": "provider endpoint from config (baseUrl)",
-  "src/modules/mcp/http-transport.ts": "MCP server URL from user config; separate allowlist (mcp.allowedServers)",
-  "src/modules/mcp/sse-transport.ts": "MCP server URL from user config; separate allowlist (mcp.allowedServers)",
+  "src/modules/mcp/http-transport.ts":
+    "MCP server URL from user config; separate allowlist (mcp.allowedServers)",
+  "src/modules/mcp/sse-transport.ts":
+    "MCP server URL from user config; separate allowlist (mcp.allowedServers)",
   "src/modules/updater/checker.ts": "GitHub releases URL, hardcoded",
-  "src/modules/updater/archive.ts": "GitHub release asset URL from latest.json (manifest-validated)",
+  "src/modules/updater/archive.ts":
+    "GitHub release asset URL from latest.json (manifest-validated)",
   "src/modules/mcp/oauth.ts": "IdP token URL from user MCP server config (oauth.tokenUrl)",
-  "src/modules/daemon/protocol.ts": "Thin UI client talks only to the local daemon (127.0.0.1, token file)",
-  "src/modules/service/runtime/webhook.ts": "Validated by checkCallbackUrl (https/SSRF) before fetch; redirect: manual",
-  "src/modules/setup/discovery.ts": "local setup probe: localhost ports and provider URLs from config",
+  "src/modules/daemon/protocol.ts":
+    "Thin UI client talks only to the local daemon (127.0.0.1, token file)",
+  "src/modules/service/runtime/webhook.ts":
+    "Validated by checkCallbackUrl (https/SSRF) before fetch; redirect: manual",
+  "src/modules/setup/discovery.ts":
+    "local setup probe: localhost ports and provider URLs from config",
   "src/tools/web-search.ts": "search API URL from config; ToolExecutor validates urlArgs (INV-10)",
-  "src/modules/security/network-validator.ts": "the policy itself: fetchValidated revalidates every hop",
+  "src/modules/security/network-validator.ts":
+    "the policy itself: fetchValidated revalidates every hop",
   "src/modules/webui/assets/js/api.ts": "same-origin relative path in the browser",
   "src/modules/webui/assets/js/sidebar/files/view.ts": "same-origin relative path in the browser",
   "src/modules/webui/assets/setup-api.ts": "same-origin relative path in the browser",
@@ -111,10 +121,9 @@ describe("architecture: outbound network policy (W13)", () => {
     const unjustified = Object.entries(OUTBOUND_FETCH_ALLOWLIST)
       .filter(([, reason]) => reason.trim().length < 10)
       .map(([path]) => path);
-    expect(
-      unjustified,
-      `Allowlist entries without a reason:\n${unjustified.join("\n")}`,
-    ).toEqual([]);
+    expect(unjustified, `Allowlist entries without a reason:\n${unjustified.join("\n")}`).toEqual(
+      [],
+    );
   });
 
   it("keeps only allowlist entries that still contain a fetch(", () => {
@@ -122,7 +131,10 @@ describe("architecture: outbound network policy (W13)", () => {
     const stale = Object.keys(OUTBOUND_FETCH_ALLOWLIST).filter(
       (path) => !FETCH_RE.test(files.get(path) ?? ""),
     );
-    expect(stale, `Allowlist entries with no fetch() left to justify:\n${stale.join("\n")}`).toEqual([]);
+    expect(
+      stale,
+      `Allowlist entries with no fetch() left to justify:\n${stale.join("\n")}`,
+    ).toEqual([]);
   });
 
   it("scanner flags a raw fetch fixture", () => {
@@ -134,7 +146,10 @@ describe("architecture: outbound network policy (W13)", () => {
 
   it("scanner accepts a fixture routed through the policy", () => {
     const offenders = findUnvalidatedFetch([
-      { path: "src/modules/foo/bar.ts", text: "const r = await fetchOutbound(opts.url, init, o);\n" },
+      {
+        path: "src/modules/foo/bar.ts",
+        text: "const r = await fetchOutbound(opts.url, init, o);\n",
+      },
     ]);
     expect(offenders).toEqual([]);
   });

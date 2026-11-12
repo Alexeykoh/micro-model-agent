@@ -180,6 +180,12 @@ export async function runLlmPhase(
     host.emitPhase(state.iteration, "done", onPhase);
   }
 
+  // Успешный ответ — прямое доказательство достижимости эндпоинта. Discovery-
+  // проба трёхсекундная и пишет `reachable=false` при таймауте/VPN-лаге, а сам
+  // факт ответа модели её не снимал: сайдбар показывал «unavailable» до смены
+  // провайдера (INV-15: «не смогли спросить» ≠ «недоступен»).
+  if (deps.capabilitiesProbeRef) deps.capabilitiesProbeRef.reachable = true;
+
   // Провайдер не отдал usage — калибровка помечается stale (>1 вызова).
   if (!stream.sawUsage) contextManager.noteMissingUsage?.();
 
