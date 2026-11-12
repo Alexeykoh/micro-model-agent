@@ -66,3 +66,38 @@ export function angular11Settings(configDir?: string): { writeCheck: boolean } {
   const s = readBuiltinSettings("angular11", ANGULAR11_SCHEMA, configDir);
   return { writeCheck: flag(s.writeCheck, true) };
 }
+
+/** Настройки `telegram-notify`: токен, чат и фильтры уведомлений. */
+export const TELEGRAM_NOTIFY_SCHEMA: PluginSettingDef[] = [
+  { key: "botToken", type: "string", title: "Bot token", secret: true },
+  { key: "chatId", type: "string", title: "Chat ID", secret: true },
+  {
+    key: "notifyOn",
+    type: "enum",
+    title: "Notify on",
+    enum: ["turn", "session", "both"],
+    default: "turn",
+  },
+  { key: "sessionId", type: "string", title: "Only session ID" },
+  { key: "sessionName", type: "string", title: "Only session name" },
+];
+
+export interface TelegramNotifySettings {
+  botToken: string;
+  chatId: string;
+  notifyOn: string;
+  sessionId: string;
+  sessionName: string;
+}
+
+export function telegramNotifySettings(configDir?: string): TelegramNotifySettings {
+  const s = readBuiltinSettings("telegram-notify", TELEGRAM_NOTIFY_SCHEMA, configDir);
+  const mode = typeof s.notifyOn === "string" ? s.notifyOn : "turn";
+  return {
+    botToken: typeof s.botToken === "string" ? s.botToken : "",
+    chatId: typeof s.chatId === "string" ? s.chatId : "",
+    notifyOn: ["turn", "session", "both"].includes(mode) ? mode : "turn",
+    sessionId: typeof s.sessionId === "string" ? s.sessionId : "",
+    sessionName: typeof s.sessionName === "string" ? s.sessionName : "",
+  };
+}

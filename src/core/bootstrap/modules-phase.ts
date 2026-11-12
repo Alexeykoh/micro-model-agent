@@ -14,6 +14,7 @@ import { PluginLoader } from "../../modules/plugins/loader";
 import { plugin as angular11Plugin } from "../../modules/plugins/builtin/angular11";
 import { plugin as lintOnWritePlugin } from "../../modules/plugins/builtin/lint-on-write";
 import { plugin as notifyPlugin } from "../../modules/plugins/builtin/notify";
+import { plugin as telegramNotifyPlugin } from "../../modules/plugins/builtin/telegram-notify";
 import { ExecutionModule } from "../../modules/execution/module";
 import { SessionModule } from "../../modules/session/index";
 import { BrowserModule } from "../../modules/browser/index";
@@ -226,7 +227,7 @@ function registerModuleToolsAndPlugins(input: ModulesPhaseInput, moduleHost: Mod
     registerBuiltinPlugin(pluginManager, plugin);
   }
 
-  for (const builtin of [angular11Plugin, lintOnWritePlugin, notifyPlugin])
+  for (const builtin of [angular11Plugin, lintOnWritePlugin, notifyPlugin, telegramNotifyPlugin])
     pluginManager.register(builtin);
 
   const pluginLoader = new PluginLoader();
