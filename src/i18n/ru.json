@@ -1327,6 +1327,7 @@
   "prompt.overflow.exceeded": "Промпт переполнен: системному промпту нужно ~{needed} токенов (бюджет {budget} токенов); \"{label}\" ({original} токенов) было {mode} до {resolved} токенов. Чтобы включить всё полностью, {hint}.",
   "prompt.overflow.failed": "Не удалось разрешить переполнение промпта: {error} — слишком большие блоки будут отброшены.",
   "prompt.overflow.startup": "Проверка при старте: системному промпту нужно ~{needed} токенов (бюджет: {budget} токенов); {block} ({original} токенов) будет суммаризован/обрезан перед первым запуском. Чтобы включить всё полностью, {hint}.",
+  "prompt.overflow.essential_over_budget": "Системный промпт превышает бюджет: только обязательные блоки занимают {essential} токенов (бюджет {budget}) — истории почти не останется. {hint}.",
   "tool.session_info.no_active": "Нет активной сессии",
   "tool.session_info.result": "Сессия: \"{name}\" ({id})\nМодель: {model}\nПровайдер: {provider}\nКонтекстное окно: {contextWindow} токенов\nСообщений: {messages}\nСоздана: {createdAt}\nОбновлена: {updatedAt}",
   "tool.session_info.context": "Использовано контекста: {used} / {budget} токенов ({percent}%)",

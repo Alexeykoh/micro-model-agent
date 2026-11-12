@@ -40,6 +40,10 @@ export interface SystemPromptBuild {
   excluded: string[];
   excludedBlocks: PromptBlock[];
   blocks: Array<{ label: string; priority: string; tokens: number; included: boolean }>;
+  /** Токены essential-блоков (см. `BuildResult.essentialTokens`, B3). */
+  essentialTokens: number;
+  /** Essential-блоки рвут бюджет — вызывающий обязан предупредить (B3). */
+  essentialOverBudget: boolean;
 }
 
 /** Собирает системный промпт из блоков с учётом override-ов переполнения. */
@@ -62,6 +66,8 @@ export function buildSystemPrompt(host: PromptPhaseHost): SystemPromptBuild {
           included: true,
         },
       ],
+      essentialTokens: 0,
+      essentialOverBudget: false,
     };
   }
   const systemBudget = Math.floor(
@@ -105,6 +111,8 @@ export function buildSystemPrompt(host: PromptPhaseHost): SystemPromptBuild {
       excluded: result.excluded,
       excludedBlocks: result.excludedBlocks,
       blocks: result.blocks,
+      essentialTokens: result.essentialTokens,
+      essentialOverBudget: result.essentialOverBudget,
     };
   }
   builder.addBlock(note);
@@ -114,6 +122,8 @@ export function buildSystemPrompt(host: PromptPhaseHost): SystemPromptBuild {
     excluded: withNote.excluded,
     excludedBlocks: withNote.excludedBlocks,
     blocks: withNote.blocks,
+    essentialTokens: withNote.essentialTokens,
+    essentialOverBudget: withNote.essentialOverBudget,
   };
 }
 
@@ -202,6 +212,20 @@ export async function resolvePromptOverflowOnce(host: PromptPhaseHost): Promise<
   const { deps } = host;
   const cfg = deps.config;
   const dry = buildSystemPrompt(host);
+  // B3: essential-блоки рвут бюджет — единственная точка предупреждения для
+  // всех поверхностей (main + раннеры + one-shot): bootstrap dry-run молчит
+  // про essential специально, чтобы не дублировать баннер (kind-варнинги
+  // там уже есть).
+  if (dry.essentialOverBudget) {
+    const systemBudget = Math.floor(cfg.contextWindow * cfg.contextBudget.systemPrompt);
+    deps.logger.warn(
+      t("prompt.overflow.essential_over_budget", {
+        essential: String(dry.essentialTokens),
+        budget: String(systemBudget),
+        hint: overflowHint(cfg, deps.configDir, dry.essentialTokens),
+      }),
+    );
+  }
   const overflow = dry.excludedBlocks.filter((b) => Boolean(b.kind));
   if (overflow.length === 0) return;
 
