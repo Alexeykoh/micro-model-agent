@@ -10,7 +10,6 @@
 import type { AppConfig, ProviderEntry, ReasoningStrategy } from "../../config/types";
 import type { AgentDeps } from "../agent";
 import type { CostTracker } from "../../modules/pricing/index";
-import type { Logger } from "../../logger/app-logger";
 import type { ContextProbeResult } from "../../llm/provider-context";
 import {
   ProviderManager,
@@ -20,7 +19,7 @@ import { reasoningCapsForProvider } from "../../modules/providers/reasoning-reso
 import { rememberReasoningMechanism } from "../../modules/reasoning/probe";
 import { buildActiveProvider } from "../../modules/providers/factory";
 import { refreshSystemInfoBlock } from "../system-prompt";
-import { logContextProbeAutoSet, probeCacheKey, reprobeActiveProvider } from "./provider-probe-phase";
+import { reprobeActiveProvider } from "./provider-probe-phase";
 
 export { logContextProbeAutoSet, probeCacheKey } from "./provider-probe-phase";
 import { t } from "../../i18n/index";
@@ -31,7 +30,6 @@ import {
   refreshCapabilitiesProbe,
   restartReasoningProbe,
   invalidateReasoningProbe,
-  publishContextProbe,
   type ProbeIdentity,
 } from "./provider-probes";
 
@@ -57,11 +55,6 @@ export interface ProviderPhaseHost {
   /** Кеш «идентичность → измеренное окно контекста» (INV-W6): повторное
    *  переключение на ту же идентичность сети не касается. */
   probeWindowCache: Map<string, ContextProbeResult>;
-}
-
-/** Логгер хоста (у `AgentDeps.logger` есть `.warn`/`.info`). */
-function loggerOf(host: ProviderPhaseHost): Logger {
-  return host.deps.logger;
 }
 
 /**

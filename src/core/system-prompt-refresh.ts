@@ -14,7 +14,7 @@ import {
   fallbackPromptFacts,
   type ClientTz,
 } from "./prompt-facts";
-import { buildSystemInfo, resolvePromptProfile } from "./system-prompt";
+import { buildSystemInfo, resolvePromptProfile } from "./system-prompt-render";
 
 /** Топ языков проекта из индексатора для large-профиля (B6: поле больше не мёртвое). */
 function topLanguages(deps: AgentDeps): string[] {
