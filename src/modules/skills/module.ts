@@ -194,12 +194,17 @@ export class SkillsModule implements AgentModule {
 
   /** Системный блок: каталог + тела загруженных (совместимый вход). */
   getSystemPromptBlock(): PromptBlock | null {
+    // B19: тонкая обёртка над раздельным путём, а не свой формат: раньше
+    // склейка шла одним high-блоком без source/label — приоритеты и лог
+    // деградации (INV-17) расходились со `getPromptBlocks`.
     const blocks = this.getPromptBlocks();
     if (blocks.length === 0) return null;
     const content = blocks.map((b) => b.content).join("\n\n");
     return {
+      source: "skills",
+      label: "skills",
       content,
-      priority: "high",
+      priority: "normal",
       essential: false,
       estimatedTokens: this.estimateTokens(content),
     };

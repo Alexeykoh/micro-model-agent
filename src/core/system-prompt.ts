@@ -34,7 +34,10 @@ export function buildModelBlock(model: string): PromptBlock {
     source: "core",
     label: "model",
     content,
-    priority: "low",
+    // B13: normal, а не low — идентичность вылетала первой при давлении
+    // бюджета, хотя путаница моделей стоит дороже всего блока (~20 ток).
+    // Не essential: B3-гейт честно предупредит, если не влезет даже она.
+    priority: "normal",
     essential: false,
     estimatedTokens: estimateTokens(content),
   };
@@ -47,17 +50,29 @@ export function buildModelBlock(model: string): PromptBlock {
  * @param model активная модель (живой конфиг);
  * @param tools имена тулов, видимых модели в этой задаче.
  */
-export function buildServiceJobPrompt(model: string, tools: readonly string[]): string {
+export function buildServiceJobPrompt(
+  model: string,
+  tools: readonly string[],
+  security?: AppConfig["security"],
+): string {
   const toolLine = tools.length
     ? `Available tools: ${tools.join(", ")}. Use them only when the task needs them.`
     : "No tools are available in this job: you cannot read files, run commands or browse the web.";
-  return [
+  const lines = [
     `You are MMA answering one service job. Active model: ${model}.`,
     "Answer the request directly and completely, in the user's language.",
     toolLine,
     "Do not claim work you did not do: no invented file contents, command output or web pages.",
     "If the task needs something unavailable, say so plainly instead of guessing.",
-  ].join("\n");
+  ];
+  // B20: job с тулами обязан знать про блокировки — иначе жжёт платные вызовы,
+  // которые full-режим отсёк бы заранее. Компактно: lean-бюджет < 300 токенов.
+  if (security?.enabled && tools.length > 0) {
+    lines.push(
+      `SECURITY RESTRICTIONS (enforced — blocked calls return "[SECURITY BLOCKED]", do not retry them).`,
+    );
+  }
+  return lines.join("\n");
 }
 
 /** Обрезает длинную команду в промпте, сохраняя строку ≤120 символов. */
