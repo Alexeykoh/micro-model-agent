@@ -197,7 +197,7 @@ export function controlFor(def: Dict, value: unknown, ctx: Dict): HTMLElement {
 export const PANEL_SECTIONS: Record<string, Dict[]> = {
   general: [
     { id: "general.interface", titleKey: "web.settings.sec.general.interface", keys: ["locale", "ui.verbosity"] },
-    { id: "general.agent", titleKey: "web.settings.sec.general.agent", descKey: "web.settings.sec.general.agent.desc", keys: ["maxToolIterations", "stuckThreshold", "autoPlan", "execution.autoAdvance", "execution.profile", "execution.image", "cost.maxRunUsd"] },
+    { id: "general.agent", titleKey: "web.settings.sec.general.agent", descKey: "web.settings.sec.general.agent.desc", keys: ["maxToolIterations", "stuckThreshold", "autoPlan", "promptProfile", "execution.autoAdvance", "execution.profile", "execution.image", "cost.maxRunUsd"] },
     { id: "general.provider", titleKey: "web.settings.sec.general.provider", keys: ["provider.fallback"] },
     { id: "general.update", titleKey: "web.settings.sec.general.update", descKey: "web.settings.sec.general.update.desc", keys: ["updater.enabled", "updater.autoInstall", "updater.intervalMs"] },
   ],

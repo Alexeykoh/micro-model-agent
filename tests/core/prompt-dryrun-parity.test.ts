@@ -46,7 +46,9 @@ function stubInput() {
         block({ content: "PROJECT-MAP", label: "project map", kind: "project-map" }),
     },
     toolCtx: { toolAllowlist: undefined },
-    activeToolTags: [],
+    // Ненулевой набор: browser_open вне схемы — hidden-блок обязан попасть
+    // в набор (L4: при пустом наборе скрытых нет вовсе — см. hidden-tools).
+    activeToolTags: ["file"],
   } as never;
 }
 

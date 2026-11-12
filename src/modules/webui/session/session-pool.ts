@@ -17,8 +17,23 @@ import type { SessionRunner } from "../../../core/bootstrap/session-runner";
 import type { ClientTz } from "../../../core/prompt-facts";
 import type { QueuedMessage } from "../state";
 import { MAX_QUEUE_LENGTH } from "../limits";
-import { selectEvictions } from "./runner-gc";
+import {
+  startSweeper,
+  stopSweeper,
+  sweepIfDue,
+  sweepRunners,
+  type SweepState,
+} from "./pool-sweep";
+
+export { RUNNER_IDLE_MS, RUNNER_LRU_MAX } from "./pool-sweep";
 import { SlotQueue } from "./run-queue";
+import {
+  anyBusyOf,
+  busyIdsOf,
+  queuedCountsOf,
+  queuedIdsBySessionOf,
+  totalQueuedOf,
+} from "./pool-aggregates";
 
 /** Слот сессии: busy-резерв с токеном владения + FIFO входящих. */
 export interface RunSlot {
@@ -29,15 +44,6 @@ export interface RunSlot {
 
 /** Фабрика раннеров из bootstrap (нет — legacy-режим без параллелизма). */
 export type RunnerFactory = (sessionId: string) => SessionRunner;
-
-/** Простой раннер без ходов (тесты). */
-export const RUNNER_IDLE_MS = 10 * 60_000;
-
-/** Сколько раннеров держим одновременно (LRU). */
-export const RUNNER_LRU_MAX = 8;
-
-/** Как часто чистим простаивающие раннеры. */
-const SWEEP_INTERVAL_MS = 60_000;
 
 /** Per-session пул: очереди, busy-слоты, кеш раннеров. Чистое состояние — IO в util. */
 export class RunPool {
@@ -97,38 +103,24 @@ export class RunPool {
     return this.peekSlot(id)?.busy ?? false;
   }
 
-  /** Id занятых сессионных слотов (без legacy — для бейджей вкладок). */
+  /** Id занятых сессионных слотов (для бейджей вкладок). */
   busyIds(): string[] {
-    const out: string[] = [];
-    for (const [key, slot] of this.slots) {
-      if (key !== "" && slot.busy) out.push(key);
-    }
-    return out;
+    return busyIdsOf(this.slots);
   }
 
   /** Занят ли хоть один слот (агрегат для legacy `s.busy`). */
   anyBusy(): boolean {
-    for (const slot of this.slots.values()) {
-      if (slot.busy) return true;
-    }
-    return false;
+    return anyBusyOf(this.slots);
   }
 
-  /** Счётчики очереди по сессиям (без legacy — для бейджей). */
+  /** Счётчики очереди по сессиям (для бейджей). */
   queuedCounts(): Record<string, number> {
-    const out: Record<string, number> = {};
-    for (const [key, slot] of this.slots) {
-      if (key === "") continue;
-      if (slot.queue.length > 0) out[key] = slot.queue.length;
-    }
-    return out;
+    return queuedCountsOf(this.slots);
   }
 
   /** Длина всех очередей (агрегат для legacy `queueLen`). */
   totalQueued(): number {
-    let n = 0;
-    for (const slot of this.slots.values()) n += slot.queue.length;
-    return n;
+    return totalQueuedOf(this.slots);
   }
 
 
@@ -176,12 +168,7 @@ export class RunPool {
 
   /** Id очередей по сессиям (без legacy-слота, как `queuedCounts`). */
   queuedIdsBySession(): Record<string, string[]> {
-    const out: Record<string, string[]> = {};
-    for (const [key, slot] of this.slots) {
-      if (key === "" || slot.queue.length === 0) continue;
-      out[key] = slot.queue.ids();
-    }
-    return out;
+    return queuedIdsBySessionOf(this.slots);
   }
 
   /** Убирает сообщение очереди по id; undefined — такого уже нет. */
@@ -245,41 +232,34 @@ export class RunPool {
   }
 
   /** Периодическая чистка простаивающих раннеров (не держит процесс живым). */
-  private startSweeper(): void {
-    if (this.sweepTimer) return;
-    this.sweepTimer = setInterval(() => this.sweep(), SWEEP_INTERVAL_MS);
-    this.sweepTimer.unref?.();
+  private sweeperState(): SweepState {
+    return {
+      runners: this.runners,
+      lastActive: this.lastActive,
+      isBusy: (id) => this.peekSlot(id)?.busy ?? false,
+      disposeRunner: (id) => this.disposeRunner(id),
+      lastSweepAt: this.lastSweepAt,
+      timer: this.sweepTimer,
+    };
   }
 
-  /** Чистка, если с прошлой прошло достаточно времени. */
+  private startSweeper(): void {
+    startSweeper(this.sweeperState(), () => this.sweep());
+  }
+
   private maybeSweep(): void {
-    const now = Date.now();
-    const last = this.lastSweepAt;
-    if (last !== undefined && now - last < SWEEP_INTERVAL_MS) return;
-    this.sweep(now);
+    sweepIfDue(this.sweeperState(), (now) => this.sweep(now));
   }
 
   private lastSweepAt?: number;
 
-  /**
-   * Вытесняет раннеры: простаивающие дольше `RUNNER_IDLE_MS` и лишние по LRU
-   * (свыше `RUNNER_LRU_MAX`). Занятые и с очередью не трогаем (аудит §6.11).
-   *
-   * @returns число вытесненных раннеров.
-   */
+  /** Вытеснение idle/LRU-раннеров (детали — в pool-sweep.ts). */
   sweep(now: number = Date.now()): number {
+    const count = sweepRunners(this.sweeperState(), now);
     this.lastSweepAt = now;
-    const evict = selectEvictions(
-      [...this.runners.keys()],
-      this.lastActive,
-      (id) => this.peekSlot(id)?.busy ?? false,
-      now,
-      RUNNER_IDLE_MS,
-      RUNNER_LRU_MAX,
-    );
-    for (const id of evict) this.disposeRunner(id);
-    return evict.length;
+    return count;
   }
+
 
   /** Id закешированных раннеров (для reconfigure). */
   runnerIds(): string[] {
@@ -295,10 +275,7 @@ export class RunPool {
 
   /** Полный сброс (стоп сервера): раннеры, слоты, очереди. */
   clear(): void {
-    if (this.sweepTimer) {
-      clearInterval(this.sweepTimer);
-      this.sweepTimer = null;
-    }
+    stopSweeper(this.sweeperState());
     for (const id of [...this.runners.keys()]) this.disposeRunner(id);
     this.slots.clear();
     this.lastActive.clear();

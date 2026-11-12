@@ -36,11 +36,11 @@ describe("large prompt profile (L5)", () => {
     } as never;
     const large = prompt(rich, "large");
     expect(large).toContain("Platform: linux (shell: sh).");
-    expect(large).toContain("MCP servers configured: gh");
+    expect(large).toContain("MCP servers: gh");
     expect(large).toContain("Project languages: typescript.");
     const full = prompt(rich, "full");
     expect(full).not.toContain("Platform: linux");
-    expect(full).not.toContain("MCP servers configured");
+    expect(full).not.toContain("MCP servers:");
     expect(full).not.toContain("Project languages:");
   });
 

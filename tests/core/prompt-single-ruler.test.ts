@@ -34,7 +34,7 @@ function hostWithAbsurdCounter(promptProfile: "full" | "service-job"): PromptPha
     promptOverrides: new Map(),
     overflowHintBlock: null,
     frozenMapBlock: null,
-  } as unknown as PromptPhaseHost;
+  } as never;
 }
 
 describe("prompt budget single ruler (B2)", () => {

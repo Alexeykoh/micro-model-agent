@@ -7,22 +7,11 @@ import { LoadedEvents, type LoadedSkillRef } from "./loaded-events";
 import type { SkillUsage } from "./usage";
 import { t } from "../../i18n/index";
 import { estimateTokens } from "../../llm/token-counter";
+import { checkLoadBudget, type LoadResult } from "./load-budget";
+export { SKILLS_LOADED_TOKENS_CAP } from "./load-budget";
+export type { LoadResult } from "./load-budget";
 
-/** Итог загрузки скилла по имени (успех, сообщение, сам скилл). */
-export interface LoadResult {
-  success: boolean;
-  message: string;
-  skill?: SkillMeta;
-}
 
-/**
- * Абсолютный потолок суммарного веса загруженных тел скиллов (L2): хвост
- * промпта, каждая загрузка рвёт prefix-cache. Долевой бюджет
- * (`skills.budget` × окно) на больших окнах даёт десятки тысяч токенов хвоста;
- * cap держит его в разумных рамках. На малом окне доля меньше cap —
- * поведение 1:1 со старым.
- */
-export const SKILLS_LOADED_TOKENS_CAP = 6000;
 
 /** Каталоги-источники скиллов в порядке приоритета (builtin → global → project). */
 export interface SkillSources {
@@ -260,34 +249,9 @@ export class SkillsModule implements AgentModule {
   }
 
   private tryLoad(skill: SkillMeta): LoadResult {
-    const tokens = this.estimateTokens(skill.content);
-    // L2: тела скиллов живут в хвосте промпта и рвут prefix-cache при росте —
-    // абсолютный cap поверх долевого бюджета (на малом окне доля меньше cap
-    // и поведение не меняется).
-    const effectiveBudget = Math.min(this.budget, SKILLS_LOADED_TOKENS_CAP);
-
-    if (tokens > this.budget) {
-      return {
-        success: false,
-        message: t("skill.too_large", {
-          name: skill.name,
-          tokens,
-          budget: this.budget,
-        }),
-      };
-    }
-
-    if (this.currentTokens + tokens > effectiveBudget) {
-      const remaining = Math.max(0, effectiveBudget - this.currentTokens);
-      return {
-        success: false,
-        message: t("skill.exceeds_budget", {
-          name: skill.name,
-          tokens,
-          remaining,
-        }),
-      };
-    }
+    const decision = checkLoadBudget(skill, this.budget, this.currentTokens);
+    if (!decision.ok) return { success: false, message: decision.message };
+    const { tokens, effectiveBudget } = decision;
 
     this.loadedSkills.set(skill.name, skill);
     this.currentTokens += tokens;

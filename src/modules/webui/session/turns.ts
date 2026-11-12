@@ -12,7 +12,6 @@ import { pushState, releaseBusy, reserveBusy, syncBusy } from "./session-status"
 import { makeForwarder } from "./forward";
 import { makeRunAgent } from "./run-agent";
 import type { SessionRunner } from "../../../core/bootstrap/session-runner";
-import type { Agent } from "../../../core/agent";
 import { beginEgressTurn, endEgressTurn } from "../../security/data-policy/turn-journal";
 import { attachEgressTurn } from "./egress-turn";
 import {
@@ -97,8 +96,9 @@ function runRunnerTurn(
     runner.contextManager.addPendingImage({ type: "image_url", image_url: { url } });
   }
   // B18b: часовой пояс клиента — в агента до хода (пересборка статики только
-  // при смене). Стаб-раннеры тестов без метода молча пропускают.
-  const setTz = (runner.agent as Partial<Pick<Agent, "setClientTz">>).setClientTz;
+  // при смене). Структурный тип вместо импорта core/agent (гейт INV-3);
+  // стаб-раннеры тестов без метода молча пропускают.
+  const setTz = (runner.agent as { setClientTz?: (tz: ClientTz | undefined) => void }).setClientTz;
   if (typeof setTz === "function") {
     setTz.call(runner.agent, s.pool.getClientTz(sessionId));
   }

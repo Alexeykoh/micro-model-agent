@@ -9,7 +9,9 @@ describe("dynamic model identity", () => {
   it("renders the active model", () => {
     const b = buildModelBlock("mellum2.1-12b-a2.5b-thinking");
     expect(b.content).toContain("mellum2.1-12b-a2.5b-thinking");
-    expect(b.priority).toBe("low");
+    // B13: normal, а не low — идентичность вылетала первой при давлении
+    // бюджета, хотя путаница моделей стоит дороже всего блока (~20 токенов).
+    expect(b.priority).toBe("normal");
   });
 
   it("changes with the model (fresh per build)", () => {

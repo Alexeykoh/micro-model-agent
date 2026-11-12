@@ -8,12 +8,17 @@
  * видом `Agent`.
  */
 import { join } from "path";
-import { createHash } from "crypto";
 import { projectMmaDir } from "../../config/paths";
-import { PromptBuilder, filterBlocksForTags, omittedBlocksNote } from "../prompt-builder";
+import { PromptBuilder, omittedBlocksNote } from "../prompt-builder";
 import { resolvePromptOverflow, overflowHint, HINT_BLOCK_TOKENS } from "../prompt-overflow";
 import { buildServiceJobPrompt } from "../system-prompt";
 import { estimateTokens } from "../../llm/token-counter";
+import {
+  applyOverrides,
+  gateBlocks,
+  overflowFingerprint,
+  pluginPromptBlocks,
+} from "./prompt-blocks";
 import type { PromptBlock, PromptBlockKind, PromptProfile } from "../types";
 import type { SessionLogger } from "../session-logger";
 import type { AgentDeps } from "../agent";
@@ -55,25 +60,6 @@ export interface SystemPromptBuild {
   fingerprint: string;
 }
 
-/** Хеш контента kind-блока для отпечатка (B16: ловит правки любой длины). */
-function kindHash(content: string): string {
-  return createHash("sha256").update(content).digest("hex").slice(0, 16);
-}
-
-/**
- * Отпечаток входов резолва: бюджет плюс kind-блоки до override-подмен.
- * Подмены не входят намеренно — иначе каждый резолв менял бы отпечаток
- * и следующий прогон пересчитывал бы снова.
- */
-function overflowFingerprint(systemBudget: number, blocks: PromptBlock[]): string {
-  const kinds = blocks
-    .filter((b) => b.kind)
-    .map((b) => `${b.kind}:${kindHash(b.content)}`)
-    .sort()
-    .join("|");
-  return `${systemBudget}|${kinds}`;
-}
-
 /** Собирает системный промпт из блоков с учётом override-ов переполнения. */
 export function buildSystemPrompt(host: PromptPhaseHost): SystemPromptBuild {
   const { deps } = host;
@@ -106,36 +92,18 @@ export function buildSystemPrompt(host: PromptPhaseHost): SystemPromptBuild {
     deps.config.contextWindow * deps.config.contextBudget.systemPrompt,
   );
   const builder = new PromptBuilder(systemBudget);
-  const applyOverrides = (blocks: PromptBlock[]): PromptBlock[] =>
-    blocks.map((b) => (b.kind && host.promptOverrides.has(b.kind) ? host.promptOverrides.get(b.kind)! : b));
-  // B12: гейт по реально видимым тегам схемы (allowlist-aware), а не только
-  // по активным — иначе блок рекламирует тул, которого нет в схеме LLM.
-  const visibleTags = deps.toolExecutor.getVisibleTags(deps.toolTags);
   const staticRaws = deps.promptBlocks;
   const dynamicRaws = deps.getDynamicPromptBlocks?.() ?? [];
   // B16/B17: отпечаток считается по исходникам (до override-подмен и фильтров).
   const fingerprint = overflowFingerprint(systemBudget, [...staticRaws, ...dynamicRaws]);
-  builder.addBlocks(applyOverrides(filterBlocksForTags(staticRaws, deps.toolTags, visibleTags)));
-  const dynamic = filterBlocksForTags(dynamicRaws, deps.toolTags, visibleTags);
-  const stableDynamic = freezeProjectMap(host, applyOverrides(dynamic));
+  // B12: гейт по реально видимым тегам схемы (allowlist-aware).
+  builder.addBlocks(applyOverrides(gateBlocks(deps, staticRaws), host.promptOverrides));
+  const dynamic = gateBlocks(deps, dynamicRaws);
+  const stableDynamic = freezeProjectMap(host, applyOverrides(dynamic, host.promptOverrides));
   if (stableDynamic.length > 0) {
     builder.addBlocks(stableDynamic);
   }
-  const pluginBlocks: PromptBlock[] = (deps.pluginManager.runOnBuildPrompt?.() ?? []).flatMap(
-    (content): PromptBlock[] =>
-      content && content.trim() !== ""
-        ? [
-            {
-              source: "plugin",
-              label: "capabilities",
-              content,
-              priority: "low" as const,
-              essential: false,
-              estimatedTokens: estimateTokens(content),
-            },
-          ]
-        : [],
-  );
+  const pluginBlocks = pluginPromptBlocks(deps, estimateTokens);
   if (pluginBlocks.length > 0) {
     builder.addBlocks(pluginBlocks);
   }

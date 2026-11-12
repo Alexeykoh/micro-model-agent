@@ -14,9 +14,13 @@
  */
 import type { AppConfig } from "../config/types";
 import type { PromptBlock } from "./types";
-import type { AgentDeps } from "./agent/deps";
 import { estimateTokens } from "../llm/token-counter";
-import { collectPromptFacts, fallbackPromptFacts, type ClientTz, type PromptEnvironmentFacts } from "./prompt-facts";
+import { fallbackPromptFacts, type PromptEnvironmentFacts } from "./prompt-facts";
+// Статика и сервисный промпт вынесены (правило ≤300); реэкспорт — публичный
+// контракт `./system-prompt` не меняется для вызывающих и тестов.
+export { buildServiceJobPrompt } from "./system-prompt-service";
+export { applyClientTz, refreshSystemInfoBlock } from "./system-prompt-refresh";
+
 /**
  * Динамический блок идентичности активной модели. Собирается свежим на
  * каждом билде системного промпта, поэтому переживает `/model use`/
@@ -43,38 +47,6 @@ export function buildModelBlock(model: string): PromptBlock {
   };
 }
 
-/**
- * Короткий системный промпт service-job. Говорит модели ровно то, что она
- * должна знать: кто она, на какой модели работает, какие тулы реально
- * доступны (или что их нет), и что нельзя выдумывать работу.
- * @param model активная модель (живой конфиг);
- * @param tools имена тулов, видимых модели в этой задаче.
- */
-export function buildServiceJobPrompt(
-  model: string,
-  tools: readonly string[],
-  security?: AppConfig["security"],
-): string {
-  const toolLine = tools.length
-    ? `Available tools: ${tools.join(", ")}. Use them only when the task needs them.`
-    : "No tools are available in this job: you cannot read files, run commands or browse the web.";
-  const lines = [
-    `You are MMA answering one service job. Active model: ${model}.`,
-    "Answer the request directly and completely, in the user's language.",
-    toolLine,
-    "Do not claim work you did not do: no invented file contents, command output or web pages.",
-    "If the task needs something unavailable, say so plainly instead of guessing.",
-  ];
-  // B20: job с тулами обязан знать про блокировки — иначе жжёт платные вызовы,
-  // которые full-режим отсёк бы заранее. Компактно: lean-бюджет < 300 токенов.
-  if (security?.enabled && tools.length > 0) {
-    lines.push(
-      `SECURITY RESTRICTIONS (enforced — blocked calls return "[SECURITY BLOCKED]", do not retry them).`,
-    );
-  }
-  return lines.join("\n");
-}
-
 /** Обрезает длинную команду в промпте, сохраняя строку ≤120 символов. */
 function clip(value: string, max = 60): string {
   return value.length <= max ? value : `${value.slice(0, max - 1)}…`;
@@ -97,76 +69,6 @@ export function resolvePromptProfile(
 ): "full" | "large" {
   if (explicit === "full" || explicit === "large") return explicit;
   return config.contextWindow >= LARGE_WINDOW_THRESHOLD ? "large" : "full";
-}
-
-/** Топ языков проекта из индексатора для large-профиля (B6: поле больше не мёртвое). */
-function topLanguages(deps: AgentDeps): string[] {
-  try {
-    const indexer = deps.moduleRegistry?.get("indexer") as
-      | { mapInfo?: () => { languages?: Array<{ language: string }> } }
-      | undefined;
-    return (indexer?.mapInfo?.().languages ?? []).map((l) => l.language).slice(0, 3);
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Пересборка статичного system-блока из живых зависимостей (B14).
- * Bootstrap фиксирует systemInfo один раз — тест-команда, autoPlan, security,
- * runtime/Bun, LSP-строки; после `reconfigure` всё это stale. Факты собираются
- * заново (package.json читается с диска, теги/конфиг — живые), блок меняется
- * на месте: порядок и приоритет сохраняются, prefix-cache рвётся один раз.
- * Профиль (`full`/`large`) резолвится из живого конфига — смена окна или
- * ручной override подхватываются следующим reconfigure (L5).
- * @param deps живые зависимости агента.
- * @returns true — блок найден и пересобран; false — нечего обновлять.
- */
-export function refreshSystemInfoBlock(deps: AgentDeps): boolean {
-  if (!deps.profileCompressed) return false;
-  const idx = deps.promptBlocks.findIndex((b) => b.source === "core" && b.label === "system");
-  if (idx < 0) return false;
-  const facts = deps.envReport
-    ? collectPromptFacts({
-        config: deps.config,
-        baseDir: deps.baseDir,
-        envReport: deps.envReport,
-        activeToolTags: deps.toolTags,
-        clientTz: deps.clientTz,
-        languages: topLanguages(deps),
-      })
-    : fallbackPromptFacts(deps.config, deps.baseDir, deps.profileCompressed, deps.clientTz);
-  const content = buildSystemInfo(
-    deps.config,
-    deps.baseDir,
-    deps.profileCompressed,
-    facts,
-    resolvePromptProfile(deps.config.promptProfile, deps.config),
-  );
-  deps.promptBlocks[idx] = {
-    ...deps.promptBlocks[idx]!,
-    content,
-    estimatedTokens: estimateTokens(content),
-  };
-  return true;
-}
-
-/**
- * Применяет часовой пояс клиента к агенту (B18b): запоминает и пересобирает
- * статику, если пояс сменился. No-op при том же значении (пересборка рвёт
- * prefix-cache — не дёргаем её на каждом ходу).
- * @returns true — статика пересобрана; false — нечего обновлять.
- */
-export function applyClientTz(deps: AgentDeps, tz: ClientTz | undefined): boolean {
-  const cur = deps.clientTz;
-  if (!tz) {
-    if (!cur) return false;
-    deps.clientTz = undefined;
-    return refreshSystemInfoBlock(deps);
-  }
-  if (cur && cur.timeZone === tz.timeZone && cur.utcOffset === tz.utcOffset) return false;
-  deps.clientTz = tz;
-  return refreshSystemInfoBlock(deps);
 }
 
 /**
@@ -294,7 +196,7 @@ export function buildSystemInfo(
     lines.push(`Platform: ${env.platform} (shell: ${env.shell}).`);
     if (env.mcp.configured.length > 0) {
       lines.push(
-        `MCP servers configured: ${env.mcp.configured.slice(0, 8).join(", ")} — call their tools directly when the task fits.`,
+        `MCP servers: ${env.mcp.configured.slice(0, 8).join(", ")} — call their tools when relevant.`,
       );
     }
     if (env.project.languages.length > 0) {

@@ -51,7 +51,7 @@ function resolveHost(contextWindow: number, warns: string[]): PromptPhaseHost {
     promptOverrides: new Map(),
     overflowHintBlock: null,
     frozenMapBlock: null,
-  } as unknown as PromptPhaseHost;
+  } as never;
 }
 
 describe("essential budget guard (B3)", () => {
