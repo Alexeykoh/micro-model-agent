@@ -83,7 +83,7 @@ export async function setupModulesPhase(input: ModulesPhaseInput): Promise<Modul
   // shouldAutocreateSession — тот же гейт, что запрещает им создавать сессию
   // (A-01): он false только для подкоманд, которым не нужен диалог.
   if (shouldAutocreateSession()) {
-    dryRunStartupOverflow(input, promptBlocks);
+    dryRunStartupOverflow(input, promptBlocks, core.sessionModule);
   }
 
   // План-блок удалён: мутирует каждую итерацию (статусы шагов), инвалидируя
