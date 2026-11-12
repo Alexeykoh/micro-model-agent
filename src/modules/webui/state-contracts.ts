@@ -7,6 +7,7 @@ import type { Logger } from "../../logger/app-logger";
 import type { LspDiagnosis } from "../lsp/diagnose";
 import type { MemoryStore } from "../memory/store";
 import type { PluginLoadFailure, PluginRecord } from "../plugins/records";
+import type { AgentPlugin } from "../types";
 import type { WebSessionManager } from "./state-session";
 
 /** Статические веб-ассеты (снапшот на старт; live-перечитывание — через `assetSource`). */
@@ -96,6 +97,12 @@ export interface WebPluginManager {
   setEnabled(name: string, on: boolean): boolean;
   /** Перечитать каталоги с диска (выгрузка + сброс кэша модулей + чтение). */
   reload(): { unloaded: number; loaded: number; failed: number; staleTs: number };
+  /**
+   * Инстанс плагина для настроек (`GET/PUT /api/plugins/:name/settings`).
+   * Опционален, чтобы старые стабы жили без него: без него точки настроек
+   * отвечают `503 plugins_unavailable`.
+   */
+  getPlugin?(name: string): AgentPlugin | null;
 }
 
 /**

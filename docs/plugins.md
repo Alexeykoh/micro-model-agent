@@ -112,6 +112,40 @@ export default {
 } satisfies AgentPlugin;
 ```
 
+## Настройки плагина: манифест + свой файл + подстраница
+
+Плагин может объявить манифест настроек — массив `settingsSchema`. Значения
+живут в **своём файле** рядом с плагином и показываются на подстранице
+в панели настроек `Plugins · MCP` (шестерёнка в строке плагина):
+
+```ts
+// ~/.mma/plugins/greeter/plugin.ts
+import type { AgentPlugin } from "micro-models-agent";
+
+export default {
+  name: "greeter",
+  settingsSchema: [
+    { key: "greeting", type: "string", title: "Приветствие", default: "hi" },
+    { key: "retries", type: "number", min: 1, max: 9, default: 3 },
+    { key: "mode", type: "enum", enum: ["fast", "slow"], default: "fast" },
+    { key: "token", type: "string", secret: true },
+  ],
+} satisfies AgentPlugin;
+```
+
+- **Манифест.** Типы: `string` · `number` · `boolean` · `enum` · `list` · `json`;
+  границы `min/max` для чисел, `enum: [...]` обязательно непустой, `secret: true`
+  прячет значение (как env у MCP). Битый деф отбрасывается с warning в логе —
+  регистрация плагина не страдает.
+- **Файл.** Папка-плагин → `<dir>/settings.json`; файл-плагин →
+  `<имя>.settings.json` рядом. Только для внешних плагинов (не builtin/system):
+  встроенные хранят настройки в общем конфиге. Неизвестные ключи в файле
+  сохраняются при записи (forward-compat).
+- **Подстраница.** Строка плагина с валидной схемой получает шестерёнку →
+  поддиалог с контролами (те же, что остальные секции: тумблер, селект,
+  число, список, JSON). Сохранение — сразу, по одному ключу (`PUT
+  /api/plugins/:name/settings {values}`). Пустой секрет оставляет хранимое.
+
 ## Включение и выключение
 
 Плагин включается/выключается **живо**, без перезапуска. Три поверхности, один путь записи

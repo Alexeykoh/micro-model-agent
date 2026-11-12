@@ -23,6 +23,7 @@ export function stubPlugins(
     builtin: false,
     draft: false,
     enabled: true,
+    hasSettings: false,
     provides: { tools: [], hooks: [] },
     permissions: [],
     warnings: [],
