@@ -32,10 +32,21 @@ type ChildProcessError = Error & {
 };
 
 function childErr(err: unknown): ChildProcessError {
-  return err instanceof Error ? err as ChildProcessError : new Error(String(err)) as ChildProcessError;
+  return err instanceof Error
+    ? (err as ChildProcessError)
+    : (new Error(String(err)) as ChildProcessError);
 }
 
 const syntaxCache = new Map<string, { hash: string; error: string | null }>();
+
+/**
+ * Исполняемый Bun для `bun build`. Под самим Bun — `process.execPath`: на
+ * Windows, где `bun` стоит npm-шимом (`bun.ps1`/`bun.cmd`), `spawn("bun")` не
+ * находит файл, и проверка синтаксиса молча пропускалась (`ENOENT` → null).
+ */
+function bunExecutable(): string {
+  return process.versions.bun ? process.execPath : "bun";
+}
 
 function contentHash(content: string): string {
   let h = 5381;
@@ -115,7 +126,7 @@ export class LintOnWritePlugin implements AgentPlugin {
       }
       try {
         await runAsync(
-          { file: "bun", args: ["build", "--no-bundle", "--target=bun", filePath] },
+          { file: bunExecutable(), args: ["build", "--no-bundle", "--target=bun", filePath] },
           baseDir,
           10000,
           signal,
