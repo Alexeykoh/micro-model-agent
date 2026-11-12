@@ -40,12 +40,12 @@ CI (`.github/workflows/quality.yml`) строже локали: coverage-пор�
 
 **CLI:** `bun run mma setup` · `mma meet` · `mma agents init` · `mma session list|show|delete`.
 
-|                 |                                                                                                      |
-| --------------- | ---------------------------------------------------------------------------------------------------- |
-| **Runtime**     | Bun + TypeScript (strict, NodeNext)                                                                  |
-| **Тесты**       | `bun test` — раннер Bun (vitest-совместимый API); vitest — только integration/e2e                     |
-| **Линт**        | Biome (только линтер; формат — Prettier, в гейт не входит; фронтенд `assets/**` вне Biome)           |
-| **Фронтенд**    | TypeScript в `src/modules/webui/assets/**`, отдельный `tsconfig.frontend.json`                       |
+|                 |                                                                                                             |
+| --------------- | ----------------------------------------------------------------------------------------------------------- |
+| **Runtime**     | Bun + TypeScript (strict, NodeNext)                                                                         |
+| **Тесты**       | `bun test` — раннер Bun (vitest-совместимый API); vitest — только integration/e2e                           |
+| **Линт**        | Biome (только линтер; формат — Prettier, в гейт не входит; фронтенд `assets/**` вне Biome)                  |
+| **Фронтенд**    | TypeScript в `src/modules/webui/assets/**`, отдельный `tsconfig.frontend.json`                              |
 | **Зависимости** | commander, fast-xml-parser, js-tiktoken, jsonrepair, pdfjs-dist, picocolors, playwright, string-width, yaml |
 
 ---
@@ -124,6 +124,13 @@ CI (`.github/workflows/quality.yml`) строже локали: coverage-пор�
 
 Детали и команды — [testing.md](./docs/agents/testing.md).
 
+### 10. CHANGELOG — только по явной команде
+
+**`CHANGELOG.md` не обновляется без явной команды пользователя.** Правка кода,
+багфикс, спека, тест или рефакторинг — не повод трогать этот файл. Запись
+появляется только по прямой просьбе («добавь в changelog», «обнови changelog»,
+«готовь релиз»). Без команды — ни строки.
+
 ---
 
 ## Архитектура
@@ -169,22 +176,22 @@ scope/protected-путей, SSRF и rate-limit (INV-9/10). Новый тул о�
 
 ## Карта кода
 
-| Область            | Путь                                                    | Что знать перед правкой                                  |
-| ------------------ | ------------------------------------------------------- | -------------------------------------------------------- |
-| Петля агента       | `src/core/agent.ts`, `src/core/agent/*`                 | фазы, гейты, восстановление после сбоев                  |
-| Контекст/компакция | `src/core/context/`                                     | `getContextTokens()` — единственный вход порогов         |
-| Промпт             | `src/core/prompt-*.ts`                                  | сборка системного промпта, снимок карты на ход           |
-| Провайдеры         | `src/modules/providers/`, `src/llm/`                    | активная **запись** из `entries[]`; адаптеры и пробы — `llm/` |
-| Конфиг             | `src/config/`                                           | ключ — `registry*.ts`, значение — `defaults.ts`          |
-| Тулы               | `src/tools/`                                            | `ToolExecutor` — единственный путь исполнения            |
-| Модули             | `src/modules/*`                                         | подключаются в bootstrap-фазах `src/core/bootstrap/`     |
-| Терминал           | `src/ui/`, `src/output/`                                | `OutputChannel` — единственный владелец терминала        |
-| Веб                | `src/modules/webui/`                                    | SSE + REST; состояние event-sourced; фронтенд `assets/**` |
-| Сервис             | `src/modules/service/`                                  | HTTP API v1; 1 тенант = 1 процесс                        |
-| Плагины            | `src/modules/plugins/`                                  | контракт экспортируется из `src/index.ts`                |
-| CLI/REPL           | `src/cli/`, `src/core/commands/`                        | каталог команд; подкоманды — handler-map                 |
-| Тексты             | `src/i18n/*.json`, `src/modules/webui/assets/app-i18n.ts` | **два** словаря: CLI и веб                            |
-| Сборка/CI          | `scripts/`, `.github/workflows/`                        | build, release, гейты                                    |
+| Область            | Путь                                                      | Что знать перед правкой                                       |
+| ------------------ | --------------------------------------------------------- | ------------------------------------------------------------- |
+| Петля агента       | `src/core/agent.ts`, `src/core/agent/*`                   | фазы, гейты, восстановление после сбоев                       |
+| Контекст/компакция | `src/core/context/`                                       | `getContextTokens()` — единственный вход порогов              |
+| Промпт             | `src/core/prompt-*.ts`                                    | сборка системного промпта, снимок карты на ход                |
+| Провайдеры         | `src/modules/providers/`, `src/llm/`                      | активная **запись** из `entries[]`; адаптеры и пробы — `llm/` |
+| Конфиг             | `src/config/`                                             | ключ — `registry*.ts`, значение — `defaults.ts`               |
+| Тулы               | `src/tools/`                                              | `ToolExecutor` — единственный путь исполнения                 |
+| Модули             | `src/modules/*`                                           | подключаются в bootstrap-фазах `src/core/bootstrap/`          |
+| Терминал           | `src/ui/`, `src/output/`                                  | `OutputChannel` — единственный владелец терминала             |
+| Веб                | `src/modules/webui/`                                      | SSE + REST; состояние event-sourced; фронтенд `assets/**`     |
+| Сервис             | `src/modules/service/`                                    | HTTP API v1; 1 тенант = 1 процесс                             |
+| Плагины            | `src/modules/plugins/`                                    | контракт экспортируется из `src/index.ts`                     |
+| CLI/REPL           | `src/cli/`, `src/core/commands/`                          | каталог команд; подкоманды — handler-map                      |
+| Тексты             | `src/i18n/*.json`, `src/modules/webui/assets/app-i18n.ts` | **два** словаря: CLI и веб                                    |
+| Сборка/CI          | `scripts/`, `.github/workflows/`                          | build, release, гейты                                         |
 
 ---
 
@@ -247,18 +254,18 @@ scope/protected-путей, SSRF и rate-limit (INV-9/10). Новый тул о�
 
 ## Документация
 
-| Документ                                                | О чём                                                        |
-| ------------------------------------------------------- | ------------------------------------------------------------ |
-| [docs/README.md](./docs/README.md)                      | карта документации: что нормативно, где история              |
-| [CONTRIBUTING.md](./CONTRIBUTING.md)                    | клонирование, ветки, PR, DoD                                 |
-| [architecture v2](./docs/specs/2026-10-12-architecture-v2-design.md) | целевая архитектура, INV-1…23                  |
-| [architecture v2 — схемы](./docs/specs/2026-10-12-architecture-v2-schematics.md) | boot/ход/enforcement/конфиг |
-| [architecture.md](./docs/agents/architecture.md)        | текущее состояние: Output, Host-seam, Security, `LLMProvider` |
-| [gates.md](./docs/agents/gates.md)                      | инвариант → гейт, CI-гейты                                   |
-| [debt.md](./docs/agents/debt.md)                        | реестр долгов (pay-once)                                     |
-| [testing.md](./docs/agents/testing.md)                  | живые прогоны, Playwright, сертификация                      |
-| [code-style.md](./docs/agents/code-style.md)            | форматирование, типы, async/error, i18n                      |
-| [STYLE.md](./docs/design/ui/STYLE.md)                   | канон стиля чат-вывода                                       |
+| Документ                                                                         | О чём                                                         |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| [docs/README.md](./docs/README.md)                                               | карта документации: что нормативно, где история               |
+| [CONTRIBUTING.md](./CONTRIBUTING.md)                                             | клонирование, ветки, PR, DoD                                  |
+| [architecture v2](./docs/specs/2026-10-12-architecture-v2-design.md)             | целевая архитектура, INV-1…23                                 |
+| [architecture v2 — схемы](./docs/specs/2026-10-12-architecture-v2-schematics.md) | boot/ход/enforcement/конфиг                                   |
+| [architecture.md](./docs/agents/architecture.md)                                 | текущее состояние: Output, Host-seam, Security, `LLMProvider` |
+| [gates.md](./docs/agents/gates.md)                                               | инвариант → гейт, CI-гейты                                    |
+| [debt.md](./docs/agents/debt.md)                                                 | реестр долгов (pay-once)                                      |
+| [testing.md](./docs/agents/testing.md)                                           | живые прогоны, Playwright, сертификация                       |
+| [code-style.md](./docs/agents/code-style.md)                                     | форматирование, типы, async/error, i18n                       |
+| [STYLE.md](./docs/design/ui/STYLE.md)                                            | канон стиля чат-вывода                                        |
 
 Остальное: [execution](./docs/agents/execution.md) · [tools](./docs/agents/tools.md) ·
 [modules](./docs/agents/modules.md) · [service-api](./docs/agents/service-api.md) ·
