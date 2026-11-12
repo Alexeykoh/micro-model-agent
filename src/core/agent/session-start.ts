@@ -18,6 +18,8 @@ export interface SessionStartInput {
   overflowResolved: boolean;
   buildSystemPrompt(): SystemPromptBuild;
   resolvePromptOverflowOnce(): Promise<void>;
+  /** Пересборка системного сообщения в живом контексте (resume-путь, B11). */
+  refreshSystemPrompt(): void;
 }
 
 /** Итог фазы: новые значения флагов (null — старт уже был, менять нечего). */
@@ -29,9 +31,24 @@ export interface SessionStartResult {
 }
 
 /**
+ * Ленивые блоки — в общий набор один раз (идемпотентно по идентичности:
+ * `makeLazyPromptBlocks` мемоизирует объект, повторный push дал бы дубль
+ * health-check блока в промпте). Один путь для старта и resume (B11).
+ */
+async function ensureLazyBlocks(deps: AgentDeps): Promise<void> {
+  const lazy = deps.lazyPromptBlocks ? await deps.lazyPromptBlocks() : [];
+  for (const block of lazy) {
+    if (!deps.promptBlocks.includes(block)) deps.promptBlocks.push(block);
+  }
+}
+
+/**
  * Если сессия ещё не инициализирована (нет системного сообщения), пишет
  * `session_start`, дожидается ленивых блоков/пробы и добавляет системный
- * промпт. Идемпотентно: при уже добавленном промпте возвращает null.
+ * промпт. Возвращает null при уже добавленном промпте — EXCEPT resume (B11):
+ * свежий агент после `setContext` (раннеры, `/resume`) несёт system, но
+ * kind-overflow ни разу не резолвил — догоняем резолв + refresh, иначе
+ * инструкции/карта сверх бюджета молча выкидывались бы каждой сборкой.
  */
 export async function ensureSessionStart(
   input: SessionStartInput,
@@ -43,6 +60,17 @@ export async function ensureSessionStart(
     input.systemPromptAdded ||
     contextManager.getActiveHistory().some((m) => m.role === "system")
   ) {
+    if (!input.overflowResolved) {
+      await ensureLazyBlocks(deps);
+      try {
+        await input.resolvePromptOverflowOnce();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        deps.logger.warn(t("prompt.overflow.failed", { error: message }));
+      }
+      input.refreshSystemPrompt();
+      return { systemPromptAdded: true, overflowResolved: true };
+    }
     return null;
   }
 
@@ -58,8 +86,7 @@ export async function ensureSessionStart(
     environment: { ...((env ?? {}) as Record<string, unknown>), provider: liveProvider },
   });
 
-  const lazy = deps.lazyPromptBlocks ? await deps.lazyPromptBlocks() : [];
-  if (lazy.length > 0) deps.promptBlocks.push(...lazy);
+  await ensureLazyBlocks(deps);
 
   // Одноразовый резолв instructions/project-map сверх бюджета ДО первой сборки.
   let overflowResolved = input.overflowResolved;

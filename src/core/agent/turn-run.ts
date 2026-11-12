@@ -31,6 +31,8 @@ export interface TurnRunHost {
   setScope(): void;
   buildSystemPrompt(): SystemPromptBuild;
   resolvePromptOverflowOnce(): Promise<void>;
+  /** Пересборка системного сообщения в живом контексте (resume-путь, B11). */
+  refreshSystemPrompt(): void;
   callerProvenance(): { provider: string; model: string };
   executeSingleAgentLoop(
     input: string,
@@ -94,6 +96,7 @@ export async function runTurn(
       overflowResolved: host.overflowResolved,
       buildSystemPrompt: () => host.buildSystemPrompt(),
       resolvePromptOverflowOnce: () => host.resolvePromptOverflowOnce(),
+      refreshSystemPrompt: () => host.refreshSystemPrompt(),
     },
     slog,
   );
