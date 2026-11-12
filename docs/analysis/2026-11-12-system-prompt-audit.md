@@ -16,6 +16,13 @@
 `src/modules/skills/module.ts`, `src/modules/skills/catalog.ts`,
 `src/modules/indexer/module.ts`.
 
+| Всего | Исправлено | Открыто |
+| --- | --- | --- |
+| 27 | 26 | 1 (B4) |
+
+Проверки после интеграции: `bun test` — 6480 pass / 0 fail (16 skip);
+`bun run quality` (typecheck + frontend + arch-гейты + lint + fallow) — зелёный.
+
 ## Особенность проекта, relevant для промпта
 
 MMA — агент для маленьких моделей (класс Qwen3.5-9B, окно 32–64K).
@@ -54,6 +61,8 @@ iteration-prologue каждой итерации: refreshSystemPrompt() → пе
 
 ### B1. Стартовый dry-run считает не тот набор блоков, что реальная сборка — high
 
+**Статус:** ✅ исправлено — `buildStartupAuditBlocks` (единый синхронный набор) + тест паритета
+
 Где: `src/core/bootstrap/modules-prompt.ts:79-98` (`dryRunStartupOverflow`)
 против `src/core/agent/prompt-phase.ts:46-118` (`buildSystemPrompt`).
 
@@ -72,6 +81,8 @@ plugin/overflow-добавки как параметры), а не дублир�
 сравнение по `label+source`.
 
 ### B2. Два разных счётчика токенов в одном бюджете — high
+
+**Статус:** ✅ исправлено — один `estimateTokens` во всём промпт-тракте, `countTokens` только у провайдера
 
 Где: `src/core/agent/prompt-phase.ts:89` (`countTokens` провайдера для
 plugin-блоков), `src/core/agent/prompt-phase.ts:61` (там же для
@@ -94,6 +105,8 @@ plugin-блоков), `src/core/agent/prompt-phase.ts:61` (там же для
 
 ### B3. Essential-блоки рвут бюджет молча — high
 
+**Статус:** ✅ исправлено — `essentialTokens`/`essentialOverBudget` + warn с конкретным фиксом
+
 Где: `src/core/prompt-builder.ts:148` (`fits = essential || ...`).
 
 `systemInfoPrompt` — `critical + essential: true`
@@ -111,6 +124,8 @@ plugin-блоков), `src/core/agent/prompt-phase.ts:61` (там же для
 (см. B4).
 
 ### B4. Hint-блоки занижают свой вес и добавляются вне бюджета — medium
+
+**Статус:** ⏳ открыто — вес hint-блоков всё ещё константа `HINT_BLOCK_TOKENS`
 
 Где: `src/core/prompt-overflow-resolve.ts:245-267`
 (`estimatedTokens: HINT_BLOCK_TOKENS` — константа 60),
@@ -130,6 +145,8 @@ hint-блоков; во втором проходе проверять `used + n
 
 ### B5. Model-блок в раннере заморожен на конфиге спавна — medium
 
+**Статус:** ✅ исправлено — модель читается из живого `configRef` (main и раннер)
+
 Где: `src/core/bootstrap/session-runner-scope.ts:237-238`
 (`model: input.config.model`) и `src/core/bootstrap/modules-prompt.ts:138`
 (`model: input.config.model`).
@@ -147,6 +164,8 @@ hint-блоков; во втором проходе проверять `used + n
 `buildSystemPrompt` содержит новую» для main и раннера.
 
 ### B6. Половина фактов собирается, но не используется; часть — ложная — high
+
+**Статус:** ✅ исправлено — `lsp.hasServer` честный, трёхвариантный VERIFY; `languages` заполняются (large)
 
 Где: `src/core/prompt-facts.ts:147-183` (`collectPromptFacts`) против
 `src/core/system-prompt.ts:75-229` (`buildSystemInfo`).
@@ -169,6 +188,8 @@ hint-блоков; во втором проходе проверять `used + n
 
 ### B7. `fallbackPromptFacts` угадывает платформу по строке профиля — low
 
+**Статус:** ✅ исправлено — платформа из `process.platform`, не из строки профиля
+
 Где: `src/core/prompt-facts.ts:190-204`.
 
 Эвристика `profile.includes("win32"/"darwin"/"linux")` классифицирует
@@ -184,6 +205,8 @@ hint-блоков; во втором проходе проверять `used + n
 
 ### B8. Усечение по `CHARS_PER_TOKEN=4` врёт на кириллице — medium
 
+**Статус:** ✅ исправлено — итеративное усечение с проверкой `estimateTokens` + тест на кириллице
+
 Где: `src/core/prompt-overflow-resolve.ts:15-16,87-94` против
 `src/llm/token-counter.ts:14-34` и комментария в том же файле `:163-164`.
 
@@ -198,6 +221,8 @@ hint-блоков; во втором проходе проверять `used + n
 `estimateTokens(truncate(s)) ≤ maxTokens`.
 
 ### B9. Кэш суммаризаций инвалидируется бюджетом и слеп к модели — medium
+
+**Статус:** ✅ исправлено — ключ кэша с моделью, sibling-reuse при смене бюджета
 
 Где: `src/core/prompt-overflow-resolve.ts:30-32`
 (`cacheKey = sha(kind|content|maxTokens)`).
@@ -217,6 +242,8 @@ hint-блоков; во втором проходе проверять `used + n
 
 ### B10. `collectText` с `maxTokens*2` опасен для малых окон — medium
 
+**Статус:** ✅ исправлено — `capCompletion` под окно контекста
+
 Где: `src/core/prompt-overflow-resolve.ts:66-85,152,177-194`.
 
 Запас `*2` «оценки эвристичны» при окне 8K и цели 2K просит у провайдера
@@ -233,6 +260,8 @@ hint-блоков; во втором проходе проверять `used + n
 сейчас не измеряется.
 
 ### B11. Resume-раннер строит system без overflow-резолва и lazy-блоков — medium
+
+**Статус:** ✅ исправлено — резолв переполнения на resume-пути + refresh
 
 Где: `src/core/agent/surface.ts:105-118` (`setContext`) против
 `src/core/agent/session-start.ts:36-96` (`ensureSessionStart`).
@@ -252,6 +281,8 @@ KV-кеш рвётся, токены скачут. Для параллельны
 
 ### B12. Legacy-режим `filterBlocksForTags` показывает инструкции к несуществующим тулам — medium
 
+**Статус:** ✅ исправлено — гейт по реально видимым тегам схемы (allowlist-aware)
+
 Где: `src/core/prompt-builder.ts:42-51`.
 
 Пустой `activeTags` = «все тулы», фильтр no-op. Но блок с
@@ -267,6 +298,8 @@ KV-кеш рвётся, токены скачут. Для параллельны
 
 ### B13. Model-блок — первый кандидат на выброс — low
 
+**Статус:** ✅ исправлено — model-блок `normal`
+
 Где: `src/core/system-prompt.ts:30-40`
 (`priority: "low", essential: false`).
 
@@ -281,6 +314,8 @@ KV-кеш рвётся, токены скачут. Для параллельны
 детерминизм жалоб и стоимости.
 
 ### B14. `systemInfoPrompt` — снимок на bootstrap, stale до рестарта — medium
+
+**Статус:** ✅ исправлено — `refreshSystemInfoBlock` на `reconfigure`
 
 Где: `src/core/bootstrap/workspace-phase.ts:178-196`.
 
@@ -300,6 +335,8 @@ KV-кеш рвётся, токены скачут. Для параллельны
 
 ### B15. `PRIORITY_ORDER` без фолбэка; длинные строки нарушают свой же канон — low
 
+**Статус:** ✅ исправлено — `priorityRank` с фолбэком на `normal`
+
 Где: `src/core/prompt-builder.ts:31-36,128-130`;
 `src/core/system-prompt.ts:8-13` (канон ≤120).
 
@@ -316,6 +353,8 @@ KV-кеш рвётся, токены скачут. Для параллельны
 (с подстановками максимальной длины).
 
 ### B16. Lazy-блок и overrides живут вечно, инвалидации нет — medium
+
+**Статус:** ✅ исправлено — отпечаток входов, перерезолв при правке контента
 
 Где: `src/core/agent/session-start.ts:61-62`
 (`deps.promptBlocks.push(...lazy)`), `src/core/agent/agent-base.ts:71,83`
@@ -336,6 +375,8 @@ KV-кеш рвётся, токены скачут. Для параллельны
 
 ### B17. Сужение бюджета mid-session не пересчитывает overflow — medium
 
+**Статус:** ✅ исправлено — отпечаток включает бюджет, перерезолв при сужении окна
+
 Где: `src/core/agent/session-start.ts:66-74` + `src/core/agent/prompt-phase.ts:201-241`.
 
 Флаг `overflowResolved` — на всё время жизни агента. `reconfigure`
@@ -350,6 +391,8 @@ KV-кеш рвётся, токены скачут. Для параллельны
 
 ### B18. Время в промпте — серверное, не пользовательское — low
 
+**Статус:** ✅ исправлено — tz клиента end-to-end + явная метка `(server/user local time)`
+
 Где: `src/core/prompt-facts.ts:55-66` (`localNow`), `src/core/system-prompt.ts:92`.
 
 `Date: ...` — локаль процесса. Для `mma web` с удалённым пользователем
@@ -361,6 +404,8 @@ KV-кеш рвётся, токены скачут. Для параллельны
 `(server local)`. Однострочно, но снимает класс жалоб.
 
 ### B19. Два пути скиллов расходятся по приоритетам — low
+
+**Статус:** ✅ исправлено — склеенный путь скиллов стал тонкой обёрткой с owner/label
 
 Где: `src/modules/skills/module.ts:196-206` (`getSystemPromptBlock`
 склеивает всё в один `high`) против `:212-219` (`getPromptBlocks` —
@@ -378,6 +423,8 @@ KV-кеш рвётся, токены скачут. Для параллельны
 Гейт INV-17 уже требует владельца — распространить на оба пути.
 
 ### B20. `service-job` считает иначе и не знает про security — low
+
+**Статус:** ✅ исправлено — security-строка в service-job при наличии тулов
 
 Где: `src/core/agent/prompt-phase.ts:50-66`.
 
@@ -461,6 +508,8 @@ B20 меняют знак (на large вредят сильнее или инв�
 
 ### L1. Потолок рекомендаций 262144 — large-модели занижены — medium
 
+**Статус:** ✅ исправлено — шкала до 1M, доля из конфига
+
 Где: `src/core/prompt-overflow.ts:90-95`
 (`sizes = [..., 131072, 262144]`, фолбэк — крупнейший известный).
 
@@ -474,6 +523,8 @@ B20 меняют знак (на large вредят сильнее или инв�
 и частично в коде).
 
 ### L2. Фиксированные лимиты контента не масштабируются с окном — medium
+
+**Статус:** ✅ исправлено — scale-aware карта/каталог + cap тел скиллов
 
 Где: `src/config/defaults.ts:171` (`mapTokenBudget: 1500`),
 `registry-extra-provider.ts:94` (потолок 20000),
@@ -494,6 +545,8 @@ B20 меняют знак (на large вредят сильнее или инв�
 
 ### L3. Пороги компакции и дайджесты настроены под тесноту — medium
 
+**Статус:** ✅ исправлено — пороги компакции/toolResultKeep масштабируются (явный конфиг побеждает)
+
 Где: `src/config/defaults.ts:107-122`
 (`compactionThreshold: 0.75`, `toolResultKeep: 6`, `toolDigest: "full"`,
 `admitMaxTokens: 3000`, `ledgerMax: 200`).
@@ -508,6 +561,8 @@ B20 меняют знак (на large вредят сильнее или инв�
 дефолты — small-профиль, и дать `mma context --large` пресет.
 
 ### L4. Автосужение тулов вредит большой модели — medium
+
+**Статус:** ✅ исправлено — large: широкий тул-режим, preseed/hidden/enable_tools не сужают
 
 Где: `src/config/defaults.ts:50-61` (`enableOnDemand: true`,
 `defaultTags: ["file","code"]`), `src/tools/auto-tags.ts`
@@ -527,6 +582,8 @@ vision, research), keyword-эвристики (`RESEARCH_RE`/`CODE_RE`) дают
 Эвристики оставить small-профилю.
 
 ### L5. Один промпт на оба класса — нет профиля large — high
+
+**Статус:** ✅ исправлено — профиль `large` + ключ `promptProfile` (auto|full|large)
 
 Где: `src/core/types.ts:23` (`PromptProfile = "full" | "service-job"`),
 `src/core/system-prompt.ts:75-229`.
@@ -550,6 +607,8 @@ vision, research), keyword-эвристики (`RESEARCH_RE`/`CODE_RE`) дают
 
 ### L6. Счётчик cl100k врёт сильнее именно на large-стеке — low
 
+**Статус:** ✅ исправлено — `encodingForModel` (o200k для OpenAI-класса, ленивая загрузка)
+
 Где: `src/llm/token-counter.ts:36-41` (комментарий признаёт расхождение
 с o200k «в несколько процентов», `TokenCounter` всегда cl100k).
 
@@ -565,6 +624,8 @@ vision, research), keyword-эвристики (`RESEARCH_RE`/`CODE_RE`) дают
 и выбрасывается).
 
 ### L7. Безлимит цены по умолчанию опасен именно на large — low
+
+**Статус:** ✅ исправлено — дефолт `cost.maxRunUsd = 5`, явный 0 = opt-out
 
 Где: `src/config/defaults.ts:95` (`cost: { maxRunUsd: 0 }` — безлимит),
 `src/core/agent/loop-run.ts:139-145` (`costBudgetExceeded`).
