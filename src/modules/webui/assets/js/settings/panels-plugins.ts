@@ -118,15 +118,20 @@ export function renderPluginsPanel(): void {
       const note = el("span", "src system-note", t("web.settings.plugins_system_locked"));
       line.appendChild(note);
     } else {
+      // Контролы строки — в прибитой вправо ячейке: иначе `flex-wrap` у
+      // `.list-line` роняет тумблер длинных строк на вторую линию влево и
+      // у каждой строки он оказывается в своём месте.
+      const actions = el("span", "row-actions");
       // Живой тумблер вместо статуса: тот же контракт, что у строки MCP ниже.
       // `onFlip` ничего не возвращает — состояние перерисовывается из ответа.
-      line.appendChild(
+      actions.appendChild(
         makeToggle(p.enabled !== false, () => {
           void togglePlugin(p.name, p.enabled === false);
         }),
       );
       // Подстраница настроек: только если у плагина есть манифест + файл.
-      if (p.hasSettings === true) line.appendChild(settingsChip(p.name, openPluginSettings));
+      if (p.hasSettings === true) actions.appendChild(settingsChip(p.name, openPluginSettings));
+      line.appendChild(actions);
     }
     return line;
   };

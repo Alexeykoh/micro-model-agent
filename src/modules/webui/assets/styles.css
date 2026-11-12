@@ -1914,6 +1914,12 @@ body.light .toggle:not(.on) { background: var(--toggle-off); }
 .settings-list .list-line .dim { color: var(--dim-a); }
 .settings-list .list-line .linkbtn { flex: 0 0 auto; }
 .settings-list .list-line .linkbtn:first-of-type { margin-left: auto; }
+/* Прибитая вправо ячейка контролов строки (тумблер + шестерёнка настроек):
+   без неё `flex-wrap` роняет их у длинных строк на вторую линию влево. */
+.settings-list .list-line .row-actions {
+  margin-left: auto; flex: 0 0 auto; display: inline-flex;
+  align-items: center; gap: 8px;
+}
 
 /* System modules: harness-owned rows, read-only toggle + a one-line purpose. */
 .settings-list .list-line .plugin-desc {
