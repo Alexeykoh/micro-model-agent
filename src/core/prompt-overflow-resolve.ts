@@ -263,29 +263,37 @@ export async function resolvePromptOverflow(opts: {
     });
   }
 
-  const hintBlock: PromptBlock | null =
+  const hintContent =
     replacements.length > 0
-      ? {
-          source: "core",
-          label: "overflow note",
-          content: [
-            `[Instructions note] Some project blocks exceeded the system-prompt budget and were compressed:`,
-            ...warnings.map(
-              (w) =>
-                `- ${KIND_LABEL[w.kind]}: ${w.originalTokens} tokens → ${w.resolvedTokens} tokens (${w.mode})`,
-            ),
-            ...(unresolved.length > 0
-              ? unresolved.map((k) => `- ${KIND_LABEL[k]}: did not fit at all — read it yourself if needed`)
-              : []),
-            ...warnings
-              .filter((w) => KIND_SOURCE_FILE[w.kind])
-              .map((w) => `Read the full ${KIND_SOURCE_FILE[w.kind]} with read_file if details are missing.`),
-          ].join("\n"),
-          priority: "high",
-          essential: true,
-          estimatedTokens: HINT_BLOCK_TOKENS,
-        }
+      ? [
+          `[Instructions note] Some project blocks exceeded the system-prompt budget and were compressed:`,
+          ...warnings.map(
+            (w) =>
+              `- ${KIND_LABEL[w.kind]}: ${w.originalTokens} tokens → ${w.resolvedTokens} tokens (${w.mode})`,
+          ),
+          ...(unresolved.length > 0
+            ? unresolved.map((k) => `- ${KIND_LABEL[k]}: did not fit at all — read it yourself if needed`)
+            : []),
+          ...warnings
+            .filter((w) => KIND_SOURCE_FILE[w.kind])
+            .map((w) => `Read the full ${KIND_SOURCE_FILE[w.kind]} with read_file if details are missing.`),
+        ].join("\n")
       : null;
+
+  // B4: вес hint-блока — фактический, а не константа. `HINT_BLOCK_TOKENS`
+  // остаётся как аллокационный резерв в цикле выше (оценка сверху), но
+  // `estimatedTokens` блока обязан отражать реальный текст: иначе бюджет
+  // недосчитывает десятки токенов при 2–3 сжатых блоках.
+  const hintBlock: PromptBlock | null = hintContent
+    ? {
+        source: "core",
+        label: "overflow note",
+        content: hintContent,
+        priority: "high",
+        essential: true,
+        estimatedTokens: estimateTokens(hintContent),
+      }
+    : null;
 
   return { replacements, hintBlock, warnings };
 }
