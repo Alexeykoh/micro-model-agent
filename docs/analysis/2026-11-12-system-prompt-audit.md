@@ -18,7 +18,7 @@
 
 | Всего | Исправлено | Открыто |
 | --- | --- | --- |
-| 27 | 26 | 1 (B4) |
+| 27 | 27 | 0 |
 
 Проверки после интеграции: `bun test` — 6480 pass / 0 fail (16 skip);
 `bun run quality` (typecheck + frontend + arch-гейты + lint + fallow) — зелёный.
@@ -125,7 +125,7 @@ plugin-блоков), `src/core/agent/prompt-phase.ts:61` (там же для
 
 ### B4. Hint-блоки занижают свой вес и добавляются вне бюджета — medium
 
-**Статус:** ⏳ открыто — вес hint-блоков всё ещё константа `HINT_BLOCK_TOKENS`
+**Статус:** ✅ исправлено — вес hint-блока = `estimateTokens(content)`; `omittedBlocksNote` получает остаток бюджета и режется до одной строки (или опускается), если не влезает
 
 Где: `src/core/prompt-overflow-resolve.ts:245-267`
 (`estimatedTokens: HINT_BLOCK_TOKENS` — константа 60),
