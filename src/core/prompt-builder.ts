@@ -38,16 +38,25 @@ const PRIORITY_ORDER: Record<string, number> = {
 /**
  * Убирает блоки, которым нужен неактивный тег тулов (напр. `browser`).
  * Пустой/неизвестный набор — legacy-режим «все тулы», блоки не фильтруются.
+ * B12: при суженном наборе (allowlist) тег может быть «активен», но ни один
+ * его тул не попал в схему LLM — такие блоки тоже убираются. Передай
+ * `visibleTags` (теги тулов реальной схемы, напр. `executor.getVisibleTags()`),
+ * иначе проверка идёт только по `activeTags`.
  */
 export function filterBlocksForTags(
   blocks: PromptBlock[],
   activeTags: string[] | undefined,
+  visibleTags?: Set<string> | string[],
 ): PromptBlock[] {
   if (!activeTags || activeTags.length === 0) return blocks;
   const active = new Set(activeTags);
-  return blocks.filter(
-    (block) => !block.requiresTags?.length || block.requiresTags.some((tag) => active.has(tag)),
-  );
+  const visible = visibleTags ? new Set(visibleTags) : undefined;
+  return blocks.filter((block) => {
+    if (!block.requiresTags?.length) return true;
+    if (!block.requiresTags.some((tag) => active.has(tag))) return false;
+    if (visible) return block.requiresTags.some((tag) => visible.has(tag));
+    return true;
+  });
 }
 
 /**

@@ -154,10 +154,19 @@ export function buildSystemInfo(
   }
   lines.push(``);
 
-  if (env.lsp.enabled) {
+  // B6: трёхвариантная честность. Сервер на старте не подтверждён (факты
+  // собираются до LSP-probe) — слать модель в `lsp_check` первым делом
+  // нельзя, это жжёт итерацию малой модели. Подтверждённый сервер (B14)
+  // вернёт строгий вариант.
+  if (env.lsp.enabled && env.lsp.hasServer) {
     lines.push(
       `VERIFY EVERY WRITE: fix [LSP errors]/[Project typecheck failed]/[Syntax check failed] in the result;`,
-      `if LSP is enabled and no marker appears, call "lsp_check" once; otherwise use the project's check.`,
+      `if no marker appears, call "lsp_check" once; otherwise use the project's check.`,
+    );
+  } else if (env.lsp.enabled) {
+    lines.push(
+      `VERIFY EVERY WRITE: fix [Project typecheck failed]/[Syntax check failed] in the result;`,
+      `LSP server not confirmed at startup — prefer the project's check; call "lsp_check" only if needed.`,
     );
   } else {
     lines.push(

@@ -95,7 +95,10 @@ export function dryRunStartupOverflow(
     });
   }
   const systemBudget = Math.floor(config.contextWindow * config.contextBudget.systemPrompt);
-  const dry = dryRunOverflow(filterBlocksForTags([...promptBlocks, ...dynamicBlocks], activeToolTags), systemBudget);
+  // B12: тот же allowlist-aware гейт, что в первой сборке (иначе баннер
+  // считал бы по другому набору, чем `buildSystemPrompt`).
+  const visibleTags = toolRegistry.visibleTagsOf(activeToolTags, input.toolCtx.toolAllowlist);
+  const dry = dryRunOverflow(filterBlocksForTags([...promptBlocks, ...dynamicBlocks], activeToolTags, visibleTags), systemBudget);
   if (dry.overflow.length === 0) return;
   const overflowTokens = dry.overflow.reduce((s, b) => s + b.estimatedTokens, 0);
   const needed = dry.includedTokens + overflowTokens;
