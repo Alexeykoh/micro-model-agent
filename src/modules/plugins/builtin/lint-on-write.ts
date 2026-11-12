@@ -19,6 +19,7 @@ import {
   syntaxFailureBlock,
   typecheckFailureBlock,
 } from "./lint-format";
+import { LINT_ON_WRITE_SCHEMA, lintOnWriteSettings } from "./plugin-settings";
 
 // Пофайловые синтаксис-проверки кешируются по (путь, хеш содержимого): перезапись
 // файла с тем же содержимым скипает (дорогую) проверку. Смена контента →
@@ -49,6 +50,7 @@ export class LintOnWritePlugin implements AgentPlugin {
   name = "lint-on-write";
   priority = 10;
   isBuiltin = true;
+  settingsSchema = LINT_ON_WRITE_SCHEMA;
   // Дебаунснутый проектный typecheck по корню проекта. Один общий слот
   // протекал tsc-ошибками одного проекта в записи другого (монорепо).
   private _checks = new Map<string, { at: number; promise: Promise<string | null> }>();
@@ -60,9 +62,10 @@ export class LintOnWritePlugin implements AgentPlugin {
       return;
     }
 
-    if (!result.success) {
-      return;
-    }
+    if (!result.success) return;
+
+    const settings = lintOnWriteSettings();
+    if (!settings.syntaxCheck && !settings.projectLint && !settings.typeCheck) return;
 
     const path = String(call.arguments.path || "");
     if (!path) return;
@@ -74,7 +77,9 @@ export class LintOnWritePlugin implements AgentPlugin {
     if (signal?.aborted) return;
 
     const ext = extname(fullPath);
-    const syntaxError = await this.checkSyntax(fullPath, ext, tctx.baseDir, signal);
+    const syntaxError = settings.syntaxCheck
+      ? await this.checkSyntax(fullPath, ext, tctx.baseDir, signal)
+      : null;
     if (signal?.aborted) return;
 
     if (syntaxError) {
@@ -82,9 +87,9 @@ export class LintOnWritePlugin implements AgentPlugin {
       return;
     }
 
-    await this.runProjectLint(tctx, result, signal);
+    if (settings.projectLint) await this.runProjectLint(tctx, result, signal);
     if (signal?.aborted) return;
-    await this.runProjectTypeCheck(fullPath, tctx.baseDir, result, signal);
+    if (settings.typeCheck) await this.runProjectTypeCheck(fullPath, tctx.baseDir, result, signal);
   }
 
   private async checkSyntax(
@@ -160,16 +165,12 @@ export class LintOnWritePlugin implements AgentPlugin {
     let lintScript: string | undefined;
     try {
       const packageJsonPath = join(ctx.baseDir, "package.json");
-      if (!existsSync(packageJsonPath)) {
-        return;
-      }
+      if (!existsSync(packageJsonPath)) return;
 
       const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
       lintScript = packageJson.scripts?.lint;
 
-      if (!lintScript) {
-        return;
-      }
+      if (!lintScript) return;
 
       // Объявленный, но неустановленный бинарник линтера ("eslint" не стоит) —
       // пробел проектного сетапа, а не проблема кода: дописывание его к каждой
@@ -210,14 +211,10 @@ export class LintOnWritePlugin implements AgentPlugin {
     // вообще без типового фидбэка (наблюдено в ses_mst2r0r5).
     const projectRoot = findProjectRoot(filePath, baseDir, ["tsconfig.json", "package.json"]);
     const tsconfigPath = join(projectRoot, "tsconfig.json");
-    if (!existsSync(tsconfigPath)) {
-      return;
-    }
+    if (!existsSync(tsconfigPath)) return;
     // Без локального tsc проверка невозможна — не платим npx-задержку.
     const tsc = resolveTscCommand(projectRoot);
-    if (!tsc) {
-      return;
-    }
+    if (!tsc) return;
 
     const now = Date.now();
     const prev = this._checks.get(projectRoot);
@@ -247,7 +244,7 @@ export class LintOnWritePlugin implements AgentPlugin {
       if (errors.length > 0) {
         const fixResult = autoFixErrors(filePath, readFileSync(filePath, "utf-8"), errors);
 
-        if (fixResult.fixed) {
+        if (fixResult.fixed && lintOnWriteSettings().autoFix) {
           // Пишем починенное содержимое
           writeFileSync(filePath, fixResult.newContent, "utf-8");
           result.output += autoFixedBlock(fixResult.applied);

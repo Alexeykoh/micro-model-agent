@@ -16,7 +16,7 @@
 ```ts
 type PluginSettingType = "string" | "number" | "boolean" | "enum" | "list" | "json";
 interface PluginSettingDef {
-  key: string;            // ^[a-z0-9_]{1,64}$, уникален в схеме
+  key: string;            // ^[A-Za-z][A-Za-z0-9_]{0,63}, уникален в схеме
   type: PluginSettingType;
   title?: string;         // подпись, fallback — key
   description?: string;   // подсказка под строкой
@@ -40,7 +40,9 @@ AgentPlugin.settingsSchema?: PluginSettingDef[];
 - файл-плагин (`.../my-stats.ts`) → `.../my-stats.settings.json`.
 
 Только для внешних плагинов: `plugin.path` задан и плагин не builtin/system.
-Встроенные хранят настройки в общем конфиге, как раньше.
+Встроенные (не системные, со схемой) хранят настройки в
+`<MMA_CONFIG_DIR>/plugin-settings/<имя>.settings.json` — в `src/` писать
+нельзя. Системные модули харнесса настроек не имеют.
 
 Эффективные значения = `defaults` из схемы + хранимое. Неизвестные хранимые
 ключи при записи сохраняются (forward-compat), в UI не показываются.

@@ -3,6 +3,7 @@
 // traversal невозможен по построению. Кэш — по mtime файла.
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join } from "node:path";
+import { globalMmaDir } from "../../config/paths";
 import type { AgentPlugin, PluginSettingDef } from "../types";
 import {
   applyPatch,
@@ -33,6 +34,19 @@ export function canHaveSettings(plugin: AgentPlugin): boolean {
     plugin.isBuiltin !== true && plugin.system !== true && typeof plugin.path === "string" &&
     plugin.path.length > 0
   );
+}
+
+/**
+ * Встроенный (не системный) плагин: свой файл лежит не рядом с кодом
+ * (в `src/` писать нельзя), а в `<MMA_CONFIG_DIR>/plugin-settings/`.
+ */
+export function isBuiltinWithSettings(plugin: AgentPlugin): boolean {
+  return plugin.isBuiltin === true && plugin.system !== true;
+}
+
+/** Файл настроек встроенного плагина (уважает `MMA_CONFIG_DIR`). */
+export function builtinSettingsPath(name: string, configDir?: string): string {
+  return join(configDir ?? globalMmaDir(), "plugin-settings", `${name}.settings.json`);
 }
 
 /** Валидная непустая схема плагина (сырая, из кода). */
@@ -79,15 +93,28 @@ export type PluginFinder = (name: string) => AgentPlugin | null;
 /**
  * Стор настроек: резолвит схему и файл по инстансу плагина, валидирует,
  * кэширует эффективные значения по mtime.
+ *
+ * Внешние плагины → sidecar рядом с кодом; встроенные (не системные) →
+ * `<MMA_CONFIG_DIR>/plugin-settings/<name>.settings.json`.
  */
 export class PluginSettingsStore {
   private readonly cache = new Map<string, { mtimeMs: number; values: Record<string, unknown> }>();
 
-  constructor(private readonly find: PluginFinder) {}
+  constructor(
+    private readonly find: PluginFinder,
+    private readonly configDir?: string,
+  ) {}
+
+  /** Путь файла настроек плагина; null — настроек быть не может. */
+  fileOf(plugin: AgentPlugin): string | null {
+    if (canHaveSettings(plugin)) return settingsPathFor(plugin.path);
+    if (isBuiltinWithSettings(plugin)) return builtinSettingsPath(plugin.name, this.configDir);
+    return null;
+  }
 
   /** Схема плагина (пусто — настроек нет). */
   defsOf(plugin: AgentPlugin): PluginSettingDef[] {
-    if (!canHaveSettings(plugin)) return [];
+    if (!this.fileOf(plugin)) return [];
     return pluginSettingsDefs(plugin);
   }
 
@@ -102,7 +129,7 @@ export class PluginSettingsStore {
     if (!plugin) return {};
     const defs = this.defsOf(plugin);
     if (defs.length === 0) return {};
-    const file = settingsPathFor(plugin.path);
+    const file = this.fileOf(plugin);
     if (!file) return schemaDefaults(defs);
     return this.cachedEffective(name, file, defs);
   }
@@ -126,7 +153,7 @@ export class PluginSettingsStore {
     if (!plugin) return { error: "not_found" };
     const defs = this.defsOf(plugin);
     if (defs.length === 0) return { error: "no_settings" };
-    const file = settingsPathFor(plugin.path);
+    const file = this.fileOf(plugin);
     if (!file) return { error: "no_settings" };
     const stored = readSettingsFile(file);
     const applied = applyPatch(defs, stored, patch);
@@ -170,4 +197,32 @@ export class PluginSettingsStore {
 /** Аккуратный предикат «файл настроек существует» (для мусора в выдаче). */
 export function settingsFileExists(path: string): boolean {
   return existsSync(path);
+}
+
+const builtinCache = new Map<string, { mtimeMs: number; values: Record<string, unknown> }>();
+
+/**
+ * Прямое чтение настроек встроенного плагина для рантайма (без менеджера:
+ * встроенные живут в процессе с bootstrap и менеджера под рукой нет).
+ * Кэш по mtime файла, битый файл — дефолты.
+ */
+export function readBuiltinSettings(
+  name: string,
+  schema: readonly PluginSettingDef[],
+  configDir?: string,
+): Record<string, unknown> {
+  const defs = validateSettingsSchema(schema).defs;
+  if (defs.length === 0) return {};
+  const file = builtinSettingsPath(name, configDir);
+  let mtimeMs = 0;
+  try {
+    mtimeMs = statSync(file).mtimeMs;
+  } catch {
+    mtimeMs = 0;
+  }
+  const hit = builtinCache.get(file);
+  if (hit && hit.mtimeMs === mtimeMs) return hit.values;
+  const values = mergeWithDefaults(defs, readSettingsFile(file));
+  builtinCache.set(file, { mtimeMs, values });
+  return values;
 }

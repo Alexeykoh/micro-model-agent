@@ -3,7 +3,7 @@
 // Невалидная схема/значение никогда не бросает — возвращает замечания.
 import type { PluginSettingDef } from "../types";
 
-const KEY_RE = /^[a-z0-9_]{1,64}$/;
+const KEY_RE = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 
 /** Схема после санитизации: только валидные дефы, дубли убраны. */
 export interface SanitizedSchema {

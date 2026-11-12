@@ -82,7 +82,7 @@ export type PluginSettingType = "string" | "number" | "boolean" | "enum" | "list
  * значения живут в своём файле (`settings.json` рядом с плагином).
  */
 export interface PluginSettingDef {
-  /** Ключ в файле настроек: `^[a-z0-9_]{1,64}$`, уникален в схеме. */
+  /** Ключ в файле настроек: `^[A-Za-z][A-Za-z0-9_]{0,63}$`, уникален в схеме. */
   key: string;
   type: PluginSettingType;
   /** Подпись в UI; fallback — key. */

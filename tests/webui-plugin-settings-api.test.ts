@@ -123,6 +123,39 @@ describe("plugin settings REST", () => {
     });
   });
 
+  it("serves builtins from <MMA_CONFIG_DIR>/plugin-settings", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mma-psettings-builtin-"));
+    const prev = process.env.MMA_CONFIG_DIR;
+    process.env.MMA_CONFIG_DIR = dir;
+    try {
+      const s = stateWithPlugins([
+        {
+          name: "notify",
+          isBuiltin: true,
+          settingsSchema: [{ key: "onSuccess", type: "boolean", default: true }],
+        },
+      ]);
+      await withServer(s, async (base) => {
+        const get = await doFetch(`${base}/api/plugins/notify/settings`);
+        expect(get.status).toBe(200);
+        const body = (await get.json()) as {
+          schema: Array<{ key: string }>;
+          values: Record<string, unknown>;
+        };
+        expect(body.schema.map((d) => d.key)).toEqual(["onSuccess"]);
+        expect(body.values).toMatchObject({ onSuccess: true });
+        const put = await putJson(base, "/api/plugins/notify/settings", {
+          values: { onSuccess: false },
+        });
+        expect(put.status).toBe(200);
+        expect(put.json).toMatchObject({ values: { onSuccess: false } });
+      });
+    } finally {
+      if (prev === undefined) delete process.env.MMA_CONFIG_DIR;
+      else process.env.MMA_CONFIG_DIR = prev;
+    }
+  });
+
   it("answers 503 when the plugin manager is missing", async () => {
     const s = createWebUiState();
     s.config = structuredClone(DEFAULTS);
