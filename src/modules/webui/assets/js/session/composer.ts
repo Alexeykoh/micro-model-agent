@@ -1,8 +1,6 @@
 // Composer: per-tab draft/attachments, send/interrupt, busy reflection and the
-// queued-message pin. Extracted from `tabs.js`. Tab operations it needs
-// (activeTab, status mutation, new/close/open) arrive via `initComposer`, so it
-// does not import the tab hub. The mobile session sub-header lives in
-// `sess-bar.ts` (re-exported here for `tabs.ts`).
+// queued-message pin. Tab operations arrive via `initComposer`; the mobile
+// session sub-header lives in `sess-bar.ts` (re-exported for `tabs.ts`).
 import { inp, sendBtn, el, icon } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
@@ -24,6 +22,7 @@ import {
 } from "../feed.js";
 import { setBusy } from "../rail.js";
 import { setSessOpen } from "../core/menus.js";
+import { clientTimeZone } from "./client-tz.js";
 import { cmdkKeydown, initCmdk } from "./cmdk.js";
 import { initMentions, mentionKeydown } from "./mentions.js";
 import { initAttachments, renderAttachments } from "./attachments.js";
@@ -177,6 +176,9 @@ async function send(): Promise<void> {
   const body: Record<string, unknown> = { text };
   if (images.length) body.images = images;
   if (sessionId) body.sessionId = sessionId;
+  // B18b: часовой пояс клиента — сервер подставляет его в Date системного
+  // промпта; без него модель планирует по серверному времени.
+  body.clientTz = clientTimeZone();
   const r = await api<Dict>("/api/message", { method: "POST", body });
   if (!r.ok) {
     const err = (r.data && r.data.error) || r.status;
@@ -293,7 +295,6 @@ export function reflectBusy(): void {
   const escHint = document.getElementById("hintEsc");
   if (escHint) escHint.hidden = !own;
   setBusy(session.busy);
-  // Server queue counters (`state` SSE) drive the pinned strip even for
-  // entries this client has no text for (another tab / reload mid-turn).
+  // Server queue counters (`state` SSE) drive the pinned strip.
   renderQueueStrip();
 }

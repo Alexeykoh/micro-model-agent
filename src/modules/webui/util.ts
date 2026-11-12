@@ -5,10 +5,13 @@
  * (правило #1). Чистая обвязка запрос/ответ — без переходов состояния приложения.
  */
 import { exec } from "node:child_process";
-import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { errMsg } from "../../utils/error";
+
+export { checkAuth, sameOrigin, SECURITY_HEADERS, setAuthCookie } from "./auth";
+export type { AuthState } from "./auth";
 import { redactContextSecrets } from "../../core/api";
+import type { ClientTz } from "../../core/prompt-facts";
 import { MAX_BODY_BYTES, bodyCapFor } from "./limits";
 import { readEnv } from "../../config/env";
 
@@ -47,102 +50,7 @@ export function isLoopbackAddress(addr: string | undefined): boolean {
   return /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(a);
 }
 
-/** Сравнение строк за константное время; разные длины коротко замыкаются (timingSafeEqual бросает). */
-function safeEqual(a: string, b: string): boolean {
-  const ab = Buffer.from(a);
-  const bb = Buffer.from(b);
-  if (ab.length !== bb.length) return false;
-  return timingSafeEqual(ab, bb);
-}
-
-/** Имя HttpOnly-куки, несущей веб-токен для GET-навигаций. */
-const AUTH_COOKIE = "mma_web_auth";
-
-/** Читает значение куки из сырого заголовка `Cookie:`; битые кодировки дают null. */
-function cookieValue(header: string | undefined, name: string): string | null {
-  if (!header) return null;
-  for (const part of header.split(";")) {
-    const eq = part.indexOf("=");
-    if (eq === -1) continue;
-    if (part.slice(0, eq).trim() === name) {
-      const raw = part.slice(eq + 1).trim();
-      try {
-        return decodeURIComponent(raw);
-      } catch {
-        return null;
-      }
-    }
-  }
-  return null;
-}
-
-/**
- * Заголовки безопасности веб-поверхности (аудит §6.1): фрейминг, MIME-sniffing,
- * referrer и CSP.
- *
- * `script-src` содержит `'unsafe-inline'` — в `index.html` есть инлайновый
- * bootstrap темы; без него тема мигает при загрузке. Вынос скрипта в файл
- * позволит сузить политику — это `DEBT(webui-csp-inline-script)`.
- */
-export const SECURITY_HEADERS: Record<string, string> = {
-  "Content-Security-Policy": [
-    "default-src 'self'",
-    "script-src 'self' 'unsafe-inline'",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com data:",
-    "img-src 'self' data: blob:",
-    "connect-src 'self'",
-    "frame-ancestors 'none'",
-    "base-uri 'self'",
-    "object-src 'none'",
-  ].join("; "),
-  "X-Frame-Options": "DENY",
-  "X-Content-Type-Options": "nosniff",
-  "Referrer-Policy": "no-referrer",
-};
-
-/** Узкий срез состояния для auth-проверок: только токен. */
-export interface AuthState {
-  token: string | null | undefined;
-}
-
-/** Токен-auth HTTP-поверхностей (заголовок `x-mma-token`, `?token=` или кука); без токена — разрешено. */
-export function checkAuth(req: IncomingMessage, reqUrl: URL, s: AuthState): boolean {
-  if (!s.token) return true;
-  const header = req.headers["x-mma-token"];
-  if (typeof header === "string" && safeEqual(header, s.token)) return true;
-  const query = reqUrl.searchParams.get("token");
-  if (query !== null && safeEqual(query, s.token)) return true;
-  const cookie = cookieValue(req.headers.cookie, AUTH_COOKIE);
-  return cookie !== null && safeEqual(cookie, s.token);
-}
-
-/**
- * Выдаёт браузеру same-site куку с токеном, чтобы plain-навигация
- * `<a target="_blank" href="/api/file?...">` (не умеющая ставить заголовок
- * `x-mma-token`) всё равно аутентифицировалась. `SameSite=Strict` — кросс-сайт
- * запрос её никогда не несёт, так что CSRF-поверхности не добавляется.
- */
-export function setAuthCookie(res: ServerResponse, s: AuthState): void {
-  if (!s.token) return;
-  res.setHeader(
-    "Set-Cookie",
-    `${AUTH_COOKIE}=${encodeURIComponent(s.token)}; Path=/; HttpOnly; SameSite=Strict`,
-  );
-}
-
-/** Отклоняет кросс-доменные записи из браузера (CSRF-закалка). */
-export function sameOrigin(req: IncomingMessage, reqUrl: URL): boolean {
-  const origin = req.headers.origin;
-  if (!origin) return true; // curl / same-origin GET
-  try {
-    return new URL(String(origin)).host === reqUrl.host;
-  } catch {
-    return false;
-  }
-}
-
-/** Отправляет JSON-ответ со статусом. */
+/** JSON-ответ: статус + тело (единственный способ отдать JSON в webui). */
 export function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(body));
@@ -198,10 +106,22 @@ function requestPath(req: IncomingMessage): string {
   return idx >= 0 ? raw.slice(0, idx) : raw;
 }
 
+/** Разобранное тело POST /api/message: текст, картинки, опциональный пояс клиента. */
+export type ParsedMessageBody =
+  | { text: string; images: string[]; clientTz?: ClientTz }
+  | { error: string };
+
+/** Строгая проверка пояса: объект + непустая зона + `±HH:MM` (B18). */
+function parseClientTz(value: unknown): ClientTz | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const rec = value as Record<string, unknown>;
+  if (typeof rec.timeZone !== "string" || !rec.timeZone) return undefined;
+  if (typeof rec.utcOffset !== "string" || !/^[-+]\d{2}:\d{2}$/.test(rec.utcOffset)) return undefined;
+  return { timeZone: rec.timeZone, utcOffset: rec.utcOffset };
+}
+
 /** Достаёт `{ text, images }` из распарсенного тела; битый JSON и пусто — разные ошибки. */
-export function parseMessageBody(
-  raw: string,
-): { text: string; images: string[] } | { error: string } {
+export function parseMessageBody(raw: string): ParsedMessageBody {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -224,7 +144,10 @@ export function parseMessageBody(
     images.push(img);
   }
   if (text.trim().length === 0 && images.length === 0) return { error: "empty" };
-  return { text, images };
+  // Пояс клиента — best-effort: кривой/отсутствующий молча игнорируем
+  // (fail-open в серверное время), тело при этом валидно.
+  const clientTz = parseClientTz(rec.clientTz);
+  return clientTz ? { text, images, clientTz } : { text, images };
 }
 
 /**

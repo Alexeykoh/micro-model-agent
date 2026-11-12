@@ -4,8 +4,9 @@ import { ensureSessionStart } from "../../src/core/agent/session-start";
 function hostWithSystem(overrides: Record<string, unknown> = {}) {
   const calls: string[] = [];
   const lazyBlock = { content: "lazy", priority: "low", essential: false, estimatedTokens: 1 };
+  const promptBlocks: unknown[] = [];
   const deps = {
-    promptBlocks: [] as unknown[],
+    promptBlocks,
     lazyPromptBlocks: async () => [lazyBlock],
     contextManager: {
       getActiveHistory: () => [{ role: "system", content: "old system" }],
@@ -15,6 +16,7 @@ function hostWithSystem(overrides: Record<string, unknown> = {}) {
   return {
     calls,
     lazyBlock,
+    deps,
     input: {
       deps,
       systemPromptAdded: true,
@@ -75,9 +77,9 @@ describe("session start resume path (B11/B16/B17)", () => {
   });
 
   it("adds lazy blocks once, without duplicating them", async () => {
-    const { input, lazyBlock } = hostWithSystem();
-    const deps = input.deps as unknown as { promptBlocks: unknown[] };
-    deps.promptBlocks.push(lazyBlock);
+    const { input, lazyBlock, deps } = hostWithSystem();
+    const promptBlocks = deps.promptBlocks;
+    promptBlocks.push(lazyBlock);
     const before = deps.promptBlocks.length;
     await ensureSessionStart(input, {} as never);
     expect(deps.promptBlocks.length).toBe(before);

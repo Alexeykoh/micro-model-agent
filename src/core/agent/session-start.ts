@@ -82,15 +82,16 @@ export async function ensureSessionStart(
     });
   }
 
-  await ensureLazyBlocks(deps);
-
   // Отпечаток текущих входов резолва (B16/B17). Повторный резолв — только при
   // расхождении: правка AGENTS.md/карты или смена бюджета между прогонами.
+  // Ленивые блоки подтягиваем только перед резолвом (они входят в бюджет):
+  // дёргать фоновую проверку каждый прогон — лишний await и лишний слот.
   const dry = input.buildSystemPrompt();
   let overflowResolved = input.overflowResolved;
   let overflowFingerprint = input.overflowFingerprint ?? undefined;
   const shouldResolve = !overflowResolved || overflowFingerprint !== dry.fingerprint;
   if (shouldResolve) {
+    await ensureLazyBlocks(deps);
     overflowResolved = true;
     overflowFingerprint = dry.fingerprint;
     try {

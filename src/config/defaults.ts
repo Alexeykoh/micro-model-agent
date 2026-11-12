@@ -92,7 +92,11 @@ export const DEFAULTS: AppConfig = {
   // Авто-детект окна у провайдера включён: проба на старте/смене модели
   // уточняет настроенное значение (см. contextAuto в types.ts).
   contextAuto: true,
-  cost: { maxRunUsd: 0 },
+  // L7: потолочный лимит хода по умолчанию. Ноль (безлимит) на хостед-модели
+  // с maxToolIterations 200 — финансовая дыра: runaway-ход жжёт платные токены
+  // без остановки. Бесплатным моделям не мешает: без цены расход всегда 0,
+  // а 0 < любого положительного cap. Явный 0 — осознанный opt-out.
+  cost: { maxRunUsd: 5 },
   hitl: { killSwitch: false, autoApproveLow: false },
   compliance: { enabled: false, retentionDays: 180 },
   memory: {
@@ -142,6 +146,7 @@ export const DEFAULTS: AppConfig = {
   maxToolIterations: 200,
   stuckThreshold: 6,
   autoPlan: true,
+  promptProfile: "auto",
   execution: {
     autoAdvance: true,
     profile: "local-trusted",

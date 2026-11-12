@@ -2,7 +2,7 @@ import { describe, it, expect } from "bun:test";
 import { refreshSystemInfoBlock } from "../../src/core/system-prompt";
 import { estimateTokens } from "../../src/llm/token-counter";
 
-function depsWith(config: Record<string, unknown>, systemContent: string | null) {
+function depsWith(config: Record<string, unknown>, systemContent: string | null, omitProfile = false) {
   const promptBlocks: Array<Record<string, unknown>> = [
     { source: "other", label: "keep", content: "KEEP", priority: "low", essential: false, estimatedTokens: 1 },
   ];
@@ -25,7 +25,7 @@ function depsWith(config: Record<string, unknown>, systemContent: string | null)
       ...config,
     },
     baseDir: "/tmp",
-    profileCompressed: "prof",
+    ...(omitProfile ? {} : { profileCompressed: "prof" }),
     promptBlocks,
   } as never;
 }
@@ -53,9 +53,7 @@ describe("live static block (B14)", () => {
   });
 
   it("returns false without a profile or without a system block", () => {
-    const noProfile = depsWith({}, "STALE") as unknown as Record<string, unknown>;
-    delete noProfile.profileCompressed;
-    expect(refreshSystemInfoBlock(noProfile as never)).toBe(false);
+    expect(refreshSystemInfoBlock(depsWith({}, "STALE", true))).toBe(false);
     expect(refreshSystemInfoBlock(depsWith({}, null))).toBe(false);
   });
 });

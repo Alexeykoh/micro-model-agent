@@ -4,20 +4,12 @@ import type { ProjectMapInfo } from "../../core/host";
 import type { ToolDefinition } from "../../tools/types";
 import { Indexer, DEFAULT_MAX_FILES, type IndexResult, type IndexedFile } from "./walker";
 import { IndexCache } from "./cache";
-import { buildProjectProfileLine } from "./project-profile";
-import { rankFiles, rankSymbols, matchOutline } from "./rank";
-import { formatMapReport } from "./map-report";
-import { t } from "../../i18n/index";
-import {
-  estimateTokens,
-  formatFindResults,
-  formatSymbolResults,
-  formatOutlineResult,
-  computeRanks,
-  buildMapInfo,
-  emptyMapInfo,
-} from "./format";
+import { estimateTokens } from "../../llm/token-counter";
+
 import { createProjectMapTool, type MapToolHost } from "./map-tool";
+import { buildMapToolHost } from "./map-tool-host";
+import { mapInfoOf, formatMapOf, type MapViewInput } from "./map-info";
+import { findFiles, findText, hasIndexedSymbols, outlineText, symbolsText } from "./queries";
 import { IndexWatch } from "./watch";
 import type { SymbolProvider } from "./provider";
 
@@ -39,6 +31,27 @@ export interface IndexerModuleOptions {
 /** Дефолтный токен-бюджет списка файлов карты. */
 const MAP_TOKEN_BUDGET = 1500;
 
+/**
+ * Бюджет карты на больших окнах (L2): 1500 токенов — это 1% окна 200K,
+ * модель получает выжимку вместо карты. Явное значение конфига побеждает;
+ * дефолт масштабируется (см. `effectiveMapTokenBudget` в workspace-фазе).
+ */
+export const LARGE_MAP_TOKEN_BUDGET = 6000;
+
+/**
+ * Эффективный бюджет карты (L2): явный конфиг — как есть; дефолт на большом
+ * окне поднимается до `LARGE_MAP_TOKEN_BUDGET`. Чистая — тестируется отдельно.
+ */
+export function effectiveMapTokenBudget(
+  configured: number | undefined,
+  defaultBudget: number,
+  contextWindow: number,
+  largeWindowThreshold: number,
+): number {
+  if (configured !== undefined && configured !== defaultBudget) return configured;
+  return contextWindow >= largeWindowThreshold ? LARGE_MAP_TOKEN_BUDGET : defaultBudget;
+}
+
 /** Модуль индексатора: кэш, карта проекта для промпта, тул project_map, вотчер. */
 export class IndexerModule implements AgentModule {
   name = "indexer";
@@ -49,7 +62,6 @@ export class IndexerModule implements AgentModule {
   private maxFiles: number;
   private mapTokenBudget: number;
   private index: IndexResult | null = null;
-  private rankCache: { index: IndexResult; ranks: Map<string, number> } | null = null;
   private symbolProvider: SymbolProvider | null = null;
   private mapCache: { index: IndexResult; value: ProjectMapInfo } | null = null;
   private buildPromise: Promise<IndexResult | null> | null = null;
@@ -125,7 +137,6 @@ export class IndexerModule implements AgentModule {
 
   /** Перестройка с переиспользованием кэша; индекс не гасится до завершения. */
   async refresh(): Promise<IndexResult | null> {
-    this.rankCache = null;
     this.builtAt = null;
     this.forceRebuild = true;
     try {
@@ -139,7 +150,6 @@ export class IndexerModule implements AgentModule {
   async reindex(): Promise<IndexResult | null> {
     this.cache.invalidate();
     this.index = null;
-    this.rankCache = null;
     this.builtAt = null;
     this.forceRebuild = true;
     try {
@@ -151,25 +161,22 @@ export class IndexerModule implements AgentModule {
 
   /** Ищет файлы по символу/пути, ранжированно (пусто без индекса). */
   find(query: string): IndexedFile[] {
-    if (!this.index) return [];
-    return rankFiles(this.index.files, query).map((r) => r.file);
+    return findFiles(this.index, query);
   }
 
   /** Человеко/модельно-читаемый результат `find` (общий для тула и `mma map`). */
   formatFind(query: string): string {
-    return formatFindResults(this.find(query), query);
+    return findText(this.index, query);
   }
 
   /** Ранжированный список мест определения символа (`path:line name (kind)`). */
   formatSymbols(query: string): string {
-    if (!this.index) return t("indexer.not_indexed");
-    return formatSymbolResults(rankSymbols(this.index.files, query), query);
+    return symbolsText(this.index, query);
   }
 
   /** Оглавление файла: символы с номерами строк (без чтения тела). */
   formatOutline(query: string): string {
-    if (!this.index) return t("indexer.not_indexed");
-    return formatOutlineResult(matchOutline(this.index.files, query), query);
+    return outlineText(this.index, query);
   }
 
   /** Точный текст карты проекта для системного промпта (null без индекса). */
@@ -210,23 +217,29 @@ export class IndexerModule implements AgentModule {
    * `/api/state` не пересобирал разбивку.
    */
   mapInfo(): ProjectMapInfo {
-    if (!this.index) {
-      return emptyMapInfo({
-        indexing: this.indexing,
-        builtAt: this.builtAt,
-        watcher: this.watcher.active,
-      });
-    }
-    if (this.mapCache && this.mapCache.index === this.index) {
+    if (this.mapCache && this.index && this.mapCache.index === this.index) {
       return { ...this.mapCache.value, indexing: this.indexing, watcher: this.watcher.active };
     }
-    const value = buildMapInfo(this.index.files, {
-      tokens: estimateTokens(this.formatMap(this.index)),
+    const info = mapInfoOf(this.mapView());
+    if (this.index) {
+      this.mapCache = { index: this.index, value: info };
+      return { ...info, indexing: this.indexing };
+    }
+    return info;
+  }
+
+  /** Срез состояния модуля для сборки карты (в `map-info.ts`). */
+  private mapView(): MapViewInput {
+    return {
+      index: this.index,
+      indexing: this.indexing,
       builtAt: this.builtAt,
-      watcher: this.watcher.active,
-    });
-    this.mapCache = { index: this.index, value };
-    return { ...value, indexing: this.indexing };
+      watcherActive: this.watcher.active,
+      baseDir: this.baseDir,
+      maxFiles: this.maxFiles,
+      mapTokenBudget: this.mapTokenBudget,
+      summarize: (result) => this.indexer.summarize(result),
+    };
   }
 
   /** Компактная статистика карты для совместимости (null до конца обхода). */
@@ -257,27 +270,12 @@ export class IndexerModule implements AgentModule {
 
   /** Текст отчёта «карта проекта» (формат — в `map-report.ts`). */
   private formatMap(result: IndexResult): string {
-    return formatMapReport(result, {
-      baseDir: this.baseDir,
-      maxFiles: this.maxFiles,
-      mapTokenBudget: this.mapTokenBudget,
-      ranks: this.getRanks(result),
-      summary: this.indexer.summarize(result),
-      stackLine: buildProjectProfileLine(this.baseDir),
-    });
+    return formatMapOf(this.mapView(), result);
   }
 
-  /** PageRank-ранги файлов, кэшированные на объект индекса (граф дёшев, но не на поллинг). */
-  private getRanks(result: IndexResult): Map<string, number> {
-    if (this.rankCache?.index === result) return this.rankCache.ranks;
-    const ranks = computeRanks(result);
-    this.rankCache = { index: result, ranks };
-    return ranks;
-  }
-
-  /** Узкий срез модуля для `project_map` (без кэша/вотчера/полей). */
+  /** Узкий срез модуля для `project_map` (сборка — в map-tool-host.ts). */
   private mapToolHost(): MapToolHost {
-    return {
+    return buildMapToolHost({
       baseDir: this.baseDir,
       buildIndex: () => this.buildIndex(),
       refresh: () => this.refresh(),
@@ -289,10 +287,10 @@ export class IndexerModule implements AgentModule {
       formatFind: (query) => this.formatFind(query),
       formatSymbols: (query) => this.formatSymbols(query),
       formatOutline: (query) => this.formatOutline(query),
-    };
+    });
   }
 
   private hasIndexedSymbols(query: string): boolean {
-    return this.index ? rankSymbols(this.index.files, query).length > 0 : false;
+    return hasIndexedSymbols(this.index, query);
   }
 }

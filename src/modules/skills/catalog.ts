@@ -8,6 +8,12 @@ import { estimateTokens } from "../../llm/token-counter";
 export const CATALOG_LIMIT = 10;
 
 /**
+ * Catalog size on large windows (L2): большая модель выбирает из большего
+ * списка без потерь, малой хватает топ-10. Дефолт параметра — small-канон.
+ */
+export const LARGE_CATALOG_LIMIT = 25;
+
+/**
  * Orders skills for the catalog: skills with a usage count first (count desc,
  * then name), unused skills afterwards in the order they were scanned.
  */
@@ -29,9 +35,13 @@ export function rankSkills(skills: SkillMeta[], usage?: SkillUsage): SkillMeta[]
 }
 
 /** Compact `[Available Skills]` block; null when there are no skills. */
-export function buildCatalogBlock(skills: SkillMeta[], usage?: SkillUsage): PromptBlock | null {
+export function buildCatalogBlock(
+  skills: SkillMeta[],
+  usage?: SkillUsage,
+  limit: number = CATALOG_LIMIT,
+): PromptBlock | null {
   if (skills.length === 0) return null;
-  const shown = rankSkills(skills, usage).slice(0, CATALOG_LIMIT);
+  const shown = rankSkills(skills, usage).slice(0, Math.max(1, limit));
   const lines = [
     "[Available Skills]",
     'Skills extend your knowledge. Load one with "load_skill" when it matches the task;',

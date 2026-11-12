@@ -21,6 +21,7 @@ import {
   scrubError,
   sendJson,
 } from "../util";
+import type { ClientTz } from "../../../core/prompt-facts";
 import { t } from "../../../i18n/index";
 
 /**
@@ -93,6 +94,13 @@ function runRunnerTurn(
 ): void {
   for (const url of images) {
     runner.contextManager.addPendingImage({ type: "image_url", image_url: { url } });
+  }
+  // B18b: часовой пояс клиента — в агента до хода (пересборка статики только
+  // при смене). Структурный тип вместо импорта core/agent (гейт INV-3);
+  // стаб-раннеры тестов без метода молча пропускают.
+  const setTz = (runner.agent as { setClientTz?: (tz: ClientTz | undefined) => void }).setClientTz;
+  if (typeof setTz === "function") {
+    setTz.call(runner.agent, s.pool.getClientTz(sessionId));
   }
   s.activeSessionId = sessionId;
   const dlpEnabled = s.config?.security?.dataPolicy?.enabled ?? true;
@@ -180,7 +188,7 @@ export function finishTurn(s: SessionStore & RuntimeState & ConfigStore & HttpTr
  */
 /** Разобранное тело `POST /api/message`: текст, картинки, сессия-владелец. */
 type ParsedPost =
-  | { text: string; images: string[]; target: string }
+  | { text: string; images: string[]; target: string; clientTz?: ClientTz }
   | { error: string; status: number };
 
 /**
@@ -197,7 +205,7 @@ function parsePost(s: SessionStore & RuntimeState & ConfigStore & HttpTransport 
   }
   // Web всегда через раннер: без фабрики исполнителя нет.
   if (!s.pool.hasFactory()) return { error: "no_runner", status: 503 };
-  return { text: body.text, images: body.images, target };
+  return { text: body.text, images: body.images, target, clientTz: body.clientTz };
 }
 
 /**
@@ -208,9 +216,12 @@ function parsePost(s: SessionStore & RuntimeState & ConfigStore & HttpTransport 
 function dispatchPost(
   s: SessionStore & RuntimeState & ConfigStore & HttpTransport & SseTransport & WorkspaceStore,
   res: ServerResponse,
-  parsed: { text: string; images: string[]; target: string },
+  parsed: { text: string; images: string[]; target: string; clientTz?: ClientTz },
 ): void {
-  const { text, images, target } = parsed;
+  const { text, images, target, clientTz } = parsed;
+  // Часовой пояс клиента — в пул до ветвления (B18b): и прямой ход, и дренаж
+  // очереди читают последний присланный; latest wins.
+  if (clientTz) s.pool.setClientTz(target, clientTz);
   // Слоты независимы: занятость — только по своему.
   const blocked = s.pool.isBusy(target);
   if (blocked) {
