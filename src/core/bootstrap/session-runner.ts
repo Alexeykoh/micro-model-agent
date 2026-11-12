@@ -194,7 +194,9 @@ export function createSessionRunnerFactory(
     // Сессионный модуль для dynamic-блоков — свой (id/имя в системном промпте).
     const runnerSessionModule = new SessionModule(pinned);
     const getDynamicPromptBlocks = buildRunnerDynamicBlocks({
-      config,
+      // B5: живой источник, а не снимок `config` на спавн — раннер переживает
+      // смену модели/провайдера через общий configRef.
+      getModel: () => configRef.current?.model ?? bootConfig.model,
       skillsModule,
       sessionModule: runnerSessionModule,
       indexerModule,
