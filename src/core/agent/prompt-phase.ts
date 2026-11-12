@@ -12,6 +12,7 @@ import { projectMmaDir } from "../../config/paths";
 import { PromptBuilder, filterBlocksForTags, omittedBlocksNote } from "../prompt-builder";
 import { resolvePromptOverflow, overflowHint, HINT_BLOCK_TOKENS } from "../prompt-overflow";
 import { buildServiceJobPrompt } from "../system-prompt";
+import { estimateTokens } from "../../llm/token-counter";
 import type { PromptBlock, PromptBlockKind, PromptProfile } from "../types";
 import type { SessionLogger } from "../session-logger";
 import type { AgentDeps } from "../agent";
@@ -45,8 +46,11 @@ export interface SystemPromptBuild {
 /** Собирает системный промпт из блоков с учётом override-ов переполнения. */
 export function buildSystemPrompt(host: PromptPhaseHost): SystemPromptBuild {
   const { deps } = host;
-  // S-04: service-job — своя короткая поверхность. Блоки харнесса (карта,
-  // скиллы, AGENTS.md, скрытые тулы) в job-режиме не отправляются вовсе.
+  // B2: учёт бюджета — одной линейкой (`estimateTokens`) во всём промпт-тракте
+  // (блоки, builder, dry-run, резолвер переполнения). Точный tiktoken-счётчик
+  // провайдера (`llmProvider.countTokens`) для бюджета не используется:
+  // смешанные линейки расходились до ±30% и вытесняли случайные блоки.
+  // Выбор линейки под класс модели — задача L6.
   if (host.promptProfile === "service-job") {
     const tools = deps.toolExecutor.getToolDefinitions(deps.toolTags).map((t) => t.name);
     const prompt = buildServiceJobPrompt(deps.config.model, tools);
@@ -58,7 +62,7 @@ export function buildSystemPrompt(host: PromptPhaseHost): SystemPromptBuild {
         {
           label: "service-job",
           priority: "high",
-          tokens: deps.llmProvider.countTokens(prompt),
+          tokens: estimateTokens(prompt),
           included: true,
         },
       ],
@@ -86,7 +90,7 @@ export function buildSystemPrompt(host: PromptPhaseHost): SystemPromptBuild {
               content,
               priority: "low" as const,
               essential: false,
-              estimatedTokens: deps.llmProvider.countTokens(content),
+              estimatedTokens: estimateTokens(content),
             },
           ]
         : [],
@@ -158,7 +162,7 @@ export function logContextStat(
     historyBudget: snap.budget.history,
     systemTokens:
       kind === "start" && systemMsg && typeof systemMsg.content === "string"
-        ? deps.llmProvider.countTokens(systemMsg.content)
+        ? estimateTokens(systemMsg.content)
         : undefined,
     toolTokens: snap.toolTokens,
     tokens: snap.tokens,
@@ -177,6 +181,7 @@ export function logContextStat(
 /** Текущий системный промпт с подсчётом токенов (для /sysprompt, диагностики). */
 export interface SystemPromptInfo {
   text: string;
+  /** Размер в той же линейке, что бюджет (`estimateTokens`, см. B2 выше). */
   tokenCount: number;
   /** Бюджет системного промпта (contextWindow × contextBudget.systemPrompt). */
   budget: number;
@@ -186,7 +191,7 @@ export interface SystemPromptInfo {
 
 export function getSystemPromptInfo(host: PromptPhaseHost): SystemPromptInfo {
   const { prompt, excluded, blocks } = buildSystemPrompt(host);
-  const tokenCount = host.deps.llmProvider.countTokens(prompt);
+  const tokenCount = estimateTokens(prompt);
   const budget = Math.floor(
     host.deps.config.contextWindow * host.deps.config.contextBudget.systemPrompt,
   );
