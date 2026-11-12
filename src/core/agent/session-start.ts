@@ -16,6 +16,11 @@ export interface SessionStartInput {
   deps: AgentDeps;
   systemPromptAdded: boolean;
   overflowResolved: boolean;
+  /**
+   * Отпечаток входов последнего резолва (B16/B17); null/undefined — сверить
+   * заново (первый прогон, апгрейд со старого агента).
+   */
+  overflowFingerprint?: string | null;
   buildSystemPrompt(): SystemPromptBuild;
   resolvePromptOverflowOnce(): Promise<void>;
   /** Пересборка системного сообщения в живом контексте (resume-путь, B11). */
@@ -28,6 +33,8 @@ export interface SessionStartResult {
   overflowResolved: boolean;
   /** `undefined` — проба не задана (флаг не трогаем). */
   probePassed?: boolean;
+  /** Отпечаток после (пере)резолва; `undefined` — не менялся. */
+  overflowFingerprint?: string;
 }
 
 /**
@@ -45,10 +52,11 @@ async function ensureLazyBlocks(deps: AgentDeps): Promise<void> {
 /**
  * Если сессия ещё не инициализирована (нет системного сообщения), пишет
  * `session_start`, дожидается ленивых блоков/пробы и добавляет системный
- * промпт. Возвращает null при уже добавленном промпте — EXCEPT resume (B11):
- * свежий агент после `setContext` (раннеры, `/resume`) несёт system, но
- * kind-overflow ни разу не резолвил — догоняем резолв + refresh, иначе
- * инструкции/карта сверх бюджета молча выкидывались бы каждой сборкой.
+ * промпт. Дальше — ревалидация резолва (B16/B17): отпечаток входов
+ * (бюджет + kind-блоки) сверяется каждый прогон; изменился контент инструкций
+ * или сузился бюджет — резолв повторяется, иначе пропускается дёшево.
+ * Resume-путь (B11): свежий агент после `setContext` несёт system, но резолв
+ * ни разу не видел — догоняем резолв + refresh вместо молчаливой потери.
  */
 export async function ensureSessionStart(
   input: SessionStartInput,
@@ -56,42 +64,35 @@ export async function ensureSessionStart(
 ): Promise<SessionStartResult | null> {
   const { deps } = input;
   const { contextManager, logger, pluginManager, sessionManager } = deps;
-  if (
+  const started =
     input.systemPromptAdded ||
-    contextManager.getActiveHistory().some((m) => m.role === "system")
-  ) {
-    if (!input.overflowResolved) {
-      await ensureLazyBlocks(deps);
-      try {
-        await input.resolvePromptOverflowOnce();
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        deps.logger.warn(t("prompt.overflow.failed", { error: message }));
-      }
-      input.refreshSystemPrompt();
-      return { systemPromptAdded: true, overflowResolved: true };
-    }
-    return null;
-  }
+    contextManager.getActiveHistory().some((m) => m.role === "system");
 
-  // Стартовую диагностику сессии (окружение, плагины, скиллы) — первой записью
-  // в session.jsonl, чтобы файл был самоописываем. Провайдер-срез берём из
-  // ЖИВОГО конфига, а не из bootstrap-снимка envReport (фоновая context-probe
-  // приземляется позже и снимок показывал до-пробное окно).
-  const env = deps.envReport;
-  const liveProvider = env?.provider
-    ? { ...env.provider, model: deps.config.model, contextWindow: deps.config.contextWindow }
-    : undefined;
-  slog.logSessionStart({
-    environment: { ...((env ?? {}) as Record<string, unknown>), provider: liveProvider },
-  });
+  if (!started) {
+    // Стартовую диагностику сессии (окружение, плагины, скиллы) — первой записью
+    // в session.jsonl, чтобы файл был самоописываем. Провайдер-срез берём из
+    // ЖИВОГО конфига, а не из bootstrap-снимка envReport (фоновая context-probe
+    // приземляется позже и снимок показывал до-пробное окно).
+    const env = deps.envReport;
+    const liveProvider = env?.provider
+      ? { ...env.provider, model: deps.config.model, contextWindow: deps.config.contextWindow }
+      : undefined;
+    slog.logSessionStart({
+      environment: { ...((env ?? {}) as Record<string, unknown>), provider: liveProvider },
+    });
+  }
 
   await ensureLazyBlocks(deps);
 
-  // Одноразовый резолв instructions/project-map сверх бюджета ДО первой сборки.
+  // Отпечаток текущих входов резолва (B16/B17). Повторный резолв — только при
+  // расхождении: правка AGENTS.md/карты или смена бюджета между прогонами.
+  const dry = input.buildSystemPrompt();
   let overflowResolved = input.overflowResolved;
-  if (!overflowResolved) {
+  let overflowFingerprint = input.overflowFingerprint ?? undefined;
+  const shouldResolve = !overflowResolved || overflowFingerprint !== dry.fingerprint;
+  if (shouldResolve) {
     overflowResolved = true;
+    overflowFingerprint = dry.fingerprint;
     try {
       await input.resolvePromptOverflowOnce();
     } catch (err) {
@@ -100,24 +101,32 @@ export async function ensureSessionStart(
     }
   }
 
-  // B2: ждём фоновую reasoning-пробу рядом с ленивыми блоками, чтобы ПЕРВЫЙ
-  // LLM-вызов уже знал, держит ли бэкенд механизм.
-  let probePassed: boolean | undefined;
-  if (deps.reasoningProbe) {
-    probePassed = await deps.reasoningProbe();
+  if (!started) {
+    // B2: ждём фоновую reasoning-пробу рядом с ленивыми блоками, чтобы ПЕРВЫЙ
+    // LLM-вызов уже знал, держит ли бэкенд механизм.
+    let probePassed: boolean | undefined;
+    if (deps.reasoningProbe) {
+      probePassed = await deps.reasoningProbe();
+    }
+
+    const { prompt: systemPrompt, excluded } = input.buildSystemPrompt();
+    contextManager.addMessage({ role: "system", content: systemPrompt });
+    slog.logSystem(systemPrompt.slice(0, 2000));
+    if (excluded.length > 0) {
+      slog.logSystem(`[Excluded prompt blocks: ${excluded.length}]`);
+    }
+    pluginManager.runOnSessionStart({
+      logger,
+      sessionManager: sessionManager?.getActiveMeta(),
+      contextManager,
+    });
+
+    return { systemPromptAdded: true, overflowResolved, probePassed, overflowFingerprint };
   }
 
-  const { prompt: systemPrompt, excluded } = input.buildSystemPrompt();
-  contextManager.addMessage({ role: "system", content: systemPrompt });
-  slog.logSystem(systemPrompt.slice(0, 2000));
-  if (excluded.length > 0) {
-    slog.logSystem(`[Excluded prompt blocks: ${excluded.length}]`);
+  if (shouldResolve) {
+    input.refreshSystemPrompt();
+    return { systemPromptAdded: true, overflowResolved, overflowFingerprint };
   }
-  pluginManager.runOnSessionStart({
-    logger,
-    sessionManager: sessionManager?.getActiveMeta(),
-    contextManager,
-  });
-
-  return { systemPromptAdded: true, overflowResolved, probePassed };
+  return null;
 }

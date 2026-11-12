@@ -41,6 +41,9 @@ export class Agent extends AgentBase {
   /** Гард одноразового асинхронного резолва переполнения в run(). */
   // biome-ignore lint/correctness/noUnusedPrivateClassMembers: пишется через TurnRunHost
   private overflowResolved = false;
+  /** Отпечаток входов последнего резолва (B16/B17); null — сверить заново. */
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: пишется через TurnRunHost
+  private overflowFingerprint: string | null = null;
   /** Пауза хода на границе итераций (INV-P1, спека webui-pause-resume). */
   private pauseRequested = false;
   /** Резолвер ждущего гейта; один waiter на ход (агент не reentrant). */

@@ -19,9 +19,16 @@ function hostWithSystem(overrides: Record<string, unknown> = {}) {
       deps,
       systemPromptAdded: true,
       overflowResolved: false,
-      buildSystemPrompt: () => {
-        throw new Error("must not build on resume path");
-      },
+      overflowFingerprint: null,
+      buildSystemPrompt: () => ({
+        prompt: "sys",
+        excluded: [],
+        excludedBlocks: [],
+        blocks: [],
+        essentialTokens: 0,
+        essentialOverBudget: false,
+        fingerprint: "fp-1",
+      }),
       resolvePromptOverflowOnce: async () => {
         calls.push("resolve");
       },
@@ -33,19 +40,38 @@ function hostWithSystem(overrides: Record<string, unknown> = {}) {
   };
 }
 
-describe("session start resume path (B11)", () => {
+describe("session start resume path (B11/B16/B17)", () => {
   it("resolves overflow and refreshes the system message on a resumed agent", async () => {
     const { input, calls } = hostWithSystem();
     const result = await ensureSessionStart(input, {} as never);
     expect(calls).toEqual(["resolve", "refresh"]);
-    expect(result).toEqual({ systemPromptAdded: true, overflowResolved: true });
+    expect(result).toEqual({ systemPromptAdded: true, overflowResolved: true, overflowFingerprint: "fp-1" });
   });
 
-  it("stays silent when overflow was already resolved", async () => {
-    const { input, calls } = hostWithSystem({ overflowResolved: true });
+  it("stays silent when the fingerprint is unchanged", async () => {
+    const { input, calls } = hostWithSystem({ overflowResolved: true, overflowFingerprint: "fp-1" });
     const result = await ensureSessionStart(input, {} as never);
     expect(calls).toEqual([]);
     expect(result).toBeNull();
+  });
+
+  it("re-resolves when instructions changed between runs (B16)", async () => {
+    const { input, calls } = hostWithSystem({
+      overflowResolved: true,
+      overflowFingerprint: "fp-1",
+      buildSystemPrompt: () => ({
+        prompt: "sys",
+        excluded: [],
+        excludedBlocks: [],
+        blocks: [],
+        essentialTokens: 0,
+        essentialOverBudget: false,
+        fingerprint: "fp-2",
+      }),
+    });
+    const result = await ensureSessionStart(input, {} as never);
+    expect(calls).toEqual(["resolve", "refresh"]);
+    expect(result?.overflowFingerprint).toBe("fp-2");
   });
 
   it("adds lazy blocks once, without duplicating them", async () => {
