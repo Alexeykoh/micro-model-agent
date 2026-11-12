@@ -111,7 +111,11 @@ export function buildSystemPrompt(host: PromptPhaseHost): SystemPromptBuild {
     builder.addBlock(host.overflowHintBlock);
   }
   const result = builder.build();
-  const note = omittedBlocksNote(result.excludedBlocks);
+  // B4: остаток бюджета после первого прохода — заметка не должна его рвать.
+  const usedTokens = result.blocks
+    .filter((b) => b.included)
+    .reduce((sum, b) => sum + b.tokens, 0);
+  const note = omittedBlocksNote(result.excludedBlocks, Math.max(0, systemBudget - usedTokens));
   if (!note) {
     return {
       prompt: result.prompt,

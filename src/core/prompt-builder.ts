@@ -91,26 +91,47 @@ function blockLabel(block: PromptBlock): string {
 /**
  * Заметка о блоках, выброшенных по бюджету (INV-6/17). `instructions` и
  * `project-map` обрабатывает резолвер переполнения отдельно — их не дублируем.
+ *
+ * B4: заметка — `essential`, т.е. влезает всегда; чтобы она не выталкивала
+ * историю сверх бюджета, вызывающий передаёт остаток (`remainingTokens`).
+ * Не помещается полный перечень — режем его до одной строки с количеством.
  * @param excludedBlocks блоки, не вошедшие в промпт.
+ * @param remainingTokens свободный остаток системного бюджета (undefined — без лимита).
  * @returns essential-блок с причиной или null, если сообщать нечего.
  */
-export function omittedBlocksNote(excludedBlocks: PromptBlock[]): PromptBlock | null {
+export function omittedBlocksNote(
+  excludedBlocks: PromptBlock[],
+  remainingTokens?: number,
+): PromptBlock | null {
   const relevant = excludedBlocks.filter((block) => !block.kind);
   if (relevant.length === 0) return null;
+
+  const build = (lines: string[]): PromptBlock => {
+    const content = lines.join("\n");
+    return {
+      source: "core",
+      label: "omitted blocks",
+      content,
+      priority: "high",
+      essential: true,
+      estimatedTokens: estimateTokens(content),
+    };
+  };
+
   const lines = [`[Prompt note] Omitted due to the system-prompt budget:`];
   for (const block of relevant.slice(0, 5)) {
     lines.push(`- ${blockLabel(block)}: ${block.estimatedTokens} tok`);
   }
   if (relevant.length > 5) lines.push(`- +${relevant.length - 5} more`);
-  const content = lines.join("\n");
-  return {
-    source: "core",
-    label: "omitted blocks",
-    content,
-    priority: "high",
-    essential: true,
-    estimatedTokens: estimateTokens(content),
-  };
+  const full = build(lines);
+
+  if (remainingTokens === undefined || full.estimatedTokens <= remainingTokens) return full;
+
+  // Не влезает: одна строка «сколько всего выброшено» вместо перечня.
+  const compact = build([
+    `[Prompt note] ${relevant.length} block(s) omitted due to the system-prompt budget.`,
+  ]);
+  return compact.estimatedTokens <= remainingTokens ? compact : null;
 }
 
 /**
