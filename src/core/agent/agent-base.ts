@@ -35,6 +35,7 @@ import {
   type SystemPromptInfo,
 } from "./prompt-phase";
 import type { SessionLogger } from "../session-logger";
+import { applyClientTz } from "../system-prompt";
 import {
   applyReasoningLevel,
   callerProvenance,
@@ -189,6 +190,15 @@ export class AgentBase {
   /** Тестовый вид текущих блоков промпта. */
   getPromptBlocksForTest(): PromptBlock[] {
     return promptBlocksForTest(this.deps);
+  }
+
+  /**
+   * Ставит часовой пояс клиента (B18b): веб-пул зовёт перед каждым ходом.
+   * Пересборка статики — только при смене (иначе рвём prefix-cache впустую).
+   * @returns true — статика пересобрана.
+   */
+  setClientTz(tz: import("../prompt-facts").ClientTz | undefined): boolean {
+    return applyClientTz(this.deps, tz);
   }
 
   /** Общий ToolContext (бросает, если bootstrap его не дал). */

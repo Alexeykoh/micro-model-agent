@@ -99,6 +99,12 @@ export interface AgentDeps {
    */
   profileCompressed?: string;
   /**
+   * Часовой пояс клиента (B18b): ставит веб-пул перед ходом через
+   * `setClientTz`. `refreshSystemInfoBlock` учитывает его при пересборке
+   * статики; нет — серверное время с меткой.
+   */
+  clientTz?: import("../prompt-facts").ClientTz;
+  /**
    * Прошёл ли механизм reasoning-effort валидацию пробой. Только стартовое
    * значение — живой итог даёт `reasoningProbe` (B2), который агент лениво
    * ждёт перед первым LLM-вызовом.

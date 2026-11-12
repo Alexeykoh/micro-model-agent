@@ -16,7 +16,7 @@ import type { AppConfig } from "../config/types";
 import type { PromptBlock } from "./types";
 import type { AgentDeps } from "./agent/deps";
 import { estimateTokens } from "../llm/token-counter";
-import { collectPromptFacts, fallbackPromptFacts, type PromptEnvironmentFacts } from "./prompt-facts";
+import { collectPromptFacts, fallbackPromptFacts, type ClientTz, type PromptEnvironmentFacts } from "./prompt-facts";
 /**
  * Динамический блок идентичности активной модели. Собирается свежим на
  * каждом билде системного промпта, поэтому переживает `/model use`/
@@ -100,8 +100,9 @@ export function refreshSystemInfoBlock(deps: AgentDeps): boolean {
         baseDir: deps.baseDir,
         envReport: deps.envReport,
         activeToolTags: deps.toolTags,
+        clientTz: deps.clientTz,
       })
-    : fallbackPromptFacts(deps.config, deps.baseDir, deps.profileCompressed);
+    : fallbackPromptFacts(deps.config, deps.baseDir, deps.profileCompressed, deps.clientTz);
   const content = buildSystemInfo(deps.config, deps.baseDir, deps.profileCompressed, facts);
   deps.promptBlocks[idx] = {
     ...deps.promptBlocks[idx]!,
@@ -109,6 +110,24 @@ export function refreshSystemInfoBlock(deps: AgentDeps): boolean {
     estimatedTokens: estimateTokens(content),
   };
   return true;
+}
+
+/**
+ * Применяет часовой пояс клиента к агенту (B18b): запоминает и пересобирает
+ * статику, если пояс сменился. No-op при том же значении (пересборка рвёт
+ * prefix-cache — не дёргаем её на каждом ходу).
+ * @returns true — статика пересобрана; false — нечего обновлять.
+ */
+export function applyClientTz(deps: AgentDeps, tz: ClientTz | undefined): boolean {
+  const cur = deps.clientTz;
+  if (!tz) {
+    if (!cur) return false;
+    deps.clientTz = undefined;
+    return refreshSystemInfoBlock(deps);
+  }
+  if (cur && cur.timeZone === tz.timeZone && cur.utcOffset === tz.utcOffset) return false;
+  deps.clientTz = tz;
+  return refreshSystemInfoBlock(deps);
 }
 
 /**

@@ -9,6 +9,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { errMsg } from "../../utils/error";
 import { redactContextSecrets } from "../../core/api";
+import type { ClientTz } from "../../core/prompt-facts";
 import { MAX_BODY_BYTES, bodyCapFor } from "./limits";
 import { readEnv } from "../../config/env";
 
@@ -198,10 +199,22 @@ function requestPath(req: IncomingMessage): string {
   return idx >= 0 ? raw.slice(0, idx) : raw;
 }
 
+/** Разобранное тело POST /api/message: текст, картинки, опциональный пояс клиента. */
+export type ParsedMessageBody =
+  | { text: string; images: string[]; clientTz?: ClientTz }
+  | { error: string };
+
+/** Строгая проверка пояса: объект + непустая зона + `±HH:MM` (B18). */
+function parseClientTz(value: unknown): ClientTz | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const rec = value as Record<string, unknown>;
+  if (typeof rec.timeZone !== "string" || !rec.timeZone) return undefined;
+  if (typeof rec.utcOffset !== "string" || !/^[-+]\d{2}:\d{2}$/.test(rec.utcOffset)) return undefined;
+  return { timeZone: rec.timeZone, utcOffset: rec.utcOffset };
+}
+
 /** Достаёт `{ text, images }` из распарсенного тела; битый JSON и пусто — разные ошибки. */
-export function parseMessageBody(
-  raw: string,
-): { text: string; images: string[] } | { error: string } {
+export function parseMessageBody(raw: string): ParsedMessageBody {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -224,7 +237,10 @@ export function parseMessageBody(
     images.push(img);
   }
   if (text.trim().length === 0 && images.length === 0) return { error: "empty" };
-  return { text, images };
+  // Пояс клиента — best-effort: кривой/отсутствующий молча игнорируем
+  // (fail-open в серверное время), тело при этом валидно.
+  const clientTz = parseClientTz(rec.clientTz);
+  return clientTz ? { text, images, clientTz } : { text, images };
 }
 
 /**

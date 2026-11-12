@@ -24,6 +24,16 @@ import {
 } from "../feed.js";
 import { setBusy } from "../rail.js";
 import { setSessOpen } from "../core/menus.js";
+
+/** Часовой пояс клиента для сервера (B18b): зона + `±HH:MM`. */
+function clientTimeZone(): { timeZone: string; utcOffset: string } {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "local";
+  const mins = -new Date().getTimezoneOffset();
+  const sign = mins >= 0 ? "+" : "-";
+  const abs = Math.abs(mins);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return { timeZone, utcOffset: `${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}` };
+}
 import { cmdkKeydown, initCmdk } from "./cmdk.js";
 import { initMentions, mentionKeydown } from "./mentions.js";
 import { initAttachments, renderAttachments } from "./attachments.js";
@@ -177,6 +187,9 @@ async function send(): Promise<void> {
   const body: Record<string, unknown> = { text };
   if (images.length) body.images = images;
   if (sessionId) body.sessionId = sessionId;
+  // B18b: часовой пояс клиента — сервер подставляет его в Date системного
+  // промпта; без него модель планирует по серверному времени.
+  body.clientTz = clientTimeZone();
   const r = await api<Dict>("/api/message", { method: "POST", body });
   if (!r.ok) {
     const err = (r.data && r.data.error) || r.status;

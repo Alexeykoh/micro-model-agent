@@ -14,6 +14,7 @@
  * worktree-изоляции пока нет.
  */
 import type { SessionRunner } from "../../../core/bootstrap/session-runner";
+import type { ClientTz } from "../../../core/prompt-facts";
 import type { QueuedMessage } from "../state";
 import { MAX_QUEUE_LENGTH } from "../limits";
 import { selectEvictions } from "./runner-gc";
@@ -48,6 +49,8 @@ export class RunPool {
   private nextQueuedId = 1;
   /** Последняя активность раннера (для LRU и idle-вытеснения). */
   private lastActive = new Map<string, number>();
+  /** Последний присланный часовой пояс клиента по сессии (B18b). */
+  private clientTz = new Map<string, ClientTz>();
   /** Таймер периодической чистки (null — не запущен). */
   private sweepTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -211,6 +214,20 @@ export class RunPool {
     return runner;
   }
 
+  /**
+   * Запоминает часовой пояс клиента сессии (B18b): фронт шлёт с каждым POST,
+   * берём последний (смена пояса посреди сессии — редкость, latest wins).
+   */
+  setClientTz(id: string, tz: ClientTz | undefined): void {
+    if (tz) this.clientTz.set(id, tz);
+    else this.clientTz.delete(id);
+  }
+
+  /** Последний часовой пояс клиента сессии (undefined — не присылал). */
+  getClientTz(id: string): ClientTz | undefined {
+    return this.clientTz.get(id);
+  }
+
   /** Раннер из кеша или свежий спавн (фабрика обязана — иначе throw). */
   getOrCreateRunner(id: string): SessionRunner {
     this.maybeSweep();
@@ -273,6 +290,7 @@ export class RunPool {
   drop(id: string): void {
     this.disposeRunner(id);
     this.slots.delete(id);
+    this.clientTz.delete(id);
   }
 
   /** Полный сброс (стоп сервера): раннеры, слоты, очереди. */
@@ -284,6 +302,7 @@ export class RunPool {
     for (const id of [...this.runners.keys()]) this.disposeRunner(id);
     this.slots.clear();
     this.lastActive.clear();
+    this.clientTz.clear();
   }
 
   /** Отпустить раннер (вклад тулов плагинов снимается, реестр больше не нужен). */
