@@ -26,6 +26,13 @@ export interface BuildResult {
   excludedBlocks: PromptBlock[];
   /** Поблочная разбивка — логирует реальный состав системного промпта. */
   blocks: BlockBuildInfo[];
+  /** Сумма токенов essential-блоков (они включаются всегда, B3). */
+  essentialTokens: number;
+  /**
+   * Essential-блоки сами рвут бюджет: история будет зажата, а молчать
+   * нельзя — вызывающий обязан предупредить пользователя (B3).
+   */
+  essentialOverBudget: boolean;
 }
 
 const PRIORITY_ORDER: Record<string, number> = {
@@ -142,6 +149,10 @@ export class PromptBuilder {
     const excluded: string[] = [];
     const excludedBlocks: PromptBlock[] = [];
     const blocks: BlockBuildInfo[] = [];
+    const essentialTokens = this.blocks
+      .filter((block) => block.essential)
+      .reduce((sum, block) => sum + block.estimatedTokens, 0);
+    const essentialOverBudget = essentialTokens > this.budget;
 
     for (const block of ordered) {
       const tokens = block.estimatedTokens;
@@ -150,6 +161,9 @@ export class PromptBuilder {
       if (fits) {
         included.push(block.content);
         usedTokens += tokens;
+        if (essentialOverBudget && block.essential && !reason) {
+          reason = `essential over budget: ${essentialTokens} tok > ${this.budget} tok`;
+        }
       } else {
         excluded.push(block.content);
         excludedBlocks.push(block);
@@ -171,6 +185,8 @@ export class PromptBuilder {
       excluded,
       excludedBlocks,
       blocks,
+      essentialTokens,
+      essentialOverBudget,
     };
   }
 }

@@ -1327,6 +1327,7 @@
   "prompt.overflow.exceeded": "Prompt overflow: the system prompt needs ~{needed} tok (budget {budget} tok); \"{label}\" ({original} tok) was {mode} to {resolved} tok. To fit everything fully, {hint}.",
   "prompt.overflow.failed": "Prompt overflow resolution failed: {error} — oversized blocks will be dropped.",
   "prompt.overflow.startup": "Startup check: the system prompt needs ~{needed} tok (budget: {budget} tok); {block} ({original} tok) will be summarized/truncated before the first run. To include everything fully, {hint}.",
+  "prompt.overflow.essential_over_budget": "System prompt over budget: essential blocks alone need {essential} tok (budget {budget} tok) — history will be squeezed to fit. {hint}.",
   "tool.session_info.no_active": "No active session",
   "tool.session_info.result": "Session: \"{name}\" ({id})\nModel: {model}\nProvider: {provider}\nContext window: {contextWindow} tokens\nMessages: {messages}\nCreated: {createdAt}\nUpdated: {updatedAt}",
   "tool.session_info.context": "Context used: {used} / {budget} tokens ({percent}%)",
