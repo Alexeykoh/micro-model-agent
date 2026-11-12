@@ -22,7 +22,10 @@ function hostWithAbsurdCounter(promptProfile: "full" | "service-job"): PromptPha
       promptBlocks: [],
       getDynamicPromptBlocks: () => [],
       pluginManager: { runOnBuildPrompt: () => ["x".repeat(100)] },
-      toolExecutor: { getToolDefinitions: () => [{ name: "a" }, { name: "b" }] },
+      toolExecutor: {
+        getToolDefinitions: () => [{ name: "a" }, { name: "b" }],
+        getVisibleTags: () => new Set(["a", "b"]),
+      },
       // Абсурд: если хоть один учёт возьмёт эту линейку — бюджет порвётся.
       llmProvider: { countTokens: () => 999999 },
       toolTags: [],

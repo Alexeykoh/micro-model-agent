@@ -40,7 +40,10 @@ function resolveHost(contextWindow: number, warns: string[]): PromptPhaseHost {
       ],
       getDynamicPromptBlocks: () => [],
       pluginManager: { runOnBuildPrompt: () => [] },
-      toolExecutor: { getToolDefinitions: () => [] },
+      toolExecutor: {
+        getToolDefinitions: () => [],
+        getVisibleTags: () => new Set<string>(),
+      },
       llmProvider: { countTokens: (s: string) => Math.ceil(s.length / 4) },
       toolTags: [],
     },
