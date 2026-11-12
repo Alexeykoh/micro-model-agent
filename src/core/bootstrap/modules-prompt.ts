@@ -160,9 +160,13 @@ export function collectDynamicPromptBlocks(
     // плагины: там `define_capability` модели всё равно недоступен.
     pluginsVisible: !input.toolCtx.toolAllowlist,
   });
+  // B5: идентичность — из ЖИВОГО конфига (`toolCtx.config` — геттер поверх
+  // configRef), а не из bootstrap-снимка `input.config`: reconfigure заменяет
+  // объект конфига, замыкание на старом врало бы про модель до рестарта.
+  const liveModel = input.toolCtx.config?.model ?? input.config.model;
   // Единый сборщик (INV-16): та же структура, что у раннера.
   return assembleDynamicPromptBlocks({
-    model: input.config.model,
+    model: liveModel,
     skillsModule: input.skillsModule,
     sessionModule,
     indexerModule: input.indexerModule,

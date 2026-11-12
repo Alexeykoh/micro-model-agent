@@ -53,10 +53,9 @@ describe("PromptAssembler (W1.5, INV-16)", () => {
   it("runner delegates to the shared assembler (no second copy of the structure)", () => {
     const registry = new ToolRegistry();
     const pm = new PluginManager();
-    const config = { model: "m" } as never;
 
     const runnerBlocks = buildRunnerDynamicBlocks({
-      config,
+      getModel: () => "m",
       skillsModule: skills,
       sessionModule: session,
       indexerModule: indexer,
