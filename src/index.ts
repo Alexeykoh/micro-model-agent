@@ -21,6 +21,8 @@ export type {
   HostBridgeSubmitOptions,
   PluginPermission,
   PluginProvides,
+  PluginSettingDef,
+  PluginSettingType,
   TurnSummary,
 } from "./modules/types";
 export { PLUGIN_PERMISSIONS } from "./modules/plugins/records";

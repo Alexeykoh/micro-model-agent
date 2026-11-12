@@ -110,6 +110,7 @@ export function formatPluginDetails(
   if (record.provides.hooks.length > 0) {
     lines.push(`  ${t("cli.plugins.hooks_label")}: ${record.provides.hooks.join(", ")}`);
   }
+  if (record.hasSettings) lines.push("  " + pc.dim(t("cli.plugins.settings")));
   lines.push(...noticeLines(record, toolConflicts));
   const failure = failures.find((f) => f.path === record.path);
   if (failure) lines.push("  " + pc.red(failure.message));

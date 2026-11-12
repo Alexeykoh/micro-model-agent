@@ -8,7 +8,7 @@
 
 | Каталог | Область | Описание |
 |---------|---------|----------|
-| `src/modules/plugins/builtin/` | встроенные | `lint-on-write`, `notify` — всегда загружены; `angular11` — встроен, выключен по умолчанию (`DEFAULTS.plugins.disabled`) |
+| `src/modules/plugins/builtin/` | встроенные | `lint-on-write`, `notify` — всегда загружены; `angular11`, `telegram-notify` — встроены, выключены по умолчанию (`DEFAULTS.plugins.disabled`) |
 | `~/.mma/plugins/` | глобальные | для всех проектов пользователя |
 | `<project>/.mma/plugins/` | проектные | только для этого проекта |
 
@@ -111,6 +111,50 @@ export default {
   },
 } satisfies AgentPlugin;
 ```
+
+## Настройки плагина: манифест + свой файл + подстраница
+
+Плагин может объявить манифест настроек — массив `settingsSchema`. Значения
+живут в **своём файле** рядом с плагином и показываются на подстранице
+в панели настроек `Plugins · MCP` (шестерёнка в строке плагина):
+
+```ts
+// ~/.mma/plugins/greeter/plugin.ts
+import type { AgentPlugin } from "micro-models-agent";
+
+export default {
+  name: "greeter",
+  settingsSchema: [
+    { key: "greeting", type: "string", title: "Приветствие", default: "hi" },
+    { key: "retries", type: "number", min: 1, max: 9, default: 3 },
+    { key: "mode", type: "enum", enum: ["fast", "slow"], default: "fast" },
+    { key: "token", type: "string", secret: true },
+  ],
+} satisfies AgentPlugin;
+```
+
+- **Манифест.** Типы: `string` · `number` · `boolean` · `enum` · `list` · `json`;
+  границы `min/max` для чисел, `enum: [...]` обязательно непустой, `secret: true`
+  прячет значение (как env у MCP). Ключ — `^[A-Za-z][A-Za-z0-9_]{0,63}$`.
+  Битый деф отбрасывается с warning в логе —
+  регистрация плагина не страдает.
+- **Файл.** Папка-плагин → `<dir>/settings.json`; файл-плагин →
+  `<имя>.settings.json` рядом. **Встроенные** (`lint-on-write`, `notify`,
+  `angular11`) хранят настройки в
+  `<MMA_CONFIG_DIR>/plugin-settings/<имя>.settings.json` — в `src/` писать
+  нельзя. Системные модули харнесса настроек не имеют. Неизвестные ключи в файле
+  сохраняются при записи (forward-compat).
+- Встроенные: `lint-on-write` (`syntaxCheck`, `projectLint`, `typeCheck`,
+  `autoFix`), `notify` (`onSuccess`, `onFailure`, `onInterrupted`), `angular11`
+  (`writeCheck`), `telegram-notify` (`botToken`, `chatId`, `notifyOn`,
+  `sessionId`, `sessionName`). Читаются в хуках напрямую через `readBuiltinSettings`
+  (кэш по mtime) — менеджер не трогаем (потолок 300 строк).
+- **Подстраница.** Строка плагина с валидной схемой получает шестерёнку →
+  поддиалог с контролами (те же, что остальные секции: тумблер, селект,
+  число, список, JSON). Сохранение — сразу, по одному ключу (`PUT
+  /api/plugins/:name/settings {values}`). Пустой секрет оставляет хранимое.
+  Подстраница доступна и встроенным: шестерёнка в строке `lint-on-write`,
+  `notify`, `telegram-notify`, `angular11`.
 
 ## Включение и выключение
 
@@ -435,7 +479,7 @@ export default {
 
 ## См. также
 
-- Встроенные плагины: `src/modules/plugins/builtin/lint-on-write.ts`, `notify.ts`, `angular11/`
+- Встроенные плагины: `src/modules/plugins/builtin/lint-on-write.ts`, `notify.ts`, `telegram-notify.ts`, `angular11/`
 - Загрузчик: `src/modules/plugins/loader.ts`
 - Диспетчер: `src/modules/plugins/manager.ts`
 - Метаданные и валидация: `src/modules/plugins/records.ts`

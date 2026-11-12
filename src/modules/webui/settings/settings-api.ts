@@ -20,6 +20,10 @@ import {
   handlePluginsReload,
   handleSkillsGet,
 } from "./settings-api-plugins";
+import {
+  handlePluginSettingsGet,
+  handlePluginSettingsUpdate,
+} from "./settings-api-plugin-settings";
 import type { SettingsState } from "./settings-api-write";
 
 export type { McpServerView } from "./settings-api-mcp";
@@ -28,6 +32,10 @@ export { mcpList } from "./settings-api-mcp";
 export { handleLspGet, handleLspUpdate, listLspServers, updateLspServer, type LspServerView, type LspWriteResult } from "./settings-api-lsp";
 export { handleMcpCreate, handleMcpDelete, handleMcpToggle, handleMcpUpdate } from "./settings-api-mcp";
 export { handlePluginToggle, handlePluginsGet, handlePluginsReload, handleSkillsGet } from "./settings-api-plugins";
+export {
+  handlePluginSettingsGet,
+  handlePluginSettingsUpdate,
+} from "./settings-api-plugin-settings";
 
 type SettingsHandler = (
   req: IncomingMessage,
@@ -81,6 +89,16 @@ const SETTINGS_PREFIX: Array<{ method: string; prefix: string; handle: SettingsH
     method: "POST",
     prefix: "/api/plugins/",
     handle: (req, res, param, s) => handlePluginToggle(req, res, decodeURIComponent(param), s),
+  },
+  {
+    method: "GET",
+    prefix: "/api/plugins/",
+    handle: (_req, res, param, s) => handlePluginSettingsGet(_req, res, param, s),
+  },
+  {
+    method: "PUT",
+    prefix: "/api/plugins/",
+    handle: (req, res, param, s) => handlePluginSettingsUpdate(req, res, param, s),
   },
   {
     method: "PUT",

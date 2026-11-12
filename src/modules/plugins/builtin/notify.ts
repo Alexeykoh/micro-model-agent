@@ -9,6 +9,7 @@ import { platform } from "node:os";
 import { t } from "../../../i18n/index";
 import type { AgentPlugin, PluginHookContext, TurnSummary } from "../../types";
 import type { ToolContext } from "../../../tools/types";
+import { NOTIFY_SCHEMA, notifySettings } from "./plugin-settings";
 
 /** Injectable notifier (tests never touch the real OS). */
 export type DesktopNotifier = (
@@ -72,11 +73,16 @@ export class NotifyPlugin implements AgentPlugin {
   name = "notify";
   priority = 5;
   isBuiltin = true;
+  settingsSchema = NOTIFY_SCHEMA;
 
   constructor(private readonly notifier: DesktopNotifier = sendDesktopNotification) {}
 
   onTurnEnd(ctx: PluginHookContext, summary: TurnSummary): void {
     const tctx = ctx as unknown as ToolContext;
+    const settings = notifySettings();
+    if (summary.interrupted && !settings.onInterrupted) return;
+    if (!summary.interrupted && !summary.success && !settings.onFailure) return;
+    if (!summary.interrupted && summary.success && !settings.onSuccess) return;
     const status = summary.interrupted
       ? t("plugin.notify_interrupted")
       : summary.success

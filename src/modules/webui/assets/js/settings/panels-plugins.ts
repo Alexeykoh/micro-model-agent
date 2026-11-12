@@ -12,6 +12,7 @@ import { groupHeader, placeholderFor, chip, renderSections } from "./panels-shar
 import { renderLspSection } from "./panels-lsp.js";
 import { openSubDialog } from "./subdialog.js";
 import { mcpForm } from "./mcp-form.js";
+import { pluginSettingsForm, settingsChip } from "./plugin-settings-form.js";
 
 /** Перечитать каталоги с диска: выгрузка → сброс кэша → чтение заново. */
 async function reloadPlugins(): Promise<void> {
@@ -117,13 +118,20 @@ export function renderPluginsPanel(): void {
       const note = el("span", "src system-note", t("web.settings.plugins_system_locked"));
       line.appendChild(note);
     } else {
+      // Контролы строки — в прибитой вправо ячейке: иначе `flex-wrap` у
+      // `.list-line` роняет тумблер длинных строк на вторую линию влево и
+      // у каждой строки он оказывается в своём месте.
+      const actions = el("span", "row-actions");
       // Живой тумблер вместо статуса: тот же контракт, что у строки MCP ниже.
       // `onFlip` ничего не возвращает — состояние перерисовывается из ответа.
-      line.appendChild(
+      actions.appendChild(
         makeToggle(p.enabled !== false, () => {
           void togglePlugin(p.name, p.enabled === false);
         }),
       );
+      // Подстраница настроек: только если у плагина есть манифест + файл.
+      if (p.hasSettings === true) actions.appendChild(settingsChip(p.name, openPluginSettings));
+      line.appendChild(actions);
     }
     return line;
   };
@@ -243,6 +251,24 @@ function openMcpForm(mode: string, entry: Dict | null): void {
       void loadPlugins();
     },
   );
+}
+
+/** Open the plugin settings subpage (manifest + its own file). */
+function openPluginSettings(name: string): void {
+  void api<Dict>("/api/plugins/" + encodeURIComponent(name) + "/settings").then((res) => {
+    if (!res.ok || !res.data || res.data.ok !== true) {
+      setIndicator(t("web.settings.plugin_settings_failed"), true);
+      return;
+    }
+    openSubDialog(
+      t("web.settings.plugin_settings_title", { name }),
+      pluginSettingsForm(name, res.data),
+      () => {
+        renderPluginsPanel();
+        void loadPlugins();
+      },
+    );
+  });
 }
 
 export async function loadPlugins(): Promise<void> {

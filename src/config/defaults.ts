@@ -225,9 +225,10 @@ export const DEFAULTS: AppConfig = {
     budget: 0.15,
   },
   plugins: {
-    // `angular11` — системный плагин, выключен по умолчанию: включается штатным
-    // контуром (`mma plugins enable angular11`, `/plugins`, тумблер в вебе).
-    disabled: ["angular11"],
+    // `angular11`, `telegram-notify` — встроенные плагины, выключены по
+    // умолчанию: включаются штатным контуром (`mma plugins enable`,
+    // `/plugins`, тумблер в вебе).
+    disabled: ["angular11", "telegram-notify"],
     maxDrafts: 10,
   },
   hallucination: {
