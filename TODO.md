@@ -108,50 +108,50 @@
 > `OutputEvent` нельзя строить Enterprise поверх монолита — любой
 > «enterprise-флаг» в монолите локально пропатчится.
 
-- [ ] **Разделение монолита UI / runtime.**
-      **Волна -1 закрыта 2026-11-09** веткой `feat/daemon-wire` (спека
-      [`2026-11-09-daemon-wire-design`](./docs/specs/2026-11-09-daemon-wire-design.md),
-      волна -1): wire-транспорт `mma serve` (Agent Service API `/v1`+SSE,
-      daemon переживает рестарт UI через `session.jsonl`/`checkpoint.json`/
-      `interrupt.json` + SSE pull-resume), версионирование протокола
-      (`PROTOCOL_VERSION="1"`, `/v1/health.protocol`, клиент отвергает чужой
-      major), токен в файле `~/.mma/daemon.token` (0600, fallback OS keychain),
-      thin-клиент `DaemonClient` (`src/modules/daemon/protocol.ts`).
-      **W0 закрыт 2026-11-13** веткой `refactor/runtime-layer-split`: общий
-      runtime-слой (`src/runtime/`: `RunPool`, egress, body, scrub, clip, net)
-      вынесен из `webui`; `service` и `core` больше не импортируют
-      `modules/webui` (гейт `tests/arch/runtime-layer.test.ts`). **W1 закрыт
-      2026-11-13** веткой `feat/host-local`: async `Host.getState`,
-      `subscribeEvents`/`HostEvent`, `LocalHost` (`src/core/local-host.ts`),
-      REPL стал потребителем `Host`. **W2 закрыт 2026-11-13** веткой
-      `feat/host-wire`: `/v1/host/*` (state, submit, stream, interrupt,
-      pause/resume, answer) + `RemoteHost`. **W3a закрыт 2026-11-13** веткой
-      `feat/host-read`: сессии/history/log через `/v1/host/*` и методы `Host`.
-      **W3b-1 закрыт 2026-11-13** веткой `feat/host-config`: `config`/`models`
-      через host wire, реестр конфига и кеш моделей в `src/runtime/`.
-      **W3b-2 закрыт 2026-11-13** веткой `feat/host-config-write`: `POST
-      /v1/host/config` через общий `applyConfigWrite`.
-      **W3b-3 закрыт 2026-11-13** веткой `feat/host-command`: `POST
-      /v1/host/sessions/:id/command` (серверное подмножество) и
-      `Host.executeCommand` → `{ok, output[]}`.
-      **W3b-4 (thin-REPL MVP) закрыт 2026-11-13** веткой
-      `feat/daemon-repl`: `mma --daemon <url>` — клиент без локального рантайма,
-      рендер событий, вопросы, локальные `/help|/clear|/exit`, остальные
-      команды по wire. **W3b-5 закрыт 2026-11-13** веткой `feat/host-images`:
-      картинки в host submit. Остаток W3: паритет рендера/команд.
-      **W4a закрыт 2026-11-13** веткой `feat/web-daemon`: `mma web --daemon-url
-      <url>` — адаптер host-покрытых `/api/*` + SSE; непокрытые панели 501.
-      **W4b-1 закрыт 2026-11-13** веткой `feat/web-files`: панель Files
-      через wire. **W4b-2a закрыт 2026-11-13** веткой `feat/web-git`:
-      read-only git в адаптере. **W4b-2b закрыт 2026-11-13** веткой
-      `feat/web-memory`: панели Memory и Skills через wire. **W4b-2c
-      закрыт 2026-11-13** веткой `feat/web-misc`: setup/index/lsp через
-      wire. **W4b-3 закрыт 2026-11-13** веткой `feat/web-plugins`:
-      панель Plugins через wire. Осталась панель update, затем W5…W7
-      по [`2026-11-10-monolith-split-design`](./docs/specs/2026-11-10-monolith-split-design.md):
-      `LocalHost`/`RemoteHost`, `/v1/host/*`, thin REPL, web-адаптер,
-      one-shot `--daemon`, TLS. Браузер уже тонкий; `mma web` пока in-process
-      и к демону не проксирует.
+- [ ] **Разделение монолита UI / runtime (волны -1…W7).**
+      Спека: [`2026-11-10-monolith-split-design`](./docs/specs/2026-11-10-monolith-split-design.md).
+      Статус на 2026-11-13; рабочая линия — `v0_26_0`.
+      - [x] **Волна -1** — wire-протокол (`feat/daemon-wire`): `mma serve`, `/v1`+SSE,
+            версия протокола, токен `~/.mma/daemon.token`, `DaemonClient`.
+      - [x] **W0** — общий runtime-слой (`refactor/runtime-layer-split`):
+            `src/runtime/**`, `service`/`core` больше не импортируют `modules/webui`.
+      - [x] **W1** — контракт `Host` v2 (`feat/host-local`): async `getState`,
+            `subscribeEvents`/`HostEvent`, `LocalHost`, REPL — потребитель `Host`.
+      - [x] **W2** — интерактивный wire (`feat/host-wire`): `/v1/host/{state,submit,stream,
+            interrupt,pause,resume,answer}` + `RemoteHost`.
+      - [x] **W3a** — сессии/история/лог (`feat/host-read`): `Host.listSessions`,
+            `createSession`, `deleteSession`, `getHistory`, `getLog`.
+      - [x] **W3b-1** — конфиг/модели (`feat/host-config`): `GET /v1/host/config`,
+            `/models`, `runtime/config-view.ts`, `runtime/model-cache.ts`.
+      - [x] **W3b-2** — запись конфига (`feat/host-config-write`): `POST /v1/host/config`,
+            общий `runtime/config-write.ts`.
+      - [x] **W3b-3** — команды (`feat/host-command`): `POST .../command`,
+            `Host.executeCommand` → `{ok, output[]}` (серверное подмножество).
+      - [x] **W3b-4** — thin-REPL MVP (`feat/daemon-repl`): `mma --daemon <url>`,
+            рендер событий, вопросы, локальные `/help|/clear|/exit`.
+      - [x] **W3b-5** — картинки (`feat/host-images`): `images` в host submit.
+      - [x] **W4a** — web-адаптер (`feat/web-daemon`): `mma web --daemon-url <url>`,
+            host-покрытые `/api/*` + SSE-маппинг.
+      - [x] **W4b-1** — Files (`feat/web-files`): `/v1/host/files` + `runtime/workspace-fs.ts`.
+      - [x] **W4b-2a** — git (`feat/web-git`): `/v1/host/git[/changes|/diff]`.
+      - [x] **W4b-2b** — Memory/Skills (`feat/web-memory`): `/v1/host/{memory,skills}`.
+      - [x] **W4b-2c** — Setup/Index/LSP (`feat/web-misc`): `/v1/host/{setup,index,lsp,lsp/doctor}`.
+      - [x] **W4b-3** — Plugins (`feat/web-plugins`): `/v1/host/plugins`, `runtime/mcp-view.ts`.
+      - [ ] **W4b-4** — update-панель: updater в `mma serve` + `/v1/host/update`
+            (сейчас `501` в daemon-режиме).
+      - [ ] **W5** — one-shot `mma "prompt" --daemon` через job API `/v1/tasks`
+            (сейчас `--daemon` запускает thin-REPL и игнорирует промпт).
+      - [ ] **W6** — TLS и удалённая закалка: in-app TLS, токен+TLS на не-loopback,
+            ротация токена, фикс `deploy/Dockerfile.service`.
+      - [ ] **W7** — уборка: доки, ре-экспорт-заглушки, реестр долгов,
+            синк `docs/README`/сайта.
+
+      **Паритет после волн:** полный каталог команд и рендер thin-REPL
+      (plan/usage/critic/subagent), вставка картинок в thin-REPL, авто-реконнект
+      SSE, локаль `X-Mma-Locale`/i18n, e2e-тесты «демон + thin-REPL/web».
+
+      **Релиз:** `CHANGELOG`/версия `0.26.0` не трогали; `v0_26_0` не влит в `dev`.
+      Обычный `mma web` остаётся in-process; `--daemon-url` — адаптер к демону.
 - [x] **Cost/LLM-gateway.** **MVP закрыт 2026-11-09**: per-run hard-stop
       `cost.maxRunUsd` (целые USD; `stopReason=cost_budget` через форс-финал,
       `src/core/agent/cost-budget.ts` + проверка в loop-run). `max_turns`
