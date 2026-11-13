@@ -13,7 +13,7 @@ import type { SessionManager } from "../modules/session/manager";
 import type { SkillsModule } from "../modules/skills/module";
 import type { PluginManager } from "../modules/plugins/manager";
 import { createHostBridge } from "../core/host";
-import type { Host, HostStateSnapshot } from "../core/host";
+import type { Host, HostCommandResult, HostStateSnapshot } from "../core/host";
 import type { HostBridge, HostBridgeSubmitOptions } from "../modules/types";
 import type { OutputEvent } from "../output/types";
 import type { EnvironmentReport } from "../core/environment";
@@ -38,7 +38,7 @@ import { setupCompleter as setupReplCompleter, refreshModelCache as refreshReplM
 import { renderPlan, runAgent as runReplAgent } from "./repl-run";
 import { setupListeners as setupReplListeners } from "./repl-listeners";
 import {
-  executeCommand as executeReplCommand,
+  executeCommandResult as executeReplCommandResult,
   registerCommand as registerReplCommand,
   showHelp as showReplHelp,
 } from "./repl-dispatch";
@@ -253,8 +253,8 @@ export class Repl implements ReplContext {
   }
 
   /** Host: прогон slash-команды через ту же handler-map, что и ручной ввод. */
-  public async executeCommand(line: string): Promise<void> {
-    await executeReplCommand(this, line);
+  public executeCommand(line: string): Promise<HostCommandResult> {
+    return executeReplCommandResult(this, line);
   }
 
   /** Показ помощи: общая или по команде (`/help <команда>`). */

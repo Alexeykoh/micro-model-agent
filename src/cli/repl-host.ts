@@ -34,7 +34,7 @@ export interface ReplHostHost {
   sessionManager?: SessionManager;
   execModule?: ExecutionModule;
   runAgent(input: string): Promise<void>;
-  executeCommand(line: string): Promise<void>;
+  executeCommand(line: string): Promise<import("../core/host").HostCommandResult>;
   modelCache: string[];
   configDir: string;
 }

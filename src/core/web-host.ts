@@ -1,6 +1,7 @@
 /** Хост для `mma web`: без TTY и LineEditor, поверх тех же deps. */
 import type {
   Host,
+  HostCommandResult,
   HostConfigSnapshot,
   HostConfigWriteResult,
   HostEvent,
@@ -27,7 +28,7 @@ export interface WebHostDeps {
   runAgent: (text: string) => Promise<unknown>;
   isBusy: () => boolean;
   interrupt: () => void;
-  executeCommand: (line: string) => Promise<void>;
+  executeCommand: (line: string) => Promise<HostCommandResult>;
   getState: (sessionId?: string) => HostStateSnapshot;
   addPendingImage?: (dataUrl: string) => void;
   /** Опционален: у тестового стаба сессий может не быть. */
@@ -59,10 +60,10 @@ export class WebHost implements Host {
     return defaultOutputBus.subscribe(fn);
   }
 
-  async executeCommand(line: string): Promise<void> {
+  async executeCommand(line: string): Promise<HostCommandResult> {
     const trimmed = line.trim();
-    if (!trimmed.startsWith("/")) return;
-    await this.deps.executeCommand(trimmed);
+    if (!trimmed.startsWith("/")) return { ok: false, output: [], error: "command must start with /" };
+    return this.deps.executeCommand(trimmed);
   }
 
   async getState(sessionId?: string): Promise<HostStateSnapshot> {

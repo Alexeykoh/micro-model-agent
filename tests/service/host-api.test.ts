@@ -152,6 +152,31 @@ describe("host sessions surface", () => {
   });
 });
 
+describe("host command wire", () => {
+  it("runs supported commands and reports unsupported ones honestly", async () => {
+    const status = await httpJson(`${base}/v1/host/sessions/${sessionId}/command`, {
+      method: "POST",
+      json: { line: "/status" },
+    });
+    expect(status.status).toBe(200);
+    expect(status.json.ok).toBe(true);
+    expect((status.json.output as string[]).some((l) => l.startsWith("model:"))).toBe(true);
+
+    const help = await httpJson(`${base}/v1/host/sessions/${sessionId}/command`, {
+      method: "POST",
+      json: { line: "/help" },
+    });
+    expect(help.json.ok).toBe(true);
+
+    const unknown = await httpJson(`${base}/v1/host/sessions/${sessionId}/command`, {
+      method: "POST",
+      json: { line: "/provider add" },
+    });
+    expect(unknown.json.ok).toBe(false);
+    expect(String(unknown.json.error)).toContain("not supported");
+  });
+});
+
 describe("host config and models", () => {
   it("writes a config key and reports persistence", async () => {
     const res = await httpJson(`${base}/v1/host/config`, {

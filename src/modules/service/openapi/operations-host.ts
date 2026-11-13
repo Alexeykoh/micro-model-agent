@@ -224,5 +224,19 @@ export const HOST_OPERATIONS: SpecOperation[] = [
       schema: { type: "object", required: ["key", "value"], properties: { key: { type: "string" }, value: {} } },
     },
     responses: { "200": ok("Запись применена"), "400": ok("Неизвестный ключ/значение", "ProblemDetails"), "409": ok("Идёт ход", "ProblemDetails"), "413": TOO_LARGE, ...PROBLEM_RESPONSES },
+  },  {
+    method: "post",
+    path: "/v1/host/sessions/{sessionId}/command",
+    operationId: "hostCommand",
+    tag: "host",
+    summary: "Slash-команда на рантайме демона",
+    description: "Серверное подмножество: help/status/sessions/model/config/stop/pause/resume. Неизвестная команда — `{ok:false,error}`.",
+    params: [SESSION_ID, ...TENANT_HEADERS],
+    requestBody: {
+      description: "Строка команды",
+      required: true,
+      schema: { type: "object", required: ["line"], properties: { line: { type: "string" } } },
+    },
+    responses: { "200": ok("Результат команды"), "400": ok("Пустая строка", "ProblemDetails"), "413": TOO_LARGE, ...PROBLEM_RESPONSES },
   },
 ];

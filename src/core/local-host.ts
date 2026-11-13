@@ -8,6 +8,7 @@
  */
 import type {
   Host,
+  HostCommandResult,
   HostConfigSnapshot,
   HostConfigWriteResult,
   HostEvent,
@@ -25,7 +26,7 @@ export interface LocalHostDeps {
   submit(text: string, opts?: HostBridgeSubmitOptions): Promise<unknown>;
   interrupt(): void;
   subscribeOutput(fn: (ev: OutputEvent) => void): () => void;
-  executeCommand(line: string): Promise<void>;
+  executeCommand(line: string): Promise<HostCommandResult>;
   /** Снапшот может быть синхронным (локальная проекция) или async. */
   getState(sessionId?: string): HostStateSnapshot | Promise<HostStateSnapshot>;
   listSessions(): SessionMeta[];
@@ -72,8 +73,8 @@ export class LocalHost implements Host {
     });
   }
 
-  async executeCommand(line: string): Promise<void> {
-    await this.deps.executeCommand(line);
+  async executeCommand(line: string): Promise<HostCommandResult> {
+    return this.deps.executeCommand(line);
   }
 
   async listSessions(): Promise<SessionMeta[]> {

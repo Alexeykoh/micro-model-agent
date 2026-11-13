@@ -7,6 +7,7 @@
  */
 import type {
   Host,
+  HostCommandResult,
   HostConfigSnapshot,
   HostConfigWriteResult,
   HostEvent,
@@ -86,12 +87,13 @@ export class RemoteHost implements Host {
     if (!res.ok) throw new Error(`daemon answer failed: ${res.status} ${await safeText(res)}`);
   }
 
-  async executeCommand(line: string): Promise<void> {
+  async executeCommand(line: string): Promise<HostCommandResult> {
     const res = await this.request(this.sessionUrl("command"), {
       method: "POST",
       body: JSON.stringify({ line }),
     });
     if (!res.ok) throw new Error(`daemon command failed: ${res.status} ${await safeText(res)}`);
+    return (await res.json()) as HostCommandResult;
   }
 
   async listSessions(): Promise<SessionMeta[]> {
