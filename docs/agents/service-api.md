@@ -236,6 +236,7 @@ timestamp, windowMs?})`: сравнение за константное врем
 | GET/POST | `/v1/host/config` | отредактированный конфиг + реестр ключей / запись ключа |
 | GET | `/v1/host/models?provider=` | модели активного/указанного провайдера |
 | GET | `/v1/host/files?path=` | листинг директории workspace (панель Files) |
+| GET | `/v1/host/git`, `/git/changes`, `/git/diff` | read-only git для панели Changes |
 | POST | `/v1/host/sessions/:id/submit` | `{text, images?}` → `202 {turnId}` (data-URL, ≤10) |
 | GET | `/v1/host/sessions/:id/stream` | SSE, resume по `Last-Event-ID`/`?since=` |
 | POST | `/v1/host/sessions/:id/interrupt` | идемпотентная отмена хода: `{interrupted}` |
