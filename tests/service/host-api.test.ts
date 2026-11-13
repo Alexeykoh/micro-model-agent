@@ -118,6 +118,40 @@ describe("host control routes", () => {
   });
 });
 
+describe("host sessions surface", () => {
+  it("lists, creates, reads history/log and deletes sessions", async () => {
+    const list = await httpJson(`${base}/v1/host/sessions`);
+    expect(list.status).toBe(200);
+    expect((list.json.sessions as unknown[]).length).toBeGreaterThan(0);
+
+    const created = await httpJson(`${base}/v1/host/sessions`, {
+      method: "POST",
+      json: { name: "wire" },
+    });
+    expect(created.status).toBe(201);
+    expect(created.json.name).toBe("wire");
+    const id = created.json.id as string;
+
+    const hist = await httpJson(`${base}/v1/host/sessions/${id}/history`);
+    expect(hist.status).toBe(200);
+    expect(Array.isArray(hist.json.messages)).toBe(true);
+
+    const log = await httpJson(`${base}/v1/host/sessions/${id}/log?limit=5`);
+    expect(log.status).toBe(200);
+    expect(Array.isArray(log.json.entries)).toBe(true);
+
+    const del = await httpJson(`${base}/v1/host/sessions/${id}`, { method: "DELETE" });
+    expect(del.status).toBe(204);
+    const after = await httpJson(`${base}/v1/host/sessions`);
+    expect((after.json.sessions as Array<{ id: string }>).some((x) => x.id === id)).toBe(false);
+  });
+
+  it("404s for history/log of an unknown session", async () => {
+    expect((await httpJson(`${base}/v1/host/sessions/ses_missing/history`)).status).toBe(404);
+    expect((await httpJson(`${base}/v1/host/sessions/ses_missing/log`)).status).toBe(404);
+  });
+});
+
 async function waitTask(url: string, jobId: string, status: string, ms = 3000): Promise<string> {
   const start = Date.now();
   for (;;) {

@@ -125,7 +125,9 @@
       `subscribeEvents`/`HostEvent`, `LocalHost` (`src/core/local-host.ts`),
       REPL стал потребителем `Host`. **W2 закрыт 2026-11-13** веткой
       `feat/host-wire`: `/v1/host/*` (state, submit, stream, interrupt,
-      pause/resume, answer) + `RemoteHost`. Дальше — W3…W7
+      pause/resume, answer) + `RemoteHost`. **W3a закрыт 2026-11-13** веткой
+      `feat/host-read`: сессии/history/log через `/v1/host/*` и методы `Host`.
+      Остаток W3b: thin-REPL, `command`/config/models, изображения. Дальше — W4…W7
       по [`2026-11-10-monolith-split-design`](./docs/specs/2026-11-10-monolith-split-design.md):
       `LocalHost`/`RemoteHost`, `/v1/host/*`, thin REPL, web-адаптер,
       one-shot `--daemon`, TLS. Браузер уже тонкий; `mma web` пока in-process

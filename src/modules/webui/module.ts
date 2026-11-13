@@ -245,6 +245,18 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
         },
         state.busy,
       ),
+    ...(deps.sessionManager
+      ? {
+          sessions: {
+            list: () => deps.sessionManager!.list(),
+            create: (name?: string) => deps.sessionManager!.create(name),
+            delete: (id: string) => deps.sessionManager!.delete(id),
+            getHistory: (id: string) => deps.sessionManager!.getHistory(id),
+            loadSessionLog: (id: string, opts?: { since?: string }) =>
+              deps.sessionManager!.loadSessionLog(id, opts),
+          },
+        }
+      : {}),
   });
 
   state.bridge = host;

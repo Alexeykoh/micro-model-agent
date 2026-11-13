@@ -99,6 +99,16 @@ export function buildLocalHost(host: ReplHostHost): Host {
     subscribeOutput: (fn) => subscribeOutput(fn),
     executeCommand: (line) => host.executeCommand(line),
     getState: (sessionId) => getState(host, sessionId),
+    listSessions: () => host.sessionManager?.list() ?? [],
+    createSession: (name) => {
+      if (!host.sessionManager) throw new Error("sessions unavailable");
+      return host.sessionManager.create(name);
+    },
+    deleteSession: (id) => {
+      host.sessionManager?.delete(id);
+    },
+    getHistory: (id) => host.sessionManager?.getHistory(id) ?? [],
+    getLog: (id, opts) => host.sessionManager?.loadSessionLog(id, opts ?? {}) ?? [],
   });
 }
 

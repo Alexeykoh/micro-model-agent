@@ -9,6 +9,8 @@
 import type { Host, HostEvent, HostStateSnapshot } from "./host";
 import type { HostBridgeSubmitOptions } from "../modules/types";
 import type { OutputEvent } from "../output/types";
+import type { SessionLogEntry } from "../modules/session/log-types";
+import type { SessionMessage, SessionMeta } from "../modules/session/types";
 
 /** Зависимости локального хоста (шина вывода и run-путь владельца). */
 export interface LocalHostDeps {
@@ -19,6 +21,11 @@ export interface LocalHostDeps {
   executeCommand(line: string): Promise<void>;
   /** Снапшот может быть синхронным (локальная проекция) или async. */
   getState(sessionId?: string): HostStateSnapshot | Promise<HostStateSnapshot>;
+  listSessions(): SessionMeta[];
+  createSession(name?: string): SessionMeta;
+  deleteSession(sessionId: string): void;
+  getHistory(sessionId: string): SessionMessage[];
+  getLog(sessionId: string, opts?: { since?: string }): SessionLogEntry[];
 }
 
 /** In-process хост: тот же интерфейс, что у RemoteHost. */
@@ -57,5 +64,26 @@ export class LocalHost implements Host {
 
   async executeCommand(line: string): Promise<void> {
     await this.deps.executeCommand(line);
+  }
+
+  async listSessions(): Promise<SessionMeta[]> {
+    return this.deps.listSessions();
+  }
+
+  async createSession(name?: string): Promise<SessionMeta> {
+    return this.deps.createSession(name);
+  }
+
+  async deleteSession(sessionId: string): Promise<void> {
+    this.deps.deleteSession(sessionId);
+  }
+
+  async getHistory(sessionId: string): Promise<SessionMessage[]> {
+    return this.deps.getHistory(sessionId);
+  }
+
+  async getLog(sessionId: string, opts?: { since?: string; limit?: number }): Promise<SessionLogEntry[]> {
+    const entries = this.deps.getLog(sessionId, opts);
+    return opts?.limit ? entries.slice(-opts.limit) : entries;
   }
 }
