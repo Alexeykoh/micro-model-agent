@@ -21,7 +21,7 @@ import type { SessionMessage, SessionMeta } from "../session/types";
 /** Параметры подключения: адрес демона, сессия, bearer-токен. */
 export interface RemoteHostOptions {
   baseUrl: string;
-  sessionId: string;
+  sessionId?: string;
   token?: string | null;
 }
 
@@ -31,20 +31,27 @@ const TERMINAL_TYPES = new Set(["task.finished", "task.failed", "task.cancelled"
 /** Тонкий UI-клиент: только wire, без собственной логики хода. */
 export class RemoteHost implements Host {
   private readonly listeners = new Set<(ev: HostEvent) => void>();
+  private activeSession?: string;
   private busy = false;
   private lastSeq = 0;
   private stream?: { controller: AbortController };
 
-  constructor(private readonly opts: RemoteHostOptions) {}
+  constructor(private readonly opts: RemoteHostOptions) {
+    this.activeSession = opts.sessionId;
+  }
+
+  /** Выбрать сессию после `listSessions`/`createSession`. */
+  setSessionId(sessionId: string): void {
+    this.activeSession = sessionId;
+  }
 
   isBusy(): boolean {
     return this.busy;
   }
 
-  async getState(sessionId: string = this.opts.sessionId): Promise<HostStateSnapshot> {
-    const res = await this.request(
-      `${this.base}/v1/host/state?session=${encodeURIComponent(sessionId)}`,
-    );
+  async getState(sessionId: string | undefined = this.activeSession): Promise<HostStateSnapshot> {
+    const query = sessionId ? `?session=${encodeURIComponent(sessionId)}` : "";
+    const res = await this.request(`${this.base}/v1/host/state${query}`);
     if (!res.ok) throw new Error(`daemon state failed: ${res.status} ${await safeText(res)}`);
     const body = (await res.json()) as { state?: HostStateSnapshot };
     return body.state ?? { busy: this.busy };
@@ -185,8 +192,13 @@ export class RemoteHost implements Host {
     return this.opts.baseUrl.replace(/\/+$/, "");
   }
 
+  private get sessionId(): string {
+    if (!this.activeSession) throw new Error("no session selected");
+    return this.activeSession;
+  }
+
   private sessionUrl(action: string): string {
-    return `${this.base}/v1/host/sessions/${encodeURIComponent(this.opts.sessionId)}/${action}`;
+    return `${this.base}/v1/host/sessions/${encodeURIComponent(this.sessionId)}/${action}`;
   }
 
   private async control(action: string): Promise<void> {

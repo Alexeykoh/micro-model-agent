@@ -134,7 +134,11 @@
       **W3b-3 закрыт 2026-11-13** веткой `feat/host-command`: `POST
       /v1/host/sessions/:id/command` (серверное подмножество) и
       `Host.executeCommand` → `{ok, output[]}`.
-      Остаток W3b: thin-REPL и изображения. Дальше — W4…W7
+      **W3b-4 (thin-REPL MVP) закрыт 2026-11-13** веткой
+      `feat/daemon-repl`: `mma --daemon <url>` — клиент без локального рантайма,
+      рендер событий, вопросы, локальные `/help|/clear|/exit`, остальные
+      команды по wire. Остаток: изображения и паритет рендера/команд.
+      Дальше — W4…W7
       по [`2026-11-10-monolith-split-design`](./docs/specs/2026-11-10-monolith-split-design.md):
       `LocalHost`/`RemoteHost`, `/v1/host/*`, thin REPL, web-адаптер,
       one-shot `--daemon`, TLS. Браузер уже тонкий; `mma web` пока in-process

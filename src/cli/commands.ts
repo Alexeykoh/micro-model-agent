@@ -37,7 +37,8 @@ export function createProgram(): Command {
     .option("-j, --json", t("cli.json"))
     .option("--reasoning <level>", t("cli.reasoning_level"), "auto")
     .option("--verbose", t("cli.verbose"))
-    .option("--context-log", t("cli.context_log"));
+    .option("--context-log", t("cli.context_log"))
+    .option("--daemon <url>", t("cli.daemon"));
 
   buildSetupCommand(program);
   buildMeetCommand(program);
