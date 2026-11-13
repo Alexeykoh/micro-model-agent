@@ -13,6 +13,7 @@ import { readEnv } from "../../config/env";
 import type { SessionManager } from "../session/manager";
 import type { ExecutionModule } from "../execution/module";
 import { RunPool } from "../../runtime/run-pool/run-pool";
+import { makeModelCache, type ModelCache } from "../../runtime/model-cache";
 import { TaskRegistry, type TenantContext } from "./runtime/task-registry";
 import { EnvelopeLog } from "./runtime/envelope";
 
@@ -66,6 +67,8 @@ export interface AgentServiceState {
   deps: ServiceDeps;
   config: AppConfig;
   pool: RunPool;
+  /** Кеш моделей активного провайдера (host wire `/v1/host/models`). */
+  models: ModelCache;
   tasks: TaskRegistry;
   envelopes: EnvelopeLog;
   busy: boolean;
@@ -135,10 +138,14 @@ export function createServiceState(deps: ServiceDeps): AgentServiceState {
   const sg = deps.config.service;
   const pool = new RunPool(undefined, sg.maxQueueLength);
   if (deps.spawnRunner) pool.setFactory(deps.spawnRunner);
+  const models = makeModelCache(deps.agent, deps.config);
+  // Best-effort прогрев: офлайн-провайдер оставит пустой список, не роняя старт.
+  void models.refresh();
   const state: AgentServiceState = {
     deps,
     config: deps.config,
     pool,
+    models,
     tasks: new TaskRegistry({
       retentionDays: sg.resultRetentionDays,
       idempotencyTtlHours: sg.idempotencyTtlHours,

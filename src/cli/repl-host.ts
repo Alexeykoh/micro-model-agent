@@ -12,6 +12,9 @@ import { LocalHost } from "../core/local-host";
 import type { OutputEvent } from "../output/types";
 import { defaultOutputBus } from "../output";
 import { planSnapshotFromModule, adaptActivePlan } from "../core/host-plan";
+import { serializeConfigForWire } from "../config/redact";
+import { configVersion } from "../config/persist";
+import { buildConfigRegistry } from "../runtime/config-view";
 import type { Agent } from "../core/agent";
 import type { AppConfig } from "../config/types";
 import type { PluginManager } from "../modules/plugins/manager";
@@ -29,6 +32,7 @@ export interface ReplHostHost {
   execModule?: ExecutionModule;
   runAgent(input: string): Promise<void>;
   executeCommand(line: string): Promise<void>;
+  modelCache: string[];
 }
 
 /** (Пере)аттач плагинного HostBridge. Зовётся в конструкторе и после того, как
@@ -109,6 +113,12 @@ export function buildLocalHost(host: ReplHostHost): Host {
     },
     getHistory: (id) => host.sessionManager?.getHistory(id) ?? [],
     getLog: (id, opts) => host.sessionManager?.loadSessionLog(id, opts ?? {}) ?? [],
+    getConfig: () => ({
+      config: serializeConfigForWire(host.config),
+      registry: buildConfigRegistry(host.config),
+      version: configVersion(host.config),
+    }),
+    listModels: () => ({ models: host.modelCache }),
   });
 }
 

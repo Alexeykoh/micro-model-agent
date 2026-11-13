@@ -152,6 +152,23 @@ describe("host sessions surface", () => {
   });
 });
 
+describe("host config and models", () => {
+  it("returns the redacted config and the key registry", async () => {
+    const res = await httpJson(`${base}/v1/host/config`);
+    expect(res.status).toBe(200);
+    expect(typeof res.json.version).toBe("number");
+    const registry = res.json.registry as Array<{ key: string }>;
+    expect(Array.isArray(registry)).toBe(true);
+    expect(registry.some((e) => e.key === "model")).toBe(true);
+  });
+
+  it("returns a models list", async () => {
+    const res = await httpJson(`${base}/v1/host/models`);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.json.models)).toBe(true);
+  });
+});
+
 async function waitTask(url: string, jobId: string, status: string, ms = 3000): Promise<string> {
   const start = Date.now();
   for (;;) {

@@ -1,5 +1,5 @@
 /** Хост для `mma web`: без TTY и LineEditor, поверх тех же deps. */
-import type { Host, HostEvent, HostStateSnapshot } from "./host";
+import type { Host, HostConfigSnapshot, HostEvent, HostModels, HostStateSnapshot } from "./host";
 import type { HostBridgeSubmitOptions } from "../modules/types";
 import type { OutputEvent } from "../output/types";
 import { defaultOutputBus } from "../output/bus";
@@ -25,6 +25,8 @@ export interface WebHostDeps {
   addPendingImage?: (dataUrl: string) => void;
   /** Опционален: у тестового стаба сессий может не быть. */
   sessions?: WebHostSessions;
+  getConfig?: () => HostConfigSnapshot;
+  listModels?: (provider?: string) => HostModels;
 }
 
 /** Реализация хоста для `mma web` — без TTY, без LineEditor. */
@@ -79,6 +81,14 @@ export class WebHost implements Host {
   async getLog(sessionId: string, opts?: { since?: string; limit?: number }): Promise<SessionLogEntry[]> {
     const entries = this.deps.sessions?.loadSessionLog(sessionId, opts) ?? [];
     return opts?.limit ? entries.slice(-opts.limit) : entries;
+  }
+
+  async getConfig(): Promise<HostConfigSnapshot> {
+    return this.deps.getConfig?.() ?? { config: {}, version: 0 };
+  }
+
+  async listModels(provider?: string): Promise<HostModels> {
+    return this.deps.listModels?.(provider) ?? { models: [] };
   }
 
   /** Транспорт-нейтральная подписка: локальная шина отдаёт `HostEvent`. */

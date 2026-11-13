@@ -68,6 +68,8 @@ function makeState(): { state: WebUiState; dir: string } {
     interrupt: () => {},
     getState: async () => ({ busy: false }),
     subscribeEvents: () => () => {},
+    getConfig: async () => ({ config: {}, version: 0 }),
+    listModels: async () => ({ models: [] }),
     executeCommand: () => Promise.resolve(),
   };
   state.bridge = bridge;

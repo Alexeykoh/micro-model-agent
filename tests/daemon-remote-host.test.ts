@@ -32,6 +32,16 @@ async function startDaemon(opts: { streamScript?: string[] } = {}): Promise<stri
       res.end(JSON.stringify({ state: { busy: false, sessionId: "S" } }));
       return;
     }
+    if (req.method === "GET" && url === "/v1/host/config") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ config: {}, version: 3, registry: [] }));
+      return;
+    }
+    if (req.method === "GET" && url.startsWith("/v1/host/models")) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ models: ["m1"] }));
+      return;
+    }
     if (req.method === "GET" && url === "/v1/host/sessions") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ sessions: [{ id: "S" }] }));
@@ -140,6 +150,14 @@ describe("RemoteHost", () => {
     await host.answer("q1", 0);
     host.interrupt();
     await expect(host.executeCommand("/status")).rejects.toThrow(/command failed: 404/);
+    host.dispose();
+  });
+
+  it("reads config and models over wire", async () => {
+    const baseUrl = await startDaemon();
+    const host = new RemoteHost({ baseUrl, sessionId: "S" });
+    await expect(host.getConfig()).resolves.toMatchObject({ version: 3 });
+    await expect(host.listModels()).resolves.toEqual({ models: ["m1"] });
     host.dispose();
   });
 

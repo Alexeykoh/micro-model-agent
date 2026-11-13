@@ -24,6 +24,8 @@ function makeBridge(): Host {
     interrupt: () => {},
     getState: async () => ({ busy: false }),
     subscribeEvents: () => () => {},
+    getConfig: async () => ({ config: {}, version: 0 }),
+    listModels: async () => ({ models: [] }),
     executeCommand: () => Promise.resolve(),
   };
 }
@@ -236,6 +238,8 @@ describe("webui server", () => {
       interrupt: () => {},
       getState: async () => ({ busy: false }),
     subscribeEvents: () => () => {},
+    getConfig: async () => ({ config: {}, version: 0 }),
+    listModels: async () => ({ models: [] }),
       executeCommand: () => Promise.resolve(),
     };
     s.bridge = bridge;
