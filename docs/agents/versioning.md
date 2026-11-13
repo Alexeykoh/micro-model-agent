@@ -13,6 +13,18 @@
 
 **Правило:** при каждом релизе (MINOR/PATCH) — добавляй запись в `CHANGELOG.md` в секцию `## [X.Y.Z] - YYYY-MM-DD`. Группируй по Added/Fixed/Changed/Removed. Пиши на английском, кратко и по существу. Формат ссылок: `**Module**: description`.
 
+Запись дописывается в `## [Unreleased]` одной командой, без чтения и перезаписи файла:
+
+```bash
+bun run changelog:add Fixed "текст записи"
+# многострочная запись — через stdin
+echo "текст записи" | bun run changelog:add Added
+```
+
+Скрипт сохраняет остальные байты файла (включая CRLF), вставляет подсекцию в каноническом
+порядке и не дублирует уже существующий пункт. `CHANGELOG.md` весит ~450 КБ — не читай его
+целиком и не переписывай из контекста.
+
 Changelog is part of the GitHub Release artifact set and is visible in the repository; MMA is not distributed through npm.
 
 ### When to bump which part

@@ -131,6 +131,13 @@ CI (`.github/workflows/quality.yml`) строже локали: coverage-пор�
 появляется только по прямой просьбе («добавь в changelog», «обнови changelog»,
 «готовь релиз»). Без команды — ни строки.
 
+Запись **дописывается**, а не переписывается: `bun run changelog:add Fixed "текст"`
+(секции `Added|Changed|Fixed|Removed|Security|Tests`; многострочный текст — через stdin,
+`echo "текст" | bun run changelog:add Fixed`). Команда вставляет пункт в
+`## [Unreleased]` и сохраняет остальные байты (включая CRLF). Читать файл целиком
+(~450 КБ) или переписывать его из контекста нельзя. Пункт встаёт первым в своей
+секции — в файле принято «свежее сверху».
+
 ---
 
 ## Архитектура
@@ -243,7 +250,8 @@ scope/protected-путей, SSRF и rate-limit (INV-9/10). Новый тул о�
   строке `Environment: …` с `package.json`.
 - **`tests/integration/**` исключён из `bun test`** (`bunfig.toml`). Тест, положенный туда, молча
   не запустится — либо клади в `tests/`, либо гоняй `bun run test:integration`.
-- **`CHANGELOG.md` — 450 КБ.** Не читай целиком; новая запись — сверху.
+- **`CHANGELOG.md` — 450 КБ.** Не читай целиком; новая запись — `bun run changelog:add`,
+  свежее сверху.
 - **`disable` плагина ≠ sandbox.** Модуль уже `require`-нут; `permissions` — декларация для показа,
   не enforcement.
 - **`vi.mock` в Bun глобален на процесс** — не использовать в тестах агента; есть швы
