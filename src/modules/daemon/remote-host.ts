@@ -16,6 +16,7 @@ import type {
 } from "../../core/host";
 import type { HostBridgeSubmitOptions } from "../types";
 import type { SessionLogEntry } from "../session/log-types";
+import { RemoteEventStream } from "./remote-host-events";
 import type { SessionMessage, SessionMeta } from "../session/types";
 
 /** Параметры подключения: адрес демона, сессия, bearer-токен. */
@@ -30,14 +31,17 @@ const TERMINAL_TYPES = new Set(["task.finished", "task.failed", "task.cancelled"
 
 /** Тонкий UI-клиент: только wire, без собственной логики хода. */
 export class RemoteHost implements Host {
-  private readonly listeners = new Set<(ev: HostEvent) => void>();
   private activeSession?: string;
   private busy = false;
-  private lastSeq = 0;
-  private stream?: { controller: AbortController };
+  private readonly events: RemoteEventStream;
 
   constructor(private readonly opts: RemoteHostOptions) {
     this.activeSession = opts.sessionId;
+    this.events = new RemoteEventStream({
+      streamUrl: () => this.sessionUrl("stream"),
+      token: opts.token,
+      onEvent: (ev) => this.trackBusy(ev),
+    });
   }
 
   setSessionId(sessionId: string): void {
@@ -65,7 +69,7 @@ export class RemoteHost implements Host {
     });
     if (!res.ok) throw new Error(`daemon submit failed: ${res.status} ${await safeText(res)}`);
     this.busy = true;
-    this.ensureStream();
+    this.events.ensure();
     return res.json();
   }
 
@@ -155,6 +159,25 @@ export class RemoteHost implements Host {
     return res.json();
   }
 
+  async gitSnapshot(): Promise<unknown> {
+    const res = await this.request(`${this.base}/v1/host/git`);
+    if (!res.ok) throw new Error(`daemon git failed: ${res.status} ${await safeText(res)}`);
+    return res.json();
+  }
+
+  async gitChanges(): Promise<unknown> {
+    const res = await this.request(`${this.base}/v1/host/git/changes`);
+    if (!res.ok) throw new Error(`daemon git changes failed: ${res.status} ${await safeText(res)}`);
+    return res.json();
+  }
+
+  async gitDiff(path: string, staged: boolean): Promise<unknown> {
+    const query = `?path=${encodeURIComponent(path)}${staged ? "&staged=1" : ""}`;
+    const res = await this.request(`${this.base}/v1/host/git/diff${query}`);
+    if (!res.ok) throw new Error(`daemon git diff failed: ${res.status} ${await safeText(res)}`);
+    return res.json();
+  }
+
   async getConfig(): Promise<HostConfigSnapshot> {
     const res = await this.request(`${this.base}/v1/host/config`);
     if (!res.ok) throw new Error(`daemon config failed: ${res.status} ${await safeText(res)}`);
@@ -179,16 +202,16 @@ export class RemoteHost implements Host {
   }
 
   subscribeEvents(fn: (ev: HostEvent) => void): () => void {
-    this.listeners.add(fn);
-    this.ensureStream();
-    return () => {
-      this.listeners.delete(fn);
-    };
+    return this.events.subscribe(fn);
   }
 
   dispose(): void {
-    this.stream?.controller.abort();
-    this.stream = undefined;
+    this.events.dispose();
+  }
+
+  private trackBusy(ev: HostEvent): void {
+    if (TERMINAL_TYPES.has(ev.type)) this.busy = false;
+    else if (ev.type === "task.started") this.busy = true;
   }
 
   private get base(): string {
@@ -218,75 +241,7 @@ export class RemoteHost implements Host {
     return fetch(url, { ...init, headers, signal: init.signal ?? AbortSignal.timeout(30_000) });
   }
 
-  /** Лениво поднимает SSE-поток; повторный вызов после закрытия — новый. */
-  private ensureStream(): void {
-    if (this.stream) return;
-    const controller = new AbortController();
-    this.stream = { controller };
-    void this.runStream(controller.signal).finally(() => {
-      if (this.stream?.controller === controller) this.stream = undefined;
-    });
-  }
 
-  private async runStream(signal: AbortSignal): Promise<void> {
-    const headers: Record<string, string> = { Accept: "text/event-stream" };
-    if (this.opts.token) headers.Authorization = `Bearer ${this.opts.token}`;
-    if (this.lastSeq > 0) headers["Last-Event-ID"] = String(this.lastSeq);
-    let res: Response;
-    try {
-      res = await fetch(this.sessionUrl("stream"), { headers, signal });
-    } catch {
-      return;
-    }
-    if (!res.ok || !res.body) return;
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = "";
-    try {
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) return;
-        buf += decoder.decode(value, { stream: true });
-        let cut = buf.indexOf("\n\n");
-        while (cut >= 0) {
-          this.handleFrame(buf.slice(0, cut));
-          buf = buf.slice(cut + 2);
-          cut = buf.indexOf("\n\n");
-        }
-      }
-    } catch {
-      /* поток закрыт клиентом или сетью — следующий вызов откроет новый */
-    }
-  }
-
-  /** Разбирает SSE-фрейм: `id:` → seq, `data:` → envelope v1. */
-  private handleFrame(frame: string): void {
-    let id = 0;
-    const data: string[] = [];
-    for (const line of frame.split(/\r?\n/)) {
-      if (line.startsWith("id:")) id = Number(line.slice(3).trim());
-      else if (line.startsWith("data:")) data.push(line.slice(5).trimStart());
-    }
-    if (!data.length) return;
-    let env: { type?: string; ts?: number; sessionId?: string; seq?: number; data?: unknown };
-    try {
-      env = JSON.parse(data.join("\n")) as typeof env;
-    } catch {
-      return;
-    }
-    if (typeof env.seq === "number") this.lastSeq = Math.max(this.lastSeq, env.seq);
-    else if (Number.isFinite(id)) this.lastSeq = Math.max(this.lastSeq, id);
-    const type = env.type ?? "output";
-    if (TERMINAL_TYPES.has(type)) this.busy = false;
-    if (type === "task.started") this.busy = true;
-    const event: HostEvent = {
-      type,
-      ts: env.ts ?? Date.now(),
-      ...(env.sessionId ? { sessionId: env.sessionId } : {}),
-      ...(env.data !== undefined ? { data: env.data } : {}),
-    };
-    for (const fn of this.listeners) fn(event);
-  }
 }
 
 async function safeText(res: Response): Promise<string> {

@@ -14,5 +14,8 @@ export interface WebDaemonHost extends Host {
   setSessionId(sessionId: string): void;
   /** Листинг директории workspace (панель Files). */
   listFiles(path: string): Promise<unknown>;
+  gitSnapshot(): Promise<unknown>;
+  gitChanges(): Promise<unknown>;
+  gitDiff(path: string, staged: boolean): Promise<unknown>;
   dispose(): void;
 }

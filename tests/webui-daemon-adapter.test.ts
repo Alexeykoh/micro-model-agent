@@ -35,6 +35,9 @@ function fakeDaemon() {
     setConfig: async () => ({ ok: true, persisted: true }),
     listModels: async () => ({ models: ["m"] }),
     listFiles: async (path: string) => ({ path, entries: [{ name: "a.ts", type: "file" }], truncated: false }),
+    gitSnapshot: async () => ({ repo: true, branch: "dev", files: [] }),
+    gitChanges: async () => ({ repo: true, files: [] }),
+    gitDiff: async () => ({ diff: "", truncated: false }),
     executeCommand: async (line) => {
       calls.commands.push(line);
       return { ok: true, output: ["status: ok"] };
@@ -82,6 +85,10 @@ describe("web daemon adapter (W4)", () => {
       });
       expect(command.status).toBe(200);
       expect(calls.commands).toEqual(["/status"]);
+
+      const git = await doFetch(`${base}/api/git`);
+      expect(git.status).toBe(200);
+      expect(((await git.json()) as { repo: boolean }).repo).toBe(true);
 
       const files = await doFetch(`${base}/api/files?path=`);
       expect(files.status).toBe(200);

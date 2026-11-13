@@ -25,6 +25,7 @@ import type { AgentServiceState } from "../state";
 import { openSessionStream } from "./events-api";
 import { handleHostSessions } from "./host-sessions";
 import { handleHostFiles } from "./host-files";
+import { handleHostGit } from "./host-git";
 import { interruptSession } from "./tasks-control";
 import { MAX_JSON_BYTES, tenantOf } from "./tasks-job";
 import { dispatchInteractive } from "./tasks-submit";
@@ -62,6 +63,7 @@ export async function handleHostApi(
     return true;
   }
   if (parts[2] === "files") return handleHostFiles(req, res, reqUrl, s, parts);
+  if (parts[2] === "git") return handleHostGit(req, res, reqUrl, s, parts);
   if (parts[2] !== "sessions") return false;
   if (
     parts.length === 3 ||

@@ -255,5 +255,32 @@ export const HOST_OPERATIONS: SpecOperation[] = [
       { name: "path", in: "query", description: "Относительный путь (по умолчанию корень)", schema: { type: "string" } },
     ],
     responses: { "200": ok("Записи директории"), "403": ok("Путь вне workspace/защищён", "ProblemDetails"), "404": ok("Не найдено", "ProblemDetails"), ...PROBLEM_RESPONSES },
+  },  {
+    method: "get",
+    path: "/v1/host/git",
+    operationId: "hostGitSnapshot",
+    tag: "host",
+    summary: "Снимок git-состояния workspace",
+    responses: { "200": ok("Ветка/dirty/worktree"), ...PROBLEM_RESPONSES },
+  },
+  {
+    method: "get",
+    path: "/v1/host/git/changes",
+    operationId: "hostGitChanges",
+    tag: "host",
+    summary: "Изменённые файлы (porcelain)",
+    responses: { "200": ok("Список изменений"), ...PROBLEM_RESPONSES },
+  },
+  {
+    method: "get",
+    path: "/v1/host/git/diff",
+    operationId: "hostGitDiff",
+    tag: "host",
+    summary: "Diff одного файла",
+    params: [
+      { name: "path", in: "query", description: "Относительный путь", schema: { type: "string" } },
+      { name: "staged", in: "query", description: "1 — diff --cached", schema: { type: "string" } },
+    ],
+    responses: { "200": ok("Diff с капом"), "403": ok("Путь вне workspace", "ProblemDetails"), ...PROBLEM_RESPONSES },
   },
 ];

@@ -46,6 +46,16 @@ const ROUTES: Record<string, Handler> = {
     const provider = reqUrl.searchParams.get("provider") ?? undefined;
     sendJson(res, 200, await host.listModels(provider));
   },
+  "GET /api/git": async ({ res, host }) => {
+    sendJson(res, 200, await host.gitSnapshot());
+  },
+  "GET /api/git/changes": async ({ res, host }) => {
+    sendJson(res, 200, await host.gitChanges());
+  },
+  "GET /api/git/diff": async ({ res, reqUrl, host }) => {
+    const path = reqUrl.searchParams.get("path") ?? "";
+    sendJson(res, 200, await host.gitDiff(path, reqUrl.searchParams.get("staged") === "1"));
+  },
   "GET /api/files": async ({ res, reqUrl, host }) => {
     sendJson(res, 200, await host.listFiles(reqUrl.searchParams.get("path") ?? ""));
   },

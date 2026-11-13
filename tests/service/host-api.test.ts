@@ -169,6 +169,18 @@ describe("host files wire", () => {
   });
 });
 
+describe("host git wire", () => {
+  it("reports a non-repo workspace honestly", async () => {
+    const res = await httpJson(`${base}/v1/host/git`);
+    expect(res.status).toBe(200);
+    expect(res.json.repo).toBe(false);
+
+    const changes = await httpJson(`${base}/v1/host/git/changes`);
+    expect(changes.status).toBe(200);
+    expect(changes.json.files).toEqual([]);
+  });
+});
+
 describe("host command wire", () => {
   it("runs supported commands and reports unsupported ones honestly", async () => {
     const status = await httpJson(`${base}/v1/host/sessions/${sessionId}/command`, {
