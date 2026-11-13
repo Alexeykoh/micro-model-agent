@@ -2821,5 +2821,7 @@
   "daemon.question_options": "Варианты: {options}",
   "daemon.submit_failed": "Не удалось отправить ход: {error}",
   "daemon.answer_failed": "Не удалось ответить: {error}",
-  "daemon.disconnected": "Отключено от {url}"
+  "daemon.disconnected": "Отключено от {url}",
+  "cli.web.daemon": "Отдать браузерный UI адаптером к запущенному демону (URL)",
+  "cli.web_daemon_started": "mma web (демон) → {url} · демон {daemon}"
 }

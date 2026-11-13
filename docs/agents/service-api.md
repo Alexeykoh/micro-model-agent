@@ -244,3 +244,10 @@ timestamp, windowMs?})`: сравнение за константное врем
 
 `command`, `history`/`log`, `config`/`models` и CRUD сессий через host wire появятся
 в W3: перенос `CommandServices` и тонкого REPL.
+
+### Web-адаптер
+
+`mma web --daemon-url <url>` не поднимает локальный рантайм: браузерный `/api/*`
+проксируется в `/v1/host/*`, события демона переводятся в веб-SSE. Покрыты
+чат, сессии, история/лог, конфиг, модели и команды; панели files/git/lsp/
+memory/skills/plugins/setup/index/update отвечают `501` до W4b.

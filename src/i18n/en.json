@@ -2821,5 +2821,7 @@
   "daemon.question_options": "Options: {options}",
   "daemon.submit_failed": "Submit failed: {error}",
   "daemon.answer_failed": "Answer failed: {error}",
-  "daemon.disconnected": "Disconnected from {url}"
+  "daemon.disconnected": "Disconnected from {url}",
+  "cli.web.daemon": "Serve the browser UI as an adapter over a running daemon URL",
+  "cli.web_daemon_started": "mma web (daemon) → {url} · daemon {daemon}"
 }

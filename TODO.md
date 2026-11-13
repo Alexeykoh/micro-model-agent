@@ -139,7 +139,9 @@
       рендер событий, вопросы, локальные `/help|/clear|/exit`, остальные
       команды по wire. **W3b-5 закрыт 2026-11-13** веткой `feat/host-images`:
       картинки в host submit. Остаток W3: паритет рендера/команд.
-      Дальше — W4…W7
+      **W4a закрыт 2026-11-13** веткой `feat/web-daemon`: `mma web --daemon-url
+      <url>` — адаптер host-покрытых `/api/*` + SSE; непокрытые панели 501.
+      Дальше — W4b…W7
       по [`2026-11-10-monolith-split-design`](./docs/specs/2026-11-10-monolith-split-design.md):
       `LocalHost`/`RemoteHost`, `/v1/host/*`, thin REPL, web-адаптер,
       one-shot `--daemon`, TLS. Браузер уже тонкий; `mma web` пока in-process
