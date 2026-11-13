@@ -123,16 +123,17 @@ async function main(): Promise<void> {
 
   applyLogVisibility(verboseOpt);
 
-  // Thin-REPL: локальный рантайм не поднимаем вовсе — всё состояние в демоне.
-  const daemonUrl = typeof opts.daemon === "string" ? opts.daemon : undefined;
-  if (daemonUrl) {
-    await runDaemonRepl({ url: daemonUrl });
-    return;
-  }
 
   // `web`/`serve` долгоживущие: их action — no-op, сервер стартует здесь, после
   // parse, чтобы пережить one-shot exit-хук (на них он осознанно не вешается).
   if (await dispatchLongRunningCommand(program, { projectDir, noAgentsMd })) {
+    return;
+  }
+
+  // Thin-REPL: локальный рантайм не поднимаем вовсе — всё состояние в демоне.
+  const daemonUrl = typeof opts.daemon === "string" ? opts.daemon : undefined;
+  if (daemonUrl) {
+    await runDaemonRepl({ url: daemonUrl });
     return;
   }
 

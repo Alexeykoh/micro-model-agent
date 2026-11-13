@@ -49,6 +49,7 @@ export function buildWebCommand(program: Command): void {
     .option("--host <addr>", t("cli.web.host"))
     .option("--token <t>", t("cli.web.token"))
     .option("--no-open", t("cli.web.no_open"))
+    .option("--daemon-url <url>", t("cli.web.daemon"))
     .action(() => {
       /* Диспатчится из main.ts после program.parse(): веб-сервер долгоживущий,
          хук one-shot выхода его резать не должен. */

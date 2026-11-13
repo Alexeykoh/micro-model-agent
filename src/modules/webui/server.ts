@@ -7,6 +7,7 @@
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createWebUiState, type WebUiState, type WebUiAssets } from "./state";
+import { handleDaemonApi } from "./daemon-api";
 import { sessionStatus } from "./session/session-status";
 import { skillsEventPayload } from "./skills-events";
 import {
@@ -154,6 +155,11 @@ const API_GROUPS: Array<(
 
 /** REST-хендлер `/api/*`; auth + same-origin уже проверены. */
 function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: WebUiState): void {
+  // Daemon-режим: браузерные маршруты обслуживает адаптер (W4).
+  if (s.daemon) {
+    void handleDaemonApi(req, res, reqUrl, s);
+    return;
+  }
   const route = API_ROUTES[`${req.method} ${reqUrl.pathname}`];
   if (route) {
     route(req, res, s);

@@ -4,6 +4,7 @@
 // реэкспортированы ниже — внешние импорты не меняются.
 import type { Server, ServerResponse } from "node:http";
 import type { Host } from "../../core/host";
+import type { WebDaemonHost } from "./daemon-contracts";
 import type { UsageSnapshot } from "../../core/host-state";
 import { RunPool } from "../../runtime/run-pool/run-pool";
 import type { SetupDisplay } from "../setup/answers";
@@ -38,6 +39,8 @@ export interface WebUiState extends WebUiWiring {
   token: string | null;
   clients: Set<ServerResponse>;
   bridge: Host | null;
+  /** Режим `mma web --daemon`: браузерный API проксируется в демон. */
+  daemon?: WebDaemonHost;
   /**
    * Агрегат занятости: true, пока бежит ХОТЬ ОДИН ход (владелец — пул).
    * Per-session busy — в пуле (`pool.isBusy`), бейджи вкладок — из

@@ -85,6 +85,10 @@ export const HOST_CASTS: Record<string, string> = {
 
 /** Пустые `catch {}` / `.catch(() => {})` / `.catch(() => null)` на файл: бюджет, не список строк. */
 export const SILENT_CATCHES: Record<string, { count: number; reason: string }> = {
+  "src/modules/webui/daemon-module.ts": {
+    count: 1,
+    reason: "демон недоступен: следующий запрос честно ответит 502, ошибку глотать в SSE незачем",
+  },
   "src/modules/daemon/remote-host.ts": {
     count: 1,
     reason: "SSE-поток закрыт сетью/клиентом: следующий subscribe/submit откроет новый, ошибка не actionable",

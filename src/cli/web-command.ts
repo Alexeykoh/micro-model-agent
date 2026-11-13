@@ -17,6 +17,9 @@ import { tryOpenBrowser } from "../modules/webui/server";
 import { globalMmaDir } from "../config/paths";
 import { MMA_ENV } from "../config/env";
 import { createUpdater, busLogger, type UpdaterModule } from "../modules/updater/index";
+import { RemoteHost } from "../modules/daemon/remote-host";
+import { readDaemonToken } from "../modules/daemon/protocol";
+import { startWebDaemon } from "../modules/webui/daemon-module";
 import type { AppConfig } from "../config/types";
 
 /** Опции `mma web`: порт, хост, токен, suppress автооткрытия, проект. */
@@ -25,6 +28,8 @@ export interface WebCommandOptions {
   host?: string;
   token?: string;
   noOpen?: boolean;
+  /** Режим адаптера: URL запущенного демона. */
+  daemonUrl?: string;
   projectDir?: string;
   noAgentsMd?: boolean;
 }
@@ -93,6 +98,29 @@ function startWebUpdater(config: AppConfig, state: WebUiState): UpdaterModule | 
   });
 }
 
+/** Адаптер `web --daemon`: статика + прокси `/api/*`, без локального рантайма. */
+async function runWebDaemon(opts: WebCommandOptions): Promise<void> {
+  const host = new RemoteHost({ baseUrl: opts.daemonUrl!, token: opts.token ?? readDaemonToken() });
+  const web = await startWebDaemon({
+    daemon: host,
+    ...(opts.host ? { host: opts.host } : {}),
+    ...(opts.token ? { token: opts.token } : {}),
+  });
+  const url = await web.url;
+  getDefaultChannel().writeLine(t("cli.web_daemon_started", { url, daemon: opts.daemonUrl! }));
+  if (!opts.noOpen) tryOpenBrowser(url);
+  await new Promise<void>((resolve) => {
+    const shutdown = (): void => {
+      process.off("SIGINT", shutdown);
+      process.off("SIGTERM", shutdown);
+      web.stop();
+      resolve();
+    };
+    process.on("SIGINT", shutdown);
+    process.on("SIGTERM", shutdown);
+  });
+}
+
 /** Запуск веб-режима: bootstrap → старт UI → ожидание SIGINT/SIGTERM. */
 export async function runWeb(opts: WebCommandOptions): Promise<void> {
   // Транспорт читает их на старте (server/state): у порта нет поля конфига,
@@ -101,6 +129,11 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
   if (opts.host) process.env[MMA_ENV.WEBUI_HOST] = opts.host;
   if (opts.token) process.env[MMA_ENV.WEBUI_TOKEN] = opts.token;
   if (opts.noOpen) process.env[MMA_ENV.WEBUI_OPEN] = "0";
+
+  if (opts.daemonUrl) {
+    await runWebDaemon(opts);
+    return;
+  }
 
   const mmaDir = globalMmaDir();
   const { hasDomainFiles } = await import("../config/domains");
