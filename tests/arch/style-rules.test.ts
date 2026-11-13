@@ -85,6 +85,10 @@ export const HOST_CASTS: Record<string, string> = {
 
 /** Пустые `catch {}` / `.catch(() => {})` / `.catch(() => null)` на файл: бюджет, не список строк. */
 export const SILENT_CATCHES: Record<string, { count: number; reason: string }> = {
+  "src/modules/daemon/remote-host.ts": {
+    count: 1,
+    reason: "SSE-поток закрыт сетью/клиентом: следующий subscribe/submit откроет новый, ошибка не actionable",
+  },
   "src/cli/repl-start.ts": {
     count: 3,
     reason: "fire-and-forget фоновая запись/проба на старте REPL, ошибка не actionable",

@@ -64,12 +64,22 @@ function cancelTask(s: AgentServiceState, task: TaskRecord): void {
   }
 }
 
-/** Закрытие SSE отменяет только интерактивную задачу сессии (job продолжается). */
-export function abortInteractiveTask(s: AgentServiceState, sessionId: string): void {
+/**
+ * Отменяет бегущий интерактивный ход сессии; `false` — отменять нечего.
+ * Идемпотентна: повторный вызов после терминального статуса — no-op.
+ */
+export function interruptSession(s: AgentServiceState, sessionId: string): boolean {
   const task = s.tasks
     .listForSession(sessionId)
     .find((t) => t.mode === "interactive" && (t.status === "running" || t.status === "waiting_input"));
-  if (task) cancelTask(s, task);
+  if (!task) return false;
+  cancelTask(s, task);
+  return true;
+}
+
+/** Закрытие SSE отменяет только интерактивную задачу сессии (job продолжается). */
+export function abortInteractiveTask(s: AgentServiceState, sessionId: string): void {
+  interruptSession(s, sessionId);
 }
 
 /** `POST /v1/tasks/:jobId/answer` — ответ на `question` интерактивной задачи. */

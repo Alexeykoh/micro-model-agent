@@ -102,6 +102,9 @@ enforcement, сессии на диске, удалённый доступ. По
 | `mma serve` | `src/cli/service-command.ts` → `startAgentService` | в-processс `RunPool` + `SessionRunner` | job API `/v1`, сессии на диске |
 | `mma "prompt"` | `src/cli/main-oneshot.ts` | в-processс `Agent` | локальный запуск |
 
+С 2026-11-13 host wire: `/v1/host/state|submit|stream|interrupt|pause|resume|answer`,
+тонкий `RemoteHost` поверх тех же job-прогонов и SSE (split W2).
+
 С 2026-11-13 `Host` расширен (async `getState`, `subscribeEvents`, `HostEvent`),
 `LocalHost` собирается в `src/core/local-host.ts`, REPL — его потребитель.
 
@@ -365,7 +368,7 @@ Host-контракт для этого не нужен.
 |---|---|
 | W0 | Вынести общий рантайм-слой (`RunPool`, egress, body, scrub, `PlanSnapshot`) из `webui` в нейтральный слой; `service` перестаёт зависеть от `webui`. Поведение не меняется. **Закрыт 2026-11-13** (`refactor/runtime-layer-split`, `src/runtime/**`). |
 | W1 | Контракт `Host`: `LocalHost`, async `getState`, транспорт-нейтральная подписка `subscribeEvents`. REPL переходит на `Host` (local by default). `RemoteHost` — вместе с W2: нужен wire `/v1/host/*`. **Закрыт 2026-11-13** (`feat/host-local`, `src/core/local-host.ts`, `tests/core/local-host.test.ts`). |
-| W2 | Интерактивный wire `/v1/host/*`: state, sessions, submit, stream, command, interrupt, pause/resume, answer, history/log, config. Contract-тесты. |
+| W2 | Интерактивный wire `/v1/host/*`: state, submit, stream, interrupt, pause/resume, answer. **Закрыт 2026-11-13** (`feat/host-wire`): `src/modules/service/api/host-api.ts`, `RemoteHost` (`src/modules/daemon/remote-host.ts`). `command`/history/config/sessions — с W3 (нужны CommandServices/сессии на клиенте). |
 | W3 | REPL thin-клиент: полный `RemoteHost`, терминальный рендер на клиенте, slash-команды по wire, изображения, локаль. |
 | W4 | Web-адаптер: проксирование `/api/*` в `/v1/host/*` в режиме daemon. |
 | W5 | One-shot `--daemon` через job API. |

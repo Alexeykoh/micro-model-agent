@@ -157,6 +157,25 @@ function queueFull(s: AgentServiceState, sessionId: string): boolean {
   return s.pool.isBusy(sessionId) && s.pool.queueLen(sessionId) >= s.config.service.maxQueueLength;
 }
 
+/**
+ * Интерактивный ход хоста (`POST /v1/host/sessions/:id/submit`): тот же
+ * single-flight/FIFO путь, что у task API, без output-спеки и allowlist.
+ */
+export function dispatchInteractive(
+  s: AgentServiceState,
+  sessionId: string,
+  text: string,
+  tenant: TenantContext,
+): { ok: true; task: TaskRecord } | { ok: false } {
+  const params: SubmitParams = {
+    input: text,
+    mode: "interactive",
+    toolAllowlist: [],
+    wait: false,
+  };
+  return createAndDispatch(s, sessionId, params, tenant);
+}
+
 /** `wait:true` — ждём завершения до `syncWaitMs`, иначе 202 (таймер снимается). */
 async function respondSubmitWait(
   res: ServerResponse,

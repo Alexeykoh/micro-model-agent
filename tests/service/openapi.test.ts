@@ -33,6 +33,13 @@ const ROUTED: Array<[string, string]> = [
   ["POST", "/v1/tasks/{jobId}/cancel"],
   ["POST", "/v1/tasks/{jobId}/answer"],
   ["GET", "/v1/sessions/{sessionId}/events"],
+  ["GET", "/v1/host/state"],
+  ["POST", "/v1/host/sessions/{sessionId}/submit"],
+  ["GET", "/v1/host/sessions/{sessionId}/stream"],
+  ["POST", "/v1/host/sessions/{sessionId}/interrupt"],
+  ["POST", "/v1/host/sessions/{sessionId}/pause"],
+  ["POST", "/v1/host/sessions/{sessionId}/resume"],
+  ["POST", "/v1/host/sessions/{sessionId}/answer"],
 ];
 
 function makeDeps(overrides: Partial<ServiceDeps> = {}): ServiceDeps {

@@ -62,7 +62,7 @@ async function handleRequest(
   const filtered = filterResponse(
     res,
     apiGuard({ config: s.config, workspace: s.deps.baseDir ?? process.cwd() }),
-    reqUrl.pathname.endsWith("/events") ? "sse" : "json",
+    reqUrl.pathname.endsWith("/events") || reqUrl.pathname.endsWith("/stream") ? "sse" : "json",
   );
 
   if (OPEN_PATHS.has(reqUrl.pathname)) {
