@@ -68,7 +68,7 @@ export function handleMcpToggle(
       } catch {
         persisted = false;
       }
-      sendJson(res, 200, { ok: true, persisted, restartRequired: true, mcp: mcpList(s) });
+      sendJson(res, 200, { ok: true, persisted, restartRequired: true, mcp: mcpServersView(s.config) });
     })
     .catch((err: unknown) => {
       requestError(req, res, err);
@@ -95,7 +95,7 @@ export function handleMcpCreate(
     res,
     s,
     (config, rec) => mcpOutcome(createMcpServer(config, rec)),
-    (_config, state) => ({ mcp: mcpList(state) }),
+    (_config, state) => ({ mcp: mcpServersView(state.config) }),
   );
 }
 
@@ -111,7 +111,7 @@ export function handleMcpUpdate(
     res,
     s,
     (config, rec) => mcpOutcome(updateMcpServer(config, id, rec)),
-    (_config, state) => ({ mcp: mcpList(state) }),
+    (_config, state) => ({ mcp: mcpServersView(state.config) }),
   );
 }
 
@@ -127,5 +127,5 @@ export function handleMcpDelete(res: ServerResponse, id: string, s: SettingsStat
     return;
   }
   const persisted = persistConfig(s, s.config, "mcpServers");
-  sendJson(res, 200, { ok: true, persisted, restartRequired: true, mcp: mcpList(s) });
+  sendJson(res, 200, { ok: true, persisted, restartRequired: true, mcp: mcpServersView(s.config) });
 }

@@ -12,6 +12,7 @@
 | Работает с агентом/кодом  | [AGENTS.md](../AGENTS.md) — правила, инварианты, карта кода                                                                 |
 | Меняет архитектуру        | [architecture v2](./specs/2026-10-12-architecture-v2-design.md) + [схемы](./specs/2026-10-12-architecture-v2-schematics.md) |
 | Разбирается с API сервиса | [service-api.md](./agents/service-api.md) → [serve mode](./serve-mode.md)                                                   |
+| Поднимает демон/тонкий клиент | [monolith split](./specs/2026-11-10-monolith-split-design.md) → [service-api.md](./agents/service-api.md)                     |
 | Хочет понять enterprise   | [MMA Enterprise: идея](./ideas/2026-11-05-mma-enterprise.md) → [отдельная версия](./ideas/2026-11-09-mma-enterprise-separate-version.md) |
 | Проверяет стиль вывода    | [STYLE.md](./design/ui/STYLE.md)                                                                                            |
 

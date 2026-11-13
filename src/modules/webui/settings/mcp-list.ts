@@ -4,11 +4,11 @@
 import type { ServerResponse } from "node:http";
 import { sendJson } from "../util";
 import type { ConfigStore, HttpTransport, SseTransport, WorkspaceStore } from "../state";
-import { mcpList } from "./settings-api";
+import { mcpServersView } from "../../../runtime/mcp-view";
 
 export function handleMcpList(
   res: ServerResponse,
   s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport,
 ): void {
-  sendJson(res, 200, { mcp: mcpList(s) });
+  sendJson(res, 200, { mcp: mcpServersView(s.config) });
 }
