@@ -267,10 +267,12 @@ export function emittedEventTypes(serviceDir: string): string[] {
     "api/tasks-submit.ts",
     "api/tasks-runner.ts",
     "api/tasks-control.ts",
+    "api/host-update.ts",
   ];
   const found = new Set<string>();
   const patterns = [
     /emitEvent\([^,]+,[^,]+,\s*"([a-z._]+)"/g,
+    /emitSessionEvent\([^,]+,[^,]+,\s*"([a-z._]+)"/g,
     /opts\.emit\(\s*"([a-z._]+)"/g,
     // Локальная обёртка моста (`const emit = (type, data) => …`), на которую
     // перешёл event-bridge: литералы остаются в файле, но не у `opts.emit`.

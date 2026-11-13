@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AgentResult } from "../../src/core/types";
 import type { AgentServiceState } from "../../src/modules/service/state";
 import { startAgentService } from "../../src/modules/service/module";
+import { publishUpdateNotice } from "../../src/modules/service/api/host-update";
 import { httpJson } from "./http-client";
 import { cleanupServiceDir, firstSessionId, makeServiceDeps, tempServiceDir } from "./harness";
 
@@ -223,6 +224,61 @@ describe("host plugins wire", () => {
     expect(res.status).toBe(200);
     expect(res.json.plugins).toEqual([{ name: "p" }]);
     expect(Array.isArray(res.json.mcp)).toBe(true);
+  });
+});
+
+describe("host update wire", () => {
+  it("answers 503 without an updater", async () => {
+    expect((await httpJson(`${base}/v1/host/update`)).status).toBe(503);
+    expect((await httpJson(`${base}/v1/host/update`, { method: "POST" })).status).toBe(503);
+  });
+
+  it("reports status and installs when updater is wired", async () => {
+    let installed = false;
+    state.deps.updater = {
+      getUpdater: () => ({ getCurrentVersion: () => "0.25.0" }),
+      installNow: async () => {
+        installed = true;
+        return { success: true, installed: "0.26.0" };
+      },
+    } as never;
+    state.updateAvailable = { current: "0.25.0", latest: "0.26.0" };
+
+    const status = await httpJson(`${base}/v1/host/update`);
+    expect(status.status).toBe(200);
+    expect(status.json).toMatchObject({
+      current: "0.25.0",
+      updateAvailable: true,
+      latest: "0.26.0",
+    });
+
+    const res = await httpJson(`${base}/v1/host/update`, { method: "POST" });
+    expect(res.status).toBe(200);
+    expect(res.json).toMatchObject({ ok: true, installed: "0.26.0" });
+    expect(installed).toBe(true);
+
+    const snap = await httpJson(`${base}/v1/host/state`);
+    expect(snap.json.state.updateAvailable).toEqual({ current: "0.25.0", latest: "0.26.0" });
+  });
+});
+
+describe("host update notices", () => {
+  it("broadcasts updater notices to active session streams", () => {
+    const frames: string[] = [];
+    state.clients.add({
+      sessionId,
+      lastEventId: 0,
+      lastEventAt: Date.now(),
+      send: (frame) => frames.push(frame),
+    });
+
+    publishUpdateNotice(state, { phase: "installed", current: "0.25.0", latest: "0.26.0" });
+
+    expect(frames).toHaveLength(1);
+    expect(frames[0]).toContain("event: update");
+    expect(frames[0]).toContain('"phase":"installed"');
+    expect(state.updateAvailable).toBeUndefined();
+    state.clients.clear();
   });
 });
 

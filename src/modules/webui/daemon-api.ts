@@ -46,6 +46,9 @@ const ROUTES: Record<string, Handler> = {
     const provider = reqUrl.searchParams.get("provider") ?? undefined;
     sendJson(res, 200, await host.listModels(provider));
   },
+  "POST /api/update": async ({ res, host }) => {
+    sendJson(res, 200, await host.installUpdate());
+  },
   "GET /api/plugins": async ({ res, host }) => {
     sendJson(res, 200, await host.plugins());
   },

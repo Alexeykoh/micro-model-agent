@@ -36,7 +36,7 @@ export async function startWebDaemon(opts: WebDaemonOptions): Promise<WebDaemonH
   const unsubscribe = opts.daemon.subscribeEvents((ev) => {
     const mapped = mapHostEvent(ev);
     if (mapped) broadcast(mapped, state);
-    if (mapped?.type === "turn_end") void pushState(state);
+    if (mapped?.type === "turn_end" || mapped?.type === "update") void pushState(state);
   });
 
   const assets = createAssetSource();

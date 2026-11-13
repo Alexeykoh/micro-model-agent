@@ -11,6 +11,28 @@ export function formatFrame(env: Envelope): string {
 /** Кап событий на задачу: реестр не растёт бесконечно на долгом ходе. */
 export const TASK_EVENTS_MAX = 2000;
 
+/** Событие вне задачи (например, апдейтер): только буфер сессии и SSE. */
+export function emitSessionEvent(
+  s: AgentServiceState,
+  sessionId: string,
+  type: string,
+  data: unknown,
+): Envelope {
+  const env: Envelope = {
+    v: 1,
+    seq: s.envelopes.next(sessionId),
+    ts: Date.now(),
+    type,
+    sessionId,
+    data,
+  };
+  s.envelopes.append(env);
+  for (const client of s.clients) {
+    if (client.sessionId === sessionId) client.send(formatFrame(env));
+  }
+  return env;
+}
+
 /** Аллоцирует seq, кладёт в буфер/задачу и рассылает подписчикам сессии. */
 export function emitEvent(
   s: AgentServiceState,

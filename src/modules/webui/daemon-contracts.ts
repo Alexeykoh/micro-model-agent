@@ -24,5 +24,6 @@ export interface WebDaemonHost extends Host {
   lspFlags(): Promise<unknown>;
   lspDoctor(): Promise<unknown>;
   plugins(): Promise<unknown>;
+  installUpdate(): Promise<unknown>;
   dispose(): void;
 }

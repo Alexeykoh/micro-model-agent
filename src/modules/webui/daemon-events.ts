@@ -67,6 +67,16 @@ export function mapHostEvent(ev: HostEvent): SseEvent | null {
       };
     case "task.cancelled":
       return { ...base, type: "turn_end", success: false, interrupted: true };
+    case "update":
+      return {
+        ...base,
+        type: "update",
+        phase: String(data.phase ?? ""),
+        current: String(data.current ?? ""),
+        ...(data.latest ? { latest: String(data.latest) } : {}),
+        ...(data.error ? { error: String(data.error) } : {}),
+        ...(data.progress ? { progress: data.progress } : {}),
+      };
     default:
       return null;
   }
