@@ -34,4 +34,14 @@ export interface ServiceConfig {
    * По умолчанию только `https`: тело webhook'а несёт результат хода.
    */
   webhookAllowHttp?: boolean;
+  /**
+   * TLS демона. `cert`/`key` — пути к PEM; оба заданы — сервер слушает HTTPS.
+   * `terminatedByProxy` — явное разрешение HTTP на не-loopback, когда TLS
+   * терминирует доверенный прокси/ingress (pod-сеть приватна).
+   */
+  tls?: {
+    cert?: string;
+    key?: string;
+    terminatedByProxy?: boolean;
+  };
 }

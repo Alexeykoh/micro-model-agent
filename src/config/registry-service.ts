@@ -14,7 +14,18 @@ function int(
   get: (c: AppConfig) => unknown,
   set: (c: AppConfig, v: unknown) => void,
 ): ConfigKeyDef {
-  return { key, aliases: [], domain: "service", valueType: "int", min, max, step, effects: [], get, set };
+  return {
+    key,
+    aliases: [],
+    domain: "service",
+    valueType: "int",
+    min,
+    max,
+    step,
+    effects: [],
+    get,
+    set,
+  };
 }
 
 function str(
@@ -50,37 +61,123 @@ function optString(
 
 /** Все ключи `service.*` в порядке отображения. */
 export const SERVICE_DEFS: ConfigKeyDef[] = [
-  int("service.port", 1, 65535, 1,
+  int(
+    "service.port",
+    1,
+    65535,
+    1,
     (c) => c.service.port,
-    (c, v) => { c.service.port = v as number; }),
-  str("service.host",
+    (c, v) => {
+      c.service.port = v as number;
+    },
+  ),
+  str(
+    "service.host",
     (c) => c.service.host,
-    (c, v) => { c.service.host = String(v).trim() || DEFAULTS.service.host; }),
-  optString("service.token",
+    (c, v) => {
+      c.service.host = String(v).trim() || DEFAULTS.service.host;
+    },
+  ),
+  optString(
+    "service.token",
     (c) => c.service.token ?? "",
-    (c, value) => { c.service.token = value; }),
-  optString("service.tenant",
+    (c, value) => {
+      c.service.token = value;
+    },
+  ),
+  optString(
+    "service.tenant",
     (c) => c.service.tenant ?? "",
-    (c, value) => { c.service.tenant = value; }),
-  int("service.resultRetentionDays", 1, 365, 1,
+    (c, value) => {
+      c.service.tenant = value;
+    },
+  ),
+  int(
+    "service.resultRetentionDays",
+    1,
+    365,
+    1,
     (c) => c.service.resultRetentionDays,
-    (c, v) => { c.service.resultRetentionDays = v as number; }),
-  int("service.idempotencyTtlHours", 1, 720, 1,
+    (c, v) => {
+      c.service.resultRetentionDays = v as number;
+    },
+  ),
+  int(
+    "service.idempotencyTtlHours",
+    1,
+    720,
+    1,
     (c) => c.service.idempotencyTtlHours,
-    (c, v) => { c.service.idempotencyTtlHours = v as number; }),
-  int("service.syncWaitMs", 0, 120_000, 1000,
+    (c, v) => {
+      c.service.idempotencyTtlHours = v as number;
+    },
+  ),
+  int(
+    "service.syncWaitMs",
+    0,
+    120_000,
+    1000,
     (c) => c.service.syncWaitMs,
-    (c, v) => { c.service.syncWaitMs = v as number; }),
-  int("service.maxQueueLength", 1, 100, 1,
+    (c, v) => {
+      c.service.syncWaitMs = v as number;
+    },
+  ),
+  int(
+    "service.maxQueueLength",
+    1,
+    100,
+    1,
     (c) => c.service.maxQueueLength,
-    (c, v) => { c.service.maxQueueLength = v as number; }),
-  int("service.callbackTimeoutMs", 1000, 120_000, 1000,
+    (c, v) => {
+      c.service.maxQueueLength = v as number;
+    },
+  ),
+  int(
+    "service.callbackTimeoutMs",
+    1000,
+    120_000,
+    1000,
     (c) => c.service.callbackTimeoutMs,
-    (c, v) => { c.service.callbackTimeoutMs = v as number; }),
-  optString("service.webhookSecret",
+    (c, v) => {
+      c.service.callbackTimeoutMs = v as number;
+    },
+  ),
+  optString(
+    "service.webhookSecret",
     (c) => c.service.webhookSecret ?? "",
-    (c, value) => { c.service.webhookSecret = value; }),
-  bool("service.webhookAllowHttp",
+    (c, value) => {
+      c.service.webhookSecret = value;
+    },
+  ),
+  bool(
+    "service.webhookAllowHttp",
     (c) => c.service.webhookAllowHttp ?? false,
-    (c, v) => { c.service.webhookAllowHttp = Boolean(v); }),
+    (c, v) => {
+      c.service.webhookAllowHttp = Boolean(v);
+    },
+  ),
+  optString(
+    "service.tls.cert",
+    (c) => c.service.tls?.cert ?? "",
+    (c, value) => {
+      c.service.tls ??= {};
+      c.service.tls.cert = value;
+    },
+  ),
+  optString(
+    "service.tls.key",
+    (c) => c.service.tls?.key ?? "",
+    (c, value) => {
+      c.service.tls ??= {};
+      c.service.tls.key = value;
+    },
+  ),
+  bool(
+    "service.tls.terminatedByProxy",
+    (c) => c.service.tls?.terminatedByProxy ?? false,
+    (c, v) => {
+      c.service.tls ??= {};
+      c.service.tls.terminatedByProxy = Boolean(v);
+    },
+  ),
 ];

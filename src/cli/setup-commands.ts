@@ -63,6 +63,7 @@ export function buildServeCommand(program: Command): void {
     .option("-p, --port <n>", t("cli.serve.port"))
     .option("--host <addr>", t("cli.serve.host"))
     .option("--token <t>", t("cli.serve.token"))
+    .option("--rotate-token", t("cli.serve.rotate_token"))
     .action(() => {
       /* Диспатчится из main.ts после program.parse(): сервис долгоживущий,
          хук one-shot выхода его резать не должен. */

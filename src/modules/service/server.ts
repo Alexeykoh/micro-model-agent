@@ -8,12 +8,14 @@
  * старте (спека §11).
  */
 import { createServer as createHttpServer } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { t } from "../../i18n/index";
 import { defaultOutputBus } from "../../output";
 import { errMsg } from "../../utils/error";
 import { bearerOk, isLoopback, sendProblem } from "./http/respond";
+import { resolveServiceTls, tlsPolicyError } from "./http/tls";
 import { handleApi } from "./http/routes";
 import { problem } from "./runtime/problem";
 import { apiGuard, filterResponse } from "../../runtime/egress";
@@ -21,19 +23,25 @@ import type { AgentServiceState } from "./state";
 
 /** Поднимает сервер; резолвит базовый URL после успешного bind. */
 export async function startServiceServer(s: AgentServiceState): Promise<string> {
+  const tls = resolveServiceTls(s.config.service);
   if (!isLoopback(s.host) && !s.token) {
     throw new Error(t("service.missing_token_nonloopback", { host: s.host }));
   }
-  const server = createHttpServer((req, res) => {
+  if (!isLoopback(s.host)) {
+    const policy = tlsPolicyError(tls);
+    if (policy) throw new Error(policy);
+  }
+  const handler = (req: IncomingMessage, res: ServerResponse): void => {
     void handleRequest(req, res, s);
-  });
+  };
+  const server = tls.options ? createHttpsServer(tls.options, handler) : createHttpServer(handler);
   s.server = server;
   return await new Promise<string>((resolve, reject) => {
     server.once("error", reject);
     server.listen(s.port, s.host, () => {
       const addr = server.address() as AddressInfo;
       s.port = addr.port;
-      resolve(`http://${s.host}:${addr.port}`);
+      resolve(`${tls.scheme}://${s.host}:${addr.port}`);
     });
   });
 }

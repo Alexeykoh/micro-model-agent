@@ -12,6 +12,7 @@ import { busLogger, createUpdater } from "../modules/updater/factory";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { CONFIG_FILE, persistConfigChange } from "../config/persist";
+import { readDaemonToken, rotateDaemonToken } from "../modules/daemon/protocol";
 
 /** Опции `mma serve`: порт, хост, токен, проект. */
 export interface ServeCommandOptions {
@@ -20,6 +21,8 @@ export interface ServeCommandOptions {
   token?: string;
   projectDir?: string;
   noAgentsMd?: boolean;
+  /** Сгенерировать новый `~/.mma/daemon.token` и использовать его. */
+  rotateToken?: boolean;
 }
 
 /**
@@ -64,6 +67,12 @@ export async function runServe(opts: ServeCommandOptions): Promise<void> {
     pluginManager,
   } = await bootstrap(...serveBootstrapArgs(opts));
 
+  // Ротация токена — на старте: запись в `~/.mma/daemon.token`, клиенты
+  // читают тот же файл. Работающий демон новый токен не подхватывает
+  // (спека §12: смена токена требует рестарта).
+  if (opts.rotateToken) rotateDaemonToken();
+  const token = opts.token ?? readDaemonToken() ?? undefined;
+
   const svc = startAgentService({
     agent,
     config,
@@ -86,10 +95,10 @@ export async function runServe(opts: ServeCommandOptions): Promise<void> {
     reconfigure: (cfg) => agent.reconfigure(cfg),
     host: opts.host,
     port: opts.port,
-    token: opts.token,
+    token,
   });
 
-  await svc.url;
+  const url = await svc.url;
   // Самообновление живёт в демоне: панель update в daemon-web, SSE `update`
   // в активных сессиях и общий `updateAvailable` в снапшоте состояния.
   const updater = createUpdater({
@@ -100,8 +109,8 @@ export async function runServe(opts: ServeCommandOptions): Promise<void> {
   });
   if (updater) svc.state.deps.updater = updater;
   const channel = getDefaultChannel();
-  const where = { host: svc.state.host, port: String(svc.state.port) };
-  channel.writeLine(t("cli.serve_started", { ...where, dir: baseDir }));
+  const where = { url, dir: baseDir };
+  channel.writeLine(t("cli.serve_started", { ...where }));
   // Discovery сразу на старте: иначе первый вопрос «как это устроено?» уходит
   // в поиск по репозиторию вместо одного клика.
   channel.writeLine(pc.dim(t("cli.serve_docs", where)));

@@ -1,6 +1,6 @@
 # Agent Service API v1
 
-Запуск: `mma serve [-p <port>] [--host <addr>] [--token <t>]`. Рантайм —
+Запуск: `mma serve [-p <port>] [--host <addr>] [--token <t>] [--rotate-token]`. Рантайм —
 `src/modules/service/` — поднимает тот же агент, что CLI/REPL/web, но отдаёт
 формальный HTTP-контракт для внешних систем (боты, бэкенды, cron).
 
@@ -46,7 +46,7 @@ guard-тест `tests/service/openapi.test.ts`, который падает, е�
 | Ключ | Дефолт | Смысл |
 |---|---|---|
 | `service.port` | `7331` | порт (флаг `-p` важнее) |
-| `service.host` | `127.0.0.1` | адрес; не-loopback требует токен |
+| `service.host` | `127.0.0.1` | адрес; не-loopback требует токен и TLS |
 | `service.token` | — | `Authorization: Bearer` (control plane → runtime) |
 | `service.tenant` | — | тенант процесса (silo); `X-Mma-Tenant` сверяется с ним |
 | `service.resultRetentionDays` | `7` | хранение терминальных результатов |
@@ -56,9 +56,13 @@ guard-тест `tests/service/openapi.test.ts`, который падает, е�
 | `service.callbackTimeoutMs` | `10000` | таймаут webhook-доставки |
 | `service.webhookSecret` | — | секрет HMAC подписи вебхуков |
 | `service.webhookAllowHttp` | `false` | `http`-callback только для loopback |
+| `service.tls.cert`, `.key` | — | PEM-пути; оба заданы — HTTPS |
+| `service.tls.terminatedByProxy` | `false` | HTTP на не-loopback, TLS терминирует ingress |
 
 Env: `MMA_SERVICE_PORT`, `MMA_SERVICE_HOST`, `MMA_SERVICE_TOKEN`,
-`MMA_SERVICE_TENANT` (важнее конфига). Доступно в `/config` и web Settings →
+`MMA_SERVICE_TENANT`, `MMA_SERVICE_TLS_CERT`, `MMA_SERVICE_TLS_KEY`,
+`MMA_SERVICE_TLS_PROXY` (важнее конфига). Токен также читается из
+`~/.mma/daemon.token`; `--rotate-token` перегенерирует его при старте. Доступно в `/config` и web Settings →
 Network → Agent Service API.
 
 ## Endpoints
