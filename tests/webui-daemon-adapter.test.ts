@@ -34,6 +34,7 @@ function fakeDaemon() {
     getConfig: async () => ({ config: { model: "m" }, version: 2, registry: [] }),
     setConfig: async () => ({ ok: true, persisted: true }),
     listModels: async () => ({ models: ["m"] }),
+    listFiles: async (path: string) => ({ path, entries: [{ name: "a.ts", type: "file" }], truncated: false }),
     executeCommand: async (line) => {
       calls.commands.push(line);
       return { ok: true, output: ["status: ok"] };
@@ -81,6 +82,10 @@ describe("web daemon adapter (W4)", () => {
       });
       expect(command.status).toBe(200);
       expect(calls.commands).toEqual(["/status"]);
+
+      const files = await doFetch(`${base}/api/files?path=`);
+      expect(files.status).toBe(200);
+      expect(((await files.json()) as { entries: unknown[] }).entries).toHaveLength(1);
 
       const history = await doFetch(`${base}/api/sessions/S1/history`);
       expect(history.status).toBe(200);

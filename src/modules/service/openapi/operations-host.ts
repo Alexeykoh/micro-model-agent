@@ -245,5 +245,15 @@ export const HOST_OPERATIONS: SpecOperation[] = [
       schema: { type: "object", required: ["line"], properties: { line: { type: "string" } } },
     },
     responses: { "200": ok("Результат команды"), "400": ok("Пустая строка", "ProblemDetails"), "413": TOO_LARGE, ...PROBLEM_RESPONSES },
+  },  {
+    method: "get",
+    path: "/v1/host/files",
+    operationId: "hostFiles",
+    tag: "host",
+    summary: "Листинг директории workspace",
+    params: [
+      { name: "path", in: "query", description: "Относительный путь (по умолчанию корень)", schema: { type: "string" } },
+    ],
+    responses: { "200": ok("Записи директории"), "403": ok("Путь вне workspace/защищён", "ProblemDetails"), "404": ok("Не найдено", "ProblemDetails"), ...PROBLEM_RESPONSES },
   },
 ];

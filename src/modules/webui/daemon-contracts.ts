@@ -12,5 +12,7 @@ export interface WebDaemonHost extends Host {
   resume(): Promise<void>;
   answer(id: string, value: unknown): Promise<void>;
   setSessionId(sessionId: string): void;
+  /** Листинг директории workspace (панель Files). */
+  listFiles(path: string): Promise<unknown>;
   dispose(): void;
 }

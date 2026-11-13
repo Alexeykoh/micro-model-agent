@@ -40,7 +40,6 @@ export class RemoteHost implements Host {
     this.activeSession = opts.sessionId;
   }
 
-  /** Выбрать сессию после `listSessions`/`createSession`. */
   setSessionId(sessionId: string): void {
     this.activeSession = sessionId;
   }
@@ -50,8 +49,7 @@ export class RemoteHost implements Host {
   }
 
   async getState(sessionId: string | undefined = this.activeSession): Promise<HostStateSnapshot> {
-    const query = sessionId ? `?session=${encodeURIComponent(sessionId)}` : "";
-    const res = await this.request(`${this.base}/v1/host/state${query}`);
+    const res = await this.request(`${this.base}/v1/host/state${sessionId ? `?session=${encodeURIComponent(sessionId)}` : ""}`);
     if (!res.ok) throw new Error(`daemon state failed: ${res.status} ${await safeText(res)}`);
     const body = (await res.json()) as { state?: HostStateSnapshot };
     return body.state ?? { busy: this.busy };
@@ -151,6 +149,12 @@ export class RemoteHost implements Host {
     return body.entries ?? [];
   }
 
+  async listFiles(path: string): Promise<unknown> {
+    const res = await this.request(`${this.base}/v1/host/files${path ? `?path=${encodeURIComponent(path)}` : ""}`);
+    if (!res.ok) throw new Error(`daemon files failed: ${res.status} ${await safeText(res)}`);
+    return res.json();
+  }
+
   async getConfig(): Promise<HostConfigSnapshot> {
     const res = await this.request(`${this.base}/v1/host/config`);
     if (!res.ok) throw new Error(`daemon config failed: ${res.status} ${await safeText(res)}`);
@@ -182,7 +186,6 @@ export class RemoteHost implements Host {
     };
   }
 
-  /** Закрыть поток событий (остановка клиента). */
   dispose(): void {
     this.stream?.controller.abort();
     this.stream = undefined;
