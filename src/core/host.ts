@@ -145,6 +145,17 @@ export interface HostModels {
   loading?: boolean;
 }
 
+/** Итог записи ключа конфига через wire. */
+export interface HostConfigWriteResult {
+  ok: boolean;
+  value?: unknown;
+  display?: string;
+  persisted: boolean;
+  warning?: string;
+  error?: string;
+  effects?: readonly string[];
+}
+
 export interface HostEvent {
   type: string;
   ts: number;
@@ -179,6 +190,7 @@ export interface Host extends HostBridge {
 
   // Конфиг и модели (W3b).
   getConfig(): Promise<HostConfigSnapshot>;
+  setConfig(key: string, value: unknown): Promise<HostConfigWriteResult>;
   listModels(provider?: string): Promise<HostModels>;
 }
 

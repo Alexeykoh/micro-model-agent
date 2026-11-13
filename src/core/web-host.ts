@@ -1,5 +1,12 @@
 /** Хост для `mma web`: без TTY и LineEditor, поверх тех же deps. */
-import type { Host, HostConfigSnapshot, HostEvent, HostModels, HostStateSnapshot } from "./host";
+import type {
+  Host,
+  HostConfigSnapshot,
+  HostConfigWriteResult,
+  HostEvent,
+  HostModels,
+  HostStateSnapshot,
+} from "./host";
 import type { HostBridgeSubmitOptions } from "../modules/types";
 import type { OutputEvent } from "../output/types";
 import { defaultOutputBus } from "../output/bus";
@@ -26,6 +33,7 @@ export interface WebHostDeps {
   /** Опционален: у тестового стаба сессий может не быть. */
   sessions?: WebHostSessions;
   getConfig?: () => HostConfigSnapshot;
+  setConfig?: (key: string, value: unknown) => Promise<HostConfigWriteResult>;
   listModels?: (provider?: string) => HostModels;
 }
 
@@ -85,6 +93,13 @@ export class WebHost implements Host {
 
   async getConfig(): Promise<HostConfigSnapshot> {
     return this.deps.getConfig?.() ?? { config: {}, version: 0 };
+  }
+
+  async setConfig(key: string, value: unknown): Promise<HostConfigWriteResult> {
+    if (!this.deps.setConfig) {
+      return { ok: false, persisted: false, error: "config write unavailable" };
+    }
+    return this.deps.setConfig(key, value);
   }
 
   async listModels(provider?: string): Promise<HostModels> {

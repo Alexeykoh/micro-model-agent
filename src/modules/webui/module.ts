@@ -12,9 +12,7 @@ import type { ExecutionModule } from "../execution/module";
 import { CONFIG_FILE, persistConfigChange as persistConfig } from "../../config/persist";
 import { buildSetupDisplay } from "../setup/answers";
 import { WebHost } from "../../core/web-host";
-import { serializeConfigForWire } from "../../config/redact";
-import { configVersion } from "../../config/persist";
-import { buildConfigRegistry } from "../../runtime/config-view";
+import { makeHostConfigWiring } from "./settings/host-wiring";
 import { createAssetSource } from "./asset-cache";
 import { makeWebCommands } from "./chat/commands";
 import { makeReconfigure } from "./settings/reconfigure";
@@ -260,18 +258,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
           },
         }
       : {}),
-    getConfig: () => ({
-      config: serializeConfigForWire(deps.config),
-      registry: buildConfigRegistry(deps.config),
-      version: configVersion(deps.config),
-    }),
-    listModels: (provider?: string) => {
-      if (provider && state.knownModelsFor) {
-        const resolved = state.knownModelsFor(provider);
-        return { models: resolved.models, loading: resolved.loading };
-      }
-      return { models: state.knownModels?.() ?? [] };
-    },
+    ...makeHostConfigWiring(deps.config, state),
   });
 
   state.bridge = host;

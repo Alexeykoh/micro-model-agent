@@ -7,6 +7,8 @@ import { getDefaultChannel } from "../output";
 import { t } from "../i18n/index";
 import pc from "picocolors";
 import { startAgentService } from "../modules/service/module";
+import { join } from "node:path";
+import { CONFIG_FILE, persistConfigChange } from "../config/persist";
 
 /** Опции `mma serve`: порт, хост, токен, проект. */
 export interface ServeCommandOptions {
@@ -55,6 +57,13 @@ export async function runServe(opts: ServeCommandOptions): Promise<void> {
     configDir,
     baseDir,
     spawnRunner: spawnSessionRunner,
+    ...(configDir
+      ? {
+          saveConfig: (cfg, key) =>
+            persistConfigChange(cfg, key, join(configDir, CONFIG_FILE), configDir),
+        }
+      : {}),
+    reconfigure: (cfg) => agent.reconfigure(cfg),
     host: opts.host,
     port: opts.port,
     token: opts.token,

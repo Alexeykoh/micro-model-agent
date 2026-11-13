@@ -33,6 +33,10 @@ export interface ServiceDeps {
   host?: string;
   /** Оверрайд порта (иначе env `MMA_SERVICE_PORT`, затем `service.port`). */
   port?: number;
+  /** Хук персиста конфига (CLI подключает `persistConfigChange`). */
+  saveConfig?: (config: AppConfig, key?: string) => void;
+  /** Хук пересборки живого агента после записи ключа. */
+  reconfigure?: (config: AppConfig) => void | Promise<void>;
   /** Оверрайд bearer-токена (иначе env `MMA_SERVICE_TOKEN`, затем `service.token`). */
   token?: string;
   /** Тестовый шов: fetch для webhook-доставки (дефолт — глобальный `fetch`). */

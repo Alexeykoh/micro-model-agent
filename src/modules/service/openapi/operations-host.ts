@@ -211,5 +211,18 @@ export const HOST_OPERATIONS: SpecOperation[] = [
       { name: "provider", in: "query", description: "Имя записи провайдера (по умолчанию активный)", schema: { type: "string" } },
     ],
     responses: { "200": ok("Список моделей"), ...PROBLEM_RESPONSES },
+  },  {
+    method: "post",
+    path: "/v1/host/config",
+    operationId: "hostConfigWrite",
+    tag: "host",
+    summary: "Записать ключ конфига",
+    description: "Валидация реестром, персист домена, reconfigure при эффектах; `409` во время хода (кроме темы).",
+    requestBody: {
+      description: "Ключ и значение",
+      required: true,
+      schema: { type: "object", required: ["key", "value"], properties: { key: { type: "string" }, value: {} } },
+    },
+    responses: { "200": ok("Запись применена"), "400": ok("Неизвестный ключ/значение", "ProblemDetails"), "409": ok("Идёт ход", "ProblemDetails"), "413": TOO_LARGE, ...PROBLEM_RESPONSES },
   },
 ];

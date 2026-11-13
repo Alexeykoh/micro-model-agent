@@ -153,6 +153,24 @@ describe("host sessions surface", () => {
 });
 
 describe("host config and models", () => {
+  it("writes a config key and reports persistence", async () => {
+    const res = await httpJson(`${base}/v1/host/config`, {
+      method: "POST",
+      json: { key: "ui.themeMode", value: "dark" },
+    });
+    expect(res.status).toBe(200);
+    expect(res.json.ok).toBe(true);
+    expect(typeof res.json.persisted).toBe("boolean");
+  });
+
+  it("rejects an unknown config key", async () => {
+    const res = await httpJson(`${base}/v1/host/config`, {
+      method: "POST",
+      json: { key: "nope.nope", value: 1 },
+    });
+    expect(res.status).toBe(400);
+  });
+
   it("returns the redacted config and the key registry", async () => {
     const res = await httpJson(`${base}/v1/host/config`);
     expect(res.status).toBe(200);

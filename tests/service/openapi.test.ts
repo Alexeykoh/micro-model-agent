@@ -35,6 +35,7 @@ const ROUTED: Array<[string, string]> = [
   ["GET", "/v1/sessions/{sessionId}/events"],
   ["GET", "/v1/host/state"],
   ["GET", "/v1/host/config"],
+  ["POST", "/v1/host/config"],
   ["GET", "/v1/host/models"],
   ["GET", "/v1/host/sessions"],
   ["POST", "/v1/host/sessions"],

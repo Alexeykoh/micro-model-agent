@@ -13,6 +13,8 @@ import { readMmaVersion } from "../../../core/version";
 import { configVersion } from "../../../config/persist";
 import { serializeConfigForWire } from "../../../config/redact";
 import { buildConfigRegistry } from "../../../runtime/config-view";
+import { applyConfigWrite, toConfigRaw } from "../../../runtime/config-write";
+import { setLocale } from "../../../i18n/index";
 import { PROTOCOL_VERSION } from "../../daemon/protocol";
 import { readJsonBodyOrProblem, sendJson, sendProblem } from "../http/respond";
 import { resolveAnswer } from "../runtime/prompt-io";
@@ -45,6 +47,9 @@ export async function handleHostApi(
       version: configVersion(s.config),
     });
     return true;
+  }
+  if (parts.length === 3 && parts[2] === "config" && req.method === "POST") {
+    return writeConfig(req, res, s);
   }
   if (parts.length === 3 && parts[2] === "models" && req.method === "GET") {
     const provider = reqUrl.searchParams.get("provider") ?? undefined;
@@ -93,6 +98,42 @@ function stateRoute(res: ServerResponse, s: AgentServiceState, reqUrl: URL): boo
     version: readMmaVersion(),
     protocol: PROTOCOL_VERSION,
   });
+  return true;
+}
+
+/** `POST /v1/host/config {key, value}` — валидация, персист, reconfigure. */
+async function writeConfig(
+  req: IncomingMessage,
+  res: ServerResponse,
+  s: AgentServiceState,
+): Promise<boolean> {
+  const body = await readJsonBodyOrProblem(req, res, MAX_JSON_BYTES);
+  if (!body) return true;
+  const key = typeof body.key === "string" ? body.key : "";
+  const raw = toConfigRaw(body.value);
+  if (!key || raw === null) {
+    sendProblem(res, problem({ type: "validation", title: "invalid-value", status: 400 }));
+    return true;
+  }
+  // Reconfigure живого раннера опасен; тема — исключение (INV-T3).
+  if (s.pool.anyBusy() && key !== "ui.theme" && key !== "ui.themeMode") {
+    sendProblem(res, problem({ type: "validation", title: "busy", status: 409 }));
+    return true;
+  }
+  const result = await applyConfigWrite(s.config, key, raw, {
+    saveConfig: s.deps.saveConfig,
+    reconfigure: s.deps.reconfigure,
+  });
+  if (!result.ok) {
+    sendProblem(
+      res,
+      problem({ type: "validation", title: "invalid-value", status: 400, detail: result.error }),
+    );
+    return true;
+  }
+  if (key === "locale") setLocale(s.config.locale);
+  if (key === "model" || key === "provider.active") void s.models.refresh();
+  sendJson(res, 200, result);
   return true;
 }
 

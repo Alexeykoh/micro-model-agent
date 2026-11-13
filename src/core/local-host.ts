@@ -6,7 +6,14 @@
  * процесса-глобального состояния в контракте: deps инжектируются, подписка
  * идёт через переданный `subscribeOutput`.
  */
-import type { Host, HostConfigSnapshot, HostEvent, HostModels, HostStateSnapshot } from "./host";
+import type {
+  Host,
+  HostConfigSnapshot,
+  HostConfigWriteResult,
+  HostEvent,
+  HostModels,
+  HostStateSnapshot,
+} from "./host";
 import type { HostBridgeSubmitOptions } from "../modules/types";
 import type { OutputEvent } from "../output/types";
 import type { SessionLogEntry } from "../modules/session/log-types";
@@ -27,6 +34,7 @@ export interface LocalHostDeps {
   getHistory(sessionId: string): SessionMessage[];
   getLog(sessionId: string, opts?: { since?: string }): SessionLogEntry[];
   getConfig(): HostConfigSnapshot;
+  setConfig(key: string, value: unknown): Promise<HostConfigWriteResult>;
   listModels(provider?: string): HostModels;
 }
 
@@ -91,6 +99,10 @@ export class LocalHost implements Host {
 
   async getConfig(): Promise<HostConfigSnapshot> {
     return this.deps.getConfig();
+  }
+
+  async setConfig(key: string, value: unknown): Promise<HostConfigWriteResult> {
+    return this.deps.setConfig(key, value);
   }
 
   async listModels(provider?: string): Promise<HostModels> {

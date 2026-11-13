@@ -8,6 +8,7 @@
 import type {
   Host,
   HostConfigSnapshot,
+  HostConfigWriteResult,
   HostEvent,
   HostModels,
   HostStateSnapshot,
@@ -145,6 +146,16 @@ export class RemoteHost implements Host {
     const res = await this.request(`${this.base}/v1/host/config`);
     if (!res.ok) throw new Error(`daemon config failed: ${res.status} ${await safeText(res)}`);
     return (await res.json()) as HostConfigSnapshot;
+  }
+
+  async setConfig(key: string, value: unknown): Promise<HostConfigWriteResult> {
+    const res = await this.request(`${this.base}/v1/host/config`, {
+      method: "POST",
+      body: JSON.stringify({ key, value }),
+    });
+    if (res.status === 200) return (await res.json()) as HostConfigWriteResult;
+    const detail = await safeText(res);
+    return { ok: false, persisted: false, error: `daemon config write failed: ${res.status} ${detail}` };
   }
 
   async listModels(provider?: string): Promise<HostModels> {

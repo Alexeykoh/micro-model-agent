@@ -233,7 +233,7 @@ timestamp, windowMs?})`: сравнение за константное врем
 | DELETE | `/v1/host/sessions/:id` | удаление простаивающей сессии (409 при busy) |
 | GET | `/v1/host/sessions/:id/history` | история диалога |
 | GET | `/v1/host/sessions/:id/log?since=&limit=` | хвост `session.jsonl` |
-| GET | `/v1/host/config` | отредактированный конфиг + реестр ключей |
+| GET/POST | `/v1/host/config` | отредактированный конфиг + реестр ключей / запись ключа |
 | GET | `/v1/host/models?provider=` | модели активного/указанного провайдера |
 | POST | `/v1/host/sessions/:id/submit` | `{text}` → `202 {turnId}` (картинки пока 422) |
 | GET | `/v1/host/sessions/:id/stream` | SSE, resume по `Last-Event-ID`/`?since=` |

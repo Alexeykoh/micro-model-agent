@@ -15,6 +15,9 @@ import { planSnapshotFromModule, adaptActivePlan } from "../core/host-plan";
 import { serializeConfigForWire } from "../config/redact";
 import { configVersion } from "../config/persist";
 import { buildConfigRegistry } from "../runtime/config-view";
+import { applyConfigWrite, toConfigRaw } from "../runtime/config-write";
+import { CONFIG_FILE, persistConfigChange } from "../config/persist";
+import { join } from "node:path";
 import type { Agent } from "../core/agent";
 import type { AppConfig } from "../config/types";
 import type { PluginManager } from "../modules/plugins/manager";
@@ -33,6 +36,7 @@ export interface ReplHostHost {
   runAgent(input: string): Promise<void>;
   executeCommand(line: string): Promise<void>;
   modelCache: string[];
+  configDir: string;
 }
 
 /** (Пере)аттач плагинного HostBridge. Зовётся в конструкторе и после того, как
@@ -119,6 +123,15 @@ export function buildLocalHost(host: ReplHostHost): Host {
       version: configVersion(host.config),
     }),
     listModels: () => ({ models: host.modelCache }),
+    setConfig: async (key, value) => {
+      const raw = toConfigRaw(value);
+      if (raw === null) return { ok: false, persisted: false, error: "invalid-value" };
+      const configPath = join(host.configDir, CONFIG_FILE);
+      return applyConfigWrite(host.config, key, raw, {
+        saveConfig: (cfg, changed) => persistConfigChange(cfg, changed, configPath, host.configDir),
+        reconfigure: (cfg) => host.agent.reconfigure(cfg),
+      });
+    },
   });
 }
 
