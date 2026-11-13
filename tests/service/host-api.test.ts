@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AgentResult } from "../../src/core/types";
+import type { AgentServiceState } from "../../src/modules/service/state";
 import { startAgentService } from "../../src/modules/service/module";
 import { httpJson } from "./http-client";
 import { cleanupServiceDir, firstSessionId, makeServiceDeps, tempServiceDir } from "./harness";
@@ -12,6 +13,7 @@ let dir: string;
 let stop: (() => void) | undefined;
 let base: string;
 let sessionId: string;
+let state: AgentServiceState;
 
 function fastAgent() {
   return {
@@ -29,6 +31,7 @@ beforeEach(async () => {
   dir = tempServiceDir();
   const svc = startAgentService(makeServiceDeps({ dir, agent: fastAgent() }));
   stop = svc.stop;
+  state = svc.state;
   base = await svc.url;
   sessionId = await firstSessionId(base);
 });
@@ -166,6 +169,38 @@ describe("host files wire", () => {
 
     const traversal = await httpJson(`${base}/v1/host/files?path=${encodeURIComponent("..")}`);
     expect(traversal.status).toBe(403);
+  });
+});
+
+describe("host memory/skills wire", () => {
+  it("serves memory and skills when modules are wired", async () => {
+    state.deps.memory = {
+      getPreferences: () => ({ tone: "brief" }),
+      read: () => "- fact one",
+    } as never;
+    state.deps.skills = {
+      getLoaded: () => [{ name: "alpha" }],
+      getAvailable: () => [{ name: "alpha" }, { name: "beta" }],
+    } as never;
+
+    const memory = await httpJson(`${base}/v1/host/memory`);
+    expect(memory.status).toBe(200);
+    expect((memory.json.categories as Array<{ name: string }>).length).toBeGreaterThan(0);
+    expect((memory.json.preferences as Record<string, string>).tone).toBe("brief");
+
+    const skills = await httpJson(`${base}/v1/host/skills`);
+    expect(skills.status).toBe(200);
+    expect(skills.json.skills).toEqual([
+      { name: "alpha", enabled: true },
+      { name: "beta", enabled: false },
+    ]);
+  });
+
+  it("answers 503 when a module is not wired", async () => {
+    state.deps.memory = undefined;
+    state.deps.skills = undefined;
+    expect((await httpJson(`${base}/v1/host/memory`)).status).toBe(503);
+    expect((await httpJson(`${base}/v1/host/skills`)).status).toBe(503);
   });
 });
 

@@ -178,6 +178,18 @@ export class RemoteHost implements Host {
     return res.json();
   }
 
+  async memory(): Promise<unknown> {
+    const res = await this.request(`${this.base}/v1/host/memory`);
+    if (!res.ok) throw new Error(`daemon memory failed: ${res.status} ${await safeText(res)}`);
+    return res.json();
+  }
+
+  async skills(): Promise<unknown> {
+    const res = await this.request(`${this.base}/v1/host/skills`);
+    if (!res.ok) throw new Error(`daemon skills failed: ${res.status} ${await safeText(res)}`);
+    return res.json();
+  }
+
   async getConfig(): Promise<HostConfigSnapshot> {
     const res = await this.request(`${this.base}/v1/host/config`);
     if (!res.ok) throw new Error(`daemon config failed: ${res.status} ${await safeText(res)}`);

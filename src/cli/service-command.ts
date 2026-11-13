@@ -46,14 +46,25 @@ export function serveBootstrapArgs(
 /** Запуск сервиса: bootstrap → старт API → ожидание SIGINT/SIGTERM. */
 export async function runServe(opts: ServeCommandOptions): Promise<void> {
   // exitOnComplete=true: интерактивный промпт stdin в сервисе не владеет.
-  const { agent, config, sessionManager, execModule, configDir, baseDir, spawnSessionRunner } =
-    await bootstrap(...serveBootstrapArgs(opts));
+  const {
+    agent,
+    config,
+    sessionManager,
+    execModule,
+    configDir,
+    baseDir,
+    spawnSessionRunner,
+    memoryStore,
+    skillsModule,
+  } = await bootstrap(...serveBootstrapArgs(opts));
 
   const svc = startAgentService({
     agent,
     config,
     sessionManager,
     execModule,
+    memory: memoryStore,
+    skills: skillsModule,
     configDir,
     baseDir,
     spawnRunner: spawnSessionRunner,

@@ -38,6 +38,8 @@ function fakeDaemon() {
     gitSnapshot: async () => ({ repo: true, branch: "dev", files: [] }),
     gitChanges: async () => ({ repo: true, files: [] }),
     gitDiff: async () => ({ diff: "", truncated: false }),
+    memory: async () => ({ preferences: {}, categories: [] }),
+    skills: async () => ({ skills: [] }),
     executeCommand: async (line) => {
       calls.commands.push(line);
       return { ok: true, output: ["status: ok"] };
@@ -85,6 +87,12 @@ describe("web daemon adapter (W4)", () => {
       });
       expect(command.status).toBe(200);
       expect(calls.commands).toEqual(["/status"]);
+
+      const memory = await doFetch(`${base}/api/memory`);
+      expect(memory.status).toBe(200);
+
+      const skills = await doFetch(`${base}/api/skills`);
+      expect(skills.status).toBe(200);
 
       const git = await doFetch(`${base}/api/git`);
       expect(git.status).toBe(200);

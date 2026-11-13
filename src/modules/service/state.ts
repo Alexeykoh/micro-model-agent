@@ -11,6 +11,8 @@ import type { SessionRunner } from "../../core/bootstrap/session-runner";
 import type { AppConfig } from "../../config/types";
 import { readEnv } from "../../config/env";
 import type { SessionManager } from "../session/manager";
+import type { MemoryStore } from "../memory/store";
+import type { SkillsModule } from "../skills/module";
 import type { ExecutionModule } from "../execution/module";
 import { RunPool } from "../../runtime/run-pool/run-pool";
 import { makeModelCache, type ModelCache } from "../../runtime/model-cache";
@@ -25,6 +27,10 @@ export interface ServiceDeps {
   config: AppConfig;
   sessionManager?: SessionManager;
   execModule?: ExecutionModule;
+  /** Долговременная память (панель Memory в daemon-web). */
+  memory?: MemoryStore;
+  /** Скиллы (панель Skills). */
+  skills?: SkillsModule;
   configDir?: string;
   baseDir?: string;
   /** Фабрика per-session раннеров из bootstrap (параллелизм слотов). */

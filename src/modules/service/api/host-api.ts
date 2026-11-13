@@ -26,6 +26,7 @@ import { openSessionStream } from "./events-api";
 import { handleHostSessions } from "./host-sessions";
 import { handleHostFiles } from "./host-files";
 import { handleHostGit } from "./host-git";
+import { handleHostMemory, handleHostSkills } from "./host-settings";
 import { interruptSession } from "./tasks-control";
 import { MAX_JSON_BYTES, tenantOf } from "./tasks-job";
 import { dispatchInteractive } from "./tasks-submit";
@@ -64,6 +65,8 @@ export async function handleHostApi(
   }
   if (parts[2] === "files") return handleHostFiles(req, res, reqUrl, s, parts);
   if (parts[2] === "git") return handleHostGit(req, res, reqUrl, s, parts);
+  if (parts[2] === "memory") return handleHostMemory(req, res, s, parts);
+  if (parts[2] === "skills") return handleHostSkills(req, res, s, parts);
   if (parts[2] !== "sessions") return false;
   if (
     parts.length === 3 ||
@@ -108,11 +111,7 @@ function stateRoute(res: ServerResponse, s: AgentServiceState, reqUrl: URL): boo
 }
 
 /** `POST /v1/host/config {key, value}` — валидация, персист, reconfigure. */
-async function writeConfig(
-  req: IncomingMessage,
-  res: ServerResponse,
-  s: AgentServiceState,
-): Promise<boolean> {
+async function writeConfig(req: IncomingMessage, res: ServerResponse, s: AgentServiceState): Promise<boolean> {
   const body = await readJsonBodyOrProblem(req, res, MAX_JSON_BYTES);
   if (!body) return true;
   const key = typeof body.key === "string" ? body.key : "";

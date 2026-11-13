@@ -8,31 +8,18 @@ import { requestError, sendJson } from "../util";
 import { readJsonBody } from "../http/body";
 import type { ConfigStore, WorkspaceStore, HttpTransport, SseTransport } from "../state";
 
-/** Кап одной записи памяти (символы): факт, а не дамп (аудит §6.5). */
-export const MAX_MEMORY_ENTRY_CHARS = 20_000;
-
-/** Append-only категории памяти (зеркало `memory-commands.ts` / `MemoryStore`). */
-export const MEMORY_CATEGORIES = ["conventions", "decisions", "errors", "facts"] as const;
-
-function isCategory(value: string): value is (typeof MEMORY_CATEGORIES)[number] {
-  return (MEMORY_CATEGORIES as readonly string[]).includes(value);
-}
-
-/** Запись памяти: номер и текст. */
-interface MemoryEntry {
-  n: number;
-  text: string;
-}
-
-/** Режет append-only файл категории на записи с нумерацией от 1 (`- `-блоки). */
-export function listEntries(markdown: string): MemoryEntry[] {
-  const lines = markdown.split(/\r?\n/);
-  const entries: MemoryEntry[] = [];
-  for (const line of lines) {
-    if (line.startsWith("- ")) entries.push({ n: entries.length + 1, text: line });
-  }
-  return entries;
-}
+export {
+  isMemoryCategory,
+  listEntries,
+  MAX_MEMORY_ENTRY_CHARS,
+  MEMORY_CATEGORIES,
+} from "../../../runtime/memory-view";
+import {
+  isMemoryCategory as isCategory,
+  listEntries,
+  MAX_MEMORY_ENTRY_CHARS,
+  MEMORY_CATEGORIES,
+} from "../../../runtime/memory-view";
 
 /** `GET /api/memory` — преференсы + записи по категориям (секреты вычищены). */
 export function handleMemoryGet(
