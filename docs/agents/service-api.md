@@ -235,7 +235,7 @@ timestamp, windowMs?})`: сравнение за константное врем
 | GET | `/v1/host/sessions/:id/log?since=&limit=` | хвост `session.jsonl` |
 | GET/POST | `/v1/host/config` | отредактированный конфиг + реестр ключей / запись ключа |
 | GET | `/v1/host/models?provider=` | модели активного/указанного провайдера |
-| POST | `/v1/host/sessions/:id/submit` | `{text}` → `202 {turnId}` (картинки пока 422) |
+| POST | `/v1/host/sessions/:id/submit` | `{text, images?}` → `202 {turnId}` (data-URL, ≤10) |
 | GET | `/v1/host/sessions/:id/stream` | SSE, resume по `Last-Event-ID`/`?since=` |
 | POST | `/v1/host/sessions/:id/interrupt` | идемпотентная отмена хода: `{interrupted}` |
 | POST | `/v1/host/sessions/:id/pause` / `resume` | durable-пауза агента (409 без раннера) |

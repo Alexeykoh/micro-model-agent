@@ -72,18 +72,24 @@ describe("POST /v1/host/sessions/:id/submit", () => {
     expect(status).toBe("succeeded");
   });
 
-  it("rejects an empty text and unsupported images", async () => {
+  it("rejects an empty text and malformed images, accepts data URLs", async () => {
     const empty = await httpJson(`${base}/v1/host/sessions/${sessionId}/submit`, {
       method: "POST",
       json: { text: "  " },
     });
     expect(empty.status).toBe(400);
 
-    const images = await httpJson(`${base}/v1/host/sessions/${sessionId}/submit`, {
+    const bad = await httpJson(`${base}/v1/host/sessions/${sessionId}/submit`, {
+      method: "POST",
+      json: { text: "hi", images: ["https://example.com/a.png"] },
+    });
+    expect(bad.status).toBe(422);
+
+    const ok = await httpJson(`${base}/v1/host/sessions/${sessionId}/submit`, {
       method: "POST",
       json: { text: "hi", images: ["data:image/png;base64,AA=="] },
     });
-    expect(images.status).toBe(422);
+    expect(ok.status).toBe(202);
   });
 
   it("404s for an unknown session", async () => {

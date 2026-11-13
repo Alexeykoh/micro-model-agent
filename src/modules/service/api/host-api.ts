@@ -139,6 +139,30 @@ async function writeConfig(
   return true;
 }
 
+/** Максимум картинок и размер одного data-URL (как у web). */
+const MAX_IMAGES = 10;
+const MAX_IMAGE_DATA_URL_BYTES = 70 * 1024 * 1024;
+
+/** Проверка `images`: только `data:image/...`, не больше 10 и 70 МБ каждая. */
+function parseImages(
+  raw: unknown,
+): { ok: true; images: string[] } | { ok: false; error: string } {
+  if (raw === undefined || raw === null) return { ok: true, images: [] };
+  if (!Array.isArray(raw)) return { ok: false, error: "images must be an array" };
+  if (raw.length > MAX_IMAGES) return { ok: false, error: "too many images" };
+  const images: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string" || !item.startsWith("data:image/")) {
+      return { ok: false, error: "invalid image" };
+    }
+    if (Buffer.byteLength(item, "utf8") > MAX_IMAGE_DATA_URL_BYTES) {
+      return { ok: false, error: "image too large" };
+    }
+    images.push(item);
+  }
+  return { ok: true, images };
+}
+
 /** `POST /v1/host/sessions/:id/submit {text}` — интерактивный ход. */
 async function submit(
   req: IncomingMessage,
@@ -153,19 +177,12 @@ async function submit(
     sendProblem(res, problem({ type: "validation", title: "text required", status: 400 }));
     return true;
   }
-  const images = Array.isArray(body.images) ? body.images : [];
-  if (images.length > 0) {
-    sendProblem(
-      res,
-      problem({
-        type: "validation",
-        title: "images are not supported over the host wire yet",
-        status: 422,
-      }),
-    );
+  const parsed = parseImages(body.images);
+  if (!parsed.ok) {
+    sendProblem(res, problem({ type: "validation", title: parsed.error, status: 422 }));
     return true;
   }
-  const created = dispatchInteractive(s, sessionId, text, tenantOf(req, s));
+  const created = dispatchInteractive(s, sessionId, text, tenantOf(req, s), parsed.images);
   if (!created.ok) {
     sendProblem(
       res,

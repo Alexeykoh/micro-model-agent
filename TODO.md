@@ -137,7 +137,8 @@
       **W3b-4 (thin-REPL MVP) закрыт 2026-11-13** веткой
       `feat/daemon-repl`: `mma --daemon <url>` — клиент без локального рантайма,
       рендер событий, вопросы, локальные `/help|/clear|/exit`, остальные
-      команды по wire. Остаток: изображения и паритет рендера/команд.
+      команды по wire. **W3b-5 закрыт 2026-11-13** веткой `feat/host-images`:
+      картинки в host submit. Остаток W3: паритет рендера/команд.
       Дальше — W4…W7
       по [`2026-11-10-monolith-split-design`](./docs/specs/2026-11-10-monolith-split-design.md):
       `LocalHost`/`RemoteHost`, `/v1/host/*`, thin REPL, web-адаптер,
