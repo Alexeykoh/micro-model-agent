@@ -36,6 +36,12 @@ async function startTask(s: AgentServiceState, task: TaskRecord): Promise<void> 
   }
 
   if (task.mode === "interactive") installServicePromptIO(s, task, runner);
+  for (const url of task.images ?? []) {
+    (runner.contextManager as { addPendingImage?: (img: unknown) => void } | undefined)?.addPendingImage?.({
+      type: "image_url",
+      image_url: { url },
+    });
+  }
   logTaskContext(runner, task);
 
   const forwarder = makeServiceForwarder({

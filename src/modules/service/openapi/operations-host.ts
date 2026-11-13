@@ -39,7 +39,14 @@ export const HOST_OPERATIONS: SpecOperation[] = [
     requestBody: {
       description: "Текст хода",
       required: true,
-      schema: { type: "object", required: ["text"], properties: { text: { type: "string" } } },
+      schema: {
+        type: "object",
+        required: ["text"],
+        properties: {
+          text: { type: "string" },
+          images: { type: "array", items: { type: "string" } },
+        },
+      },
     },
     responses: {
       "202": ok("Ход принят (`turnId`)"),

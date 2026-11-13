@@ -180,12 +180,12 @@ describe("RemoteHost", () => {
     host.dispose();
   });
 
-  it("rejects images instead of silently dropping them", async () => {
+  it("forwards images to the daemon submit", async () => {
     const baseUrl = await startDaemon();
     const host = new RemoteHost({ baseUrl, sessionId: "S" });
-    await expect(host.submit("hi", { images: ["data:image/png;base64,AA=="] })).rejects.toThrow(
-      /images are not supported/,
-    );
+    await expect(
+      host.submit("hi", { images: ["data:image/png;base64,AA=="] }),
+    ).resolves.toMatchObject({ jobId: "job_1" });
     host.dispose();
   });
 });

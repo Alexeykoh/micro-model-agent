@@ -58,12 +58,12 @@ export class RemoteHost implements Host {
   }
 
   async submit(text: string, o?: HostBridgeSubmitOptions): Promise<unknown> {
-    if (o?.images?.length) {
-      throw new Error("images are not supported over the host wire yet");
-    }
     const res = await this.request(this.sessionUrl("submit"), {
       method: "POST",
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({
+        text,
+        ...(o?.images?.length ? { images: o.images } : {}),
+      }),
     });
     if (!res.ok) throw new Error(`daemon submit failed: ${res.status} ${await safeText(res)}`);
     this.busy = true;

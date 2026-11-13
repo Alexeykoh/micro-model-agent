@@ -112,9 +112,10 @@ function createAndDispatch(
   sessionId: string,
   params: SubmitParams,
   tenant: TenantContext,
+  images: string[] = [],
 ): { ok: true; task: TaskRecord } | { ok: false } {
   if (queueFull(s, sessionId)) return { ok: false };
-  const task = s.tasks.create(createParams(sessionId, params, tenant));
+  const task = s.tasks.create(createParams(sessionId, params, tenant, images));
   if (s.pool.isBusy(sessionId)) {
     if (!enqueueTask(s, task)) return { ok: false };
   } else {
@@ -123,11 +124,17 @@ function createAndDispatch(
   return { ok: true, task };
 }
 
-function createParams(sessionId: string, p: SubmitParams, tenant: TenantContext): TaskCreateParams {
+function createParams(
+  sessionId: string,
+  p: SubmitParams,
+  tenant: TenantContext,
+  images: string[] = [],
+): TaskCreateParams {
   return {
     sessionId,
     mode: p.mode,
     input: p.input,
+    ...(images.length ? { images } : {}),
     ...(p.output ? { output: p.output } : {}),
     ...(p.toolAllowlist.length ? { toolAllowlist: p.toolAllowlist } : {}),
     ...(p.timeoutMs !== undefined ? { timeoutMs: p.timeoutMs } : {}),
@@ -166,6 +173,7 @@ export function dispatchInteractive(
   sessionId: string,
   text: string,
   tenant: TenantContext,
+  images: string[] = [],
 ): { ok: true; task: TaskRecord } | { ok: false } {
   const params: SubmitParams = {
     input: text,
@@ -173,7 +181,7 @@ export function dispatchInteractive(
     toolAllowlist: [],
     wait: false,
   };
-  return createAndDispatch(s, sessionId, params, tenant);
+  return createAndDispatch(s, sessionId, params, tenant, images);
 }
 
 /** `wait:true` — ждём завершения до `syncWaitMs`, иначе 202 (таймер снимается). */
