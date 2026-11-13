@@ -1,20 +1,16 @@
-// Общие транспортные лимиты без внутренних импортов.
+// Транспортные лимиты web-поверхности (тело, кап очереди).
 //
 // Отдельным модулем, чтобы `state.ts` и `util.ts` оба читали `MAX_BODY_BYTES`,
 // не импортируя друг друга (это ребро было одним из двух webui-циклов).
+import { DEFAULT_MAX_BODY_BYTES, MAX_BODY_BYTES } from "../../runtime/http-body";
+
 /**
  * Максимум байт тела запроса. Должен вмещать до `MAX_IMAGES` прикреплённых
  * изображений: файл до 50 МБ раздувается base64 ≈ до 70 МБ на изображение,
  * итого 10 × 70 МБ ≈ 700 МБ + текст — отсюда 768 МБ.
+ * Источник — нейтральный runtime-слой (его делит и `mma serve`).
  */
-export const MAX_BODY_BYTES = 768 * 1024 * 1024;
-
-/**
- * Кап тела для обычных маршрутов (конфиг, настройки, команды): 1 МБ.
- * Раньше все маршруты делили кап сообщений (768 МБ) — 5 МБ в `/api/config`
- * проходили (аудит §6.3/§6.4).
- */
-export const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
+export { MAX_BODY_BYTES, DEFAULT_MAX_BODY_BYTES } from "../../runtime/http-body";
 
 /** Кап тела для маршрута сообщений: картинки до 50 МБ × 10. */
 export const MESSAGE_MAX_BODY_BYTES = MAX_BODY_BYTES;
@@ -37,5 +33,6 @@ export function bodyCapFor(method: string | undefined, pathname: string): number
  * Максимум сообщений в очереди входящих (`POST /api/message` во время хода).
  * Хвост сверх капа отклоняется `429 queue_full` — очередь не должна расти
  * безгранично, пока пользователь спамит в долгий ход.
+ * Источник — нейтральный runtime-слой (`RunPool` живёт там же).
  */
-export const MAX_QUEUE_LENGTH = 5;
+export { MAX_QUEUE_LENGTH } from "../../runtime/run-pool/limits";

@@ -16,7 +16,7 @@ import { errMsg } from "../../utils/error";
 import { bearerOk, isLoopback, sendProblem } from "./http/respond";
 import { handleApi } from "./http/routes";
 import { problem } from "./runtime/problem";
-import { apiGuard, filterResponse } from "../webui/egress";
+import { apiGuard, filterResponse } from "../../runtime/egress";
 import type { AgentServiceState } from "./state";
 
 /** Поднимает сервер; резолвит базовый URL после успешного bind. */

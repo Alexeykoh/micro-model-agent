@@ -102,6 +102,10 @@ enforcement, сессии на диске, удалённый доступ. По
 | `mma serve` | `src/cli/service-command.ts` → `startAgentService` | в-processс `RunPool` + `SessionRunner` | job API `/v1`, сессии на диске |
 | `mma "prompt"` | `src/cli/main-oneshot.ts` | в-processс `Agent` | локальный запуск |
 
+С 2026-11-13 общий рантайм-слой вынесен в `src/runtime/**` (`RunPool`,
+`egress`, `http-body`, `scrub`, `tool-output`, `net`): `service` и `core`
+больше не импортируют `modules/webui` (гейт `tests/arch/runtime-layer.test.ts`).
+
 Уже готово для wire: `SessionRunner` (`src/core/bootstrap/session-runner.ts`),
 `HostStateSnapshot`/`buildHostState` (`src/core/host-state.ts`), `OutputEvent`
 (`src/output/types.ts`), `PromptIO` (`src/tools/prompt-io.ts`), командный
@@ -356,7 +360,7 @@ Host-контракт для этого не нужен.
 
 | Волна | Назначение |
 |---|---|
-| W0 | Вынести общий рантайм-слой (`RunPool`, egress, body, scrub, `PlanSnapshot`) из `webui` в нейтральный слой; `service` перестаёт зависеть от `webui`. Поведение не меняется. |
+| W0 | Вынести общий рантайм-слой (`RunPool`, egress, body, scrub, `PlanSnapshot`) из `webui` в нейтральный слой; `service` перестаёт зависеть от `webui`. Поведение не меняется. **Закрыт 2026-11-13** (`refactor/runtime-layer-split`, `src/runtime/**`). |
 | W1 | Контракт `Host`: `LocalHost`/`RemoteHost`, транспорт-нейтральная подписка, расширение интерфейса. REPL переходит на `Host` (local by default). |
 | W2 | Интерактивный wire `/v1/host/*`: state, sessions, submit, stream, command, interrupt, pause/resume, answer, history/log, config. Contract-тесты. |
 | W3 | REPL thin-клиент: полный `RemoteHost`, терминальный рендер на клиенте, slash-команды по wire, изображения, локаль. |

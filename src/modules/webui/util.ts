@@ -14,8 +14,13 @@ import { redactContextSecrets } from "../../core/api";
 import type { ClientTz } from "../../core/prompt-facts";
 import { MAX_BODY_BYTES, bodyCapFor } from "./limits";
 import { readEnv } from "../../config/env";
+import { BodyTooLargeError, readBody as readBodyRaw } from "../../runtime/http-body";
 
+// Тело и сетевые предикаты живут в нейтральном runtime-слое (их делят web и
+// service); здесь — реэкспорт, чтобы внешние импорты web не менялись.
 export { MAX_BODY_BYTES } from "./limits";
+export { BodyTooLargeError } from "../../runtime/http-body";
+export { isLoopback, isLoopbackAddress } from "../../runtime/net";
 
 /** Жёсткий кап текста одного сообщения, независимый от капа тела транспорта. */
 export const MAX_MESSAGE_CHARS = 32 * 1024;
@@ -25,30 +30,6 @@ export const MAX_IMAGES = 10;
 
 /** Максимум размера одного `data:image/...` URL: файл до 50 МБ после base64 (≈4/3) + заголовок. */
 export const MAX_IMAGE_DATA_URL_BYTES = 70 * 1024 * 1024;
-
-/** Бросается из readBody при превышении капа (маппится в HTTP 413). */
-export class BodyTooLargeError extends Error {
-  constructor() {
-    super("body too large");
-    this.name = "BodyTooLargeError";
-  }
-}
-
-/** True для loopback-хостов. */
-export function isLoopback(host: string): boolean {
-  return host === "127.0.0.1" || host === "localhost" || host === "::1";
-}
-
-/**
- * True, если адрес peer'а — loopback (`127.0.0.0/8`, `::1`, IPv4-mapped).
- * Это клиент локального оператора, а не внешний API-клиент (спека 2026-10-20).
- */
-export function isLoopbackAddress(addr: string | undefined): boolean {
-  if (!addr) return false;
-  const a = addr.startsWith("::ffff:") ? addr.slice("::ffff:".length) : addr;
-  if (a === "::1" || a === "0:0:0:0:0:0:0:1") return true;
-  return /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(a);
-}
 
 /** JSON-ответ: статус + тело (единственный способ отдать JSON в webui). */
 export function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -61,42 +42,12 @@ export function sendJson(res: ServerResponse, status: number, body: unknown): vo
  * БЕЗ убийства сокета: вызывающий владеет ответом 413 и рвёт запрос только
  * после флаша ответа — иначе клиент получит socket error вместо 413.
  *
- * Кап — минимум из переданного и капа маршрута (`bodyCapFor`): маршруты
- * сообщений принимают большие тела (картинки), остальные — 1 МБ.
+ * Механика чтения — в `runtime/http-body`; здесь добавляется кап маршрута:
+ * сообщения принимают большие тела (картинки), остальные — 1 МБ.
  */
 export function readBody(req: IncomingMessage, cap = MAX_BODY_BYTES): Promise<string> {
   const effectiveCap = Math.min(cap, bodyCapFor(req.method, requestPath(req)));
-  return new Promise((resolve, reject) => {
-    let size = 0;
-    let settled = false;
-    const chunks: Buffer[] = [];
-    // Предпроверка Content-Length: не буферизовать тело, которое заведомо
-    // больше капа (аудит §6.4).
-    const declared = Number(req.headers?.["content-length"] ?? "0");
-    if (Number.isFinite(declared) && declared > effectiveCap) {
-      reject(new BodyTooLargeError());
-      return;
-    }
-    req.on("data", (chunk: Buffer) => {
-      if (settled) return;
-      size += chunk.length;
-      if (size > effectiveCap) {
-        settled = true;
-        reject(new BodyTooLargeError());
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on("end", () => {
-      if (!settled) resolve(Buffer.concat(chunks).toString("utf8"));
-    });
-    req.on("error", (err) => {
-      if (!settled) {
-        settled = true;
-        reject(err);
-      }
-    });
-  });
+  return readBodyRaw(req, effectiveCap);
 }
 
 /** Путь запроса без query-строки. */

@@ -36,7 +36,7 @@ import { handleSetupApi } from "./settings/setup-api";
 import { handleLspDoctorGet, handleLspCheckPost, handleLspCheckChangedPost, handleLspDoctorPost } from "./lsp/lsp-api";
 import { readJsonBody } from "./http/body";
 import { handleUpdatePost } from "./chat/update-api";
-import { apiGuardFor, filterResponse } from "./egress";
+import { apiGuardFor, filterResponse } from "../../runtime/egress";
 import { serveStatic } from "./static-assets";
 import { handleFaviconGet } from "./favicon";
 import { readEnv } from "../../config/env";

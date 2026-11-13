@@ -1,10 +1,11 @@
-// FIFO-очередь входящих сообщений слота сессии.
+// FIFO-очередь сообщений слота сессии.
 //
-// Вынесено из `session-pool.ts`: очередь — самостоятельный шов со своей
-// нумерацией и капом, и пул не должен расти из-за неё (правило 6 AGENTS).
-import type { QueuedMessage } from "../state";
+// Вынесено из `run-pool.ts`: очередь — самостоятельная структура с
+// собственными правилами и своим тестом, а не поле бога-объекта
+// (правило 6 AGENTS).
+import type { QueuedMessage } from "./queued-message";
 
-/** Очередь сообщений слота: FIFO, монотонные id, кап по длине. */
+/** Очередь сообщений слота: FIFO, монотонный id, кап по длине. */
 export class SlotQueue {
   private items: QueuedMessage[] = [];
   private nextId = 1;
@@ -14,7 +15,7 @@ export class SlotQueue {
     return this.items.length;
   }
 
-  /** Все сообщения (для проекций и снимков). */
+  /** Все сообщения (для проекций в состоянии клиента). */
   all(): QueuedMessage[] {
     return this.items;
   }
@@ -43,7 +44,7 @@ export class SlotQueue {
     return this.items.map((m) => m.id);
   }
 
-  /** Убирает сообщение по id; undefined — такого уже нет. */
+  /** Забирает сообщение по id; undefined — такого уже нет. */
   remove(messageId: string): QueuedMessage | undefined {
     const i = this.items.findIndex((m) => m.id === messageId);
     if (i === -1) return undefined;
@@ -75,7 +76,7 @@ export class SlotQueue {
     return this.items.shift();
   }
 
-  /** Очистка очереди. */
+  /** Сброс очереди. */
   clear(): void {
     this.items = [];
   }

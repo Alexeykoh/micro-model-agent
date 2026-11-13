@@ -9,7 +9,7 @@
 import type { NetworkSecurityConfig } from "../../../config/types";
 import type { Diagnostic } from "../../../output/types";
 import { checkOutboundUrl } from "../../security/outbound-policy";
-import { isLoopback } from "../../webui/util";
+import { isLoopback } from "../../../runtime/net";
 
 export interface CallbackPolicy {
   networkConfig?: NetworkSecurityConfig;

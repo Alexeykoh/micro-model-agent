@@ -8,7 +8,8 @@
  */
 import { stripAnsi } from "../../../ui/line-math";
 import { redactContextSecrets } from "../../../core/api";
-import { scrubToolArgs, clipToolOutput } from "../../webui/session/forward";
+import { scrubToolArgs } from "../../../runtime/scrub";
+import { clipToolOutput } from "../../../runtime/tool-output";
 import type { ToolCall, ToolResult } from "../../../tools/types";
 
 /** Передаёт готовые типы событий без `v`/`seq`/`ts` — их добавляет `emit`. */

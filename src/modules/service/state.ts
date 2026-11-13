@@ -12,7 +12,7 @@ import type { AppConfig } from "../../config/types";
 import { readEnv } from "../../config/env";
 import type { SessionManager } from "../session/manager";
 import type { ExecutionModule } from "../execution/module";
-import { RunPool } from "../webui/session/session-pool";
+import { RunPool } from "../../runtime/run-pool/run-pool";
 import { TaskRegistry, type TenantContext } from "./runtime/task-registry";
 import { EnvelopeLog } from "./runtime/envelope";
 

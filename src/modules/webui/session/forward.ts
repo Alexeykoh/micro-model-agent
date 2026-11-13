@@ -15,7 +15,7 @@ import { redactContextSecrets } from "../../../core/api";
 import { sanitizeOutputPlain } from "../../../ui/sanitize-output";
 import type { MetaKind, RetractInfo, StopReason } from "../../../core/types";
 import type { ToolCall, ToolResult } from "../../../tools/types";
-import type { HostStateSnapshot } from "../../../core/host";
+import type { PlanSnapshot } from "../../../core/host";
 import type { TurnSummary } from "../../types";
 import { WEBUI_FORWARD_FLUSH_MS as DEFAULT_FLUSH_MS } from "../../../config/timeouts";
 
@@ -23,42 +23,19 @@ import { WEBUI_FORWARD_FLUSH_MS as DEFAULT_FLUSH_MS } from "../../../config/time
  * Ненулевой снапшот плана в выделенном SSE-событии `plan`. Переиспользует
  * host-контракт, чтобы карточка браузера и сайдбар рендерили одну форму.
  */
-export type PlanSnapshot = NonNullable<HostStateSnapshot["plan"]>;
+export type { PlanSnapshot } from "../../../core/host";
 
 /**
  * Вычищает credential-подобные строки внутри объекта аргументов тула,
  * сохраняя форму (браузер рендерит `args` структурно). Та же точечная
  * редактура, что в {@link scrubError}, — общий скраб покалечил бы обычные аргументы.
- * Сама реализация — в `scrub.ts` (её же использует стор прогонов субагентов).
+ * Сама реализация — в `runtime/scrub` (её же использует стор прогонов субагентов).
  */
-import { scrubToolArgs } from "./scrub";
-export { scrubToolArgs } from "./scrub";
+import { scrubToolArgs } from "../../../runtime/scrub";
+export { scrubToolArgs } from "../../../runtime/scrub";
 
-/**
- * Потуловые капы тела результата для браузера. Длинный вывод (логи bash,
- * чтения файлов, хиты поиска) режется, чтобы одно событие не раздуло сокет
- * и ленту; маркер честно фиксирует обрезку.
- */
-const TOOL_OUTPUT_CAPS: Record<string, number> = {
-  browser: 8000,
-  web_search: 6000,
-  web_fetch: 4000,
-  web_browse: 4000,
-  bash: 16000,
-  read_file: 12000,
-  list_dir: 4000,
-  grep: 4000,
-  glob: 2000,
-  download_file: 2000,
-};
-const DEFAULT_OUTPUT_CAP = 6000;
-
-/** Обрезает вывод тула по капу; маркер показывает исходную длину. */
-export function clipToolOutput(toolName: string, output: string): string {
-  const cap = TOOL_OUTPUT_CAPS[toolName] ?? DEFAULT_OUTPUT_CAP;
-  if (output.length <= cap) return output;
-  return `${output.slice(0, cap)}\n… [truncated from ${output.length.toLocaleString()} chars]`;
-}
+import { clipToolOutput } from "../../../runtime/tool-output";
+export { clipToolOutput } from "../../../runtime/tool-output";
 
 /**
  * SSE-подмножество {@link TurnSummary} — `textLength` клиентам не шлётся.

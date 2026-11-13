@@ -6,7 +6,7 @@
 // last runs per session and broadcasts each event as `subagent` SSE. Parent
 // tool row → run mapping uses `parentToolCallId` from the executor.
 import type { SubagentRunEnd, SubagentRunEvent } from "../../../tools/subagent-runs";
-import { scrubToolArgs } from "./scrub";
+import { scrubToolArgs } from "../../../runtime/scrub";
 import {
   SUBAGENT_RUNS_PER_SESSION,
   SUBAGENT_RUN_MAX_EVENTS,

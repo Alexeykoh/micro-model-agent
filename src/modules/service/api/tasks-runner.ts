@@ -5,7 +5,7 @@
 import type { SessionRunner } from "../../../core/bootstrap/session-runner";
 import { defaultOutputBus } from "../../../output";
 import { errMsg } from "../../../utils/error";
-import { apiGuard } from "../../webui/egress";
+import { apiGuard } from "../../../runtime/egress";
 import { emitEvent } from "../runtime/emit";
 import { makeServiceForwarder } from "../runtime/event-bridge";
 import { newEventId } from "../runtime/ids";

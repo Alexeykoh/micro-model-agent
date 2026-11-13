@@ -118,6 +118,12 @@ export interface HostStateSnapshot {
 }
 
 /**
+ * Ненулевой снапшот плана в выделенном событии `plan` (web SSE и service).
+ * Переиспользует host-контракт, чтобы все клиенты рендерили одну форму.
+ */
+export type PlanSnapshot = NonNullable<HostStateSnapshot["plan"]>;
+
+/**
  * Полная поверхность хоста. `HostBridge` (узкий, для плагинов) — контракт
  * плагинов; `Host` добавляет нужное веб-режиму. Реализации: `Repl`, `WebHost`.
  */

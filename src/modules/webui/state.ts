@@ -5,7 +5,7 @@
 import type { Server, ServerResponse } from "node:http";
 import type { Host } from "../../core/host";
 import type { UsageSnapshot } from "../../core/host-state";
-import { RunPool } from "./session/session-pool";
+import { RunPool } from "../../runtime/run-pool/run-pool";
 import type { SetupDisplay } from "../setup/answers";
 import { SubagentRunStore } from "./session/subagent-runs";
 import { MAX_BODY_BYTES } from "./limits";
