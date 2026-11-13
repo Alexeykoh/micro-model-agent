@@ -20,6 +20,7 @@ import { readJsonBodyOrProblem, sendJson, sendProblem } from "../http/respond";
 import { resolveAnswer } from "../runtime/prompt-io";
 import { problem } from "../runtime/problem";
 import { hostStateOf } from "../runtime/host-state";
+import { runHostCommand } from "../runtime/commands";
 import type { AgentServiceState } from "../state";
 import { openSessionStream } from "./events-api";
 import { handleHostSessions } from "./host-sessions";
@@ -86,6 +87,7 @@ export async function handleHostApi(
     return setPaused(res, s, sessionId, action === "pause");
   }
   if (action === "answer" && req.method === "POST") return answer(req, res, s, sessionId);
+  if (action === "command" && req.method === "POST") return command(req, res, s, sessionId);
   return false;
 }
 
@@ -236,6 +238,24 @@ async function answer(
     return true;
   }
   sendJson(res, 202, { sessionId, status: "running" });
+  return true;
+}
+
+/** `POST /v1/host/sessions/:id/command {line}` — серверное подмножество. */
+async function command(
+  req: IncomingMessage,
+  res: ServerResponse,
+  s: AgentServiceState,
+  sessionId: string,
+): Promise<boolean> {
+  const body = await readJsonBodyOrProblem(req, res, MAX_JSON_BYTES);
+  if (!body) return true;
+  const line = typeof body.line === "string" ? body.line : "";
+  if (!line.trim()) {
+    sendProblem(res, problem({ type: "validation", title: "line required", status: 400 }));
+    return true;
+  }
+  sendJson(res, 200, await runHostCommand(s, sessionId, line));
   return true;
 }
 

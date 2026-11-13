@@ -224,7 +224,10 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     interrupt: () => {},
     // Слеш-команды идут через shared карту хендлеров; вывод стримится по SSE
     // событиями `command` (HTTP POST лишь подтверждает приём).
-    executeCommand: makeWebCommands({ state }),
+    executeCommand: async (line: string) => {
+      await makeWebCommands({ state })(line);
+      return { ok: true, output: [] };
+    },
     getState: (sessionId?: string) =>
       buildHostState(
         {

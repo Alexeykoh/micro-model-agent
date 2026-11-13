@@ -240,6 +240,7 @@ timestamp, windowMs?})`: сравнение за константное врем
 | POST | `/v1/host/sessions/:id/interrupt` | идемпотентная отмена хода: `{interrupted}` |
 | POST | `/v1/host/sessions/:id/pause` / `resume` | durable-пауза агента (409 без раннера) |
 | POST | `/v1/host/sessions/:id/answer` | `{id, answer}` на висящий вопрос |
+| POST | `/v1/host/sessions/:id/command` | `{line}` → `{ok, output[]}`; серверное подмножество команд |
 
 `command`, `history`/`log`, `config`/`models` и CRUD сессий через host wire появятся
 в W3: перенос `CommandServices` и тонкого REPL.

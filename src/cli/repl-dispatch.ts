@@ -12,6 +12,7 @@ import { CommandRegistry, groupCommands } from "../core/commands/catalog";
 import { buildCommandCatalog } from "../core/commands/spec";
 import type { OutputChannel } from "../output";
 import type { SlashCommand } from "./repl-commands";
+import type { HostCommandResult } from "../core/host";
 
 /** Поля `Repl`, нужные диспетчеру команд. */
 export interface ReplDispatchHost {
@@ -35,6 +36,19 @@ export async function executeCommand(host: ReplDispatchHost, line: string): Prom
   const trimmed = line.trim();
   if (!trimmed.startsWith("/")) return;
   await dispatchCommand(host, trimmed);
+}
+
+/** Host-путь: команда не роняет ход, ошибка становится результатом. */
+export async function executeCommandResult(
+  host: ReplDispatchHost,
+  line: string,
+): Promise<HostCommandResult> {
+  try {
+    await executeCommand(host, line);
+    return { ok: true, output: [] };
+  } catch (err) {
+    return { ok: false, output: [], error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 export async function dispatchCommand(host: ReplDispatchHost, input: string): Promise<void> {

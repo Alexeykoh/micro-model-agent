@@ -48,6 +48,7 @@ const ROUTED: Array<[string, string]> = [
   ["POST", "/v1/host/sessions/{sessionId}/pause"],
   ["POST", "/v1/host/sessions/{sessionId}/resume"],
   ["POST", "/v1/host/sessions/{sessionId}/answer"],
+  ["POST", "/v1/host/sessions/{sessionId}/command"],
 ];
 
 function makeDeps(overrides: Partial<ServiceDeps> = {}): ServiceDeps {

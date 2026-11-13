@@ -13,7 +13,7 @@ export interface LineDispatchHost {
   isBusy(): boolean;
   /** Строка попала в историю (даже если она будет проигнорирована). */
   remember(line: string): void;
-  executeCommand(line: string): Promise<void>;
+  executeCommand(line: string): Promise<unknown>;
   afterCommand(): void;
   runAgent(input: string): Promise<void>;
   /** Нужно ли продолжение (незакрытый блок кода/кавычки). */

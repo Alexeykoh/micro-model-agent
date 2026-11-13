@@ -156,6 +156,13 @@ export interface HostConfigWriteResult {
   effects?: readonly string[];
 }
 
+/** Итог slash-команды, исполненной демоном. */
+export interface HostCommandResult {
+  ok: boolean;
+  output: string[];
+  error?: string;
+}
+
 export interface HostEvent {
   type: string;
   ts: number;
@@ -169,8 +176,8 @@ export interface HostEvent {
  * плагинов; `Host` добавляет нужное веб-режиму. Реализации: `Repl`, `WebHost`.
  */
 export interface Host extends HostBridge {
-  /** Выполняет slash-команду (напр. "/status") через общую карту хендлеров. */
-  executeCommand(line: string): Promise<void>;
+  /** Выполняет slash-команду на рантайме (демон — через wire). */
+  executeCommand(line: string): Promise<HostCommandResult>;
   /**
    * Текущее состояние для сайдбара/топбара.
    * @param sessionId конкретная сессия (веб-вкладка); без него — активная.

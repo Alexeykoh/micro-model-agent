@@ -83,8 +83,8 @@ async function startDaemon(opts: { streamScript?: string[] } = {}): Promise<stri
       return;
     }
     if (req.method === "POST" && url.endsWith("/command")) {
-      res.writeHead(404);
-      res.end();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, output: ["done"] }));
       return;
     }
     if (req.method === "POST") {
@@ -154,7 +154,7 @@ describe("RemoteHost", () => {
     await host.resume();
     await host.answer("q1", 0);
     host.interrupt();
-    await expect(host.executeCommand("/status")).rejects.toThrow(/command failed: 404/);
+    await expect(host.executeCommand("/status")).resolves.toEqual({ ok: true, output: ["done"] });
     host.dispose();
   });
 
