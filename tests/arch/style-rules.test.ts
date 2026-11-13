@@ -85,6 +85,10 @@ export const HOST_CASTS: Record<string, string> = {
 
 /** Пустые `catch {}` / `.catch(() => {})` / `.catch(() => null)` на файл: бюджет, не список строк. */
 export const SILENT_CATCHES: Record<string, { count: number; reason: string }> = {
+  "src/modules/service/api/host-misc.ts": {
+    count: 1,
+    reason: "пересборка индекса fire-and-forget: статус 202 уже отдан, ошибка видна в следующем GET /v1/host/state",
+  },
   "src/modules/webui/daemon-module.ts": {
     count: 1,
     reason: "демон недоступен: следующий запрос честно ответит 502, ошибку глотать в SSE незачем",

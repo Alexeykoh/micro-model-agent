@@ -239,6 +239,9 @@ timestamp, windowMs?})`: сравнение за константное врем
 | GET | `/v1/host/git`, `/git/changes`, `/git/diff` | read-only git для панели Changes |
 | GET | `/v1/host/memory` | преференции и записи памяти |
 | GET | `/v1/host/skills` | доступные скиллы |
+| GET | `/v1/host/setup` | display-данные визарда |
+| POST | `/v1/host/index` | пересборка карты проекта |
+| GET | `/v1/host/lsp`, `/lsp/doctor` | флаги и диагностика LSP |
 | POST | `/v1/host/sessions/:id/submit` | `{text, images?}` → `202 {turnId}` (data-URL, ≤10) |
 | GET | `/v1/host/sessions/:id/stream` | SSE, resume по `Last-Event-ID`/`?since=` |
 | POST | `/v1/host/sessions/:id/interrupt` | идемпотентная отмена хода: `{interrupted}` |

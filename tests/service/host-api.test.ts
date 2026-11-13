@@ -172,6 +172,45 @@ describe("host files wire", () => {
   });
 });
 
+describe("host setup/index/lsp wire", () => {
+  it("serves setup display data without modules", async () => {
+    const res = await httpJson(`${base}/v1/host/setup`);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.json.languages)).toBe(true);
+    expect(Array.isArray(res.json.providers)).toBe(true);
+  });
+
+  it("answers 503 for index/lsp without modules", async () => {
+    expect((await httpJson(`${base}/v1/host/index`, { method: "POST" })).status).toBe(503);
+    expect((await httpJson(`${base}/v1/host/lsp`)).status).toBe(503);
+  });
+
+  it("serves index and lsp when modules are wired", async () => {
+    let refreshed = false;
+    state.deps.indexer = {
+      refresh: async () => {
+        refreshed = true;
+      },
+    } as never;
+    state.deps.lsp = {
+      getFlags: () => ({ enabled: true, offline: false }),
+      diagnose: async () => ({ ok: true, files: [] }),
+    } as never;
+
+    expect((await httpJson(`${base}/v1/host/index`, { method: "POST" })).status).toBe(202);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(refreshed).toBe(true);
+
+    const flags = await httpJson(`${base}/v1/host/lsp`);
+    expect(flags.status).toBe(200);
+    expect(flags.json.enabled).toBe(true);
+
+    const doctor = await httpJson(`${base}/v1/host/lsp/doctor`);
+    expect(doctor.status).toBe(200);
+    expect(doctor.json.ok).toBe(true);
+  });
+});
+
 describe("host memory/skills wire", () => {
   it("serves memory and skills when modules are wired", async () => {
     state.deps.memory = {

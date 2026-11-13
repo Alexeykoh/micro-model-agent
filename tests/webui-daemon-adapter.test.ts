@@ -39,6 +39,10 @@ function fakeDaemon() {
     gitChanges: async () => ({ repo: true, files: [] }),
     gitDiff: async () => ({ diff: "", truncated: false }),
     memory: async () => ({ preferences: {}, categories: [] }),
+    setup: async () => ({ required: false, languages: [], providers: [] }),
+    reindex: async () => ({ ok: true }),
+    lspFlags: async () => ({ enabled: true, offline: false }),
+    lspDoctor: async () => ({ ok: true, files: [] }),
     skills: async () => ({ skills: [] }),
     executeCommand: async (line) => {
       calls.commands.push(line);
@@ -87,6 +91,13 @@ describe("web daemon adapter (W4)", () => {
       });
       expect(command.status).toBe(200);
       expect(calls.commands).toEqual(["/status"]);
+
+      const setup = await doFetch(`${base}/api/setup`);
+      expect(setup.status).toBe(200);
+
+      const lsp = await doFetch(`${base}/api/lsp`);
+      expect(lsp.status).toBe(200);
+      expect(((await lsp.json()) as { enabled: boolean }).enabled).toBe(true);
 
       const memory = await doFetch(`${base}/api/memory`);
       expect(memory.status).toBe(200);

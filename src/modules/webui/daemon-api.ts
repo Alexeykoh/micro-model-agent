@@ -46,6 +46,18 @@ const ROUTES: Record<string, Handler> = {
     const provider = reqUrl.searchParams.get("provider") ?? undefined;
     sendJson(res, 200, await host.listModels(provider));
   },
+  "GET /api/setup": async ({ res, host }) => {
+    sendJson(res, 200, await host.setup());
+  },
+  "POST /api/index": async ({ res, host }) => {
+    sendJson(res, 202, await host.reindex());
+  },
+  "GET /api/lsp": async ({ res, host }) => {
+    sendJson(res, 200, await host.lspFlags());
+  },
+  "GET /api/lsp/doctor": async ({ res, host }) => {
+    sendJson(res, 200, await host.lspDoctor());
+  },
   "GET /api/memory": async ({ res, host }) => {
     sendJson(res, 200, await host.memory());
   },
