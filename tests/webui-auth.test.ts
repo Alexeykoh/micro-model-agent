@@ -12,7 +12,8 @@ function makeBridge(): Host {
     isBusy: () => false,
     submit: () => Promise.resolve(),
     interrupt: () => {},
-    getState: () => ({ busy: false }),
+    getState: async () => ({ busy: false }),
+    subscribeEvents: () => () => {},
     executeCommand: () => Promise.resolve(),
   };
 }
@@ -165,7 +166,8 @@ describe("webui auth + limits", () => {
       isBusy: () => false,
       submit: () => Promise.resolve(),
       interrupt: () => {},
-      getState: () => ({ busy: false }),
+      getState: async () => ({ busy: false }),
+    subscribeEvents: () => () => {},
       executeCommand: (line) => {
         lines.push(line);
         return Promise.resolve();

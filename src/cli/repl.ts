@@ -44,11 +44,7 @@ import {
 } from "./repl-dispatch";
 import {
   attachHostBridge as attachReplHostBridge,
-  getState as getReplState,
-  interrupt as interruptRepl,
-  isBusy as isReplBusy,
-  submit as submitToRepl,
-  subscribeOutput as subscribeReplOutput,
+  buildLocalHost,
 } from "./repl-host";
 import { bindSessionOutput, reload as reloadRepl, stop as stopRepl } from "./repl-session";
 import { start as startRepl } from "./repl-start";
@@ -58,7 +54,7 @@ import type { CommandInput } from "./command-context";
 export { createHostBridge };
 
 /** Интерактивный REPL терминала: владеет stdin, гоняет ходы агента, slash-команды. */
-export class Repl implements ReplContext, Host {
+export class Repl implements ReplContext {
   public completer: Completer = new Completer();
   public modelCache: string[] = [];
   /** Boot-снапшот управляемых ключей: `/config reset` откатывает из него. */
@@ -266,32 +262,36 @@ export class Repl implements ReplContext, Host {
     showReplHelp(this, command);
   }
 
-
   /** Host/HostBridge: true, пока агент крутит ход. */
   public isBusy(): boolean {
-    return isReplBusy(this);
+    return this.host.isBusy();
   }
 
   /** Host/HostBridge: сабмит через общий мост (тот же run-путь). */
   public submit(text: string, opts?: HostBridgeSubmitOptions): Promise<unknown> {
-    return submitToRepl(this, text, opts);
+    return this.host.submit(text, opts);
   }
 
   /** Host/HostBridge: прерывание текущего прогона (в idle — no-op). */
   public interrupt(): void {
-    interruptRepl(this);
+    this.host.interrupt();
   }
 
   /** Host/HostBridge: подписка на общую шину вывода. */
   public subscribeOutput(fn: (ev: OutputEvent) => void): () => void {
-    return subscribeReplOutput(fn);
+    return this.host.subscribeOutput?.(fn) ?? (() => {});
   }
 
-  /** Host: снапшот план/сессия/модель для UI-поверхностей. */
-  public getState(): HostStateSnapshot {
-    return getReplState(this);
+  /** Host-поверхность REPL (`LocalHost`); REPL — потребитель контракта (W1). */
+  private localHost?: Host;
+  public get host(): Host {
+    this.localHost ??= buildLocalHost(this);
+    return this.localHost;
   }
 
+  public async getState(sessionId?: string): Promise<HostStateSnapshot> {
+    return this.host.getState(sessionId);
+  }
 
   async start(): Promise<void> {
     await startRepl(this);

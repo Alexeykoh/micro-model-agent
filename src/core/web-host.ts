@@ -1,5 +1,5 @@
 /** Хост для `mma web`: без TTY и LineEditor, поверх тех же deps. */
-import type { Host, HostStateSnapshot } from "./host";
+import type { Host, HostEvent, HostStateSnapshot } from "./host";
 import type { HostBridgeSubmitOptions } from "../modules/types";
 import type { OutputEvent } from "../output/types";
 import { defaultOutputBus } from "../output/bus";
@@ -42,7 +42,14 @@ export class WebHost implements Host {
     await this.deps.executeCommand(trimmed);
   }
 
-  getState(sessionId?: string): HostStateSnapshot {
+  async getState(sessionId?: string): Promise<HostStateSnapshot> {
     return this.deps.getState(sessionId);
+  }
+
+  /** Транспорт-нейтральная подписка: локальная шина отдаёт `HostEvent`. */
+  subscribeEvents(fn: (ev: HostEvent) => void): () => void {
+    return defaultOutputBus.subscribe((ev) => {
+      fn({ type: "output", ts: ev.ts, sessionId: ev.sessionId, source: ev.source, data: ev });
+    });
   }
 }

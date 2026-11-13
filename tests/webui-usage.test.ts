@@ -23,7 +23,8 @@ function fakeHost(input: HostStateInput): Host {
     interrupt: () => {},
     subscribeOutput: () => () => {},
     executeCommand: async () => {},
-    getState: () => buildHostState(input, false),
+    getState: async () => buildHostState(input, false),
+    subscribeEvents: () => () => {},
   };
 }
 

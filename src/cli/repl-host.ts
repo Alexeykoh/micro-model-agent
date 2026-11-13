@@ -7,7 +7,8 @@
  */
 import { createHostBridge } from "../core/host";
 import type { HostBridge, HostBridgeSubmitOptions } from "../modules/types";
-import type { HostStateSnapshot } from "../core/host";
+import type { Host, HostStateSnapshot } from "../core/host";
+import { LocalHost } from "../core/local-host";
 import type { OutputEvent } from "../output/types";
 import { defaultOutputBus } from "../output";
 import { planSnapshotFromModule, adaptActivePlan } from "../core/host-plan";
@@ -27,6 +28,7 @@ export interface ReplHostHost {
   sessionManager?: SessionManager;
   execModule?: ExecutionModule;
   runAgent(input: string): Promise<void>;
+  executeCommand(line: string): Promise<void>;
 }
 
 /** (Пере)аттач плагинного HostBridge. Зовётся в конструкторе и после того, как
@@ -84,8 +86,24 @@ export function subscribeOutput(fn: (ev: OutputEvent) => void): () => void {
   return defaultOutputBus.subscribe(fn);
 }
 
+/**
+ * `Host` для REPL: `LocalHost` поверх того же run-пути и шины вывода.
+ * REPL — потребитель контракта, а не его реализация (split W1).
+ */
+export function buildLocalHost(host: ReplHostHost): Host {
+  const bridge = getHostBridge(host);
+  return new LocalHost({
+    isBusy: () => bridge.isBusy(),
+    submit: (text, opts) => bridge.submit(text, opts),
+    interrupt: () => bridge.interrupt(),
+    subscribeOutput: (fn) => subscribeOutput(fn),
+    executeCommand: (line) => host.executeCommand(line),
+    getState: (sessionId) => getState(host, sessionId),
+  });
+}
+
 /** Host: снапшот план/сессия/модель для UI-поверхностей. */
-export function getState(host: ReplHostHost): HostStateSnapshot {
+export function getState(host: ReplHostHost, _sessionId?: string): HostStateSnapshot {
   const meta = host.sessionManager?.getActiveMeta();
   return {
     busy: host.agentRunning,
