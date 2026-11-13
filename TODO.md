@@ -108,7 +108,7 @@
 > `OutputEvent` нельзя строить Enterprise поверх монолита — любой
 > «enterprise-флаг» в монолите локально пропатчится.
 
-- [ ] **Разделение монолита UI / runtime (волны -1…W7).**
+- [x] **Разделение монолита UI / runtime (волны -1…W7).**
       Спека: [`2026-11-10-monolith-split-design`](./docs/specs/2026-11-10-monolith-split-design.md).
       Статус на 2026-11-13; рабочая линия — `v0_26_0`.
       - [x] **Волна -1** — wire-протокол (`feat/daemon-wire`): `mma serve`, `/v1`+SSE,
@@ -143,10 +143,10 @@
             через job API `/v1/tasks` (+ polling, `remote-tasks.ts`).
       - [x] **W6** — TLS и закалка (`feat/daemon-tls`): `service.tls.*`,
             токен+TLS на не-loopback, `--rotate-token`, фикс образа/`k8s`.
-      - [ ] **W7** — уборка: доки, ре-экспорт-заглушки, реестр долгов,
-            синк `docs/README`/сайта.
+      - [x] **W7** — уборка (`docs/w7-cleanup`): доки, снятые заглушки,
+            реестр долгов, синк `docs/README`.
 
-      **Паритет после волн:** полный каталог команд и рендер thin-REPL
+      **Паритет после волн** — `DEBT(daemon-parity-gaps)`: полный каталог команд и рендер thin-REPL
       (plan/usage/critic/subagent), вставка картинок в thin-REPL, авто-реконнект
       SSE, локаль `X-Mma-Locale`/i18n, e2e-тесты «демон + thin-REPL/web».
 

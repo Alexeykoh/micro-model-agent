@@ -28,7 +28,6 @@ import type { SettingsState } from "./settings-api-write";
 
 export type { McpServerView } from "./settings-api-mcp";
 export { createMcpServer, deleteMcpServer, updateMcpServer, type McpWriteResult } from "./settings-api-mcp-write";
-export { mcpList } from "./settings-api-mcp";
 export { handleLspGet, handleLspUpdate, listLspServers, updateLspServer, type LspServerView, type LspWriteResult } from "./settings-api-lsp";
 export { handleMcpCreate, handleMcpDelete, handleMcpToggle, handleMcpUpdate } from "./settings-api-mcp";
 export { handlePluginToggle, handlePluginsGet, handlePluginsReload, handleSkillsGet } from "./settings-api-plugins";
