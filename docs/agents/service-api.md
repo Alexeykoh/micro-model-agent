@@ -216,3 +216,24 @@ timestamp, windowMs?})`: сравнение за константное врем
 
 `session.jsonl` — журнал сессии (как в других режимах); `usage` per task;
 тенант — из auth-заголовков (`X-Mma-Principal` и т.п.), не из тела/prompt.
+
+---
+
+## Host wire (split W2)
+
+Тонкий UI-клиент (`RemoteHost`, `src/modules/daemon/remote-host.ts`) говорит с демоном
+через отдельное семейство путей. Это не второй рантайм: submit идёт тем же
+`RunPool`/`SessionRunner`-путём, что `POST /v1/sessions/:id/tasks` с `mode: interactive`,
+а stream — тот же SSE-envelope, что `/v1/sessions/:id/events`.
+
+| Метод | Путь | Назначение |
+|---|---|---|
+| GET | `/v1/host/state?session=` | `HostStateSnapshot` + `workspace`/`version`/`protocol` |
+| POST | `/v1/host/sessions/:id/submit` | `{text}` → `202 {turnId}` (картинки пока 422) |
+| GET | `/v1/host/sessions/:id/stream` | SSE, resume по `Last-Event-ID`/`?since=` |
+| POST | `/v1/host/sessions/:id/interrupt` | идемпотентная отмена хода: `{interrupted}` |
+| POST | `/v1/host/sessions/:id/pause` / `resume` | durable-пауза агента (409 без раннера) |
+| POST | `/v1/host/sessions/:id/answer` | `{id, answer}` на висящий вопрос |
+
+`command`, `history`/`log`, `config`/`models` и CRUD сессий через host wire появятся
+в W3: перенос `CommandServices` и тонкого REPL.

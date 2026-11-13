@@ -74,7 +74,7 @@ export interface DocsPageOptions {
  */
 export function renderDocsPage(options: DocsPageOptions): string {
   const ops = options.operations ?? OPERATIONS;
-  const sections = ["ops", "sessions", "tasks", "events"]
+  const sections = ["ops", "sessions", "tasks", "events", "host"]
     .map((tag) => {
       const items = ops.filter((op) => op.tag === tag);
       if (items.length === 0) return "";

@@ -1,5 +1,6 @@
 /**
- * `GET /v1/sessions/:id/events` — поток событий v1 (SSE).
+ * `GET /v1/sessions/:id/events` (job API) и `GET /v1/host/sessions/:id/stream`
+ * (host wire) — один и тот же поток событий v1 (SSE).
  *
  * Envelope'ы монотонны по `seq`; `Last-Event-ID`/`?since=` дают resume из
  * in-memory буфера. Keep-alive `: ping` держит idle-соединение живым под
@@ -33,9 +34,28 @@ export function handleEventsApi(
 
   const sessionId = decodeURIComponent(parts[2]);
   if (!s.deps.sessionManager?.get(sessionId)) {
-    sendProblem(res, problem({ type: "noSession", title: "session not found", status: 404, detail: sessionId }));
+    sendProblem(
+      res,
+      problem({ type: "noSession", title: "session not found", status: 404, detail: sessionId }),
+    );
     return true;
   }
+  openSessionStream(req, res, reqUrl, s, sessionId);
+  return true;
+}
+
+/**
+ * Открывает SSE-поток сессии (общий для job API и host wire).
+ * Вызывающий уже проверил метод и существование сессии.
+ * @returns `false` — превышен кап подписчиков (ответ уже отправлен).
+ */
+export function openSessionStream(
+  req: IncomingMessage,
+  res: ServerResponse,
+  reqUrl: URL,
+  s: AgentServiceState,
+  sessionId: string,
+): boolean {
   if (s.clients.size >= s.maxSseClients) {
     sendProblem(
       res,
@@ -47,7 +67,7 @@ export function handleEventsApi(
         retryAfterMs: 1000,
       }),
     );
-    return true;
+    return false;
   }
 
   res.writeHead(200, {
@@ -101,7 +121,8 @@ function hasSubscribers(s: AgentServiceState, sessionId: string): boolean {
 /** `Last-Event-ID` (заголовок) важнее `?since=`; нечисловое → 0. */
 function parseSince(req: IncomingMessage, reqUrl: URL): number {
   const header = req.headers["last-event-id"];
-  const raw = typeof header === "string" && header.trim() ? header : reqUrl.searchParams.get("since");
+  const raw =
+    typeof header === "string" && header.trim() ? header : reqUrl.searchParams.get("since");
   const n = raw ? Number(raw) : 0;
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
 }

@@ -7,6 +7,7 @@
  * `docs/agents/service-api.md`; при расхождении правьте здесь и в доках.
  */
 import { ref } from "./schemas";
+import { HOST_OPERATIONS } from "./operations-host";
 import {
   ok,
   PROBLEM_RESPONSES,
@@ -272,6 +273,8 @@ export const OPERATIONS: SpecOperation[] = [
       ...PROBLEM_RESPONSES,
     },
   },
+  // Host wire (split W2) — отдельным файлом (правило 6).
+  ...HOST_OPERATIONS,
 ];
 
 /** Уникальные operationId — дубли сломали бы генерацию клиентов. */
