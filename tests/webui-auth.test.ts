@@ -16,6 +16,7 @@ function makeBridge(): Host {
     subscribeEvents: () => () => {},
     getConfig: async () => ({ config: {}, version: 0 }),
     listModels: async () => ({ models: [] }),
+    setConfig: async () => ({ ok: true, persisted: true }),
     executeCommand: () => Promise.resolve(),
   };
 }
@@ -172,6 +173,7 @@ describe("webui auth + limits", () => {
     subscribeEvents: () => () => {},
     getConfig: async () => ({ config: {}, version: 0 }),
     listModels: async () => ({ models: [] }),
+    setConfig: async () => ({ ok: true, persisted: true }),
       executeCommand: (line) => {
         lines.push(line);
         return Promise.resolve();

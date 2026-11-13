@@ -32,6 +32,11 @@ async function startDaemon(opts: { streamScript?: string[] } = {}): Promise<stri
       res.end(JSON.stringify({ state: { busy: false, sessionId: "S" } }));
       return;
     }
+    if (req.method === "POST" && url === "/v1/host/config") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, persisted: true }));
+      return;
+    }
     if (req.method === "GET" && url === "/v1/host/config") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ config: {}, version: 3, registry: [] }));
@@ -158,6 +163,8 @@ describe("RemoteHost", () => {
     const host = new RemoteHost({ baseUrl, sessionId: "S" });
     await expect(host.getConfig()).resolves.toMatchObject({ version: 3 });
     await expect(host.listModels()).resolves.toEqual({ models: ["m1"] });
+    await expect(host.setConfig("ui.themeMode", "dark")).resolves.toMatchObject({ ok: true });
+    expect(seen).toContain("POST /v1/host/config");
     host.dispose();
   });
 

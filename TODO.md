@@ -129,7 +129,9 @@
       `feat/host-read`: сессии/history/log через `/v1/host/*` и методы `Host`.
       **W3b-1 закрыт 2026-11-13** веткой `feat/host-config`: `config`/`models`
       через host wire, реестр конфига и кеш моделей в `src/runtime/`.
-      Остаток W3b: thin-REPL, `command`, `POST config`, изображения. Дальше — W4…W7
+      **W3b-2 закрыт 2026-11-13** веткой `feat/host-config-write`: `POST
+      /v1/host/config` через общий `applyConfigWrite`.
+      Остаток W3b: thin-REPL, `command`, изображения. Дальше — W4…W7
       по [`2026-11-10-monolith-split-design`](./docs/specs/2026-11-10-monolith-split-design.md):
       `LocalHost`/`RemoteHost`, `/v1/host/*`, thin REPL, web-адаптер,
       one-shot `--daemon`, TLS. Браузер уже тонкий; `mma web` пока in-process

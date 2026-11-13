@@ -27,6 +27,7 @@ function fakeHost(input: HostStateInput): Host {
     subscribeEvents: () => () => {},
     getConfig: async () => ({ config: {}, version: 0 }),
     listModels: async () => ({ models: [] }),
+    setConfig: async () => ({ ok: true, persisted: true }),
   };
 }
 
