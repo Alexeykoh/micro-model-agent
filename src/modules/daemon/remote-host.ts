@@ -7,6 +7,8 @@
  */
 import type { Host, HostEvent, HostStateSnapshot } from "../../core/host";
 import type { HostBridgeSubmitOptions } from "../types";
+import type { SessionLogEntry } from "../session/log-types";
+import type { SessionMessage, SessionMeta } from "../session/types";
 
 /** Параметры подключения: адрес демона, сессия, bearer-токен. */
 export interface RemoteHostOptions {
@@ -83,6 +85,50 @@ export class RemoteHost implements Host {
       body: JSON.stringify({ line }),
     });
     if (!res.ok) throw new Error(`daemon command failed: ${res.status} ${await safeText(res)}`);
+  }
+
+  async listSessions(): Promise<SessionMeta[]> {
+    const res = await this.request(`${this.base}/v1/host/sessions`);
+    if (!res.ok) throw new Error(`daemon sessions failed: ${res.status} ${await safeText(res)}`);
+    const body = (await res.json()) as { sessions?: SessionMeta[] };
+    return body.sessions ?? [];
+  }
+
+  async createSession(name?: string): Promise<SessionMeta> {
+    const res = await this.request(`${this.base}/v1/host/sessions`, {
+      method: "POST",
+      body: JSON.stringify(name !== undefined ? { name } : {}),
+    });
+    if (!res.ok) throw new Error(`daemon create session failed: ${res.status} ${await safeText(res)}`);
+    return (await res.json()) as SessionMeta;
+  }
+
+  async deleteSession(sessionId: string): Promise<void> {
+    const res = await this.request(`${this.base}/v1/host/sessions/${encodeURIComponent(sessionId)}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) throw new Error(`daemon delete session failed: ${res.status} ${await safeText(res)}`);
+  }
+
+  async getHistory(sessionId: string): Promise<SessionMessage[]> {
+    const res = await this.request(`${this.sessionUrl("history")}`);
+    if (!res.ok) throw new Error(`daemon history failed: ${res.status} ${await safeText(res)}`);
+    const body = (await res.json()) as { messages?: SessionMessage[] };
+    return body.messages ?? [];
+  }
+
+  async getLog(
+    sessionId: string,
+    opts: { since?: string; limit?: number } = {},
+  ): Promise<SessionLogEntry[]> {
+    const query = new URLSearchParams();
+    if (opts.since !== undefined) query.set("since", opts.since);
+    if (opts.limit !== undefined) query.set("limit", String(opts.limit));
+    const suffix = query.size ? `?${query.toString()}` : "";
+    const res = await this.request(`${this.sessionUrl("log")}${suffix}`);
+    if (!res.ok) throw new Error(`daemon log failed: ${res.status} ${await safeText(res)}`);
+    const body = (await res.json()) as { entries?: SessionLogEntry[] };
+    return body.entries ?? [];
   }
 
   subscribeEvents(fn: (ev: HostEvent) => void): () => void {

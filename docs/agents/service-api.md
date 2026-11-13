@@ -229,6 +229,10 @@ timestamp, windowMs?})`: сравнение за константное врем
 | Метод | Путь | Назначение |
 |---|---|---|
 | GET | `/v1/host/state?session=` | `HostStateSnapshot` + `workspace`/`version`/`protocol` |
+| GET/POST | `/v1/host/sessions` | список / создание сессии |
+| DELETE | `/v1/host/sessions/:id` | удаление простаивающей сессии (409 при busy) |
+| GET | `/v1/host/sessions/:id/history` | история диалога |
+| GET | `/v1/host/sessions/:id/log?since=&limit=` | хвост `session.jsonl` |
 | POST | `/v1/host/sessions/:id/submit` | `{text}` → `202 {turnId}` (картинки пока 422) |
 | GET | `/v1/host/sessions/:id/stream` | SSE, resume по `Last-Event-ID`/`?since=` |
 | POST | `/v1/host/sessions/:id/interrupt` | идемпотентная отмена хода: `{interrupted}` |

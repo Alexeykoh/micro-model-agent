@@ -17,6 +17,7 @@ import { problem } from "../runtime/problem";
 import { hostStateOf } from "../runtime/host-state";
 import type { AgentServiceState } from "../state";
 import { openSessionStream } from "./events-api";
+import { handleHostSessions } from "./host-sessions";
 import { interruptSession } from "./tasks-control";
 import { MAX_JSON_BYTES, tenantOf } from "./tasks-job";
 import { dispatchInteractive } from "./tasks-submit";
@@ -34,7 +35,15 @@ export async function handleHostApi(
   if (parts.length === 3 && parts[2] === "state" && req.method === "GET") {
     return stateRoute(res, s, reqUrl);
   }
-  if (parts.length !== 5 || parts[2] !== "sessions") return false;
+  if (parts[2] !== "sessions") return false;
+  if (
+    parts.length === 3 ||
+    (parts.length === 4 && req.method === "DELETE") ||
+    (parts.length === 5 && (parts[4] === "history" || parts[4] === "log"))
+  ) {
+    return handleHostSessions(req, res, reqUrl, s, parts);
+  }
+  if (parts.length !== 5) return false;
 
   const sessionId = decodeURIComponent(parts[3]);
   const action = parts[4];

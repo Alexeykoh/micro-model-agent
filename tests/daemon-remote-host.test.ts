@@ -32,6 +32,31 @@ async function startDaemon(opts: { streamScript?: string[] } = {}): Promise<stri
       res.end(JSON.stringify({ state: { busy: false, sessionId: "S" } }));
       return;
     }
+    if (req.method === "GET" && url === "/v1/host/sessions") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ sessions: [{ id: "S" }] }));
+      return;
+    }
+    if (req.method === "POST" && url === "/v1/host/sessions") {
+      res.writeHead(201, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ id: "S2", name: "x" }));
+      return;
+    }
+    if (req.method === "DELETE" && url.startsWith("/v1/host/sessions/")) {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    if (req.method === "GET" && url.split("?")[0].endsWith("/history")) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ messages: [{ role: "user", content: "hi" }] }));
+      return;
+    }
+    if (req.method === "GET" && url.split("?")[0].endsWith("/log")) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ entries: [{ type: "usage" }] }));
+      return;
+    }
     if (req.method === "GET" && url.endsWith("/stream")) {
       res.writeHead(200, { "Content-Type": "text/event-stream" });
       for (const frame of opts.streamScript ?? []) res.write(frame);
@@ -115,6 +140,18 @@ describe("RemoteHost", () => {
     await host.answer("q1", 0);
     host.interrupt();
     await expect(host.executeCommand("/status")).rejects.toThrow(/command failed: 404/);
+    host.dispose();
+  });
+
+  it("reads sessions, history and log over wire", async () => {
+    const baseUrl = await startDaemon();
+    const host = new RemoteHost({ baseUrl, sessionId: "S" });
+    await expect(host.listSessions()).resolves.toEqual([{ id: "S" }]);
+    await expect(host.createSession("x")).resolves.toMatchObject({ id: "S2" });
+    await host.deleteSession("S");
+    await expect(host.getHistory("S")).resolves.toEqual([{ role: "user", content: "hi" }]);
+    await expect(host.getLog("S", { limit: 5 })).resolves.toEqual([{ type: "usage" }]);
+    expect(seen).toContain("DELETE /v1/host/sessions/S");
     host.dispose();
   });
 

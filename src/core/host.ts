@@ -6,6 +6,8 @@ import type { ContextBreakdown, ContextQualityBreakdown, LlmSpeedSnapshot } from
 // Только тип (не исполнение): снимок собирает web-обвязка из `tools/git-core`
 // (спека git-workflow §2: ядро git не дёргает; тут контракт поля).
 import type { GitSnapshot } from "../tools/git-core";
+import type { SessionLogEntry } from "../modules/session/log-types";
+import type { SessionMessage, SessionMeta } from "../modules/session/types";
 
 /**
  * Статус шага плана для хоста. `skipped` не входит в контракт —
@@ -154,6 +156,13 @@ export interface Host extends HostBridge {
   getState(sessionId?: string): Promise<HostStateSnapshot>;
   /** Транспорт-нейтральная подписка на события хоста (W1). */
   subscribeEvents(fn: (ev: HostEvent) => void): () => void;
+
+  // Сессионная read-поверхность (W3): тонкий клиент не держит историю локально.
+  listSessions(): Promise<SessionMeta[]>;
+  createSession(name?: string): Promise<SessionMeta>;
+  deleteSession(sessionId: string): Promise<void>;
+  getHistory(sessionId: string): Promise<SessionMessage[]>;
+  getLog(sessionId: string, opts?: { since?: string; limit?: number }): Promise<SessionLogEntry[]>;
 }
 
 /** Опции фабрики хост-моста: занятость, картинки, запуск и прерывание. */
