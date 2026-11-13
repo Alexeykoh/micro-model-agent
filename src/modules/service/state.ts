@@ -16,6 +16,7 @@ import type { SkillsModule } from "../skills/module";
 import type { IndexerModule } from "../indexer/module";
 import type { LspModule } from "../lsp/module";
 import type { PluginManager } from "../plugins/manager";
+import type { UpdaterModule } from "../updater/module";
 import type { ExecutionModule } from "../execution/module";
 import { RunPool } from "../../runtime/run-pool/run-pool";
 import { makeModelCache, type ModelCache } from "../../runtime/model-cache";
@@ -40,6 +41,8 @@ export interface ServiceDeps {
   lsp?: LspModule;
   /** Плагины (панель Plugins). */
   plugins?: PluginManager;
+  /** Самообновление (панель update). */
+  updater?: UpdaterModule;
   configDir?: string;
   baseDir?: string;
   /** Фабрика per-session раннеров из bootstrap (параллелизм слотов). */
@@ -123,6 +126,8 @@ export interface AgentServiceState {
   host: string;
   port: number;
   token?: string;
+  /** Доступный апдейт; заполняет `publishUpdateNotice` апдейтера. */
+  updateAvailable?: { current: string; latest: string };
   /**
    * Тенант процесса (silo): авторитетный источник для authz. Заголовок
    * `X-Mma-Tenant` только сверяется с ним (см. `tenantOk` в server).

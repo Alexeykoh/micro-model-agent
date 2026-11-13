@@ -19,6 +19,7 @@ export function hostStateOf(s: AgentServiceState, sessionId?: string): HostState
       ...(s.deps.sessionManager ? { sessionManager: s.deps.sessionManager } : {}),
       ...(execModule ? { execModule } : {}),
       ...(s.deps.baseDir ? { workspace: s.deps.baseDir } : {}),
+      ...(s.updateAvailable ? { updateAvailable: s.updateAvailable } : {}),
       ...(active ? { sessionId: active } : {}),
     },
     s.pool.isBusy(active ?? null),

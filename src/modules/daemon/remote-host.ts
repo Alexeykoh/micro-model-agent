@@ -220,6 +220,12 @@ export class RemoteHost implements Host {
     return res.json();
   }
 
+  async installUpdate(): Promise<unknown> {
+    const res = await this.request(`${this.base}/v1/host/update`, { method: "POST" });
+    if (!res.ok) throw new Error(`daemon update failed: ${res.status} ${await safeText(res)}`);
+    return res.json();
+  }
+
   async getConfig(): Promise<HostConfigSnapshot> {
     const res = await this.request(`${this.base}/v1/host/config`);
     if (!res.ok) throw new Error(`daemon config failed: ${res.status} ${await safeText(res)}`);
@@ -282,8 +288,6 @@ export class RemoteHost implements Host {
     if (this.opts.token) headers.Authorization = `Bearer ${this.opts.token}`;
     return fetch(url, { ...init, headers, signal: init.signal ?? AbortSignal.timeout(30_000) });
   }
-
-
 }
 
 async function safeText(res: Response): Promise<string> {

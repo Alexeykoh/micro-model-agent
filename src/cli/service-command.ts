@@ -7,6 +7,9 @@ import { getDefaultChannel } from "../output";
 import { t } from "../i18n/index";
 import pc from "picocolors";
 import { startAgentService } from "../modules/service/module";
+import { publishUpdateNotice } from "../modules/service/api/host-update";
+import { busLogger, createUpdater } from "../modules/updater/factory";
+import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { CONFIG_FILE, persistConfigChange } from "../config/persist";
 
@@ -87,6 +90,15 @@ export async function runServe(opts: ServeCommandOptions): Promise<void> {
   });
 
   await svc.url;
+  // Самообновление живёт в демоне: панель update в daemon-web, SSE `update`
+  // в активных сессиях и общий `updateAvailable` в снапшоте состояния.
+  const updater = createUpdater({
+    config: config.updater,
+    entryPath: fileURLToPath(import.meta.url),
+    logger: busLogger(),
+    onNotice: (notice) => publishUpdateNotice(svc.state, notice),
+  });
+  if (updater) svc.state.deps.updater = updater;
   const channel = getDefaultChannel();
   const where = { host: svc.state.host, port: String(svc.state.port) };
   channel.writeLine(t("cli.serve_started", { ...where, dir: baseDir }));
@@ -99,6 +111,7 @@ export async function runServe(opts: ServeCommandOptions): Promise<void> {
       process.off("SIGINT", shutdown);
       process.off("SIGTERM", shutdown);
       svc.stop();
+      updater?.stop();
       agent.shutdown();
       resolve();
     };

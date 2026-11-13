@@ -58,5 +58,20 @@ export const HOST_MISC_OPERATIONS: SpecOperation[] = [
     tag: "host",
     summary: "Плагины, отказы загрузки и MCP-серверы",
     responses: { "200": ok("Плагины"), "503": ok("Плагины недоступны", "ProblemDetails"), ...PROBLEM_RESPONSES },
+  },  {
+    method: "get",
+    path: "/v1/host/update",
+    operationId: "hostUpdateStatus",
+    tag: "host",
+    summary: "Текущая версия и доступный апдейт",
+    responses: { "200": ok("Версия и флаг апдейта"), "503": ok("Апдейтер недоступен", "ProblemDetails"), ...PROBLEM_RESPONSES },
+  },
+  {
+    method: "post",
+    path: "/v1/host/update",
+    operationId: "hostUpdateInstall",
+    tag: "host",
+    summary: "Установить доступный апдейт",
+    responses: { "200": ok("Итог установки"), "500": ok("Ошибка установки", "ProblemDetails"), "503": ok("Апдейтер недоступен", "ProblemDetails"), ...PROBLEM_RESPONSES },
   },
 ];

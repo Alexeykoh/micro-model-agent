@@ -44,6 +44,7 @@ function fakeDaemon() {
     lspFlags: async () => ({ enabled: true, offline: false }),
     lspDoctor: async () => ({ ok: true, files: [] }),
     plugins: async () => ({ plugins: [], failures: [], mcp: [] }),
+    installUpdate: async () => ({ ok: true, installed: "0.26.0" }),
     skills: async () => ({ skills: [] }),
     executeCommand: async (line) => {
       calls.commands.push(line);
@@ -95,6 +96,11 @@ describe("web daemon adapter (W4)", () => {
 
       const plugins = await doFetch(`${base}/api/plugins`);
       expect(plugins.status).toBe(200);
+
+      const upd = await doFetch(`${base}/api/update`, { method: "POST", body: "{}" });
+      expect(((await upd.json()) as { installed: string }).installed).toBe("0.26.0");
+
+
 
       const setup = await doFetch(`${base}/api/setup`);
       expect(setup.status).toBe(200);

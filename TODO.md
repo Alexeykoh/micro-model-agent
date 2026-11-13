@@ -137,8 +137,8 @@
       - [x] **W4b-2b** — Memory/Skills (`feat/web-memory`): `/v1/host/{memory,skills}`.
       - [x] **W4b-2c** — Setup/Index/LSP (`feat/web-misc`): `/v1/host/{setup,index,lsp,lsp/doctor}`.
       - [x] **W4b-3** — Plugins (`feat/web-plugins`): `/v1/host/plugins`, `runtime/mcp-view.ts`.
-      - [ ] **W4b-4** — update-панель: updater в `mma serve` + `/v1/host/update`
-            (сейчас `501` в daemon-режиме).
+      - [x] **W4b-4** — update-панель (`feat/web-update`): updater в `mma serve`,
+            `/v1/host/update`, SSE-событие `update`.
       - [ ] **W5** — one-shot `mma "prompt" --daemon` через job API `/v1/tasks`
             (сейчас `--daemon` запускает thin-REPL и игнорирует промпт).
       - [ ] **W6** — TLS и удалённая закалка: in-app TLS, токен+TLS на не-loopback,
