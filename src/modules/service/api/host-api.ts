@@ -28,6 +28,7 @@ import { handleHostFiles } from "./host-files";
 import { handleHostGit } from "./host-git";
 import { handleHostMemory, handleHostSkills } from "./host-settings";
 import { handleHostIndex, handleHostLsp, handleHostSetup } from "./host-misc";
+import { handleHostPlugins } from "./host-plugins";
 import { interruptSession } from "./tasks-control";
 import { MAX_JSON_BYTES, tenantOf } from "./tasks-job";
 import { dispatchInteractive } from "./tasks-submit";
@@ -71,6 +72,7 @@ export async function handleHostApi(
   if (parts[2] === "setup") return handleHostSetup(req, res, s, parts);
   if (parts[2] === "index") return handleHostIndex(req, res, s, parts);
   if (parts[2] === "lsp") return handleHostLsp(req, res, s, parts);
+  if (parts[2] === "plugins") return handleHostPlugins(req, res, s, parts);
   if (parts[2] !== "sessions") return false;
   if (
     parts.length === 3 ||

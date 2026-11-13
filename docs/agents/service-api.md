@@ -242,6 +242,7 @@ timestamp, windowMs?})`: сравнение за константное врем
 | GET | `/v1/host/setup` | display-данные визарда |
 | POST | `/v1/host/index` | пересборка карты проекта |
 | GET | `/v1/host/lsp`, `/lsp/doctor` | флаги и диагностика LSP |
+| GET | `/v1/host/plugins` | плагины, failures, MCP-серверы |
 | POST | `/v1/host/sessions/:id/submit` | `{text, images?}` → `202 {turnId}` (data-URL, ≤10) |
 | GET | `/v1/host/sessions/:id/stream` | SSE, resume по `Last-Event-ID`/`?since=` |
 | POST | `/v1/host/sessions/:id/interrupt` | идемпотентная отмена хода: `{interrupted}` |

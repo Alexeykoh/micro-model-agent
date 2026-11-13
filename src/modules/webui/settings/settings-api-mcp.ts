@@ -5,7 +5,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { requestError, sendJson } from "../util";
 import { readJsonBody } from "../http/body";
-import type { MCPServerConfigEntry } from "../../../config/types";
 import {
   createMcpServer,
   deleteMcpServer,
@@ -19,45 +18,13 @@ import {
   type SettingsState,
 } from "./settings-api-write";
 
-/** MCP-серверы проекта в форме для UI настроек. */
-export interface McpServerView {
-  id: string;
-  name: string;
-  status: string;
-  transport?: string;
-  /** Несекретные поля соединения (безопасно эхом для префилла правки). */
-  command?: string;
-  url?: string;
-  args?: string[];
-  timeout?: number;
-  enabled?: boolean;
-  /** Секрет-носящие мапы отдаются только именами ключей, никогда значениями. */
-  envKeys: string[];
-  headerKeys: string[];
-}
+export type { McpServerView } from "../../../runtime/mcp-view";
+import { mcpServersView } from "../../../runtime/mcp-view";
+import type { AppConfig } from "../../../config/types";
 
-/** Опциональные несекретные поля MCP для вида (держат гейт сложности). */
-function mcpViewOptionals(cfg: MCPServerConfigEntry): Partial<McpServerView> {
-  const out: Partial<McpServerView> = {};
-  if (cfg.transport) out.transport = cfg.transport;
-  if (cfg.command) out.command = cfg.command;
-  if (cfg.url) out.url = cfg.url;
-  if (cfg.args) out.args = [...cfg.args];
-  if (cfg.timeout !== undefined) out.timeout = cfg.timeout;
-  if (cfg.enabled !== undefined) out.enabled = cfg.enabled;
-  return out;
-}
-
-export function mcpList(s: SettingsState): McpServerView[] {
-  const servers = s.config?.mcpServers ?? {};
-  return Object.entries(servers).map(([key, cfg]) => ({
-    id: key,
-    name: cfg.name || key,
-    status: cfg.enabled === false ? "disabled" : "enabled",
-    envKeys: cfg.env ? Object.keys(cfg.env) : [],
-    headerKeys: cfg.headers ? Object.keys(cfg.headers) : [],
-    ...mcpViewOptionals(cfg),
-  }));
+/** Список MCP-серверов для web-состояния (обёртка над runtime-видом). */
+export function mcpList(s: { config?: AppConfig }): import("../../../runtime/mcp-view").McpServerView[] {
+  return mcpServersView(s.config);
 }
 
 /**
