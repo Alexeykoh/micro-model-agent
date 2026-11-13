@@ -158,6 +158,17 @@ describe("host sessions surface", () => {
   });
 });
 
+describe("host files wire", () => {
+  it("lists a workspace directory and rejects escapes", async () => {
+    const ok = await httpJson(`${base}/v1/host/files`);
+    expect(ok.status).toBe(200);
+    expect(Array.isArray(ok.json.entries)).toBe(true);
+
+    const traversal = await httpJson(`${base}/v1/host/files?path=${encodeURIComponent("..")}`);
+    expect(traversal.status).toBe(403);
+  });
+});
+
 describe("host command wire", () => {
   it("runs supported commands and reports unsupported ones honestly", async () => {
     const status = await httpJson(`${base}/v1/host/sessions/${sessionId}/command`, {
