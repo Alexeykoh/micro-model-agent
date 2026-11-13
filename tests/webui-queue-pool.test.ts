@@ -1,7 +1,7 @@
 // Queue identity + reordering in `RunPool`: cancel/start target a stable id,
 // not a position that shifts when the head drains.
 import { describe, it, expect } from "vitest";
-import { RunPool } from "../src/modules/webui/session/session-pool";
+import { RunPool } from "../src/runtime/run-pool/run-pool";
 
 function fill(pool: RunPool): { a: string; b: string; c: string } {
   const a = pool.enqueue("A", "a", [], "A");

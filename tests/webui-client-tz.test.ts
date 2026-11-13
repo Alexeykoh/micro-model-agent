@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { parseMessageBody } from "../src/modules/webui/util";
-import { RunPool } from "../src/modules/webui/session/session-pool";
+import { RunPool } from "../src/runtime/run-pool/run-pool";
 import { applyClientTz } from "../src/core/system-prompt";
 
 const TZ = { timeZone: "Asia/Yekaterinburg", utcOffset: "+05:00" };

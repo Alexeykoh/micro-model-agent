@@ -1,5 +1,5 @@
 /**
- * Per-session слоты прогонов для настоящего параллелизма (`mma web`).
+ * Per-session слоты прогонов для настоящего параллелизма (`mma web`, `mma serve`).
  *
  * Один `Agent` — не reentrant, контекст/сессия/трекер — одни на процесс,
  * поэтому каждая одновременно бегущая сессия ходит своим раннером
@@ -13,17 +13,11 @@
  * в одном каталоге): параллельные правки одних файлов могут конфликтовать —
  * worktree-изоляции пока нет.
  */
-import type { SessionRunner } from "../../../core/bootstrap/session-runner";
-import type { ClientTz } from "../../../core/prompt-facts";
-import type { QueuedMessage } from "../state";
-import { MAX_QUEUE_LENGTH } from "../limits";
-import {
-  startSweeper,
-  stopSweeper,
-  sweepIfDue,
-  sweepRunners,
-  type SweepState,
-} from "./pool-sweep";
+import type { SessionRunner } from "../../core/bootstrap/session-runner";
+import type { ClientTz } from "../../core/prompt-facts";
+import type { QueuedMessage } from "./queued-message";
+import { MAX_QUEUE_LENGTH } from "./limits";
+import { startSweeper, stopSweeper, sweepIfDue, sweepRunners, type SweepState } from "./pool-sweep";
 
 export { RUNNER_IDLE_MS, RUNNER_LRU_MAX } from "./pool-sweep";
 import { SlotQueue } from "./run-queue";
@@ -123,7 +117,6 @@ export class RunPool {
     return totalQueuedOf(this.slots);
   }
 
-
   /**
    * Атомарно резервирует слот, возвращает токен владения.
    * Звать СИНХРОННО в том же тике, что пречек busy (см. handleMessagePost).
@@ -157,7 +150,12 @@ export class RunPool {
    * Кладёт сообщение в очередь слота. Сообщение с id или null, если полна.
    * Вызывать только когда слот занят (свободный идёт сразу в ход).
    */
-  enqueue(id: string | null, text: string, images: string[], sessionId: string | null): QueuedMessage | null {
+  enqueue(
+    id: string | null,
+    text: string,
+    images: string[],
+    sessionId: string | null,
+  ): QueuedMessage | null {
     return this.slotFor(id).queue.enqueue(text, images, sessionId, this.maxQueue);
   }
 
@@ -259,7 +257,6 @@ export class RunPool {
     this.lastSweepAt = now;
     return count;
   }
-
 
   /** Id закешированных раннеров (для reconfigure). */
   runnerIds(): string[] {

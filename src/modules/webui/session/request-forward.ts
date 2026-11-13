@@ -15,7 +15,7 @@ import {
 } from "../../../llm/request-snapshot";
 import type { SessionLogEntry } from "../../session/store";
 import { broadcast, type SseTransport } from "../state";
-import type { RunPool } from "./session-pool";
+import type { RunPool } from "../../../runtime/run-pool/run-pool";
 
 /** Минимальное состояние, нужное мосту (тесты дают заглушку). */
 export interface RequestForwardState extends SseTransport {

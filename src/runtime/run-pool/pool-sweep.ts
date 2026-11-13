@@ -1,22 +1,23 @@
 /**
- * Вытеснение раннеров пула `mma web` (правило ≤300 строк).
+ * Вытеснение раннеров пула (правило ≤300 строк).
  *
- * Вынесено из `session-pool.ts`: idle/LRU-чистка, периодический sweep и
- * освобождение вклада раннера. Пул передаёт геттеры/сеттеры своего состояния.
+ * Вынесено из `run-pool.ts`: idle/LRU-чистка, периодический sweep и
+ * самостоятельное гашение таймера. Не держит состояний — мутабельный
+ * `SweepState` передаёт владелец пула.
  */
-import type { SessionRunner } from "../../../core/bootstrap/session-runner";
+import type { SessionRunner } from "../../core/bootstrap/session-runner";
 import { selectEvictions } from "./runner-gc";
 
-/** Простой раннер без ходов (тесты). */
+/** Простой раннера для вытеснения (мс). */
 export const RUNNER_IDLE_MS = 10 * 60_000;
 
-/** Сколько раннеров держим одновременно (LRU). */
+/** Сколько раннеров держим максимум (LRU). */
 export const RUNNER_LRU_MAX = 8;
 
 /** Как часто чистим простаивающие раннеры. */
 export const SWEEP_INTERVAL_MS = 60_000;
 
-/** Состояние пула, которое видит чистка. */
+/** Входы пула, которые нужны для чистки. */
 export interface SweepState {
   runners: Map<string, SessionRunner>;
   lastActive: Map<string, number>;
@@ -27,8 +28,8 @@ export interface SweepState {
 }
 
 /**
- * Вытесняет раннеры: простаивающие дольше `RUNNER_IDLE_MS` и лишние по LRU
- * (свыше `RUNNER_LRU_MAX`). Занятые и с очередью не трогаем (аудит §6.11).
+ * Чистит раннеры: простаивающие дольше `RUNNER_IDLE_MS` и лишние по LRU
+ * (сверх `RUNNER_LRU_MAX`). Занятые не трогаем (аудит §6.11).
  * @returns число вытесненных раннеров.
  */
 export function sweepRunners(state: SweepState, now: number = Date.now()): number {

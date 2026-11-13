@@ -104,12 +104,12 @@
 > thin-режим, отзыв доступа, централизованный аудит и разные клиенты
 > одного демона. **Разделение — блокер для дальнейшего развития**
 > (см. идею [`2026-11-09-mma-enterprise-separate-version.md`](./docs/ideas/2026-11-09-mma-enterprise-separate-version.md)
-> §3.5, волна -1 в §13). Без сетевого контракта `Host`/`HostStateSnapshot`/
+> §3.5, волны -1…W7 в §13). Без сетевого контракта `Host`/`HostStateSnapshot`/
 > `OutputEvent` нельзя строить Enterprise поверх монолита — любой
 > «enterprise-флаг» в монолите локально пропатчится.
 
-- [x] **Разделение монолита UI / runtime (блокер).**
-      **Закрыто 2026-11-09** веткой `feat/daemon-wire` (спека
+- [ ] **Разделение монолита UI / runtime.**
+      **Волна -1 закрыта 2026-11-09** веткой `feat/daemon-wire` (спека
       [`2026-11-09-daemon-wire-design`](./docs/specs/2026-11-09-daemon-wire-design.md),
       волна -1): wire-транспорт `mma serve` (Agent Service API `/v1`+SSE,
       daemon переживает рестарт UI через `session.jsonl`/`checkpoint.json`/
@@ -117,7 +117,14 @@
       (`PROTOCOL_VERSION="1"`, `/v1/health.protocol`, клиент отвергает чужой
       major), токен в файле `~/.mma/daemon.token` (0600, fallback OS keychain),
       thin-клиент `DaemonClient` (`src/modules/daemon/protocol.ts`).
-      Полное разделение REPL/TUI в thin-клиенты — вне волны -1 (web уже thin).
+      **W0 закрыт 2026-11-13** веткой `refactor/runtime-layer-split`: общий
+      runtime-слой (`src/runtime/`: `RunPool`, egress, body, scrub, clip, net)
+      вынесен из `webui`; `service` и `core` больше не импортируют
+      `modules/webui` (гейт `tests/arch/runtime-layer.test.ts`). Дальше — W1…W7
+      по [`2026-11-10-monolith-split-design`](./docs/specs/2026-11-10-monolith-split-design.md):
+      `LocalHost`/`RemoteHost`, `/v1/host/*`, thin REPL, web-адаптер,
+      one-shot `--daemon`, TLS. Браузер уже тонкий; `mma web` пока in-process
+      и к демону не проксирует.
 - [x] **Cost/LLM-gateway.** **MVP закрыт 2026-11-09**: per-run hard-stop
       `cost.maxRunUsd` (целые USD; `stopReason=cost_budget` через форс-финал,
       `src/core/agent/cost-budget.ts` + проверка в loop-run). `max_turns`

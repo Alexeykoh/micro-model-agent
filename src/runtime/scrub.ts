@@ -1,7 +1,6 @@
-// Скраб аргументов тула для веб-поверхности (общий для основного форвардера
-// и стора прогонов субагентов). Вынесено из `forward.ts`, чтобы стор прогонов
-// не импортировал state через forward (иначе цикл импортов WebUiState).
-import { redactContextSecrets } from "../../../core/api";
+// Скраб аргументов тула (общий для форвардера веба, стора прогонов субагентов
+// и сервисного моста событий).
+import { redactContextSecrets } from "../core/api";
 
 function scrubValue(value: unknown): unknown {
   if (typeof value === "string") return redactContextSecrets(value);

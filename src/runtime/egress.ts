@@ -1,5 +1,6 @@
 /**
- * E2 (`mma web`): единая DLP-редакция REST-ответов и SSE.
+ * E2: единая DLP-редакция REST-ответов и SSE — общий runtime-слой
+ * (`mma web` и `mma serve`).
  *
  * Шов один — на транспорте: ответ оборачивается в `filterResponse` в диспетчере,
  * поэтому все роуты (`/api/state`, `/api/skills`, `/api/file`, …) и весь SSE
@@ -13,13 +14,13 @@
  */
 import type { ServerResponse } from "node:http";
 import { homedir, hostname, userInfo } from "node:os";
-import type { PolicyContext } from "../security/data-policy/context";
-import { DEFAULT_DATA_POLICY } from "../security/data-policy/defaults";
-import { createGuard } from "../security/data-policy/guard";
-import { TokenMap } from "../security/data-policy/tokens";
-import type { AppConfig } from "../../config/types";
-import type { DataPolicyConfig, EgressGuard } from "../security/data-policy/types";
-import { isLoopbackAddress } from "./util";
+import type { PolicyContext } from "../modules/security/data-policy/context";
+import { DEFAULT_DATA_POLICY } from "../modules/security/data-policy/defaults";
+import { createGuard } from "../modules/security/data-policy/guard";
+import { TokenMap } from "../modules/security/data-policy/tokens";
+import type { AppConfig } from "../config/types";
+import type { DataPolicyConfig, EgressGuard } from "../modules/security/data-policy/types";
+import { isLoopbackAddress } from "./net";
 
 /** Режим ответа: JSON/текст (буферизуем) или SSE (по блокам). */
 export type FilterMode = "json" | "sse";
@@ -27,7 +28,7 @@ export type FilterMode = "json" | "sse";
 type AnyFn = (...args: unknown[]) => unknown;
 
 /**
- * Карта токенов веб-поверхности. Изоляция тенантов — на уровне процесса
+ * Карта токенов поверхности. Изоляция тенантов — на уровне процесса
  * (1 тенант = 1 процесс, спека §10.1), поэтому карта общая для всех соединений:
  * per-request карта сделала бы метки нестабильными между REST и SSE.
  */

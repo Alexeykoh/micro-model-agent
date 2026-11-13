@@ -1,12 +1,12 @@
 /**
- * Агрегаты слотов пула `mma web` (правило ≤300 строк).
+ * Агрегаты слотов пула (правило ≤300 строк).
  *
- * Вынесено из `session-pool.ts`: производные проекции состояния (занятость,
- * длины очередей) для бейджей вкладок и legacy-полей `s.busy`/`s.queueLen`.
+ * Вынесено из `run-pool.ts`: производные проекции занятости (busy-слоты,
+ * счётчики очередей) для состояния веба и legacy-полей `s.busy`/`s.queueLen`.
  */
-import type { RunSlot } from "./session-pool";
+import type { RunSlot } from "./run-pool";
 
-/** Id занятых сессионных слотов (без legacy — для бейджей вкладок). */
+/** Id занятых сессионных слотов (для legacy — без служебного слота). */
 export function busyIdsOf(slots: Map<string, RunSlot>): string[] {
   const out: string[] = [];
   for (const [key, slot] of slots) {
@@ -23,7 +23,7 @@ export function anyBusyOf(slots: Map<string, RunSlot>): boolean {
   return false;
 }
 
-/** Счётчики очереди по сессиям (без legacy — для бейджей). */
+/** Счётчики очереди по сессиям (для legacy — без служебного). */
 export function queuedCountsOf(slots: Map<string, RunSlot>): Record<string, number> {
   const out: Record<string, number> = {};
   for (const [key, slot] of slots) {
