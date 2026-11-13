@@ -139,8 +139,8 @@
       - [x] **W4b-3** — Plugins (`feat/web-plugins`): `/v1/host/plugins`, `runtime/mcp-view.ts`.
       - [x] **W4b-4** — update-панель (`feat/web-update`): updater в `mma serve`,
             `/v1/host/update`, SSE-событие `update`.
-      - [ ] **W5** — one-shot `mma "prompt" --daemon` через job API `/v1/tasks`
-            (сейчас `--daemon` запускает thin-REPL и игнорирует промпт).
+      - [x] **W5** — one-shot (`feat/daemon-oneshot`): `mma "prompt" --daemon`
+            через job API `/v1/tasks` (+ polling, `remote-tasks.ts`).
       - [ ] **W6** — TLS и удалённая закалка: in-app TLS, токен+TLS на не-loopback,
             ротация токена, фикс `deploy/Dockerfile.service`.
       - [ ] **W7** — уборка: доки, ре-экспорт-заглушки, реестр долгов,

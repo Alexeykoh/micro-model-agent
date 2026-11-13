@@ -28,6 +28,7 @@ import { applyLogVisibility } from "./log-visibility";
 import { dispatchLongRunningCommand } from "./main-web";
 import { isJsonMode, runOneShot } from "./main-oneshot";
 import { runDaemonRepl } from "./daemon-repl";
+import { runDaemonOneShot } from "./daemon-oneshot";
 
 /**
  * Резолвит UI-локаль ДО `createProgram()`: описания команд и подсказка-тайпоупор
@@ -133,6 +134,13 @@ async function main(): Promise<void> {
   // Thin-REPL: локальный рантайм не поднимаем вовсе — всё состояние в демоне.
   const daemonUrl = typeof opts.daemon === "string" ? opts.daemon : undefined;
   if (daemonUrl) {
+    // С промптом — one-shot через job API; без промпта — thin-REPL.
+    const daemonPrompt =
+      program.args.length > 0 && !onboardingStart ? program.args.join(" ") : "";
+    if (daemonPrompt.trim()) {
+      await runDaemonOneShot({ url: daemonUrl, prompt: daemonPrompt, json: jsonOpt });
+      return;
+    }
     await runDaemonRepl({ url: daemonUrl });
     return;
   }
