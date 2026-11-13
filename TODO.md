@@ -141,8 +141,8 @@
             `/v1/host/update`, SSE-событие `update`.
       - [x] **W5** — one-shot (`feat/daemon-oneshot`): `mma "prompt" --daemon`
             через job API `/v1/tasks` (+ polling, `remote-tasks.ts`).
-      - [ ] **W6** — TLS и удалённая закалка: in-app TLS, токен+TLS на не-loopback,
-            ротация токена, фикс `deploy/Dockerfile.service`.
+      - [x] **W6** — TLS и закалка (`feat/daemon-tls`): `service.tls.*`,
+            токен+TLS на не-loopback, `--rotate-token`, фикс образа/`k8s`.
       - [ ] **W7** — уборка: доки, ре-экспорт-заглушки, реестр долгов,
             синк `docs/README`/сайта.
 

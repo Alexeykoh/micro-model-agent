@@ -277,5 +277,10 @@ export const DEFAULTS: AppConfig = {
     callbackTimeoutMs: 10_000,
     webhookSecret: undefined,
     webhookAllowHttp: false,
+    tls: {
+      cert: undefined,
+      key: undefined,
+      terminatedByProxy: false,
+    },
   },
 };

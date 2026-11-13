@@ -1,0 +1,11 @@
+.git
+.github
+node_modules
+dist
+gh-pages
+tmp
+.mma
+coverage
+.playwright-mcp
+.ruff_cache
+*.log

@@ -2,14 +2,14 @@
 
 ## SLO (targets)
 
-| Signal | Target | Source |
-|---|---|---|
-| Task success (evals gate) | ≥ 80% pass, safety = 0 | `bun scripts/evals-check.ts` (CI gate) |
-| Liveness | `/healthz` 200, 99.9% over 30d | kubelet/docker HEALTHCHECK |
-| Readiness | `/readyz` 200 when provider reachable | `handleReady` (30s cache) |
-| Turn latency p95 | provider-bound; alert if > 5 min/turn | OTel `llm.chat` spans |
-| Cost/case | `cost.maxRunUsd` hard-stop (whole USD) | `stopReason=cost_budget` |
-| Bypass | `executor.denied` = 0 in prod | OTel `tool.call` metrics |
+| Signal                    | Target                                 | Source                                 |
+| ------------------------- | -------------------------------------- | -------------------------------------- |
+| Task success (evals gate) | ≥ 80% pass, safety = 0                 | `bun scripts/evals-check.ts` (CI gate) |
+| Liveness                  | `/healthz` 200, 99.9% over 30d         | kubelet/docker HEALTHCHECK             |
+| Readiness                 | `/readyz` 200 when provider reachable  | `handleReady` (30s cache)              |
+| Turn latency p95          | provider-bound; alert if > 5 min/turn  | OTel `llm.chat` spans                  |
+| Cost/case                 | `cost.maxRunUsd` hard-stop (whole USD) | `stopReason=cost_budget`               |
+| Bypass                    | `executor.denied` = 0 in prod          | OTel `tool.call` metrics               |
 
 ## Rollback (one command)
 
@@ -37,8 +37,16 @@ kubectl rollout history deployment/mma -n mma
 - **Disk full from sessions**: `mma session prune` / retention
   (`memory.retentionDays`, `pruneByRetention`); sessions archive is 30d,
   service events 7d by default.
-- **Token rotation**: update `MMA_SERVICE_TOKEN` secret, `kubectl rollout restart
-  deployment/mma -n mma`; old tokens stop working on pod swap.
+- **Token rotation**: local daemon — `mma serve --rotate-token` regenerates
+  `~/.mma/daemon.token` at start (clients read the same file; a running daemon
+  keeps the old token until restart). Kubernetes — update the `MMA_SERVICE_TOKEN`
+  secret and `kubectl rollout restart deployment/mma -n mma`; old tokens stop
+  working on pod swap.
+- **TLS**: in-app — set `service.tls.cert`/`service.tls.key` (PEM paths) and the
+  daemon serves HTTPS. Ingress — TLS terminates upstream; set
+  `MMA_SERVICE_TLS_PROXY=true` (or `service.tls.terminatedByProxy: true`) so the
+  pod may bind non-loopback over HTTP. Non-loopback without either is refused at
+  startup.
 
 ## Tenants / RBAC (silo model)
 
