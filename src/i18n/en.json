@@ -2813,7 +2813,7 @@
   "config.enum.text": "text",
   "config.enum.file": "file",
   "config.enum.critical": "critical",
-  "cli.daemon": "Thin REPL over a running daemon URL (e.g. http://127.0.0.1:7331)",
+  "cli.daemon": "Daemon URL: thin REPL, or one-shot when a prompt is given (e.g. http://127.0.0.1:7331)",
   "daemon.connect": "Connected to {url} · session {session}",
   "daemon.busy": "daemon is busy; the message is queued",
   "daemon.help": "Remote: /status /sessions /model /config /stop /pause /resume. Local: /help /clear /exit. Plain text starts a turn.",

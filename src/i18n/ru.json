@@ -2813,7 +2813,7 @@
   "config.enum.text": "текст",
   "config.enum.file": "файл",
   "config.enum.critical": "критический",
-  "cli.daemon": "Тонкий REPL к запущенному демону (URL, напр. http://127.0.0.1:7331)",
+  "cli.daemon": "URL демона: тонкий REPL, а с промптом — one-shot (напр. http://127.0.0.1:7331)",
   "daemon.connect": "Подключено к {url} · сессия {session}",
   "daemon.busy": "демон занят; сообщение в очереди",
   "daemon.help": "Демон: /status /sessions /model /config /stop /pause /resume. Локально: /help /clear /exit. Обычный текст начинает ход.",

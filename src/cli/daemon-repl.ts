@@ -14,6 +14,7 @@ import { Completer } from "./completer";
 import { createReplEditor } from "./repl-editor";
 import { RemoteHost } from "../modules/daemon/remote-host";
 import { readDaemonToken } from "../modules/daemon/protocol";
+import { resolveDaemonSession } from "./daemon-session";
 
 /** Параметры подключения тонкого клиента. */
 export interface DaemonReplOptions {
@@ -32,7 +33,7 @@ interface PendingQuestion {
 export async function runDaemonRepl(opts: DaemonReplOptions): Promise<void> {
   const channel = getDefaultChannel();
   const host = new RemoteHost({ baseUrl: opts.url, token: opts.token ?? readDaemonToken() });
-  const sessionId = await resolveSession(host);
+  const sessionId = await resolveDaemonSession(host);
   channel.writeLine(pc.dim(t("daemon.connect", { url: opts.url, session: sessionId })));
 
   const editor = createReplEditor({
@@ -142,23 +143,6 @@ export async function runDaemonRepl(opts: DaemonReplOptions): Promise<void> {
   unsubscribe();
   host.dispose();
   channel.writeLine(pc.dim(t("daemon.disconnected", { url: opts.url })));
-}
-
-/** Активная сессия демона; иначе первая из списка или новая. */
-async function resolveSession(host: RemoteHost): Promise<string> {
-  const state = await host.getState();
-  if (state.sessionId) {
-    host.setSessionId(state.sessionId);
-    return state.sessionId;
-  }
-  const sessions = await host.listSessions();
-  if (sessions[0]) {
-    host.setSessionId(sessions[0].id);
-    return sessions[0].id;
-  }
-  const created = await host.createSession("daemon");
-  host.setSessionId(created.id);
-  return created.id;
 }
 
 /** Команда демона; вывод печатается строками, ошибка — жёлтым. */
