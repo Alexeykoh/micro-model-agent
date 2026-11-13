@@ -17,5 +17,7 @@ export interface WebDaemonHost extends Host {
   gitSnapshot(): Promise<unknown>;
   gitChanges(): Promise<unknown>;
   gitDiff(path: string, staged: boolean): Promise<unknown>;
+  memory(): Promise<unknown>;
+  skills(): Promise<unknown>;
   dispose(): void;
 }

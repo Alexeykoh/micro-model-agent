@@ -11,7 +11,6 @@ import {
   type SpecOperation,
 } from "./operation-types";
 
-/** Host wire: state, submit, stream, interrupt, pause/resume, answer. */
 export const HOST_OPERATIONS: SpecOperation[] = [
   // ── Host wire (split W2) ────────────────────────────────────────────────
   {
@@ -282,5 +281,20 @@ export const HOST_OPERATIONS: SpecOperation[] = [
       { name: "staged", in: "query", description: "1 — diff --cached", schema: { type: "string" } },
     ],
     responses: { "200": ok("Diff с капом"), "403": ok("Путь вне workspace", "ProblemDetails"), ...PROBLEM_RESPONSES },
+  },  {
+    method: "get",
+    path: "/v1/host/memory",
+    operationId: "hostMemory",
+    tag: "host",
+    summary: "Память: преференции и записи по категориям",
+    responses: { "200": ok("Память"), "503": ok("Модуль памяти недоступен", "ProblemDetails"), ...PROBLEM_RESPONSES },
+  },
+  {
+    method: "get",
+    path: "/v1/host/skills",
+    operationId: "hostSkills",
+    tag: "host",
+    summary: "Доступные скиллы и флаг загруженности",
+    responses: { "200": ok("Скиллы"), "503": ok("Модуль скиллов недоступен", "ProblemDetails"), ...PROBLEM_RESPONSES },
   },
 ];

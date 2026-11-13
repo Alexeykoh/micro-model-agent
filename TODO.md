@@ -143,8 +143,9 @@
       <url>` — адаптер host-покрытых `/api/*` + SSE; непокрытые панели 501.
       **W4b-1 закрыт 2026-11-13** веткой `feat/web-files`: панель Files
       через wire. **W4b-2a закрыт 2026-11-13** веткой `feat/web-git`:
-      read-only git в адаптере. Дальше — W4b-2b (lsp/memory/skills/plugins/
-      setup/index/update), затем W5…W7
+      read-only git в адаптере. **W4b-2b закрыт 2026-11-13** веткой
+      `feat/web-memory`: панели Memory и Skills через wire. Дальше — W4b-2c
+      (lsp/plugins/setup/index/update), затем W5…W7
       по [`2026-11-10-monolith-split-design`](./docs/specs/2026-11-10-monolith-split-design.md):
       `LocalHost`/`RemoteHost`, `/v1/host/*`, thin REPL, web-адаптер,
       one-shot `--daemon`, TLS. Браузер уже тонкий; `mma web` пока in-process

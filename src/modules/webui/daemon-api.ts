@@ -46,6 +46,12 @@ const ROUTES: Record<string, Handler> = {
     const provider = reqUrl.searchParams.get("provider") ?? undefined;
     sendJson(res, 200, await host.listModels(provider));
   },
+  "GET /api/memory": async ({ res, host }) => {
+    sendJson(res, 200, await host.memory());
+  },
+  "GET /api/skills": async ({ res, host }) => {
+    sendJson(res, 200, await host.skills());
+  },
   "GET /api/git": async ({ res, host }) => {
     sendJson(res, 200, await host.gitSnapshot());
   },

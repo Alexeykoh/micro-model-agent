@@ -41,6 +41,8 @@ const ROUTED: Array<[string, string]> = [
   ["GET", "/v1/host/git"],
   ["GET", "/v1/host/git/changes"],
   ["GET", "/v1/host/git/diff"],
+  ["GET", "/v1/host/memory"],
+  ["GET", "/v1/host/skills"],
   ["GET", "/v1/host/sessions"],
   ["POST", "/v1/host/sessions"],
   ["DELETE", "/v1/host/sessions/{sessionId}"],
