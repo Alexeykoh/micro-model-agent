@@ -120,7 +120,10 @@
       **W0 закрыт 2026-11-13** веткой `refactor/runtime-layer-split`: общий
       runtime-слой (`src/runtime/`: `RunPool`, egress, body, scrub, clip, net)
       вынесен из `webui`; `service` и `core` больше не импортируют
-      `modules/webui` (гейт `tests/arch/runtime-layer.test.ts`). Дальше — W1…W7
+      `modules/webui` (гейт `tests/arch/runtime-layer.test.ts`). **W1 закрыт
+      2026-11-13** веткой `feat/host-local`: async `Host.getState`,
+      `subscribeEvents`/`HostEvent`, `LocalHost` (`src/core/local-host.ts`),
+      REPL стал потребителем `Host`. Дальше — W2…W7
       по [`2026-11-10-monolith-split-design`](./docs/specs/2026-11-10-monolith-split-design.md):
       `LocalHost`/`RemoteHost`, `/v1/host/*`, thin REPL, web-адаптер,
       one-shot `--daemon`, TLS. Браузер уже тонкий; `mma web` пока in-process

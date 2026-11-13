@@ -1,5 +1,5 @@
 /** Хост-контракт: мост для плагинов + снапшот состояния для UI. */
-import type { OutputEvent } from "../output/types";
+import type { OutputEvent, Source } from "../output/types";
 import { defaultOutputBus } from "../output/bus";
 import type { HostBridge, HostBridgeSubmitOptions } from "../modules/types";
 import type { ContextBreakdown, ContextQualityBreakdown, LlmSpeedSnapshot } from "./types";
@@ -124,6 +124,21 @@ export interface HostStateSnapshot {
 export type PlanSnapshot = NonNullable<HostStateSnapshot["plan"]>;
 
 /**
+ * Событие хоста, сериализуемое по wire (W1).
+ *
+ * Локальная реализация отдаёт события шины вывода (`type: "output"`, весь
+ * `OutputEvent` в `data`); remote-реализация в W2 принесёт веб-словарь
+ * (`text`, `tool_start`, `turn_end`, …) — форма одна и та же.
+ */
+export interface HostEvent {
+  type: string;
+  ts: number;
+  sessionId?: string;
+  source?: Source;
+  data?: unknown;
+}
+
+/**
  * Полная поверхность хоста. `HostBridge` (узкий, для плагинов) — контракт
  * плагинов; `Host` добавляет нужное веб-режиму. Реализации: `Repl`, `WebHost`.
  */
@@ -133,8 +148,12 @@ export interface Host extends HostBridge {
   /**
    * Текущее состояние для сайдбара/топбара.
    * @param sessionId конкретная сессия (веб-вкладка); без него — активная.
+   *
+   * Асинхронный с W1: remote-реализация читает снапшот по wire.
    */
-  getState(sessionId?: string): HostStateSnapshot;
+  getState(sessionId?: string): Promise<HostStateSnapshot>;
+  /** Транспорт-нейтральная подписка на события хоста (W1). */
+  subscribeEvents(fn: (ev: HostEvent) => void): () => void;
 }
 
 /** Опции фабрики хост-моста: занятость, картинки, запуск и прерывание. */

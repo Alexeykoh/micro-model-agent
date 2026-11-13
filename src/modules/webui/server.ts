@@ -98,7 +98,7 @@ function dropClient(res: ServerResponse, s: WebUiState): void {
 
 /** Точные роуты `METHOD путь` (правило #17: карта хендлеров, без `if`). */
 const API_ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse, s: WebUiState) => void> = {
-  "GET /api/state": (req, res, s) => {
+  "GET /api/state": async (req, res, s) => {
     // `?session=<id>` — сайдбар вкладки строится от ЕЁ сессии, не от
     // серверно-активной (иначе переключение вкладок показывает чужие данные).
     let sessionId: string | undefined;
@@ -110,7 +110,7 @@ const API_ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse, s: 
     }
     sendJson(res, 200, {
       ...sessionStatus(s),
-      state: s.bridge?.getState?.(sessionId) ?? null,
+      state: (await s.bridge?.getState?.(sessionId)) ?? null,
     });
   },
   "POST /api/message": (req, res, s) => handleMessagePost(req, res, s),
