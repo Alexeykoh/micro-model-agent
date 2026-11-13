@@ -190,6 +190,30 @@ export class RemoteHost implements Host {
     return res.json();
   }
 
+  async setup(): Promise<unknown> {
+    const res = await this.request(`${this.base}/v1/host/setup`);
+    if (!res.ok) throw new Error(`daemon setup failed: ${res.status} ${await safeText(res)}`);
+    return res.json();
+  }
+
+  async reindex(): Promise<unknown> {
+    const res = await this.request(`${this.base}/v1/host/index`, { method: "POST" });
+    if (!res.ok) throw new Error(`daemon index failed: ${res.status} ${await safeText(res)}`);
+    return res.json();
+  }
+
+  async lspFlags(): Promise<unknown> {
+    const res = await this.request(`${this.base}/v1/host/lsp`);
+    if (!res.ok) throw new Error(`daemon lsp failed: ${res.status} ${await safeText(res)}`);
+    return res.json();
+  }
+
+  async lspDoctor(): Promise<unknown> {
+    const res = await this.request(`${this.base}/v1/host/lsp/doctor`);
+    if (!res.ok) throw new Error(`daemon lsp doctor failed: ${res.status} ${await safeText(res)}`);
+    return res.json();
+  }
+
   async getConfig(): Promise<HostConfigSnapshot> {
     const res = await this.request(`${this.base}/v1/host/config`);
     if (!res.ok) throw new Error(`daemon config failed: ${res.status} ${await safeText(res)}`);

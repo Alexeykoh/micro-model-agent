@@ -13,6 +13,8 @@ import { readEnv } from "../../config/env";
 import type { SessionManager } from "../session/manager";
 import type { MemoryStore } from "../memory/store";
 import type { SkillsModule } from "../skills/module";
+import type { IndexerModule } from "../indexer/module";
+import type { LspModule } from "../lsp/module";
 import type { ExecutionModule } from "../execution/module";
 import { RunPool } from "../../runtime/run-pool/run-pool";
 import { makeModelCache, type ModelCache } from "../../runtime/model-cache";
@@ -31,6 +33,10 @@ export interface ServiceDeps {
   memory?: MemoryStore;
   /** Скиллы (панель Skills). */
   skills?: SkillsModule;
+  /** Карта проекта (кнопка Index). */
+  indexer?: IndexerModule;
+  /** LSP-панель. */
+  lsp?: LspModule;
   configDir?: string;
   baseDir?: string;
   /** Фабрика per-session раннеров из bootstrap (параллелизм слотов). */

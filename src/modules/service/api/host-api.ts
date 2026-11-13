@@ -27,6 +27,7 @@ import { handleHostSessions } from "./host-sessions";
 import { handleHostFiles } from "./host-files";
 import { handleHostGit } from "./host-git";
 import { handleHostMemory, handleHostSkills } from "./host-settings";
+import { handleHostIndex, handleHostLsp, handleHostSetup } from "./host-misc";
 import { interruptSession } from "./tasks-control";
 import { MAX_JSON_BYTES, tenantOf } from "./tasks-job";
 import { dispatchInteractive } from "./tasks-submit";
@@ -67,6 +68,9 @@ export async function handleHostApi(
   if (parts[2] === "git") return handleHostGit(req, res, reqUrl, s, parts);
   if (parts[2] === "memory") return handleHostMemory(req, res, s, parts);
   if (parts[2] === "skills") return handleHostSkills(req, res, s, parts);
+  if (parts[2] === "setup") return handleHostSetup(req, res, s, parts);
+  if (parts[2] === "index") return handleHostIndex(req, res, s, parts);
+  if (parts[2] === "lsp") return handleHostLsp(req, res, s, parts);
   if (parts[2] !== "sessions") return false;
   if (
     parts.length === 3 ||
@@ -237,12 +241,7 @@ function setPaused(
 }
 
 /** `POST /v1/host/sessions/:id/answer {id, answer}` — ответ на вопрос хода. */
-async function answer(
-  req: IncomingMessage,
-  res: ServerResponse,
-  s: AgentServiceState,
-  sessionId: string,
-): Promise<boolean> {
+async function answer(req: IncomingMessage, res: ServerResponse, s: AgentServiceState, sessionId: string): Promise<boolean> {
   const body = await readJsonBodyOrProblem(req, res, MAX_JSON_BYTES);
   if (!body) return true;
   const id = typeof body.id === "string" ? body.id : "";

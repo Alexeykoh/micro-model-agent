@@ -56,6 +56,8 @@ export async function runServe(opts: ServeCommandOptions): Promise<void> {
     spawnSessionRunner,
     memoryStore,
     skillsModule,
+    indexerModule,
+    lspModule,
   } = await bootstrap(...serveBootstrapArgs(opts));
 
   const svc = startAgentService({
@@ -65,6 +67,8 @@ export async function runServe(opts: ServeCommandOptions): Promise<void> {
     execModule,
     memory: memoryStore,
     skills: skillsModule,
+    indexer: indexerModule,
+    lsp: lspModule,
     configDir,
     baseDir,
     spawnRunner: spawnSessionRunner,

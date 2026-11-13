@@ -19,5 +19,9 @@ export interface WebDaemonHost extends Host {
   gitDiff(path: string, staged: boolean): Promise<unknown>;
   memory(): Promise<unknown>;
   skills(): Promise<unknown>;
+  setup(): Promise<unknown>;
+  reindex(): Promise<unknown>;
+  lspFlags(): Promise<unknown>;
+  lspDoctor(): Promise<unknown>;
   dispose(): void;
 }
