@@ -2812,5 +2812,14 @@
   "config.desc.service.webhookAllowHttp": "Allow plain http callbacks only for loopback hosts (https is required otherwise).",
   "config.enum.text": "text",
   "config.enum.file": "file",
-  "config.enum.critical": "critical"
+  "config.enum.critical": "critical",
+  "cli.daemon": "Thin REPL over a running daemon URL (e.g. http://127.0.0.1:7331)",
+  "daemon.connect": "Connected to {url} · session {session}",
+  "daemon.busy": "daemon is busy; the message is queued",
+  "daemon.help": "Remote: /status /sessions /model /config /stop /pause /resume. Local: /help /clear /exit. Plain text starts a turn.",
+  "daemon.question": "Question: {text}",
+  "daemon.question_options": "Options: {options}",
+  "daemon.submit_failed": "Submit failed: {error}",
+  "daemon.answer_failed": "Answer failed: {error}",
+  "daemon.disconnected": "Disconnected from {url}"
 }

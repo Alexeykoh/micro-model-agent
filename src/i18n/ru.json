@@ -2812,5 +2812,14 @@
   "config.desc.service.webhookAllowHttp": "Разрешить http-колбэк только для loopback (в остальных случаях обязателен https).",
   "config.enum.text": "текст",
   "config.enum.file": "файл",
-  "config.enum.critical": "критический"
+  "config.enum.critical": "критический",
+  "cli.daemon": "Тонкий REPL к запущенному демону (URL, напр. http://127.0.0.1:7331)",
+  "daemon.connect": "Подключено к {url} · сессия {session}",
+  "daemon.busy": "демон занят; сообщение в очереди",
+  "daemon.help": "Демон: /status /sessions /model /config /stop /pause /resume. Локально: /help /clear /exit. Обычный текст начинает ход.",
+  "daemon.question": "Вопрос: {text}",
+  "daemon.question_options": "Варианты: {options}",
+  "daemon.submit_failed": "Не удалось отправить ход: {error}",
+  "daemon.answer_failed": "Не удалось ответить: {error}",
+  "daemon.disconnected": "Отключено от {url}"
 }
