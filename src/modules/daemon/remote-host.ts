@@ -5,7 +5,13 @@
  * состояние, ходы и вопросы живут в демоне. События приходят по SSE из
  * `GET /v1/host/sessions/:id/stream`; форма — `HostEvent`, `data` — envelope v1.
  */
-import type { Host, HostEvent, HostStateSnapshot } from "../../core/host";
+import type {
+  Host,
+  HostConfigSnapshot,
+  HostEvent,
+  HostModels,
+  HostStateSnapshot,
+} from "../../core/host";
 import type { HostBridgeSubmitOptions } from "../types";
 import type { SessionLogEntry } from "../session/log-types";
 import type { SessionMessage, SessionMeta } from "../session/types";
@@ -111,7 +117,9 @@ export class RemoteHost implements Host {
   }
 
   async getHistory(sessionId: string): Promise<SessionMessage[]> {
-    const res = await this.request(`${this.sessionUrl("history")}`);
+    const res = await this.request(
+      `${this.base}/v1/host/sessions/${encodeURIComponent(sessionId)}/history`,
+    );
     if (!res.ok) throw new Error(`daemon history failed: ${res.status} ${await safeText(res)}`);
     const body = (await res.json()) as { messages?: SessionMessage[] };
     return body.messages ?? [];
@@ -125,10 +133,25 @@ export class RemoteHost implements Host {
     if (opts.since !== undefined) query.set("since", opts.since);
     if (opts.limit !== undefined) query.set("limit", String(opts.limit));
     const suffix = query.size ? `?${query.toString()}` : "";
-    const res = await this.request(`${this.sessionUrl("log")}${suffix}`);
+    const res = await this.request(
+      `${this.base}/v1/host/sessions/${encodeURIComponent(sessionId)}/log${suffix}`,
+    );
     if (!res.ok) throw new Error(`daemon log failed: ${res.status} ${await safeText(res)}`);
     const body = (await res.json()) as { entries?: SessionLogEntry[] };
     return body.entries ?? [];
+  }
+
+  async getConfig(): Promise<HostConfigSnapshot> {
+    const res = await this.request(`${this.base}/v1/host/config`);
+    if (!res.ok) throw new Error(`daemon config failed: ${res.status} ${await safeText(res)}`);
+    return (await res.json()) as HostConfigSnapshot;
+  }
+
+  async listModels(provider?: string): Promise<HostModels> {
+    const suffix = provider ? `?provider=${encodeURIComponent(provider)}` : "";
+    const res = await this.request(`${this.base}/v1/host/models${suffix}`);
+    if (!res.ok) throw new Error(`daemon models failed: ${res.status} ${await safeText(res)}`);
+    return (await res.json()) as HostModels;
   }
 
   subscribeEvents(fn: (ev: HostEvent) => void): () => void {

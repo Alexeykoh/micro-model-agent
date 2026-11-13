@@ -10,6 +10,9 @@
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { readMmaVersion } from "../../../core/version";
+import { configVersion } from "../../../config/persist";
+import { serializeConfigForWire } from "../../../config/redact";
+import { buildConfigRegistry } from "../../../runtime/config-view";
 import { PROTOCOL_VERSION } from "../../daemon/protocol";
 import { readJsonBodyOrProblem, sendJson, sendProblem } from "../http/respond";
 import { resolveAnswer } from "../runtime/prompt-io";
@@ -34,6 +37,22 @@ export async function handleHostApi(
 
   if (parts.length === 3 && parts[2] === "state" && req.method === "GET") {
     return stateRoute(res, s, reqUrl);
+  }
+  if (parts.length === 3 && parts[2] === "config" && req.method === "GET") {
+    sendJson(res, 200, {
+      config: serializeConfigForWire(s.config),
+      registry: buildConfigRegistry(s.config),
+      version: configVersion(s.config),
+    });
+    return true;
+  }
+  if (parts.length === 3 && parts[2] === "models" && req.method === "GET") {
+    const provider = reqUrl.searchParams.get("provider") ?? undefined;
+    const resolved = provider
+      ? s.models.getFor(provider)
+      : { models: s.models.get(), loading: false };
+    sendJson(res, 200, resolved);
+    return true;
   }
   if (parts[2] !== "sessions") return false;
   if (

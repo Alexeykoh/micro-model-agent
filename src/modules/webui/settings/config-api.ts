@@ -4,12 +4,9 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { setLocale } from "../../../i18n/index";
 import { serializeConfigForWire } from "../../../config/redact";
-import {
-  configDefs,
-  resolveConfigKey,
-  setConfigValue,
-  type ConfigKeyDef,
-} from "../../../config/registry";
+import { resolveConfigKey, setConfigValue } from "../../../config/registry";
+import { buildConfigRegistry } from "../../../runtime/config-view";
+export { buildConfigRegistry, type ConfigRegistryEntry } from "../../../runtime/config-view";
 import { configVersion } from "../../../config/persist";
 import { needsRebuild } from "../../../config/effects";
 import type { AppConfig } from "../../../config/types";
@@ -36,55 +33,6 @@ import { broadcast } from "../state";
  * `2026-10-30-webui-theme-persistence-design.md`).
  */
 const BUSY_EXEMPT_KEYS: ReadonlySet<string> = new Set(["ui.theme", "ui.themeMode"]);
-
-/** Запись реестра для UI настроек. */
-export interface ConfigRegistryEntry {
-  key: string;
-  aliases: string[];
-  valueType: string;
-  group: string;
-  enum?: readonly string[];
-  /**
-   * Численные границы для контролов `int`/`share`. Из дефов реестра, где есть
-   * реальная мета (напр. доли — те же лимиты 0.05–0.9, что держит парсер,
-   * `contextWindow` мин 1024); у безлимитных опускаются.
-   */
-  min?: number;
-  max?: number;
-  step?: number;
-  /** `version` и подобные в UI рендерятся нередактируемым значением. */
-  readOnly?: boolean;
-  /**
-   * Резолвленное значение read-only ключей. Их геттер реестра авторитетен и
-   * может отличаться от сырого поля конфига (напр. `version` отдаёт версию
-   * установленного пакета, а не версию схемы конфига).
-   */
-  value?: unknown;
-  /** Подсказка GUI-рендера значений `list`/`json` (чипсы, чекбоксы, таблица). */
-  editor?: ConfigKeyDef["editor"];
-}
-
-/** Сериализует реестр в порядке реестра (только канонические ключи). */
-export function buildConfigRegistry(config?: AppConfig): ConfigRegistryEntry[] {
-  return configDefs().map((def) => {
-    const entry: ConfigRegistryEntry = {
-      key: def.key,
-      aliases: def.aliases,
-      valueType: def.valueType,
-      group: def.domain,
-    };
-    if (def.enumValues) entry.enum = def.enumValues;
-    if (def.min !== undefined) entry.min = def.min;
-    if (def.max !== undefined) entry.max = def.max;
-    if (def.step !== undefined) entry.step = def.step;
-    if (def.readOnly) {
-      entry.readOnly = true;
-      if (config) entry.value = def.get(config);
-    }
-    if (def.editor) entry.editor = def.editor;
-    return entry;
-  });
-}
 
 /** Маскирует секрет для показа: последние 4 символа видны, остальное скрыто. */
 function maskToken(token: string | null): string | null {

@@ -193,5 +193,23 @@ export const HOST_OPERATIONS: SpecOperation[] = [
       "404": ok("Сессия не найдена", "ProblemDetails"),
       ...PROBLEM_RESPONSES,
     },
+  },  {
+    method: "get",
+    path: "/v1/host/config",
+    operationId: "hostConfig",
+    tag: "host",
+    summary: "Отредактированный конфиг + реестр ключей",
+    responses: { "200": ok("Конфиг и реестр"), ...PROBLEM_RESPONSES },
+  },
+  {
+    method: "get",
+    path: "/v1/host/models",
+    operationId: "hostModels",
+    tag: "host",
+    summary: "Модели провайдера",
+    params: [
+      { name: "provider", in: "query", description: "Имя записи провайдера (по умолчанию активный)", schema: { type: "string" } },
+    ],
+    responses: { "200": ok("Список моделей"), ...PROBLEM_RESPONSES },
   },
 ];

@@ -132,6 +132,19 @@ export type PlanSnapshot = NonNullable<HostStateSnapshot["plan"]>;
  * `OutputEvent` в `data`); remote-реализация в W2 принесёт веб-словарь
  * (`text`, `tool_start`, `turn_end`, …) — форма одна и та же.
  */
+/** Конфиг для тонкого клиента: отредактированные значения + реестр. */
+export interface HostConfigSnapshot {
+  config: object;
+  version: number;
+  registry?: unknown[];
+}
+
+/** Модели провайдера (по умолчанию активного). */
+export interface HostModels {
+  models: string[];
+  loading?: boolean;
+}
+
 export interface HostEvent {
   type: string;
   ts: number;
@@ -163,6 +176,10 @@ export interface Host extends HostBridge {
   deleteSession(sessionId: string): Promise<void>;
   getHistory(sessionId: string): Promise<SessionMessage[]>;
   getLog(sessionId: string, opts?: { since?: string; limit?: number }): Promise<SessionLogEntry[]>;
+
+  // Конфиг и модели (W3b).
+  getConfig(): Promise<HostConfigSnapshot>;
+  listModels(provider?: string): Promise<HostModels>;
 }
 
 /** Опции фабрики хост-моста: занятость, картинки, запуск и прерывание. */
