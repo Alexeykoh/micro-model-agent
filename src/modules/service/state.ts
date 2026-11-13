@@ -15,6 +15,7 @@ import type { MemoryStore } from "../memory/store";
 import type { SkillsModule } from "../skills/module";
 import type { IndexerModule } from "../indexer/module";
 import type { LspModule } from "../lsp/module";
+import type { PluginManager } from "../plugins/manager";
 import type { ExecutionModule } from "../execution/module";
 import { RunPool } from "../../runtime/run-pool/run-pool";
 import { makeModelCache, type ModelCache } from "../../runtime/model-cache";
@@ -37,6 +38,8 @@ export interface ServiceDeps {
   indexer?: IndexerModule;
   /** LSP-панель. */
   lsp?: LspModule;
+  /** Плагины (панель Plugins). */
+  plugins?: PluginManager;
   configDir?: string;
   baseDir?: string;
   /** Фабрика per-session раннеров из bootstrap (параллелизм слотов). */

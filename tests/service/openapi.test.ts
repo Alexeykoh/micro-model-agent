@@ -47,6 +47,7 @@ const ROUTED: Array<[string, string]> = [
   ["POST", "/v1/host/index"],
   ["GET", "/v1/host/lsp"],
   ["GET", "/v1/host/lsp/doctor"],
+  ["GET", "/v1/host/plugins"],
   ["GET", "/v1/host/sessions"],
   ["POST", "/v1/host/sessions"],
   ["DELETE", "/v1/host/sessions/{sessionId}"],

@@ -211,6 +211,21 @@ describe("host setup/index/lsp wire", () => {
   });
 });
 
+describe("host plugins wire", () => {
+  it("serves plugins when wired and 503 otherwise", async () => {
+    expect((await httpJson(`${base}/v1/host/plugins`)).status).toBe(503);
+
+    state.deps.plugins = {
+      getRecords: () => [{ name: "p" }],
+      getFailures: () => [],
+    } as never;
+    const res = await httpJson(`${base}/v1/host/plugins`);
+    expect(res.status).toBe(200);
+    expect(res.json.plugins).toEqual([{ name: "p" }]);
+    expect(Array.isArray(res.json.mcp)).toBe(true);
+  });
+});
+
 describe("host memory/skills wire", () => {
   it("serves memory and skills when modules are wired", async () => {
     state.deps.memory = {

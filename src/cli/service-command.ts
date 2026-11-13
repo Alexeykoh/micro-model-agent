@@ -58,6 +58,7 @@ export async function runServe(opts: ServeCommandOptions): Promise<void> {
     skillsModule,
     indexerModule,
     lspModule,
+    pluginManager,
   } = await bootstrap(...serveBootstrapArgs(opts));
 
   const svc = startAgentService({
@@ -69,6 +70,7 @@ export async function runServe(opts: ServeCommandOptions): Promise<void> {
     skills: skillsModule,
     indexer: indexerModule,
     lsp: lspModule,
+    plugins: pluginManager,
     configDir,
     baseDir,
     spawnRunner: spawnSessionRunner,

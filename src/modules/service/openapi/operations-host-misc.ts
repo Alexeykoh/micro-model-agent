@@ -51,5 +51,12 @@ export const HOST_MISC_OPERATIONS: SpecOperation[] = [
     tag: "host",
     summary: "Диагностика LSP workspace",
     responses: { "200": ok("Диагностика"), "500": ok("Ошибка LSP", "ProblemDetails"), "503": ok("LSP недоступен", "ProblemDetails"), ...PROBLEM_RESPONSES },
+  },  {
+    method: "get",
+    path: "/v1/host/plugins",
+    operationId: "hostPlugins",
+    tag: "host",
+    summary: "Плагины, отказы загрузки и MCP-серверы",
+    responses: { "200": ok("Плагины"), "503": ok("Плагины недоступны", "ProblemDetails"), ...PROBLEM_RESPONSES },
   },
 ];
