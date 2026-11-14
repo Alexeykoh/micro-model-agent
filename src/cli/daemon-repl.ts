@@ -10,8 +10,10 @@ import { t } from "../i18n/index";
 import { errMsg } from "../utils";
 import { getDefaultChannel } from "../output";
 import { Renderer, isRichTerminal } from "../ui/renderer";
+import { LineEditor } from "../ui/line-editor";
 import { Completer } from "./completer";
 import { createReplEditor } from "./repl-editor";
+import { readClipboardDataUrl, dataUrlSizeKb } from "./clipboard-image";
 import { RemoteHost } from "../modules/daemon/remote-host";
 import { readDaemonToken } from "../modules/daemon/protocol";
 import { resolveDaemonSession } from "./daemon-session";
@@ -45,9 +47,23 @@ export async function runDaemonRepl(opts: DaemonReplOptions): Promise<void> {
   });
   const renderer = new Renderer({ rich: isRichTerminal(), channel });
   let pending: PendingQuestion | null = null;
+  /** Картинка из клипборда: уедет с ближайшим ходом (split W9). */
+  let pendingImage: string | null = null;
   let closed = false;
   let exitRequested = false;
   let lastPlan = "";
+
+  // Ctrl+V читает клипборд на клиенте: демону уходит готовый data-URL в submit.
+  if (editor instanceof LineEditor) {
+    editor.onKeyInput = (_str, rawKey) => {
+      const key = (rawKey ?? {}) as { name?: string; ctrl?: boolean };
+      if (!key.ctrl || key.name !== "v") return false;
+      void attachClipboard(editor, channel, (dataUrl) => {
+        pendingImage = dataUrl;
+      });
+      return true;
+    };
+  }
 
   const unsubscribe = host.subscribeEvents((ev) => {
     const data = (ev.data ?? {}) as Record<string, unknown>;
@@ -143,7 +159,9 @@ export async function runDaemonRepl(opts: DaemonReplOptions): Promise<void> {
       return;
     }
     if (host.isBusy()) channel.writeLine(pc.dim(t("daemon.busy")));
-    host.submit(trimmed).catch((err) => {
+    const images = pendingImage ? [pendingImage] : undefined;
+    pendingImage = null;
+    host.submit(trimmed, images ? { images } : undefined).catch((err) => {
       channel.writeLine(pc.red(t("daemon.submit_failed", { error: errMsg(err) })));
     });
   };
@@ -199,6 +217,35 @@ async function answerQuestion(
     await host.answer(question.id, value);
   } catch (err) {
     channel.writeLine(pc.red(t("daemon.answer_failed", { error: errMsg(err) })));
+  }
+}
+
+/**
+ * Ctrl+V в thin-клиенте (split W9): картинка читается локально и уходит в
+ * `submit` как data-URL — демону не нужен доступ к клипборду.
+ */
+async function attachClipboard(
+  editor: LineEditor,
+  channel: ReturnType<typeof getDefaultChannel>,
+  onAttached: (dataUrl: string) => void,
+): Promise<void> {
+  try {
+    const dataUrl = await readClipboardDataUrl();
+    if (dataUrl) {
+      onAttached(dataUrl);
+      channel.writeLine(
+        pc.green(
+          `\n${t("image.attached", { source: "clipboard", size: `${dataUrlSizeKb(dataUrl)} KB` })}`,
+        ),
+      );
+    } else {
+      channel.writeLine(pc.yellow(`\n${t("image.clipboard_empty")}`));
+    }
+  } catch {
+    // Клипборд недоступен — пусть терминал вставит текст штатно.
+  } finally {
+    editor.reset();
+    editor.prompt();
   }
 }
 
