@@ -7,6 +7,8 @@
  * демона не зависел от `modules/service`.
  */
 
+import { getLocale } from "../../i18n/index";
+
 /** Терминальный Job-объект v1 (подмножество, нужное one-shot). */
 export interface RemoteJobObject {
   jobId: string;
@@ -63,6 +65,8 @@ export class RemoteTasksClient {
   private request(path: string, init: RequestInit = {}): Promise<Response> {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
+      // Локаль клиента (спека §13): сервер понимает её и не трогает чужие.
+      "X-Mma-Locale": getLocale(),
       ...((init.headers as Record<string, string> | undefined) ?? {}),
     };
     if (this.opts.token) headers.Authorization = `Bearer ${this.opts.token}`;

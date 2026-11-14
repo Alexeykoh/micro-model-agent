@@ -9,6 +9,7 @@
  */
 import { resolveConfigKey } from "../../../config/registry";
 import { applyConfigWrite } from "../../../runtime/config-write";
+import { t } from "../../../i18n/index";
 import type { HostCommandResult } from "../../../core/host";
 import type { AgentServiceState } from "../state";
 import { interruptSession } from "../api/tasks-control";
@@ -76,7 +77,7 @@ export async function runHostCommand(
       return {
         ok: false,
         output: [],
-        error: `command not supported over host wire: /${name}`,
+        error: t("daemon.command_unsupported", { name }),
       };
   }
 }

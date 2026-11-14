@@ -17,6 +17,7 @@ import type {
 import type { HostBridgeSubmitOptions } from "../types";
 import type { SessionLogEntry } from "../session/log-types";
 import { RemoteEventStream } from "./remote-host-events";
+import { getLocale } from "../../i18n/index";
 import type { SessionMessage, SessionMeta } from "../session/types";
 
 /** Параметры подключения: адрес демона, сессия, bearer-токен. */
@@ -24,6 +25,8 @@ export interface RemoteHostOptions {
   baseUrl: string;
   sessionId?: string;
   token?: string | null;
+  /** Локаль клиента (`X-Mma-Locale`); дефолт — локаль процесса. */
+  locale?: string;
 }
 
 /** События, после которых ход сессии завершён (busy снимается). */
@@ -40,6 +43,7 @@ export class RemoteHost implements Host {
     this.events = new RemoteEventStream({
       streamUrl: () => this.sessionUrl("stream"),
       token: opts.token,
+      locale: this.locale,
       onEvent: (ev) => this.trackBusy(ev),
     });
   }
@@ -283,10 +287,16 @@ export class RemoteHost implements Host {
   private request(url: string, init: RequestInit = {}): Promise<Response> {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
+      "X-Mma-Locale": this.locale,
       ...((init.headers as Record<string, string> | undefined) ?? {}),
     };
     if (this.opts.token) headers.Authorization = `Bearer ${this.opts.token}`;
     return fetch(url, { ...init, headers, signal: init.signal ?? AbortSignal.timeout(30_000) });
+  }
+
+  /** Локаль клиента: явная опция, иначе текущая локаль процесса. */
+  private get locale(): string {
+    return this.opts.locale ?? getLocale();
   }
 }
 

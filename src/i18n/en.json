@@ -2832,6 +2832,7 @@
   "daemon.submit_failed": "Submit failed: {error}",
   "daemon.answer_failed": "Answer failed: {error}",
   "daemon.disconnected": "Disconnected from {url}",
+  "daemon.command_unsupported": "command not supported over host wire: /{name}",
   "cli.web.daemon": "Serve the browser UI as an adapter over a running daemon URL",
   "cli.web_daemon_started": "mma web (daemon) → {url} · daemon {daemon}"
 }
