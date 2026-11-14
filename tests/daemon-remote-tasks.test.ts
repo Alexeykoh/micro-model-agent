@@ -41,6 +41,7 @@ describe("daemon job client (W5)", () => {
     });
     const headers = (calls[0]!.init?.headers ?? {}) as Record<string, string>;
     expect(headers.Authorization).toBe("Bearer tok");
+    expect(headers["X-Mma-Locale"]).toBeTruthy();
     expect(calls[1]?.url).toBe("http://daemon/v1/tasks/j1");
   });
 

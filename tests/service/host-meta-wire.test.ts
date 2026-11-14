@@ -92,6 +92,7 @@ describe("meta events over the host wire (W9)", () => {
     });
 
     const critic = events.find((e) => e.type === "critic");
+    expect(critic).toBeDefined();
     expect(critic?.data).toMatchObject({
       label: "critic: success",
       status: "success",
@@ -99,7 +100,8 @@ describe("meta events over the host wire (W9)", () => {
       summary: "all good",
       verdict: "success",
     });
-    expect((critic?.data as { checks: unknown[] }).checks).toHaveLength(1);
+    const criticData = critic?.data as { checks?: unknown[] } | undefined;
+    expect(criticData?.checks).toHaveLength(1);
 
     host.dispose();
   });

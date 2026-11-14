@@ -77,7 +77,10 @@ and `executeCommand(line)`.
   contract. `src/modules/daemon/remote-tasks.ts` drives one-shot jobs.
 - **Thin clients:** `mma --daemon <url>` (REPL), `mma web --daemon-url <url>`
   (browser adapter), `mma "prompt" --daemon <url>` (one-shot job). They own only
-  input/rendering; state is event-sourced from the daemon.
+  input/rendering; state is event-sourced from the daemon. Parity (W9): the
+  `meta`/`retract`/`critic` channel rides the same SSE, clipboard images are
+  read on the client and sent as data-URLs, and `X-Mma-Locale` is resolved per
+  request via `runWithLocale` without touching the process locale.
 - **WebUi module** (`src/modules/webui/`): statics, REST/SSE and settings; in
   daemon mode it proxies `/api/*` to `/v1/host/*` (`daemon-api.ts`) and maps
   events (`daemon-events.ts`). Unsupported panels return `501`, never an empty

@@ -108,9 +108,9 @@
 > `OutputEvent` нельзя строить Enterprise поверх монолита — любой
 > «enterprise-флаг» в монолите локально пропатчится.
 
-- [x] **Разделение монолита UI / runtime (волны -1…W7).**
+- [x] **Разделение монолита UI / runtime (волны -1…W9).**
       Спека: [`2026-11-10-monolith-split-design`](./docs/specs/2026-11-10-monolith-split-design.md).
-      Статус на 2026-11-13; рабочая линия — `v0_26_0`.
+      Статус на 2026-11-14; рабочая линия — `v0_26_0`.
       - [x] **Волна -1** — wire-протокол (`feat/daemon-wire`): `mma serve`, `/v1`+SSE,
             версия протокола, токен `~/.mma/daemon.token`, `DaemonClient`.
       - [x] **W0** — общий runtime-слой (`refactor/runtime-layer-split`):
@@ -146,9 +146,16 @@
       - [x] **W7** — уборка (`docs/w7-cleanup`): доки, снятые заглушки,
             реестр долгов, синк `docs/README`.
 
-      **Паритет после волн** — `DEBT(daemon-parity-gaps)`: полный каталог
-      команд и рендер thin-REPL (plan/usage сделаны; critic/subagent — нет),
-      вставка картинок, локаль `X-Mma-Locale`/i18n, e2e «демон + thin-REPL/web».
+      **Паритет после волн** — `DEBT(daemon-command-catalog)`: полный каталог
+      команд (рендер critic/subagent, картинки и локаль `X-Mma-Locale` закрыты
+      W9, см. ниже).
+
+      - [x] **W8** — паритет тонких клиентов (`feat/daemon-parity`):
+            SSE-реконнект `Last-Event-ID`, рендер plan/usage в thin-REPL.
+      - [x] **W9** — мета-канал и локаль (`feat/daemon-parity-gaps`):
+            `meta`/`retract`/`critic` по wire, Ctrl+V-картинки в thin-REPL,
+            `X-Mma-Locale` + ALS, `tests/host-parity.test.ts`,
+            `tests/daemon-integration.test.ts`.
 
       **Релиз:** `CHANGELOG`/версия `0.26.0` не трогали; `v0_26_0` не влит в `dev`.
       Обычный `mma web` остаётся in-process; `--daemon-url` — адаптер к демону.

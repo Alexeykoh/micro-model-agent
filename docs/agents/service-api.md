@@ -167,7 +167,7 @@ data: { "v":1, "seq", "ts", "type", "sessionId", "taskId", "data" }
 
 Типы: `task.accepted/started/finished/failed/cancelled/waiting_input`,
 `text.delta`, `reasoning.delta`, `phase`, `tool.start`, `tool.end`, `question`,
-`plan`, `error`. `seq` монотонный на сессию; resume —
+`plan`, `meta`, `retract`, `critic`, `update`. `seq` монотонный на сессию; resume —
 `Last-Event-ID` или `?since=<seq>` из in-memory буфера (best-effort между
 рестартами; статус всегда доступен pull'ом). Keep-alive `: ping` каждые 20 с;
 `X-Accel-Buffering: no`. Список событий задачи ограничен 2000 (старые
@@ -255,12 +255,16 @@ timestamp, windowMs?})`: сравнение за константное врем
 | POST | `/v1/host/sessions/:id/answer` | `{id, answer}` на висящий вопрос |
 | POST | `/v1/host/sessions/:id/command` | `{line}` → `{ok, output[]}`; серверное подмножество команд |
 
-`command`, `history`/`log`, `config`/`models` и CRUD сессий через host wire появятся
-в W3: перенос `CommandServices` и тонкого REPL.
+`images` в submit — data-URL (≤10, ≤70 МБ): клиент читает клипборд сам (Ctrl+V в
+thin-REPL), демон не имеет доступа к буферу. `X-Mma-Locale` — локаль клиента на
+каждом запросе; сервер исполняет обработчик в ALS-скоупе (`runWithLocale`) и не
+меняет локаль процесса, поэтому разные клиенты видят свои строки (спека §13).
+Мета-канал (`meta`, `retract`, `critic`) едет тем же SSE: thin-клиент печатает
+те же статусы, отзывы черновика и итоги критика, что локальный REPL.
 
 ### Web-адаптер
 
 `mma web --daemon-url <url>` не поднимает локальный рантайм: браузерный `/api/*`
 проксируется в `/v1/host/*`, события демона переводятся в веб-SSE. Покрыты
-чат, сессии, история/лог, конфиг, модели и команды; панели files/git/lsp/
-memory/skills/plugins/setup/index/update отвечают `501` до W4b.
+чат, сессии, история/лог, конфиг, модели, команды, files/git/lsp/memory/skills/
+plugins/setup/index/update.

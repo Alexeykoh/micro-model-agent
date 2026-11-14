@@ -17,20 +17,11 @@ import type {
 import type { HostBridgeSubmitOptions } from "../types";
 import type { SessionLogEntry } from "../session/log-types";
 import { RemoteEventStream } from "./remote-host-events";
+import { TERMINAL_TYPES, safeText, type RemoteHostOptions } from "./remote-host-types";
 import { getLocale } from "../../i18n/index";
 import type { SessionMessage, SessionMeta } from "../session/types";
 
-/** Параметры подключения: адрес демона, сессия, bearer-токен. */
-export interface RemoteHostOptions {
-  baseUrl: string;
-  sessionId?: string;
-  token?: string | null;
-  /** Локаль клиента (`X-Mma-Locale`); дефолт — локаль процесса. */
-  locale?: string;
-}
-
-/** События, после которых ход сессии завершён (busy снимается). */
-const TERMINAL_TYPES = new Set(["task.finished", "task.failed", "task.cancelled"]);
+export type { RemoteHostOptions } from "./remote-host-types";
 
 /** Тонкий UI-клиент: только wire, без собственной логики хода. */
 export class RemoteHost implements Host {
@@ -297,13 +288,5 @@ export class RemoteHost implements Host {
   /** Локаль клиента: явная опция, иначе текущая локаль процесса. */
   private get locale(): string {
     return this.opts.locale ?? getLocale();
-  }
-}
-
-async function safeText(res: Response): Promise<string> {
-  try {
-    return await res.text();
-  } catch {
-    return "";
   }
 }
