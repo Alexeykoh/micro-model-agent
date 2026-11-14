@@ -10,6 +10,7 @@
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { readMmaVersion } from "../../../core/version";
+import { parseClientTz } from "../../../core/prompt-facts";
 import { configVersion } from "../../../config/persist";
 import { serializeConfigForWire } from "../../../config/redact";
 import { buildConfigRegistry } from "../../../runtime/config-view";
@@ -23,6 +24,9 @@ import { hostStateOf } from "../runtime/host-state";
 import { runHostCommand } from "../runtime/commands";
 import type { AgentServiceState } from "../state";
 import { openSessionStream } from "./events-api";
+import { serveSessionImage } from "./host-images";
+import { handleHostSearch } from "./host-search";
+import { handleHostSessionView } from "./host-session-view";
 import { handleHostSessions } from "./host-sessions";
 import { handleHostFiles } from "./host-files";
 import { handleHostGit } from "./host-git";
@@ -67,6 +71,7 @@ export async function handleHostApi(
     return true;
   }
   if (parts[2] === "files") return handleHostFiles(req, res, reqUrl, s, parts);
+  if (parts[2] === "search") return handleHostSearch(req, res, reqUrl, s, parts);
   if (parts[2] === "git") return handleHostGit(req, res, reqUrl, s, parts);
   if (parts[2] === "memory") return handleHostMemory(req, res, s, parts);
   if (parts[2] === "skills") return handleHostSkills(req, res, s, parts);
@@ -83,12 +88,25 @@ export async function handleHostApi(
   ) {
     return handleHostSessions(req, res, reqUrl, s, parts);
   }
-  if (parts.length !== 5) return false;
+  if (
+    parts.length !== 5 &&
+    !(parts.length === 6 && parts[4] === "images") &&
+    !(parts.length === 7 && parts[4] === "subagents")
+  ) {
+    return false;
+  }
 
   const sessionId = decodeURIComponent(parts[3]);
   const action = parts[4];
   if (!ensureSession(s, res, sessionId)) return true;
 
+  if (action === "system-prompt" || action === "security" || action === "subagents") {
+    return handleHostSessionView(req, res, reqUrl, s, parts);
+  }
+
+  if (action === "images" && parts.length === 6 && req.method === "GET") {
+    return serveSessionImage(res, s, sessionId, decodeURIComponent(parts[5]));
+  }
   if (action === "submit" && req.method === "POST") return submit(req, res, s, sessionId);
   if (action === "stream" && req.method === "GET") {
     openSessionStream(req, res, reqUrl, s, sessionId);
@@ -193,6 +211,8 @@ async function submit(
     sendProblem(res, problem({ type: "validation", title: parsed.error, status: 422 }));
     return true;
   }
+  const clientTz = parseClientTz(body.clientTz);
+  if (clientTz) s.pool.setClientTz(sessionId, clientTz);
   const created = dispatchInteractive(s, sessionId, text, tenantOf(req, s), parsed.images);
   if (!created.ok) {
     sendProblem(

@@ -147,12 +147,18 @@ export function makeServiceForwarder(opts: ServiceForwarderOptions): ServiceForw
     },
     onToolEnd(call, result, durationMs) {
       flush();
+      const images = (result.images ?? [])
+        .map((part) => part.image_url?.url)
+        .filter((url): url is string => typeof url === "string" && url.length > 0);
+      const imageRefs = (result.imageRefs ?? []).map((ref) => ref.file);
       emit("tool.end", {
         toolCallId: call.id,
         name: call.name,
         success: result.success,
         durationMs,
         output: stripAnsi(redactContextSecrets(clipToolOutput(call.name, result.output || ""))),
+        ...(images.length ? { images } : {}),
+        ...(imageRefs.length ? { imageRefs } : {}),
       });
     },
     flush,

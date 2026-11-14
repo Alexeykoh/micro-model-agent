@@ -25,5 +25,20 @@ export interface WebDaemonHost extends Host {
   lspDoctor(): Promise<unknown>;
   plugins(): Promise<unknown>;
   installUpdate(): Promise<unknown>;
+  /** Байты сохранённой картинки тула (панель/лента в daemon-режиме). */
+  readImage(
+    sessionId: string,
+    name: string,
+  ): Promise<{ bytes: Uint8Array; mime: string } | null>;
+  /** Системный промпт активного раннера сессии. */
+  sessionPrompt(sessionId: string): Promise<unknown>;
+  /** Журнал защиты сессии (буфер + audit.jsonl). */
+  sessionSecurity(sessionId: string, limit?: number): Promise<unknown>;
+  /** Снимки прогонов субагентов сессии. */
+  subagentRuns(sessionId: string, toolCallId?: string): Promise<unknown>;
+  /** Остановить прогон субагента. */
+  interruptSubagent(sessionId: string, runId: string): Promise<unknown>;
+  /** Поиск по workspace (панель Files / `@`-mentions). */
+  search(query: string, namesOnly: boolean): Promise<unknown>;
   dispose(): void;
 }

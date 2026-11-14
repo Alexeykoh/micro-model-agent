@@ -26,7 +26,8 @@ export function mapHostEvent(ev: HostEvent): SseEvent | null {
         name: String(data.name ?? ""),
         args: data.args ?? {},
       };
-    case "tool.end":
+    case "tool.end": {
+      const images = toolImageUrls(ev, data);
       return {
         ...base,
         type: "tool_end",
@@ -35,6 +36,17 @@ export function mapHostEvent(ev: HostEvent): SseEvent | null {
         success: data.success !== false,
         durationMs: Number(data.durationMs ?? 0),
         output: String(data.output ?? ""),
+        ...(images.length ? { images } : {}),
+      };
+    }
+    case "log":
+      return {
+        ...base,
+        type: "log",
+        level: String(data.level ?? "info"),
+        source: String(data.source ?? "mma"),
+        text: String(data.text ?? ""),
+        diagnostic: data.diagnostic === true,
       };
     case "plan":
       return {
@@ -107,7 +119,33 @@ export function mapHostEvent(ev: HostEvent): SseEvent | null {
         ...(data.error ? { error: String(data.error) } : {}),
         ...(data.progress ? { progress: data.progress } : {}),
       };
+    case "subagent": {
+      // Внутренний wire-объект стора несёт свои type/ts/sessionId — их
+      // заменяет оболочка события.
+      const fields = { ...data };
+      delete fields.type;
+      delete fields.ts;
+      delete fields.sessionId;
+      return { ...base, type: "subagent", ...fields };
+    }
     default:
       return null;
   }
+}
+
+/**
+ * URL'ы картинок тула для `tool_end`. Сохранённые refs (`imageRefs`) отдаются
+ * адаптером из `/api/sessions/:id/images/:name`; inline data URL'ы — как есть.
+ */
+function toolImageUrls(
+  ev: HostEvent,
+  data: Record<string, unknown>,
+): string[] {
+  const refs = Array.isArray(data.imageRefs) ? data.imageRefs.map(String) : [];
+  if (refs.length && ev.sessionId) {
+    return refs.map(
+      (file) => `/api/sessions/${encodeURIComponent(ev.sessionId!)}/images/${encodeURIComponent(file)}`,
+    );
+  }
+  return Array.isArray(data.images) ? data.images.map(String) : [];
 }

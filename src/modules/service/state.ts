@@ -20,6 +20,7 @@ import type { UpdaterModule } from "../updater/module";
 import type { ExecutionModule } from "../execution/module";
 import { RunPool } from "../../runtime/run-pool/run-pool";
 import { makeModelCache, type ModelCache } from "../../runtime/model-cache";
+import { SubagentRunStore } from "../../runtime/subagent-runs";
 import { TaskRegistry, type TenantContext } from "./runtime/task-registry";
 import { EnvelopeLog } from "./runtime/envelope";
 
@@ -135,6 +136,8 @@ export interface AgentServiceState {
   tenant: TenantContext;
   /** Интервал SSE keep-alive (мс). */
   keepaliveMs: number;
+  /** Прогоны субагентов: снимки и живые события (split W10). */
+  subagentRuns: SubagentRunStore;
   startedAt: number;
 }
 
@@ -180,6 +183,7 @@ export function createServiceState(deps: ServiceDeps): AgentServiceState {
     turnSeq: 0,
     clients: new Set(),
     pendingQuestions: new Map(),
+    subagentRuns: new SubagentRunStore(),
     readyRate: new Map(),
     maxSseClients: deps.maxSseClients ?? 32,
     sseIdleMs: deps.sseIdleMs ?? 120_000,

@@ -262,6 +262,8 @@ export function declaredEventTypes(spec: SpecLike): string[] {
 export function emittedEventTypes(serviceDir: string): string[] {
   const files = [
     "runtime/event-bridge.ts",
+    "runtime/log-bridge.ts",
+    "runtime/subagent-events.ts",
     "runtime/prompt-io.ts",
     "api/tasks-api.ts",
     "api/tasks-submit.ts",

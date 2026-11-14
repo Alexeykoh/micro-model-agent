@@ -60,5 +60,7 @@ export const EVENT_TYPES = [
   "meta",
   "retract",
   "critic",
+  "log",
+  "subagent",
   "update",
 ];

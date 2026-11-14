@@ -46,6 +46,21 @@ function fakeDaemon() {
     plugins: async () => ({ plugins: [], failures: [], mcp: [] }),
     installUpdate: async () => ({ ok: true, installed: "0.26.0" }),
     skills: async () => ({ skills: [] }),
+    readImage: async (sessionId: string, name: string) =>
+      name === "shot.png" ? { bytes: new Uint8Array([1, 2, 3]), mime: "image/png" } : null,
+    sessionPrompt: async () => ({ available: true, text: "system" }),
+    sessionSecurity: async () => ({ events: [{ action: "block" }], cap: 200 }),
+    subagentRuns: async (_id: string, toolCallId?: string) => ({
+      runs: [{ runId: "run-1", parentToolCallId: toolCallId ?? "t1" }],
+    }),
+    interruptSubagent: async () => ({ ok: true }),
+    search: async (q: string, namesOnly: boolean) => ({
+      results: [{ kind: "path", path: q }],
+      truncated: false,
+      ms: 1,
+      scanned: 1,
+      namesOnly,
+    }),
     executeCommand: async (line) => {
       calls.commands.push(line);
       return { ok: true, output: ["status: ok"] };
@@ -122,6 +137,36 @@ describe("web daemon adapter (W4)", () => {
       const files = await doFetch(`${base}/api/files?path=`);
       expect(files.status).toBe(200);
       expect(((await files.json()) as { entries: unknown[] }).entries).toHaveLength(1);
+
+      const search = await doFetch(`${base}/api/search?q=a&names=1`);
+      expect(search.status).toBe(200);
+      expect(((await search.json()) as { results: unknown[] }).results).toHaveLength(1);
+
+      const prompt = await doFetch(`${base}/api/sessions/S1/system-prompt`);
+      expect(prompt.status).toBe(200);
+      expect(((await prompt.json()) as { text: string }).text).toBe("system");
+
+      const security = await doFetch(`${base}/api/sessions/S1/security?limit=5`);
+      expect(security.status).toBe(200);
+      expect(((await security.json()) as { events: unknown[] }).events).toHaveLength(1);
+
+      const subs = await doFetch(`${base}/api/sessions/S1/subagents?toolCallId=t9`);
+      expect(subs.status).toBe(200);
+      expect(((await subs.json()) as { runs: Array<{ parentToolCallId: string }> }).runs[0].parentToolCallId).toBe("t9");
+
+      const interrupted = await doFetch(`${base}/api/sessions/S1/subagents/run-1/interrupt`, {
+        method: "POST",
+        body: "{}",
+      });
+      expect(interrupted.status).toBe(200);
+
+      const image = await doFetch(`${base}/api/sessions/S1/images/shot.png`);
+      expect(image.status).toBe(200);
+      expect(image.headers.get("content-type")).toContain("image/png");
+      expect((await image.arrayBuffer()).byteLength).toBe(3);
+
+      const missing = await doFetch(`${base}/api/sessions/S1/images/none.png`);
+      expect(missing.status).toBe(404);
 
       const history = await doFetch(`${base}/api/sessions/S1/history`);
       expect(history.status).toBe(200);

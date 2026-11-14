@@ -83,6 +83,11 @@ const ROUTES: Record<string, Handler> = {
   "GET /api/files": async ({ res, reqUrl, host }) => {
     sendJson(res, 200, await host.listFiles(reqUrl.searchParams.get("path") ?? ""));
   },
+  "GET /api/search": async ({ res, reqUrl, host }) => {
+    const q = (reqUrl.searchParams.get("q") ?? "").trim();
+    if (!q) return sendJson(res, 400, { error: "missing_query" });
+    sendJson(res, 200, await host.search(q, reqUrl.searchParams.get("names") === "1"));
+  },
   "GET /api/commands": ({ res }) => {
     sendJson(res, 200, { commands: webCommandList() });
   },
@@ -154,7 +159,43 @@ async function sessionRoute(ctx: Ctx): Promise<boolean> {
     ctx.res.end();
     return true;
   }
+  if (parts.length === 6 && parts[3] === "subagents" && parts[5] === "interrupt") {
+    if (ctx.req.method !== "POST") return false;
+    sendJson(ctx.res, 200, await ctx.host.interruptSubagent(id, decodeURIComponent(parts[4])));
+    return true;
+  }
   if (ctx.req.method !== "GET") return false;
+  if (parts.length === 5 && parts[3] === "images") {
+    const img = await ctx.host.readImage(id, decodeURIComponent(parts[4]));
+    if (!img) {
+      sendJson(ctx.res, 404, { error: "not_found" });
+      return true;
+    }
+    ctx.res.writeHead(200, {
+      "Content-Type": img.mime,
+      "Cache-Control": "private, max-age=31536000, immutable",
+    });
+    ctx.res.end(img.bytes);
+    return true;
+  }
+  if (parts.length === 4 && parts[3] === "system-prompt") {
+    sendJson(ctx.res, 200, await ctx.host.sessionPrompt(id));
+    return true;
+  }
+  if (parts.length === 4 && parts[3] === "security") {
+    const raw = ctx.reqUrl.searchParams.get("limit");
+    const limit = raw && Number.isFinite(Number(raw)) ? Number(raw) : undefined;
+    sendJson(ctx.res, 200, await ctx.host.sessionSecurity(id, limit));
+    return true;
+  }
+  if (parts.length === 4 && parts[3] === "subagents") {
+    sendJson(
+      ctx.res,
+      200,
+      await ctx.host.subagentRuns(id, ctx.reqUrl.searchParams.get("toolCallId") ?? undefined),
+    );
+    return true;
+  }
   if (parts.length === 4 && parts[3] === "history") {
     sendJson(ctx.res, 200, { messages: await ctx.host.getHistory(id) });
     return true;
