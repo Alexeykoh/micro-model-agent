@@ -33,6 +33,7 @@ import {
   type WebUiState,
 } from "./state";
 import { pushState } from "./session/session-status";
+import { submitTurnFromHost } from "./session/turns";
 import { emitSessions } from "./session/sessions-api";
 // Чистые снапшот-хелперы живут в `./host-state`; реэкспорт, чтобы существующие
 // импортёры (`webui-usage`, `webui-plan` тесты) не чинить.
@@ -216,9 +217,9 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
 
   const host = new WebHost({
     isBusy: () => state.pool.anyBusy(),
-    // Ходы браузера — только `POST /api/message` → per-session раннер.
-    // `Host.submit` (плагинный `hostBridge`) в web не поддерживается.
-    runAgent: () => Promise.reject(new Error("web submit: use POST /api/message")),
+    // Ход браузера идёт тем же путём, что `POST /api/message` (INV-S2):
+    // `Host.submit` — единственная точка входа, второго пути нет.
+    submitTurn: (text, opts) => submitTurnFromHost(state, text, opts),
     // Scoped-стоп раннеров ведёт `actions-api` (по владельцу слота); здесь —
     // no-op fallback для легаси-слота без сессии.
     interrupt: () => {},
