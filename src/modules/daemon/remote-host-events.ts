@@ -1,25 +1,34 @@
 /**
- * SSE-поток событий демона для `RemoteHost` (split W4, правило ≤300).
+ * SSE-поток событий демона для `RemoteHost` (split W4/W8, правило ≤300).
  *
  * Класс держит одно соединение, resume по `Last-Event-ID`, разбор envelope v1
- * и набор слушателей. `RemoteHost` передаёт сюда только адрес потока и токен.
+ * и набор слушателей. Обрыв сети/потока не убивает подписку: клиент
+ * переподключается с backoff, пока его не закрыли через `dispose()`.
  */
 import type { HostEvent } from "../../core/host";
 
-/** Опции потока: адрес, токен и хук на каждое событие (для busy-флагов). */
+/** Опции потока: адрес, токен, хук события и тестовые швы. */
 export interface RemoteEventStreamOptions {
   streamUrl: () => string;
   token?: string | null;
   onEvent?: (ev: HostEvent) => void;
+  /** Пауза перед переподключением (мс); дефолт 1000. */
+  retryMs?: number;
+  /** Тестовый шов подмены сети. */
+  fetchImpl?: typeof fetch;
 }
 
-/** Подписка на SSE демона с ленивым соединением. */
+/** Подписка на SSE демона с ленивым соединением и авто-реконнектом. */
 export class RemoteEventStream {
   private readonly listeners = new Set<(ev: HostEvent) => void>();
+  private readonly fetchImpl: typeof fetch;
   private lastSeq = 0;
   private stream?: { controller: AbortController };
+  private disposed = false;
 
-  constructor(private readonly opts: RemoteEventStreamOptions) {}
+  constructor(private readonly opts: RemoteEventStreamOptions) {
+    this.fetchImpl = opts.fetchImpl ?? fetch;
+  }
 
   /** Подписка; соединение поднимается при первом слушателе. */
   subscribe(fn: (ev: HostEvent) => void): () => void {
@@ -32,7 +41,7 @@ export class RemoteEventStream {
 
   /** Поднять соединение без слушателя (нужно после submit). */
   ensure(): void {
-    if (this.stream) return;
+    if (this.stream || this.disposed) return;
     const controller = new AbortController();
     this.stream = { controller };
     void this.run(controller.signal).finally(() => {
@@ -40,19 +49,31 @@ export class RemoteEventStream {
     });
   }
 
-  /** Закрыть поток. */
+  /** Закрыть поток; после этого авто-реконнект не поднимается. */
   dispose(): void {
+    this.disposed = true;
     this.stream?.controller.abort();
     this.stream = undefined;
   }
 
+  /** Один цикл жизни: connect → обрыв → пауза → reconnect, пока живы. */
   private async run(signal: AbortSignal): Promise<void> {
+    const retryMs = this.opts.retryMs ?? 1000;
+    while (!signal.aborted) {
+      await this.connect(signal);
+      if (signal.aborted) return;
+      await sleep(retryMs, signal);
+    }
+  }
+
+  /** Одно SSE-соединение; возвращает управление на обрыве или закрытии. */
+  private async connect(signal: AbortSignal): Promise<void> {
     const headers: Record<string, string> = { Accept: "text/event-stream" };
     if (this.opts.token) headers.Authorization = `Bearer ${this.opts.token}`;
     if (this.lastSeq > 0) headers["Last-Event-ID"] = String(this.lastSeq);
     let res: Response;
     try {
-      res = await fetch(this.opts.streamUrl(), { headers, signal });
+      res = await this.fetchImpl(this.opts.streamUrl(), { headers, signal });
     } catch {
       return;
     }
@@ -73,7 +94,7 @@ export class RemoteEventStream {
         }
       }
     } catch {
-      /* поток закрыт клиентом или сетью — следующий вызов откроет новый */
+      /* поток закрыт клиентом или сетью — reconnect сделает следующий виток */
     }
   }
 
@@ -103,4 +124,18 @@ export class RemoteEventStream {
     this.opts.onEvent?.(event);
     for (const fn of this.listeners) fn(event);
   }
+}
+
+/** Пауза, прерываемая `dispose()` без висящего таймера. */
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) return resolve();
+    const timer = setTimeout(done, ms);
+    function done(): void {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", done);
+      resolve();
+    }
+    signal.addEventListener("abort", done, { once: true });
+  });
 }

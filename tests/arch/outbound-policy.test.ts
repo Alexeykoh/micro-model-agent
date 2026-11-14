@@ -53,8 +53,6 @@ export const OUTBOUND_FETCH_ALLOWLIST: Record<string, string> = {
     "Thin UI client talks only to the local daemon (127.0.0.1, token file)",
   "src/modules/daemon/remote-host.ts":
     "Thin UI client: only the configured daemon URL (token from env/file)",
-  "src/modules/daemon/remote-host-events.ts":
-    "Thin UI client: SSE stream of the configured daemon URL (token from env/file)",
   "src/modules/service/runtime/webhook.ts":
     "Validated by checkCallbackUrl (https/SSRF) before fetch; redirect: manual",
   "src/modules/setup/discovery.ts":
