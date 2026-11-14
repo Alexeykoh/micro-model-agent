@@ -15,6 +15,7 @@ import { createReplEditor } from "./repl-editor";
 import { RemoteHost } from "../modules/daemon/remote-host";
 import { readDaemonToken } from "../modules/daemon/protocol";
 import { resolveDaemonSession } from "./daemon-session";
+import { planLines, usageLine } from "./daemon-repl-render";
 
 /** Параметры подключения тонкого клиента. */
 export interface DaemonReplOptions {
@@ -46,6 +47,7 @@ export async function runDaemonRepl(opts: DaemonReplOptions): Promise<void> {
   let pending: PendingQuestion | null = null;
   let closed = false;
   let exitRequested = false;
+  let lastPlan = "";
 
   const unsubscribe = host.subscribeEvents((ev) => {
     const data = (ev.data ?? {}) as Record<string, unknown>;
@@ -78,7 +80,21 @@ export async function runDaemonRepl(opts: DaemonReplOptions): Promise<void> {
         }
         break;
       }
-      case "task.finished":
+      case "plan": {
+        const lines = planLines(data);
+        const sig = lines.join("\n");
+        if (lines.length > 0 && sig !== lastPlan) {
+          lastPlan = sig;
+          renderer.planBlock(lines);
+        }
+        break;
+      }
+      case "task.finished": {
+        const line = usageLine(data);
+        if (line) channel.writeLine(pc.dim(line));
+        channel.writeLine("");
+        break;
+      }
       case "task.failed":
       case "task.cancelled":
         channel.writeLine("");

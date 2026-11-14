@@ -375,6 +375,7 @@ Host-контракт для этого не нужен.
 | W5 | One-shot `--daemon` через job API. **Закрыт 2026-11-13** (`feat/daemon-oneshot`): `mma "prompt" --daemon <url>` → `POST /v1/sessions/:id/tasks` + poll `/v1/tasks/:jobId` (`modules/daemon/remote-tasks.ts`), общий `resolveDaemonSession`. |
 | W6 | TLS и удалённая закалка: in-app TLS, требования к нелупбэк-биндцу, ротация токена, фикс `deploy/Dockerfile.service`. **Закрыт 2026-11-13** (`feat/daemon-tls`): `service.tls.cert|key`, `terminatedByProxy`/`MMA_SERVICE_TLS_PROXY`, `--rotate-token`, `MMA_CONFIG_DIR=/data/mma` в образе. |
 | W7 | Документация, реестр долгов, удаление устаревших заглушек. **Закрыт 2026-11-13** (`docs/w7-cleanup`): docs/architecture и README синхронизированы, mcp-обёртка удалена, паритет зафиксирован в долге `DEBT(daemon-parity-gaps)`. |
+| W8 | Паритет тонких клиентов: авто-реконнект SSE и рендер plan/usage в thin-REPL. **Закрыт 2026-11-14** (`feat/daemon-parity`): `RemoteEventStream` переподключается с `Last-Event-ID`, `daemon-repl-render.ts` печатает шаги плана и usage. Остаток паритета — `DEBT(daemon-parity-gaps)`. |
 
 ## 16. Тестирование и гейты
 

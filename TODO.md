@@ -146,9 +146,9 @@
       - [x] **W7** — уборка (`docs/w7-cleanup`): доки, снятые заглушки,
             реестр долгов, синк `docs/README`.
 
-      **Паритет после волн** — `DEBT(daemon-parity-gaps)`: полный каталог команд и рендер thin-REPL
-      (plan/usage/critic/subagent), вставка картинок в thin-REPL, авто-реконнект
-      SSE, локаль `X-Mma-Locale`/i18n, e2e-тесты «демон + thin-REPL/web».
+      **Паритет после волн** — `DEBT(daemon-parity-gaps)`: полный каталог
+      команд и рендер thin-REPL (plan/usage сделаны; critic/subagent — нет),
+      вставка картинок, локаль `X-Mma-Locale`/i18n, e2e «демон + thin-REPL/web».
 
       **Релиз:** `CHANGELOG`/версия `0.26.0` не трогали; `v0_26_0` не влит в `dev`.
       Обычный `mma web` остаётся in-process; `--daemon-url` — адаптер к демону.
