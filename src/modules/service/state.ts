@@ -138,6 +138,10 @@ export interface AgentServiceState {
   keepaliveMs: number;
   /** Прогоны субагентов: снимки и живые события (split W10). */
   subagentRuns: SubagentRunStore;
+  /** Кэш последней диагностики LSP (split W11, панель LSP). */
+  lspDoctor?: unknown;
+  /** Идёт диагностика LSP (single-flight). */
+  lspProbing: boolean;
   startedAt: number;
 }
 
@@ -184,6 +188,7 @@ export function createServiceState(deps: ServiceDeps): AgentServiceState {
     clients: new Set(),
     pendingQuestions: new Map(),
     subagentRuns: new SubagentRunStore(),
+    lspProbing: false,
     readyRate: new Map(),
     maxSseClients: deps.maxSseClients ?? 32,
     sseIdleMs: deps.sseIdleMs ?? 120_000,

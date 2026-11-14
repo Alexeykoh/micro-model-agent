@@ -32,6 +32,7 @@ const COMPOSITE_STATE_ALLOWED = new Set([
   "src/modules/webui/server.ts",
   "src/modules/webui/util.ts",
   "src/modules/webui/daemon-api.ts",
+  "src/modules/webui/daemon-api-routes.ts",
   "src/modules/webui/daemon-module.ts",
 ]);
 

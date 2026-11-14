@@ -181,9 +181,14 @@ describe("host setup/index/lsp wire", () => {
     expect(Array.isArray(res.json.providers)).toBe(true);
   });
 
-  it("answers 503 for index/lsp without modules", async () => {
+  it("serves the LSP table without a live module and 503 for index", async () => {
     expect((await httpJson(`${base}/v1/host/index`, { method: "POST" })).status).toBe(503);
-    expect((await httpJson(`${base}/v1/host/lsp`)).status).toBe(503);
+    const lsp = await httpJson(`${base}/v1/host/lsp`);
+    expect(lsp.status).toBe(200);
+    expect(Array.isArray(lsp.json.servers)).toBe(true);
+    const doctor = await httpJson(`${base}/v1/host/lsp/doctor`);
+    expect(doctor.status).toBe(200);
+    expect(doctor.json.probing).toBe(false);
   });
 
   it("serves index and lsp when modules are wired", async () => {
@@ -202,13 +207,15 @@ describe("host setup/index/lsp wire", () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(refreshed).toBe(true);
 
-    const flags = await httpJson(`${base}/v1/host/lsp`);
-    expect(flags.status).toBe(200);
-    expect(flags.json.enabled).toBe(true);
-
     const doctor = await httpJson(`${base}/v1/host/lsp/doctor`);
     expect(doctor.status).toBe(200);
-    expect(doctor.json.ok).toBe(true);
+    expect((doctor.json.flags as { enabled: boolean }).enabled).toBe(true);
+
+    const run = await httpJson(`${base}/v1/host/lsp/doctor`, { method: "POST" });
+    expect(run.status).toBe(202);
+    const after = await httpJson(`${base}/v1/host/lsp/doctor`);
+    expect(after.status).toBe(200);
+    expect(after.json.diagnosis).toEqual({ ok: true, files: [] });
   });
 });
 

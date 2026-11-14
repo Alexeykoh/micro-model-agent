@@ -48,6 +48,14 @@ export function mapHostEvent(ev: HostEvent): SseEvent | null {
         text: String(data.text ?? ""),
         diagnostic: data.diagnostic === true,
       };
+    case "lsp":
+      return {
+        ...base,
+        type: "lsp",
+        phase: String(data.phase ?? ""),
+      };
+    case "setup_done":
+      return { ...base, type: "setup_done" };
     case "plan":
       return {
         ...base,

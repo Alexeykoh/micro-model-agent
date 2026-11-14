@@ -167,7 +167,8 @@ data: { "v":1, "seq", "ts", "type", "sessionId", "taskId", "data" }
 
 Типы: `task.accepted/started/finished/failed/cancelled/waiting_input`,
 `text.delta`, `reasoning.delta`, `phase`, `tool.start`, `tool.end`, `question`,
-`plan`, `meta`, `retract`, `critic`, `log`, `subagent`, `update`. `seq` монотонный на сессию; resume —
+`plan`, `meta`, `retract`, `critic`, `log`, `subagent`, `lsp`, `setup_done`,
+`update`. `seq` монотонный на сессию; resume —
 `Last-Event-ID` или `?since=<seq>` из in-memory буфера (best-effort между
 рестартами; статус всегда доступен pull'ом). Keep-alive `: ping` каждые 20 с;
 `X-Accel-Buffering: no`. Список событий задачи ограничен 2000 (старые
@@ -232,6 +233,14 @@ timestamp, windowMs?})`: сравнение за константное врем
 
 | Метод | Путь | Назначение |
 |---|---|---|
+| GET | `/v1/host/providers` | провайдеры: список/создание-правка/удаление |
+| GET/POST/PUT/DELETE | `/v1/host/mcp[/:id]` | MCP-серверы: список и CRUD (restartRequired) |
+| GET/POST/DELETE | `/v1/host/memory[/:category/:n]` | память: чтение, запись, забывание |
+| GET/POST/PUT | `/v1/host/plugins[/:name[/settings]]`, `/v1/host/reload/plugins` | плагины: список, тумблер, настройки, reload |
+| GET/PUT | `/v1/host/lsp[/:lang]` | таблица LSP-серверов и правка |
+| GET/POST | `/v1/host/lsp/doctor` | кэш диагностики / запуск (результат — SSE `lsp`) |
+| POST | `/v1/host/lsp/check`, `/check-changed` | диагностика файла/изменённых |
+| GET/POST | `/v1/host/setup`, `/setup/{scan,models,test,context,locale}` | визард первого запуска |
 | GET | `/v1/host/state?session=` | `HostStateSnapshot` + `workspace`/`version`/`protocol` |
 | GET/POST | `/v1/host/sessions` | список / создание сессии |
 | DELETE | `/v1/host/sessions/:id` | удаление простаивающей сессии (409 при busy) |

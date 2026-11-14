@@ -21,8 +21,12 @@ import type { AgentServiceState } from "../state";
 import { handleHostFile } from "./host-file";
 import { handleHostFiles } from "./host-files";
 import { handleHostGit } from "./host-git";
-import { handleHostIndex, handleHostLsp, handleHostSetup } from "./host-misc";
+import { handleHostIndex, handleHostSetup } from "./host-misc";
+import { handleHostLspRoute } from "./host-lsp";
+import { handleHostSetupWrite } from "./host-setup-write";
+import { handleHostMcp } from "./host-mcp";
 import { handleHostPlugins } from "./host-plugins";
+import { handleHostProviders } from "./host-providers";
 import { handleHostSearch } from "./host-search";
 import { handleHostSessionAction } from "./host-session-routes";
 import { handleHostSessions } from "./host-sessions";
@@ -68,10 +72,18 @@ export async function handleHostApi(
   if (parts[2] === "git") return handleHostGit(req, res, reqUrl, s, parts);
   if (parts[2] === "memory") return handleHostMemory(req, res, s, parts);
   if (parts[2] === "skills") return handleHostSkills(req, res, s, parts);
-  if (parts[2] === "setup") return handleHostSetup(req, res, s, parts);
+  if (parts[2] === "setup") {
+    return req.method === "POST"
+      ? handleHostSetupWrite(req, res, s, parts)
+      : handleHostSetup(req, res, s, parts);
+  }
   if (parts[2] === "index") return handleHostIndex(req, res, s, parts);
-  if (parts[2] === "lsp") return handleHostLsp(req, res, s, parts);
-  if (parts[2] === "plugins") return handleHostPlugins(req, res, s, parts);
+  if (parts[2] === "lsp") return handleHostLspRoute(req, res, s, parts);
+  if (parts[2] === "plugins" || (parts[2] === "reload" && parts[3] === "plugins")) {
+    return handleHostPlugins(req, res, s, parts);
+  }
+  if (parts[2] === "mcp") return handleHostMcp(req, res, s, parts);
+  if (parts[2] === "providers") return handleHostProviders(req, res, s, parts);
   if (parts[2] === "update") return handleHostUpdate(req, res, s, parts);
   if (parts[2] !== "sessions") return false;
   if (

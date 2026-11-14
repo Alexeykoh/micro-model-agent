@@ -33,6 +33,12 @@ export function emitSessionEvent(
   return env;
 }
 
+/** Событие процесса (не сессии): каждому подписчику в его поток (LSP/update). */
+export function emitAllSessions(s: AgentServiceState, type: string, data: unknown): void {
+  const ids = new Set([...s.clients].map((client) => client.sessionId));
+  for (const sessionId of ids) emitSessionEvent(s, sessionId, type, data);
+}
+
 /** Аллоцирует seq, кладёт в буфер/задачу и рассылает подписчикам сессии. */
 export function emitEvent(
   s: AgentServiceState,

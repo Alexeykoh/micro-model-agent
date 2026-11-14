@@ -147,9 +147,8 @@
             реестр долгов, синк `docs/README`.
 
       **Паритет после волн** — `DEBT(daemon-command-catalog)` (полный каталог
-      команд) и `DEBT(daemon-web-settings)` (панели providers/settings/mcp/setup
-      в daemon-режиме). Рендер critic/subagent, картинки, локаль, файлы, поиск,
-      очередь, журнал защиты и субагенты закрыты W9–W10.
+      команд). Рендер critic/subagent, картинки, локаль, файлы, поиск, очередь,
+      журнал защиты, субагенты и все панели настроек закрыты W9–W11.
 
       - [x] **W8** — паритет тонких клиентов (`feat/daemon-parity`):
             SSE-реконнект `Last-Event-ID`, рендер plan/usage в thin-REPL.
@@ -160,8 +159,11 @@
       - [x] **W10** — один путь хода и web-поверхность (та же ветка):
             `POST /api/message` → `Host.submit` (INV-S2); SSE `log`/`subagent`,
             картинки тулов, `/v1/host/{file,search}`, `system-prompt`,
-            `security`, `subagents`, `queue`, `/images`. Остаток панелей
-            providers/settings/mcp/setup — `DEBT(daemon-web-settings)`.
+            `security`, `subagents`, `queue`, `/images`.
+      - [x] **W11** — панели настроек (та же ветка): провайдеры, MCP, память,
+            плагины (тумблер/settings/reload), LSP (таблица/правка/check/doctor
+            + SSE `lsp`), визард setup (apply/probes/scan/locale) через
+            `/v1/host/*`; e2e `tests/e2e-separation.test.ts`.
 
       **Релиз:** `CHANGELOG`/версия `0.26.0` не трогали; `v0_26_0` не влит в `dev`.
       Обычный `mma web` остаётся in-process; `--daemon-url` — адаптер к демону.

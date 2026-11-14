@@ -86,6 +86,10 @@ and `executeCommand(line)`.
   with the local host (INV-S2). The host wire also carries `log`, `subagent`,
   tool images, the file viewer, search, system prompt, security journal,
   subagent snapshots and the message queue.
+- **Settings parity (W11):** providers, MCP, memory, plugins, LSP and the setup
+  wizard are served by `/v1/host/*` and proxied by the web adapter; pure
+  validation/CRUD lives in `src/runtime/` so the browser surface and the daemon
+  cannot drift. The end-to-end guard is `tests/e2e-separation.test.ts`.
 - **WebUi module** (`src/modules/webui/`): statics, REST/SSE and settings; in
   daemon mode it proxies `/api/*` to `/v1/host/*` (`daemon-api.ts`) and maps
   events (`daemon-events.ts`). Unsupported panels return `501`, never an empty

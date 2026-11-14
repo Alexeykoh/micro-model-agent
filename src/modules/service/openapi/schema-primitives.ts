@@ -62,5 +62,7 @@ export const EVENT_TYPES = [
   "critic",
   "log",
   "subagent",
+  "lsp",
+  "setup_done",
   "update",
 ];

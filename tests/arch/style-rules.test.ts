@@ -89,7 +89,7 @@ export const SILENT_CATCHES: Record<string, { count: number; reason: string }> =
     count: 1,
     reason: "пересборка индекса fire-and-forget: статус 202 уже отдан, ошибка видна в следующем GET /v1/host/state",
   },
-  "src/modules/webui/daemon-api.ts": {
+  "src/modules/webui/daemon-api-routes.ts": {
     count: 2,
     reason:
       "best-effort state для иконки и fallback sessionId у queue-action: ошибка сети не должна ломать ответ адаптера",

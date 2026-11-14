@@ -75,6 +75,32 @@ function fakeDaemon() {
       status: id === "q1" ? 200 : 404,
       body: { ok: true, action },
     }),
+    providers: async () => ({ providers: [{ name: "p" }], active: "p" }),
+    saveProvider: async () => ({ status: 200, body: { ok: true, name: "p" } }),
+    deleteProvider: async () => ({ status: 200, body: { ok: true } }),
+    mcpList: async () => ({ mcp: [{ id: "m" }] }),
+    mcpCreate: async () => ({ status: 200, body: { ok: true, mcp: [] } }),
+    mcpToggle: async () => ({ status: 200, body: { ok: true } }),
+    mcpUpdate: async () => ({ status: 200, body: { ok: true } }),
+    mcpDelete: async () => ({ status: 200, body: { ok: true } }),
+    memoryAdd: async () => ({ status: 200, body: { ok: true } }),
+    memoryDelete: async () => ({ status: 200, body: { ok: true } }),
+    pluginToggle: async () => ({ status: 200, body: { ok: true, plugins: [] } }),
+    pluginSettingsGet: async () => ({ status: 200, body: { ok: true, fields: [] } }),
+    pluginSettingsPut: async () => ({ status: 200, body: { ok: true } }),
+    pluginsReload: async () => ({ status: 200, body: { ok: true, plugins: [] } }),
+    lspServers: async () => ({ servers: [{ lang: "ts" }] }),
+    lspDoctorGet: async () => ({ diagnosis: null, probing: false, flags: { enabled: true } }),
+    lspDoctorRun: async () => ({ status: 202, body: { ok: true } }),
+    lspCheck: async () => ({ status: 200, body: { ok: true } }),
+    lspCheckChanged: async () => ({ status: 200, body: { ok: true } }),
+    lspUpdate: async () => ({ status: 200, body: { ok: true } }),
+    setupApply: async () => ({ status: 200, body: { ok: true, persisted: true } }),
+    setupScan: async () => ({ servers: [] }),
+    setupModels: async () => ({ status: 200, body: { models: ["m"] } }),
+    setupTest: async () => ({ status: 200, body: { ok: true } }),
+    setupContext: async () => ({ status: 200, body: { ok: true, contextWindow: 8192 } }),
+    setupLocale: async (locale: string) => ({ status: 200, body: { ok: true, locale } }),
     executeCommand: async (line) => {
       calls.commands.push(line);
       return { ok: true, output: ["status: ok"] };
@@ -135,9 +161,9 @@ describe("web daemon adapter (W4)", () => {
       const setup = await doFetch(`${base}/api/setup`);
       expect(setup.status).toBe(200);
 
-      const lsp = await doFetch(`${base}/api/lsp`);
-      expect(lsp.status).toBe(200);
-      expect(((await lsp.json()) as { enabled: boolean }).enabled).toBe(true);
+      const lspTable = await doFetch(`${base}/api/lsp`);
+      expect(lspTable.status).toBe(200);
+      expect(((await lspTable.json()) as { servers: unknown[] }).servers).toHaveLength(1);
 
       const memory = await doFetch(`${base}/api/memory`);
       expect(memory.status).toBe(200);
@@ -183,6 +209,86 @@ describe("web daemon adapter (W4)", () => {
       const missing = await doFetch(`${base}/api/sessions/S1/images/none.png`);
       expect(missing.status).toBe(404);
 
+      const providers = await doFetch(`${base}/api/providers`);
+      expect(providers.status).toBe(200);
+      expect(((await providers.json()) as { active: string }).active).toBe("p");
+
+      const providerSave = await doFetch(`${base}/api/providers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "openai", baseUrl: "http://x", label: "p" }),
+      });
+      expect(providerSave.status).toBe(200);
+
+      const mcp = await doFetch(`${base}/api/mcp`);
+      expect(mcp.status).toBe(200);
+      expect(((await mcp.json()) as { mcp: unknown[] }).mcp).toHaveLength(1);
+
+      const mcpToggle = await doFetch(`${base}/api/mcp/m1`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: false }),
+      });
+      expect(mcpToggle.status).toBe(200);
+
+      const memoryAdd = await doFetch(`${base}/api/memory`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category: "facts", text: "x" }),
+      });
+      expect(memoryAdd.status).toBe(200);
+
+      const memoryDelete = await doFetch(`${base}/api/memory/facts/1`, { method: "DELETE" });
+      expect(memoryDelete.status).toBe(200);
+
+      const pluginToggle = await doFetch(`${base}/api/plugins/p1`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: false }),
+      });
+      expect(pluginToggle.status).toBe(200);
+
+      const pluginSettings = await doFetch(`${base}/api/plugins/p1/settings`);
+      expect(pluginSettings.status).toBe(200);
+
+      const reload = await doFetch(`${base}/api/reload/plugins`, { method: "POST" });
+      expect(reload.status).toBe(200);
+
+      const lspSecond = await doFetch(`${base}/api/lsp`);
+      expect(lspSecond.status).toBe(200);
+      expect(((await lspSecond.json()) as { servers: unknown[] }).servers).toHaveLength(1);
+
+      const lspUpdate = await doFetch(`${base}/api/lsp/ts`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ timeout: 5000 }),
+      });
+      expect(lspUpdate.status).toBe(200);
+
+      const lspCheck = await doFetch(`${base}/api/lsp/check`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: "a.ts" }),
+      });
+      expect(lspCheck.status).toBe(200);
+
+      const setupApply = await doFetch(`${base}/api/setup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: "p" }),
+      });
+      expect(setupApply.status).toBe(200);
+
+      const scan = await doFetch(`${base}/api/setup/scan`, { method: "POST" });
+      expect(scan.status).toBe(200);
+
+      const setupLocale = await doFetch(`${base}/api/setup/locale`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locale: "ru" }),
+      });
+      expect(setupLocale.status).toBe(200);
+
       const view = await doFetch(`${base}/api/file?path=exists.ts`);
       expect(view.status).toBe(200);
       expect(await view.text()).toBe("file");
@@ -215,20 +321,16 @@ describe("web daemon adapter (W4)", () => {
     });
   });
 
-  it("answers 501 for the settings/providers surface not yet on the wire", async () => {
+  it("answers 501 for an unknown API path instead of pretending success", async () => {
     const { host } = fakeDaemon();
     const s = createWebUiState();
     s.daemon = host;
     s.bridge = host;
     await withServer(s, async (base) => {
-      // DEBT(daemon-web-settings): этот список — якорь долга; реализовали
-      // маршрут — убери его отсюда, иначе тест продолжит требовать 501.
-      for (const path of ["/api/providers", "/api/settings/system", "/api/mcp", "/api/setup/scan"]) {
-        const res = await doFetch(`${base}${path}`, { method: "GET" });
-        expect(res.status, path).toBe(501);
-        const body = (await res.json()) as { error: string };
-        expect(body.error).toContain("daemon");
-      }
+      const res = await doFetch(`${base}/api/nope`);
+      expect(res.status).toBe(501);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toContain("daemon");
     });
   });
 });

@@ -20,14 +20,14 @@ import type {
 import type { HostBridgeSubmitOptions } from "../types";
 import type { SessionLogEntry } from "../session/log-types";
 import { RemoteEventStream } from "./remote-host-events";
-import { RemotePanelClient } from "./remote-host-panels";
+import { RemoteSettingsClient } from "./remote-host-settings";
 import { TERMINAL_TYPES, safeText, type RemoteHostOptions } from "./remote-host-types";
 import type { SessionMessage, SessionMeta } from "../session/types";
 
 export type { RemoteHostOptions } from "./remote-host-types";
 
 /** Тонкий UI-клиент: только wire, без собственной логики хода. */
-export class RemoteHost extends RemotePanelClient implements Host {
+export class RemoteHost extends RemoteSettingsClient implements Host {
   private activeSession?: string;
   private busy = false;
   private readonly events: RemoteEventStream;
