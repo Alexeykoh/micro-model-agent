@@ -43,6 +43,36 @@ export function mapHostEvent(ev: HostEvent): SseEvent | null {
         steps: data.steps ?? [],
         currentIndex: data.currentIndex ?? 0,
       };
+    case "meta":
+      return {
+        ...base,
+        type: "meta",
+        chunk: String(data.chunk ?? ""),
+        ...(data.kind ? { kind: String(data.kind) } : {}),
+      };
+    case "retract":
+      return {
+        ...base,
+        type: "retract",
+        reason: String(data.reason ?? data.label ?? ""),
+        label: String(data.label ?? ""),
+        ...(data.source ? { source: String(data.source) } : {}),
+        ...(data.iteration !== undefined ? { iteration: data.iteration } : {}),
+        ...(data.verdict ? { verdict: String(data.verdict) } : {}),
+      };
+    case "critic":
+      return {
+        ...base,
+        type: "critic",
+        status: String(data.status ?? ""),
+        durationMs: Number(data.durationMs ?? 0),
+        passes: Number(data.passes ?? 0),
+        issues: data.issues ?? [],
+        checks: data.checks ?? [],
+        ...(data.summary ? { summary: String(data.summary) } : {}),
+        ...(data.timedOut ? { timedOut: true } : {}),
+        ...(data.verdict ? { verdict: String(data.verdict) } : {}),
+      };
     case "question":
       return {
         ...base,

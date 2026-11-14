@@ -57,5 +57,8 @@ export const EVENT_TYPES = [
   "tool.end",
   "question",
   "plan",
+  "meta",
+  "retract",
+  "critic",
   "update",
 ];

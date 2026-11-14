@@ -15,7 +15,7 @@ import { createReplEditor } from "./repl-editor";
 import { RemoteHost } from "../modules/daemon/remote-host";
 import { readDaemonToken } from "../modules/daemon/protocol";
 import { resolveDaemonSession } from "./daemon-session";
-import { planLines, usageLine } from "./daemon-repl-render";
+import { planLines, usageLine, retractLine, criticLine } from "./daemon-repl-render";
 
 /** Параметры подключения тонкого клиента. */
 export interface DaemonReplOptions {
@@ -58,6 +58,21 @@ export async function runDaemonRepl(opts: DaemonReplOptions): Promise<void> {
       case "reasoning.delta":
         renderer.reasoning(String(data.chunk ?? ""));
         break;
+      case "meta": {
+        const chunk = String(data.chunk ?? "");
+        if (chunk) renderer.meta(chunk);
+        break;
+      }
+      case "retract": {
+        const line = retractLine(data);
+        if (line) channel.writeLine(pc.dim(line));
+        break;
+      }
+      case "critic": {
+        const line = criticLine(data);
+        if (line) channel.writeLine(pc.dim(line));
+        break;
+      }
       case "tool.start":
         renderer.toolStart(
           String(data.name ?? "tool"),

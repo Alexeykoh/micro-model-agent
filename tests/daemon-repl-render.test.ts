@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planLines, usageLine } from "../src/cli/daemon-repl-render";
+import { criticLine, planLines, retractLine, usageLine } from "../src/cli/daemon-repl-render";
 
 describe("thin-REPL plan/usage rendering (W8)", () => {
   it("renders plan steps with status marks", () => {
@@ -23,5 +23,19 @@ describe("thin-REPL plan/usage rendering (W8)", () => {
     );
     expect(usageLine({})).toBeUndefined();
     expect(usageLine({ usage: {} })).toBeUndefined();
+  });
+});
+
+describe("thin-REPL meta rendering (W9)", () => {
+  it("prints the retract label and falls back to the reason", () => {
+    expect(retractLine({ label: "draft pulled", reason: "why" })).toBe("draft pulled");
+    expect(retractLine({ label: "", reason: "why" })).toBe("why");
+    expect(retractLine({})).toBe("");
+  });
+
+  it("prints the critic label and falls back to its status", () => {
+    expect(criticLine({ label: "critic: success", status: "success" })).toBe("critic: success");
+    expect(criticLine({ status: "concern" })).toBe("critic · concern");
+    expect(criticLine({})).toBe("");
   });
 });
