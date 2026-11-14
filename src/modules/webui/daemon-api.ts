@@ -10,6 +10,8 @@ import { MAX_BODY_BYTES, readJsonBody } from "../../runtime/http-body";
 import { broadcast, type WebUiState } from "./state";
 import { sendJson } from "./util";
 import { webCommandList } from "./chat/commands";
+import { handleI18nGet } from "./i18n/i18n-api";
+import { handleFaviconGet } from "./favicon";
 import type { WebDaemonHost } from "./daemon-contracts";
 
 interface Ctx {
@@ -26,10 +28,13 @@ type Handler = (ctx: Ctx) => Promise<void> | void;
 const ROUTES: Record<string, Handler> = {
   "GET /api/state": async ({ res, host }) => {
     const state = await host.getState();
+    const ids = state.queuedIds ?? [];
     sendJson(res, 200, {
       busy: state.busy,
       runningSessionIds: state.busy && state.sessionId ? [state.sessionId] : [],
-      queueLen: 0,
+      queueLen: ids.length,
+      queued: ids.length ? { [state.sessionId ?? ""]: ids.length } : {},
+      queuedIds: ids.length ? { [state.sessionId ?? ""]: ids } : {},
       state,
     });
   },
@@ -82,6 +87,25 @@ const ROUTES: Record<string, Handler> = {
   },
   "GET /api/files": async ({ res, reqUrl, host }) => {
     sendJson(res, 200, await host.listFiles(reqUrl.searchParams.get("path") ?? ""));
+  },
+  "GET /api/file": async ({ reqUrl, res, host }) => {
+    const view = await host.fileView(
+      reqUrl.searchParams.get("path") ?? "",
+      reqUrl.searchParams.get("download") === "1",
+    );
+    res.writeHead(view.status, { "Content-Type": view.mime, "Cache-Control": "no-store" });
+    res.end(view.bytes);
+  },
+  "POST /api/queue/cancel": async ({ req, res, s, host }) =>
+    queueAction(req, res, s, host, "cancel"),
+  "POST /api/queue/start": async ({ req, res, s, host }) =>
+    queueAction(req, res, s, host, "start"),
+  "POST /api/queue/edit": async ({ req, res, s, host }) =>
+    queueAction(req, res, s, host, "edit"),
+  "GET /api/i18n": ({ res, s }) => handleI18nGet(res, s),
+  "GET /api/favicon": async ({ res, host }) => {
+    const state = await host.getState().catch(() => undefined);
+    handleFaviconGet(res, { workspace: state?.workspace });
   },
   "GET /api/search": async ({ res, reqUrl, host }) => {
     const q = (reqUrl.searchParams.get("q") ?? "").trim();
@@ -148,8 +172,27 @@ const ROUTES: Record<string, Handler> = {
   },
 };
 
-/** `METHOD /api/sessions/:id[/history|/log]`. */
-async function sessionRoute(ctx: Ctx): Promise<boolean> {
+/** Действие очереди из браузера → host wire; статус/тело пробрасываются. */
+async function queueAction(
+  req: IncomingMessage,
+  res: ServerResponse,
+  s: WebUiState & { daemon?: WebDaemonHost },
+  host: WebDaemonHost,
+  action: "cancel" | "edit" | "start",
+): Promise<void> {
+  const body = await readJsonBody(req, MAX_BODY_BYTES);
+  const sessionId =
+    (typeof body?.sessionId === "string" && body.sessionId.trim()) ||
+    (await host.getState().catch(() => undefined))?.sessionId;
+  const id = typeof body?.id === "string" ? body.id : "";
+  if (!sessionId || !id) return sendJson(res, 400, { error: "bad_request" });
+  const text = typeof body?.text === "string" ? body.text : undefined;
+  const result = await host.queueAction(sessionId, action, id, text);
+  if (result.status < 300) broadcast({ type: "state", ts: Date.now() }, s);
+  sendJson(res, result.status, (result.body ?? {}) as Record<string, unknown>);
+}
+
+/** `METHOD /api/sessions/:id[/history|/log]`. */async function sessionRoute(ctx: Ctx): Promise<boolean> {
   const parts = ctx.reqUrl.pathname.split("/").filter(Boolean);
   if (parts[0] !== "api" || parts[1] !== "sessions" || parts.length < 3) return false;
   const id = decodeURIComponent(parts[2]);
@@ -235,6 +278,8 @@ export async function handleDaemonApi(
       return;
     }
     if (await sessionRoute(ctx)) return;
+    // DEBT(daemon-web-settings): providers/settings/mcp/setup/lsp-check читают
+    // локальные модули процесса; их перенос в runtime — отдельная волна.
     sendJson(res, 501, { error: "not supported in daemon mode", path: reqUrl.pathname });
   } catch (err) {
     sendJson(res, 502, {

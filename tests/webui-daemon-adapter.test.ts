@@ -22,7 +22,11 @@ function fakeDaemon() {
       sessionId = id;
     },
     dispose: () => {},
-    getState: async (): Promise<HostStateSnapshot> => ({ busy: false, sessionId, model: "m" }),
+    getState: async (): Promise<HostStateSnapshot> => ({
+      busy: false,
+      sessionId,
+      queuedIds: ["q1"],
+    }),
     subscribeEvents: () => () => {},
     listSessions: async () => [{ id: sessionId, name: "s" } as never],
     createSession: async (name?: string) => ({ id: "S2", name: name ?? "" }) as never,
@@ -61,6 +65,16 @@ function fakeDaemon() {
       scanned: 1,
       namesOnly,
     }),
+    fileView: async (path: string, download: boolean) => ({
+      status: path === "exists.ts" ? 200 : 404,
+      mime: "text/plain; charset=utf-8",
+      bytes: new Uint8Array(Buffer.from(download ? "download" : "file")),
+    }),
+    queue: async () => ({ queued: 1, ids: ["q1"] }),
+    queueAction: async (_sessionId: string, action: string, id: string) => ({
+      status: id === "q1" ? 200 : 404,
+      body: { ok: true, action },
+    }),
     executeCommand: async (line) => {
       calls.commands.push(line);
       return { ok: true, output: ["status: ok"] };
@@ -79,8 +93,9 @@ describe("web daemon adapter (W4)", () => {
     await withServer(s, async (base) => {
       const state = await doFetch(`${base}/api/state`);
       expect(state.status).toBe(200);
-      const stateBody = (await state.json()) as { state: HostStateSnapshot };
+      const stateBody = (await state.json()) as { state: HostStateSnapshot; queueLen: number };
       expect(stateBody.state.sessionId).toBe("S1");
+      expect(stateBody.queueLen).toBe(1);
 
       const sessions = await doFetch(`${base}/api/sessions`);
       expect(sessions.status).toBe(200);
@@ -168,6 +183,28 @@ describe("web daemon adapter (W4)", () => {
       const missing = await doFetch(`${base}/api/sessions/S1/images/none.png`);
       expect(missing.status).toBe(404);
 
+      const view = await doFetch(`${base}/api/file?path=exists.ts`);
+      expect(view.status).toBe(200);
+      expect(await view.text()).toBe("file");
+
+      const missingFile = await doFetch(`${base}/api/file?path=nope.ts`);
+      expect(missingFile.status).toBe(404);
+
+      const queueCancel = await doFetch(`${base}/api/queue/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: "S1", id: "q1" }),
+      });
+      expect(queueCancel.status).toBe(200);
+
+      const i18n = await doFetch(`${base}/api/i18n`);
+      expect(i18n.status).toBe(200);
+      expect(((await i18n.json()) as { dicts: unknown }).dicts).toBeTruthy();
+
+      const favicon = await doFetch(`${base}/api/favicon`);
+      expect(favicon.status).toBe(200);
+      expect(favicon.headers.get("content-type")).toContain("svg");
+
       const history = await doFetch(`${base}/api/sessions/S1/history`);
       expect(history.status).toBe(200);
       expect(((await history.json()) as { messages: unknown[] }).messages).toHaveLength(1);
@@ -178,16 +215,20 @@ describe("web daemon adapter (W4)", () => {
     });
   });
 
-  it("answers 501 for panels the daemon does not expose yet", async () => {
+  it("answers 501 for the settings/providers surface not yet on the wire", async () => {
     const { host } = fakeDaemon();
     const s = createWebUiState();
     s.daemon = host;
     s.bridge = host;
     await withServer(s, async (base) => {
-      const res = await doFetch(`${base}/api/file?path=x`);
-      expect(res.status).toBe(501);
-      const body = (await res.json()) as { error: string };
-      expect(body.error).toContain("daemon");
+      // DEBT(daemon-web-settings): этот список — якорь долга; реализовали
+      // маршрут — убери его отсюда, иначе тест продолжит требовать 501.
+      for (const path of ["/api/providers", "/api/settings/system", "/api/mcp", "/api/setup/scan"]) {
+        const res = await doFetch(`${base}${path}`, { method: "GET" });
+        expect(res.status, path).toBe(501);
+        const body = (await res.json()) as { error: string };
+        expect(body.error).toContain("daemon");
+      }
     });
   });
 });

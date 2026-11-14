@@ -146,9 +146,10 @@
       - [x] **W7** — уборка (`docs/w7-cleanup`): доки, снятые заглушки,
             реестр долгов, синк `docs/README`.
 
-      **Паритет после волн** — `DEBT(daemon-command-catalog)`: полный каталог
-      команд (рендер critic/subagent, картинки и локаль `X-Mma-Locale` закрыты
-      W9, см. ниже).
+      **Паритет после волн** — `DEBT(daemon-command-catalog)` (полный каталог
+      команд) и `DEBT(daemon-web-settings)` (панели providers/settings/mcp/setup
+      в daemon-режиме). Рендер critic/subagent, картинки, локаль, файлы, поиск,
+      очередь, журнал защиты и субагенты закрыты W9–W10.
 
       - [x] **W8** — паритет тонких клиентов (`feat/daemon-parity`):
             SSE-реконнект `Last-Event-ID`, рендер plan/usage в thin-REPL.
@@ -156,6 +157,11 @@
             `meta`/`retract`/`critic` по wire, Ctrl+V-картинки в thin-REPL,
             `X-Mma-Locale` + ALS, `tests/host-parity.test.ts`,
             `tests/daemon-integration.test.ts`.
+      - [x] **W10** — один путь хода и web-поверхность (та же ветка):
+            `POST /api/message` → `Host.submit` (INV-S2); SSE `log`/`subagent`,
+            картинки тулов, `/v1/host/{file,search}`, `system-prompt`,
+            `security`, `subagents`, `queue`, `/images`. Остаток панелей
+            providers/settings/mcp/setup — `DEBT(daemon-web-settings)`.
 
       **Релиз:** `CHANGELOG`/версия `0.26.0` не трогали; `v0_26_0` не влит в `dev`.
       Обычный `mma web` остаётся in-process; `--daemon-url` — адаптер к демону.

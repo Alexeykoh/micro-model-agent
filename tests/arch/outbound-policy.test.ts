@@ -51,7 +51,7 @@ export const OUTBOUND_FETCH_ALLOWLIST: Record<string, string> = {
   "src/modules/mcp/oauth.ts": "IdP token URL from user MCP server config (oauth.tokenUrl)",
   "src/modules/daemon/protocol.ts":
     "Thin UI client talks only to the local daemon (127.0.0.1, token file)",
-  "src/modules/daemon/remote-host.ts":
+  "src/modules/daemon/remote-host-panels.ts":
     "Thin UI client: only the configured daemon URL (token from env/file)",
   "src/modules/service/runtime/webhook.ts":
     "Validated by checkCallbackUrl (https/SSRF) before fetch; redirect: manual",

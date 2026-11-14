@@ -81,6 +81,11 @@ and `executeCommand(line)`.
   `meta`/`retract`/`critic` channel rides the same SSE, clipboard images are
   read on the client and sent as data-URLs, and `X-Mma-Locale` is resolved per
   request via `runWithLocale` without touching the process locale.
+- **One turn path (W10):** `mma web` no longer starts turns itself —
+  `POST /api/message` calls `Host.submit`, which shares `submitTurnFromHost`
+  with the local host (INV-S2). The host wire also carries `log`, `subagent`,
+  tool images, the file viewer, search, system prompt, security journal,
+  subagent snapshots and the message queue.
 - **WebUi module** (`src/modules/webui/`): statics, REST/SSE and settings; in
   daemon mode it proxies `/api/*` to `/v1/host/*` (`daemon-api.ts`) and maps
   events (`daemon-events.ts`). Unsupported panels return `501`, never an empty

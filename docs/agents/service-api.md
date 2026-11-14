@@ -167,7 +167,7 @@ data: { "v":1, "seq", "ts", "type", "sessionId", "taskId", "data" }
 
 Типы: `task.accepted/started/finished/failed/cancelled/waiting_input`,
 `text.delta`, `reasoning.delta`, `phase`, `tool.start`, `tool.end`, `question`,
-`plan`, `meta`, `retract`, `critic`, `update`. `seq` монотонный на сессию; resume —
+`plan`, `meta`, `retract`, `critic`, `log`, `subagent`, `update`. `seq` монотонный на сессию; resume —
 `Last-Event-ID` или `?since=<seq>` из in-memory буфера (best-effort между
 рестартами; статус всегда доступен pull'ом). Keep-alive `: ping` каждые 20 с;
 `X-Accel-Buffering: no`. Список событий задачи ограничен 2000 (старые
@@ -240,6 +240,15 @@ timestamp, windowMs?})`: сравнение за константное врем
 | GET/POST | `/v1/host/config` | отредактированный конфиг + реестр ключей / запись ключа |
 | GET | `/v1/host/models?provider=` | модели активного/указанного провайдера |
 | GET | `/v1/host/files?path=` | листинг директории workspace (панель Files) |
+| GET | `/v1/host/file?path=&download=` | вьюер файла (тот же джейл/кап, что `/api/file`) |
+| GET | `/v1/host/search?q=&names=1` | поиск по workspace (Files, `@`-mentions) |
+| GET | `/v1/host/sessions/:id/images/:name` | сохранённая картинка тула (байты) |
+| GET | `/v1/host/sessions/:id/system-prompt` | системный промпт активного раннера |
+| GET | `/v1/host/sessions/:id/security?limit=` | журнал защиты сессии |
+| GET | `/v1/host/sessions/:id/subagents` | снимки прогонов субагентов |
+| POST | `/v1/host/sessions/:id/subagents/:runId/interrupt` | остановить прогон |
+| GET | `/v1/host/sessions/:id/queue` | id сообщений очереди (FIFO) |
+| POST | `/v1/host/sessions/:id/queue/cancel|edit|start` | управление очередью |
 | GET | `/v1/host/git`, `/git/changes`, `/git/diff` | read-only git для панели Changes |
 | GET | `/v1/host/memory` | преференции и записи памяти |
 | GET | `/v1/host/skills` | доступные скиллы |

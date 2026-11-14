@@ -151,6 +151,44 @@ export abstract class RemotePanelClient {
     return res.json();
   }
 
+  /** Вьюер файла: байты + статус (ошибки вьюера отдаются текстом). */
+  async fileView(
+    path: string,
+    download: boolean,
+  ): Promise<{ status: number; mime: string; bytes: Uint8Array }> {
+    const q = new URLSearchParams({ path });
+    if (download) q.set("download", "1");
+    const res = await this.request(`${this.base}/v1/host/file?${q.toString()}`);
+    return {
+      status: res.status,
+      mime: res.headers.get("content-type") ?? "application/octet-stream",
+      bytes: new Uint8Array(await res.arrayBuffer()),
+    };
+  }
+
+  /** Очередь сессии: id сообщений в FIFO-порядке. */
+  async queue(sessionId: string): Promise<{ queued: number; ids: string[] }> {
+    const res = await this.request(
+      `${this.base}/v1/host/sessions/${encodeURIComponent(sessionId)}/queue`,
+    );
+    if (!res.ok) throw new Error(`daemon queue failed: ${res.status} ${await safeText(res)}`);
+    return (await res.json()) as { queued: number; ids: string[] };
+  }
+
+  /** Действие очереди: `cancel|edit|start`; статус возвращается как есть. */
+  async queueAction(
+    sessionId: string,
+    action: "cancel" | "edit" | "start",
+    id: string,
+    text?: string,
+  ): Promise<{ status: number; body: unknown }> {
+    const res = await this.request(
+      `${this.base}/v1/host/sessions/${encodeURIComponent(sessionId)}/queue/${action}`,
+      { method: "POST", body: JSON.stringify({ id, ...(text !== undefined ? { text } : {}) }) },
+    );
+    return { status: res.status, body: await res.json().catch(() => ({})) };
+  }
+
   protected get base(): string {
     return this.opts.baseUrl.replace(/\/+$/, "");
   }
