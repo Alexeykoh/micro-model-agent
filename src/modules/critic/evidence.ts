@@ -111,7 +111,9 @@ export function buildEvidencePack(input: EvidenceInput): EvidencePack {
 function digestLine(ev: EvidenceToolEvent): string {
   const args = ev.args ? summarizeToolArgs(ev.args) : "";
   const line = `${ev.ok === false ? "✗" : "✓"} ${ev.tool} ${args}`.trim();
-  if (ev.output && (ev.tool === "bash" || ev.ok === false)) {
+  // read_file: критик должен видеть содержимое, иначе «файл прочитан» для него
+  // неотличим от «файла нет» (ложный concern в ses_mwj70h1f).
+  if (ev.output && (ev.tool === "bash" || ev.tool === "read_file" || ev.ok === false)) {
     return `${line} » ${ev.output.slice(-MAX_DIGEST_OUTPUT_CHARS)}`;
   }
   return line;

@@ -152,8 +152,10 @@ export async function runFinalGates(host: AgentDeps, inp: GatesInput): Promise<G
     planPendingSteps: host.planPendingSteps?.() ?? undefined,
     toolEvents: gatherTurnToolEvents(contextManager, state.criticHistoryMark),
     beforeFinish: true,
-    // Текст ответа — только для ходов без мутаций (чат-доставка).
-    answerText: state.mutationsSinceCritic === 0 ? textContent : undefined,
+    // Текст ответа нужен критику и после мутаций: read-only bash/read_file
+    // инкрементят mutationsSinceCritic, и раньше ANSWER пропадал — критик
+    // писал «answer/conclusion not delivered» при корректном ответе.
+    answerText: textContent.trim() ? textContent : undefined,
     onMeta,
   });
   if (timings) timings.critic = Date.now() - criticStarted;

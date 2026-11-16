@@ -36,6 +36,7 @@ describe("critic plan evidence (S5)", () => {
     expect(CRITIC_SYSTEM_PROMPT).toContain("PLAN PENDING STEPS");
     expect(CRITIC_SYSTEM_PROMPT).toContain("shell unavailable");
     expect(CRITIC_SYSTEM_PROMPT).toContain("[SECURITY BLOCKED]");
+    expect(CRITIC_SYSTEM_PROMPT).toContain("blank line");
   });
 });
 
