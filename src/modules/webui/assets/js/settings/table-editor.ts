@@ -35,6 +35,14 @@ export function tableEditor(value: unknown, ctx: Dict, editor: Dict): HTMLElemen
   // без этого «список ещё грузится» зацикливал бы перерисовку.
   const autoLoadTried = new Set<string>();
   const head = el("div", "table-head");
+  // One explicit track per column: `repeat(auto-fit, …)` left extra columns to
+  // implicit (content-sized) tracks, which clipped model/provider values.
+  const trackTemplate = [
+    "minmax(150px, 1.3fr)",
+    ...rest.map(() => "minmax(120px, 1fr)"),
+    "28px",
+  ].join(" ");
+  head.style.gridTemplateColumns = trackTemplate;
   columns.forEach((c) => head.appendChild(el("span", "table-th", ctx.fieldLabel(c.key))));
   wrap.appendChild(head);
   const body = el("div", "table-body");
@@ -185,6 +193,7 @@ export function tableEditor(value: unknown, ctx: Dict, editor: Dict): HTMLElemen
     body.textContent = "";
     rows.forEach((row) => {
       const elRow = el("div", "table-row");
+      elRow.style.gridTemplateColumns = trackTemplate;
       elRow.dataset.key = row.name;
       const keyInput = el("input");
       keyInput.type = "text";

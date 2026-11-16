@@ -100,8 +100,11 @@ function cardFor(name: string, args: Dict, sid: string | undefined, ok: boolean)
       });
       row.appendChild(openLink);
     } else {
-      const s = el("span", "tail", shown || rawPath);
-      s.title = hidden ? shown : rawPath;
+      // DLP marker: a lock glyph instead of the long "hidden by data policy"
+      // phrase, with the explanation as the tooltip.
+      const s = el("span", "tail" + (hidden ? " dlp-lock" : ""), hidden ? "🔒" : shown || rawPath);
+      s.title = hidden ? t("web.egress.hidden") : rawPath;
+      if (hidden) s.setAttribute("aria-label", t("web.egress.hidden"));
       row.appendChild(s);
     }
     const range = readRangeText(name, args);

@@ -38,6 +38,20 @@ describe("workspace footer line", () => {
     expect(line.querySelector(".ws-ver")?.getAttribute("title")).toBe("micro-models-agent 2.29.1");
   });
 
+  it("shows a lock + tooltip when DLP hides the workspace path", () => {
+    draw({
+      workspaceHidden: true,
+      workspaceTitle: "hidden by data policy",
+      version: "2.29.1",
+    });
+    expect(line.hidden).toBe(false);
+    expect(line.querySelector(".ws-k")?.textContent).toBe("dir");
+    expect(line.querySelector(".ws-v")).toBeNull();
+    const lock = line.querySelector(".ws-lock");
+    expect(lock?.textContent).toBe("🔒");
+    expect(lock?.getAttribute("title")).toBe("hidden by data policy");
+  });
+
   it("shows the version even without a workspace path", () => {
     draw({ version: "2.29.0" });
     expect(line.hidden).toBe(false);

@@ -24,6 +24,10 @@ export interface FooterGit {
 export interface FooterInput {
   /** Каталог workspace агента (абсолютный). */
   workspace?: string;
+  /** Путь скрыт политикой данных (DLP): рисовать замок вместо текста. */
+  workspaceHidden?: boolean;
+  /** Подсказка замка (локализованное «скрыто политикой данных»). */
+  workspaceTitle?: string;
   /** Версия установленного пакета. */
   version?: string;
   /** Доступный апдейт (`current` → `latest`); чип с подсказкой-командой. */
@@ -58,6 +62,8 @@ export function renderFooter(
 ): void {
   const {
     workspace = "",
+    workspaceHidden = false,
+    workspaceTitle = "",
     version = "",
     updateAvailable = undefined,
     dev = false,
@@ -69,19 +75,30 @@ export function renderFooter(
   } = input;
   const chips = buildGitChips(git, gitLabels);
   const key = JSON.stringify([
-    workspace, version, dev, updateAvailable?.latest ?? "", dirLabel, chips,
+    workspace, workspaceHidden, workspaceTitle, version, dev,
+    updateAvailable?.latest ?? "", dirLabel, chips,
   ]);
   // Перестраиваем только на смену входа: `renderState` дёргает рендер на каждый
   // снимок состояния (план/usage/фаза), а DOM-трогать там нечего.
   if (el.dataset.key === key) return;
   el.dataset.key = key;
   el.textContent = "";
-  el.hidden = !workspace && !version && !updateAvailable && !dev && chips.length === 0;
-  if (workspace) {
+  el.hidden =
+    !workspace && !workspaceHidden && !version && !updateAvailable && !dev && chips.length === 0;
+  if (workspace || workspaceHidden) {
     el.appendChild(make("span", "ws-k", dirLabel));
-    const v = make("span", "ws-v", workspace);
-    v.title = workspace;
-    el.appendChild(v);
+    if (workspaceHidden) {
+      // DLP: the path itself must not leak, but the footer still has to say
+      // "there is a workspace" — a lock glyph plus the explanation on hover.
+      const lock = make("span", "ws-lock dlp-lock", "🔒");
+      lock.title = workspaceTitle;
+      lock.setAttribute("aria-label", workspaceTitle);
+      el.appendChild(lock);
+    } else {
+      const v = make("span", "ws-v", workspace);
+      v.title = workspace;
+      el.appendChild(v);
+    }
   }
   // Git — сразу после пути, в той же строке: одна строка вместо двух.
   for (const chip of chips) {

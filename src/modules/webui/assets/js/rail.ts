@@ -9,7 +9,8 @@
 import { t, pluralCount } from "./i18n.js";
 import { labelOf } from "./format.js";
 import { session } from "./store.js";
-import { resetSpeed, speedText, speedView } from "./speed.js";
+import { resetSpeed } from "./speed.js";
+import { renderLiveSpeed } from "./feed/speed-chip.js";
 import {
   activityCurrentKey,
   activityLabel,
@@ -28,7 +29,6 @@ let fillEl: HTMLElement | null = null;
 let notchesEl: HTMLElement | null = null;
 let labEl: HTMLElement | null = null;
 let timeEl: HTMLElement | null = null;
-let speedEl: HTMLElement | null = null;
 let stepsEl: HTMLElement | null = null;
 let escEl: HTMLElement | null = null;
 let toolsEl: HTMLElement | null = null;
@@ -95,10 +95,8 @@ function render(): void {
   root.classList.toggle("phase-compose", phase === "composing");
   labEl.textContent = "✦ " + activityLabel(key);
   timeEl.textContent = activityTimeText(key);
-  if (speedEl) {
-    const sp = speedView(session.activeSessionId);
-    speedEl.textContent = sp ? speedText(sp.value, sp.estimated) : "";
-  }
+  // Live tok/s живёт только в чипе футера (без дубля в рельсе).
+  renderLiveSpeed(session.activeSessionId);
   const steps = plan && Array.isArray(plan.steps) ? plan.steps : [];
   if (steps.length > 0) {
     const done = steps.filter((s: Dict) => s && s.status === "done").length;
@@ -138,7 +136,6 @@ export function initRail(cfgLayout?: unknown): void {
   notchesFor = 0;
   labEl = root.querySelector<HTMLElement>(".lab");
   timeEl = root.querySelector<HTMLElement>(".time");
-  speedEl = root.querySelector<HTMLElement>(".speed");
   stepsEl = root.querySelector<HTMLElement>(".st");
   escEl = root.querySelector<HTMLElement>(".right");
   toolsEl = root.querySelector<HTMLElement>(".tools");

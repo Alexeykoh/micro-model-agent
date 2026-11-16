@@ -6,6 +6,7 @@
 import type { Dict } from "./core/store/types.js";
 import type { SseDeps } from "./sse-deps.js";
 import { noteChunk as speedChunk } from "./speed.js";
+import { renderLiveSpeed } from "./feed/speed-chip.js";
 import { attachSidebarSse } from "./sse-sidebar.js";
 import { attachFaceSse } from "./sse-face.js";
 import { attachActivityStream } from "./core/activity-stream.js";
@@ -156,17 +157,22 @@ export function connectSSE(deps: SseDeps): void {
     es.addEventListener(ev, (e) => {
       const d = parse(e);
       if (!d) return;
-      if (ev === "text") speedChunk(d.sessionId, d.chunk || "");
+      if (ev === "text") {
+        speedChunk(d.sessionId, d.chunk || "");
+        renderLiveSpeed(d.sessionId);
+      }
       if (ev === "plan") railPlan(d);
       else railEvent(ev, d.name);
     });
   }
-  // Live tok/s в рельсе: reasoning — тоже генерация, иначе во время фазы
+  // Live tok/s в чипе футера: reasoning — тоже генерация, иначе во время фазы
   // размышлений скорость пуста (до первого text). Счётчик событий рельса тут
   // не трогаем — только скорость.
   es.addEventListener("reasoning", (e) => {
     const d = parse(e);
-    if (d) speedChunk(d.sessionId, d.chunk || "");
+    if (!d) return;
+    speedChunk(d.sessionId, d.chunk || "");
+    renderLiveSpeed(d.sessionId);
   });
   // Composer face (MMART): one persistent mascot that reflects the live state
   // (`sse-face.ts`, чтобы этот файл оставался ≤300 строк).

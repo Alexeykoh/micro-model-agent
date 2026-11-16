@@ -111,6 +111,11 @@ function sectionCard(section: Dict): HTMLElement {
 export function renderSections(panel: string, sections: Dict[]): void {
   const container = document.querySelector('[data-panel="' + panel + '"]');
   if (!container) return;
+  renderSectionsInto(container, sections);
+}
+
+/** Same as `renderSections`, but into an explicit node (tab panes, sub-cards). */
+export function renderSectionsInto(container: Element, sections: Dict[]): void {
   sections.forEach((section) => container.appendChild(sectionCard(section)));
 }
 

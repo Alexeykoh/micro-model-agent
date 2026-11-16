@@ -22,8 +22,8 @@ const OK: ToolResult = { success: true, output: "out" };
 const FAIL: ToolResult = { success: false, output: "boom" };
 
 /** Пакет с одним вызовом: `failing` — упал ли он; аргументы уникальны. */
-function callN(n: number) {
-  return [{ id: String(n), name: "bash", arguments: { command: `run ${n}` } }];
+function callN(n: number, tool = "bash") {
+  return [{ id: String(n), name: tool, arguments: { command: `run ${n}` } }];
 }
 
 function makeExecutor(pattern: boolean[]) {
@@ -79,7 +79,9 @@ describe("окно неудач", () => {
     let finalize: string | undefined;
     for (let n = 0; n < MAX_FAILED_BATCHES_PER_TURN * 2 && !finalize; n++) {
       state.iteration = n + 1;
-      finalize = (await ex.execute(state, callN(n), new Set(), SAID, "", "task")).finalize;
+      // Транзиентный веб-тул: per-tool disable его не касается, поэтому
+      // тест меряет именно окно неудач, а не отключение bash после 8 фейлов.
+      finalize = (await ex.execute(state, callN(n, "web_fetch"), new Set(), SAID, "", "task")).finalize;
     }
     expect(finalize).toBe("stalled");
     expect(state.failedBatchesTotal).toBeGreaterThanOrEqual(MAX_FAILED_BATCHES_PER_TURN);

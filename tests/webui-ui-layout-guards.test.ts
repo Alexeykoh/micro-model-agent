@@ -15,6 +15,10 @@ const lspChanged = readFileSync(
   new URL("../src/modules/webui/assets/js/sidebar/lsp-changed.ts", import.meta.url),
   "utf-8",
 );
+const tableEditor = readFileSync(
+  new URL("../src/modules/webui/assets/js/settings/table-editor.ts", import.meta.url),
+  "utf-8",
+);
 
 describe("web UI layout guards", () => {
   it("makes the hidden attribute beat component display rules", () => {
@@ -34,6 +38,32 @@ describe("web UI layout guards", () => {
     const label = lspChanged.indexOf("document.createTextNode");
     expect(icon).toBeGreaterThan(-1);
     expect(label).toBeGreaterThan(icon);
+  });
+
+  it("gives settings text fields readable widths (not a 120px clip)", () => {
+    const rule = css.match(/\.row > input:not\(\[type="number"\]\)[\s\S]*?\{([^}]*)\}/)?.[1] ?? "";
+    expect(rule).toMatch(/width:\s*min\(340px,\s*100%\)/i);
+    expect(css).toMatch(/\.row > select\s*\{[\s\S]*?width:\s*min\(340px,\s*100%\)/i);
+  });
+
+  it("keeps provider-form cells and the provider dialog wide enough", () => {
+    const grid = css.match(/\.pform-grid\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(grid).toMatch(/minmax\(220px,\s*1fr\)/i);
+    expect(css).toMatch(/#subOverlay:has\(\.pform-base\)[^{]*\{[^}]*width:\s*min\(720px/i);
+  });
+
+  it("gives table editor columns explicit tracks instead of clipped implicit ones", () => {
+    expect(tableEditor).toContain("trackTemplate");
+    expect(tableEditor).toContain("minmax(120px, 1fr)");
+    expect(tableEditor).not.toContain("repeat(auto-fit, minmax(84px");
+    expect(tableEditor).toContain("elRow.style.gridTemplateColumns = trackTemplate");
+  });
+
+  it("keeps the wizard and its fields wide enough to read", () => {
+    expect(css).toMatch(/\.setup-wrap\s*\{[^}]*max-width:\s*640px/i);
+    expect(css).toMatch(/\.setup-modal\s*\{[^}]*max-width:\s*640px/i);
+    const input = css.match(/\.setup-input\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(input).toMatch(/width:\s*100%/i);
   });
 
   it("keeps the setup footer reachable and the intro responsive", () => {

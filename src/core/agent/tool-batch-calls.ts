@@ -118,6 +118,23 @@ export class ToolCallRunner {
     // (subagent/mcp/pipeline тратят токены), а не накопленная за сессию.
     const costBeforeTool = costTracker.total;
     let result: ToolResult;
+    // Отключённый тул не исполняется вовсе. Раньше он лишь исчезал из списка
+    // схем, но вызов из истории всё равно доходил до executor'а — модель
+    // продолжала долбить мёртвый тул, а «используй другой тул» из директивы
+    // толкал её на обходы. Теперь ответ детерминированный и non-retryable.
+    if (this.init.state.disabledTools.has(call.name)) {
+      return {
+        result: {
+          success: false,
+          output: t("exec.tool_disabled_blocked", { tool: call.name }),
+          errorMeta: { code: "TOOL_DISABLED", retryable: false },
+        },
+        duration: 0,
+        tokensBeforeTool,
+        costBeforeTool,
+        shutdown: isShutdownRequested(),
+      };
+    }
     try {
       result = await executor.execute(call, getAbortSignal());
     } catch (err) {

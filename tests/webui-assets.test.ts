@@ -365,16 +365,22 @@ describe("webui assets", () => {
     expect(a.css).toContain(".msg-actions");
   });
 
-  it("groups the model/provider settings into sections with an add affordance", () => {
+  it("splits model/provider settings into an active card plus four tabs", () => {
     const a = loadAssets();
     expect(js(a)).toContain("settingsSection(");
-    expect(js(a)).toContain("web.settings.section_providers");
+    expect(js(a)).toContain("web.settings.active_model");
+    expect(js(a)).toContain("web.settings.tab_providers");
+    expect(js(a)).toContain("web.settings.tab_models");
+    expect(js(a)).toContain("web.settings.tab_performance");
+    expect(js(a)).toContain("web.settings.tab_capabilities");
     expect(js(a)).toContain("provider_make_active");
     expect(js(a)).toContain("provider_advanced");
     expect(a.html).toContain('data-panel="model"');
     expect(a.css).toContain(".settings-section");
     expect(a.css).toContain(".provider-item");
     expect(a.css).toContain(".sec-add");
+    expect(a.css).toContain(".model-tabs");
+    expect(a.css).toContain(".model-pane");
     expect(a.css).toContain(".pform-adv");
   });
 
@@ -787,15 +793,17 @@ describe("webui assets", () => {
     expect(a.css).toContain(".mcp-settings");
   });
 
-  it("shows generation speed in the rail and a final chip", () => {
+  it("shows generation speed only in the footer chip", () => {
     const a = loadAssets();
-    // Live value lives in the activity rail; the final per-turn number is a
-    // chip in the composer selectors row (both above the input field).
-    expect(a.html).toContain('id="railSpeed"');
+    // One readout: the chip in the composer selectors row. The rail and the
+    // think-block header must not repeat tok/s.
+    expect(a.html).not.toContain('id="railSpeed"');
     expect(a.html).toContain('id="speedChip"');
     expect(a.jsModules?.["js/speed.js"] || "").toContain("SPEED_WINDOW_MS");
     expect(a.jsModules?.["js/speed.js"] || "").toContain("speedView");
-    expect(a.jsModules?.["js/rail.js"] || "").toContain("speedView");
+    expect(a.jsModules?.["js/rail.js"] || "").not.toContain("speedView");
+    expect(a.jsModules?.["js/feed/speed-chip.js"] || "").toContain("renderLiveSpeed");
+    expect(a.jsModules?.["js/feed/speed-chip.js"] || "").toContain("speedView");
     expect(a.jsModules?.["js/sse.js"] || "").toContain("speedChunk");
     expect(a.jsModules?.["js/feed/speed-chip.js"] || "").toContain("renderSpeed");
     expect(a.css).toContain(".speed-chip");

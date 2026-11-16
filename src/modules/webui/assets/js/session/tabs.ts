@@ -20,6 +20,7 @@ import {
   scrollToBottom,
   clearBusy,
   mountFeed,
+  resetSpeedChip,
 } from "../feed.js";
 import { createNewChatTab } from "./new-chat.js";
 import { sidebarSessionChanged, setSessionLoading } from "../sidebar.js";
@@ -155,6 +156,7 @@ export function openTab(
   if ((kind || "session") === "session") {
     session.activeSessionId = id;
     sidebarSessionChanged(id);
+    resetSpeedChip();
     // Render the tab's cached snapshot instantly (or fetch it once from REST).
     hooks.ensureTabState?.(id);
   }
@@ -228,6 +230,7 @@ export function closeTab(id: string): void {
       if (next.kind === "session") {
         session.activeSessionId = next.id;
         sidebarSessionChanged(next.id);
+        resetSpeedChip();
         hooks.ensureTabState?.(next.id);
         void api("/api/sessions/activate", { method: "POST", body: { id: next.id } });
       }
