@@ -2206,6 +2206,7 @@
   "web.tools.title": "Tools · this session",
   "web.tools.count": "{on} of {total} enabled",
   "web.tools.search": "search tools",
+  "web.tools.all": "all",
   "web.tools.no_match": "No tools match the search.",
   "web.tools.unavailable": "Tools unavailable: {reason}",
   "web.tools.no_session": "Open a chat session first.",

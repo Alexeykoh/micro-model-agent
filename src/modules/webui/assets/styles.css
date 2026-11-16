@@ -663,6 +663,14 @@ body.light .codeblock { border: 1px solid var(--border); }
   background: var(--inp-bg); color: var(--fg); outline: none;
 }
 .tools-search:focus { border-color: var(--accent); }
+.tools-filters { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.tools-chip {
+  font: inherit; font-size: 11.5px; line-height: 1.4; cursor: pointer;
+  padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+  border: 1px solid var(--border-2); background: var(--surface); color: var(--dim-a);
+}
+.tools-chip:hover { color: var(--fg); border-color: var(--dim-b); }
+.tools-chip.on { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
 .tools-list {
   display: flex; flex-direction: column; gap: 2px; min-width: 0;
   max-height: min(60vh, 520px); overflow-y: auto; overflow-x: hidden;
