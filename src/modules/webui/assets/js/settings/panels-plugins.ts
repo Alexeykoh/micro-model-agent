@@ -212,9 +212,7 @@ export function renderPluginsPanel(): void {
   const mcp = data ? ((data.mcp || []) as Dict[]) : [];
   const lsp = Array.isArray(settings.lsp) ? settings.lsp.length : 0;
   const sections = PANEL_SECTIONS.plugins || [];
-
   container.appendChild(statusBar(all.length, mcp.length, lsp));
-
   const panes: Record<string, HTMLElement> = {
     plugins: pluginsPane(data, sections.filter((s) => s.id === "plugins.loader")),
     mcp: pane("mcp"),
@@ -256,7 +254,6 @@ export function renderPluginsPanel(): void {
   Object.values(panes).forEach((node) => container.appendChild(node));
   select(activeTab);
 }
-
 /** Open the MCP add/edit nested dialog. */
 function openMcpForm(mode: string, entry: Dict | null): void {
   settings.mcpForm = { mode, entry: entry || null };
