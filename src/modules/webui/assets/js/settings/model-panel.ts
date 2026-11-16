@@ -88,7 +88,7 @@ function activeCard(cfg: Dict, entries: Dict[], activeName: string, select: (k: 
   return card.el;
 }
 
-function providersPane(entries: Dict[], activeName: string): HTMLElement {
+function providersPane(entries: Dict[], activeName: string, sections: Dict[]): HTMLElement {
   const box = pane("providers");
   const head = el("div", "model-pane-actions");
   const addBtn = el("button", "sec-add");
@@ -132,6 +132,7 @@ function providersPane(entries: Dict[], activeName: string): HTMLElement {
   });
   if (!entries.length) list.appendChild(el("div", "placeholder", t("web.settings.providers_empty")));
   box.appendChild(list);
+  renderSectionsInto(box, sections);
   return box;
 }
 
@@ -197,8 +198,10 @@ export function renderModelPanel(): void {
     (settings.providers && settings.providers.active) ||
     "—";
 
+  const sections = PANEL_SECTIONS.model || [];
+  const fallbackSections = sections.filter((s) => s.id === "model.fallback");
   const panes: Record<string, HTMLElement> = {
-    providers: providersPane(entries, activeName),
+    providers: providersPane(entries, activeName, fallbackSections),
     models: modelsPane(cfg),
     performance: pane("performance"),
     capabilities: pane("capabilities"),
@@ -230,10 +233,9 @@ export function renderModelPanel(): void {
 
   // Provider/model catalogs are chronological; runtime/capabilities stay
   // registry-driven so PANEL_SECTIONS remains the single source of truth.
-  const sections = PANEL_SECTIONS.model || [];
   renderSectionsInto(
     panes.performance,
-    sections.filter((s) => s.id !== "model.capabilities"),
+    sections.filter((s) => s.id !== "model.capabilities" && s.id !== "model.fallback"),
   );
   renderSectionsInto(
     panes.capabilities,

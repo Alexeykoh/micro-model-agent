@@ -198,10 +198,10 @@ export const PANEL_SECTIONS: Record<string, Dict[]> = {
   general: [
     { id: "general.interface", titleKey: "web.settings.sec.general.interface", keys: ["locale", "ui.verbosity"] },
     { id: "general.agent", titleKey: "web.settings.sec.general.agent", descKey: "web.settings.sec.general.agent.desc", keys: ["maxToolIterations", "stuckThreshold", "autoPlan", "promptProfile", "execution.autoAdvance", "execution.profile", "execution.image", "cost.maxRunUsd"] },
-    { id: "general.provider", titleKey: "web.settings.sec.general.provider", keys: ["provider.fallback"] },
     { id: "general.update", titleKey: "web.settings.sec.general.update", descKey: "web.settings.sec.general.update.desc", keys: ["updater.enabled", "updater.autoInstall", "updater.intervalMs"] },
   ],
   model: [
+    { id: "model.fallback", titleKey: "web.settings.sec.model.fallback", descKey: "web.settings.sec.model.fallback.desc", keys: ["provider.fallback"] },
     { id: "model.tuning", titleKey: "web.settings.sec.model.tuning", descKey: "web.settings.sec.model.tuning.desc", keys: ["provider.maxCompletionTokens", "modelLoad.autoLoad", "modelLoad.flashAttention", "modelLoad.evalBatchSize", "modelLoad.offloadKvCacheToGpu"] },
     { id: "model.capabilities", titleKey: "web.settings.sec.model.capabilities", descKey: "web.settings.sec.model.capabilities.desc", keys: ["modelCapabilities"] },
   ],
@@ -216,16 +216,21 @@ export const PANEL_SECTIONS: Record<string, Dict[]> = {
     { id: "reasoning.display", titleKey: "web.settings.sec.reasoning.display", keys: ["showReasoning"] },
     { id: "reasoning.effort", titleKey: "web.settings.sec.reasoning.effort", descKey: "web.settings.sec.reasoning.effort.desc", keys: ["reasoning.mode", "reasoning.min", "reasoning.max", "reasoning.baseline", "reasoning.overrideCooldown"] },
   ],
+  memory: [
+    { id: "memory.rules", titleKey: "web.settings.sec.memory.rules", descKey: "web.settings.sec.memory.rules.desc", keys: ["memory.validator", "memory.validator.minChars", "memory.validator.minWords", "memory.validator.similarityThreshold", "memory.retentionDays"] },
+  ],
   agent: [
     { id: "agent.experts", titleKey: "web.settings.sec.agent.experts", descKey: "web.settings.sec.agent.experts.desc", keys: ["experts"] },
     { id: "agent.critic", titleKey: "web.settings.sec.agent.critic", descKey: "web.settings.sec.agent.critic.desc", keys: ["critic.enabled", "critic.model", "critic.provider", "critic.tools", "critic.maxCalls", "critic.maxRepairCycles", "critic.timeoutMs", "critic.maxTokens"] },
-    { id: "agent.tools", titleKey: "web.settings.sec.agent.tools", descKey: "web.settings.sec.agent.tools.desc", keys: ["tools.enableOnDemand", "tools.defaultTags", "tools.grepEngine", "skills.budget", "memory.validator", "memory.validator.minChars", "memory.validator.minWords", "memory.validator.similarityThreshold", "memory.retentionDays", "hitl.killSwitch", "hitl.autoApproveLow", "compliance.enabled", "compliance.retentionDays"] },
+    { id: "agent.tools", titleKey: "web.settings.sec.agent.tools", descKey: "web.settings.sec.agent.tools.desc", keys: ["tools.enableOnDemand", "tools.defaultTags", "tools.grepEngine", "skills.budget"] },
     { id: "agent.subagent", titleKey: "web.settings.sec.agent.subagent", descKey: "web.settings.sec.agent.subagent.desc", keys: ["subagent.resultMode", "subagent.maxSummaryChars", "subagent.maxParallelChunkQueries", "subagent.stableSystemPrompt", "subagent.timeoutMs", "subagent.maxDurationMs"] },
     { id: "agent.hallucination", titleKey: "web.settings.sec.agent.hallucination", descKey: "web.settings.sec.agent.hallucination.desc", keys: ["hallucination.judge.enabled"] },
   ],
   network: [
     { id: "network.web", titleKey: "web.settings.sec.network.web", descKey: "web.settings.sec.network.web.desc", keys: ["webSearch.enabled"] },
     { id: "network.error", titleKey: "web.settings.sec.network.error", descKey: "web.settings.sec.network.error.desc", keys: ["errorWebSearch.enabled", "errorWebSearch.threshold", "errorWebSearch.maxResults", "errorWebSearch.maxQueryChars", "errorWebSearch.maxSearchesPerSession", "errorWebSearch.requestTimeoutMs"] },
+  ],
+  service: [
     { id: "network.service", titleKey: "web.settings.sec.network.service", descKey: "web.settings.sec.network.service.desc", keys: ["service.port", "service.host", "service.token", "service.tenant", "service.resultRetentionDays", "service.idempotencyTtlHours", "service.syncWaitMs", "service.maxQueueLength", "service.detachedTurnGraceMs", "service.callbackTimeoutMs", "service.webhookSecret", "service.webhookAllowHttp", "service.tls.cert", "service.tls.key", "service.tls.terminatedByProxy"] },
   ],
   browser: [
@@ -250,11 +255,12 @@ export const PANEL_SECTIONS: Record<string, Dict[]> = {
     { id: "security.network", titleKey: "web.settings.sec.security.network", descKey: "web.settings.sec.security.network.desc", keys: ["security.network.deniedDomains", "security.network.allowedDomains", "security.network.allowPrivateOutbound", "security.network.allowLoopback"] },
     { id: "security.scan", titleKey: "web.settings.sec.security.scan", descKey: "web.settings.sec.security.scan.desc", keys: ["security.contentScan.dangerousPatterns"] },
     { id: "security.audit", titleKey: "web.settings.sec.security.audit", descKey: "web.settings.sec.security.audit.desc", keys: ["security.auditNotifier.enabled", "security.auditNotifier.filePath", "security.auditNotifier.webhookUrl", "security.auditNotifier.webhookTimeout", "security.auditNotifier.minSeverity", "security.auditNotifier.maxRetries", "security.auditNotifier.eventTypes"] },
+    { id: "security.approvals", titleKey: "web.settings.sec.security.approvals", descKey: "web.settings.sec.security.approvals.desc", keys: ["hitl.killSwitch", "hitl.autoApproveLow", "compliance.enabled", "compliance.retentionDays"] },
     { id: "security.encryption", titleKey: "web.settings.sec.security.encryption", descKey: "web.settings.sec.security.encryption.desc", keys: ["security.sessionEncryption.encryptHistory", "security.sessionEncryption.encryptSessionLog", "security.sessionEncryption.keyPath"] },
     { id: "security.dataPolicy", titleKey: "web.settings.sec.security.dataPolicy", descKey: "web.settings.sec.security.dataPolicy.desc", keys: ["security.dataPolicy.enabled", "security.dataPolicy.trustLocalClients", "security.dataPolicy.pathMode", "security.dataPolicy.pseudonymize", "security.dataPolicy.egress.paths", "security.dataPolicy.egress.machine", "security.dataPolicy.egress.env", "security.dataPolicy.egress.pii", "security.dataPolicy.egress.fileContent", "security.dataPolicy.egress.secrets", "security.dataPolicy.allowImagesToExternal", "security.dataPolicy.failClosed", "security.dataPolicy.minConfidence", "security.dataPolicy.trustedHosts", "security.dataPolicy.apiHiddenGlobs", "security.dataPolicy.providerBlockGlobs"] },
   ],
   advanced: [
-    { id: "advanced.diagnostics", titleKey: "web.settings.sec.advanced.diagnostics", descKey: "web.settings.sec.advanced.diagnostics.desc", keys: ["logLevel", "version"] },
+    { id: "advanced.diagnostics", titleKey: "web.settings.sec.advanced.diagnostics", descKey: "web.settings.sec.advanced.diagnostics.desc", keys: ["logLevel"] },
     { id: "advanced.retry", titleKey: "web.settings.sec.advanced.retry", descKey: "web.settings.sec.advanced.retry.desc", keys: ["retry.maxRetries", "retry.baseDelay", "retry.maxDelay", "retry.maxStreamRetries", "retry.noDataTimeoutMs"] },
     { id: "advanced.service", titleKey: "web.settings.sec.advanced.service", descKey: "web.settings.sec.advanced.service.desc", keys: ["pricing.enabled", "pricing.overrides", "otel.enabled", "otel.endpoint", "otel.serviceName"] },
   ],

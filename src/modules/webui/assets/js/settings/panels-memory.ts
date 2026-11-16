@@ -7,7 +7,8 @@ import { t } from "../i18n.js";
 import { settings } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 import { setIndicator } from "../dialog.js";
-import { placeholderFor } from "./panels-shared.js";
+import { placeholderFor, renderSectionsInto } from "./panels-shared.js";
+import { PANEL_SECTIONS } from "./controls.js";
 import { openSubDialog, closeSubDialog } from "./subdialog.js";
 import { mcpLiteralField } from "./form.js";
 
@@ -57,6 +58,8 @@ export function renderMemoryPanel(): void {
   const container = document.querySelector<HTMLElement>('[data-panel="memory"]');
   if (!container) return;
   container.textContent = "";
+  // Validation/retention rules live here, next to the notes they govern.
+  renderSectionsInto(container, PANEL_SECTIONS.memory || []);
   if (settings.memory === undefined || settings.memory === null) {
     container.appendChild(placeholderFor(settings.memory, t("web.settings.memory_unavailable")));
     return;

@@ -16,7 +16,7 @@ export function renderSettings(): void {
   // Generic panels render straight from PANEL_SECTIONS; custom panels
   // (model/ui/memory/skills/plugins/security) append their sections themselves
   // or render bespoke widgets alongside.
-  for (const panel of ["general", "context", "reasoning", "agent", "network", "browser", "sessions", "advanced"]) {
+  for (const panel of ["general", "context", "reasoning", "agent", "network", "service", "browser", "sessions", "advanced"]) {
     renderPanel(panel);
   }
   renderModelPanel();
