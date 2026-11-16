@@ -26,6 +26,8 @@ import {
 // локальный оверрайд и вернуться к серверной правде.
 let appliedMode: string | null = null;
 let appliedSkin: string | null = null;
+// Локальный оверрайд тумблера эффектов до ответа сервера (как у темы).
+let appliedEffects: boolean | null = null;
 // Миграция кэша — один раз за загрузку страницы (INV-T5).
 let migrated = false;
 
@@ -60,6 +62,11 @@ export function currentUiTheme(): string {
   return appliedSkin ?? resolveThemeSkin(configUi().theme, cacheGet(THEME_SKIN_KEY));
 }
 
+/** Включены ли частицы сезонной темы (`ui.themeEffects`, дефолт — да). */
+export function themeEffectsEnabled(): boolean {
+  return appliedEffects ?? configUi().themeEffects !== false;
+}
+
 /** Тёмный ли фон для режима (системная настройка читается только для `auto`). */
 function isLight(mode: string): boolean {
   if (mode === "light") return true;
@@ -91,7 +98,16 @@ export function applyUiTheme(theme: string): void {
   appliedSkin = skin;
   cacheSet(THEME_SKIN_KEY, skin);
   for (const id of UI_THEME_IDS) document.body.classList.toggle(id, id === skin);
-  applyThemeWeather(skin);
+  applyThemeWeather(skin, themeEffectsEnabled());
+}
+
+/**
+ * Включает/выключает частицы сезонной темы. Локальный оверрайд нужен, чтобы
+ * тумблер сработал мгновенно, не дожидаясь `POST /api/config`.
+ */
+export function applyThemeEffects(enabled: boolean): void {
+  appliedEffects = enabled;
+  applyThemeWeather(currentUiTheme(), enabled);
 }
 
 /**
@@ -102,6 +118,7 @@ export function applyUiTheme(theme: string): void {
 export function syncThemeFromConfig(): void {
   appliedMode = null;
   appliedSkin = null;
+  appliedEffects = null;
   applyTheme(currentTheme());
   applyUiTheme(currentUiTheme());
 }

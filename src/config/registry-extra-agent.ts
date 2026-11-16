@@ -81,6 +81,9 @@ export const AGENT_EXTRA_DEFS: ConfigKeyDef[] = [
   enumOf("ui.themeMode", "ui", THEME_MODES, false,
     (c) => c.ui.themeMode ?? "auto",
     (c, v) => { c.ui.themeMode = v as ThemeMode; }),
+  bool("ui.themeEffects", "ui", false,
+    (c) => c.ui.themeEffects ?? true,
+    (c, v) => { c.ui.themeEffects = v as boolean; }),
 
   int("retry.maxRetries", "agent", 0, 10, 1, false,
     (c) => c.retry.maxRetries,
