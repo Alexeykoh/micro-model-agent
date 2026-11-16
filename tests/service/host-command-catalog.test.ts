@@ -62,7 +62,7 @@ describe("host command catalog (W12)", () => {
       reason?: string;
     }>;
     expect(commands.length).toBeGreaterThanOrEqual(30);
-    for (const name of ["help", "config", "model", "sessions", "memory", "plugins", "lsp"]) {
+    for (const name of ["help", "config", "model", "sessions", "memory", "plugins", "lsp", "run", "diagnostics"]) {
       expect(commands.some((c) => c.name === name && c.available)).toBe(true);
     }
     for (const name of ["wizard", "meet", "image", "doctor"]) {
@@ -176,5 +176,19 @@ describe("host command catalog (W12)", () => {
     const unknown = await run("/definitely-not-a-command");
     expect(unknown.ok).toBe(false);
     expect(String(unknown.error)).toContain("unknown");
+  });
+
+  it("runs a turn via /run and reports daemon diagnostics (W13)", async () => {
+    const runRes = await run("/run hello world");
+    expect(runRes.ok).toBe(true);
+    expect(runRes.output.join(" ")).toContain("turn started");
+
+    const diag = await run("/diagnostics");
+    expect(diag.ok).toBe(true);
+    const text = diag.output.join("\n");
+    expect(text).toContain("version:");
+    expect(text).toContain("workspace:");
+    expect(text).toContain("sessions:");
+    expect(text).toContain("plugins:");
   });
 });

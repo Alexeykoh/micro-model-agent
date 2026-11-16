@@ -293,8 +293,7 @@ major и отвергает несовместимый (fail-fast, сущест�
 
 ## 9. Локальный режим
 
-- Конфиг `host.mode: local | daemon` (дефолт `local`) либо флаг `--daemon`.
-- `LocalHost` — существующее поведение: агент in-process, без сети.
+- Конфиг `host.mode: local | daemon` (дефолт `local`) либо флаг `--daemon`.- `LocalHost` — существующее поведение: агент in-process, без сети.
 - Демон стартует явно (`mma serve`). Автозапуск демона из `mma --daemon`
   не делаем: фоновый процесс должен быть явным (правило 8 AGENTS.md).
   Если демон недоступен — внятная ошибка с подсказкой `mma serve`.
@@ -303,6 +302,24 @@ major и отвергает несовместимый (fail-fast, сущест�
 - Режим можно запретить политикой: `host.allowLocal: false` (дефолт `true`)
   не поднимает `LocalHost` — клиент получает внятную ошибку «локальный
   режим запрещён политикой».
+
+### 9.1. Поверхности команд
+
+Каталог (`src/core/commands/spec.ts`) объявляет `surfaces`: `terminal`, `tui`,
+`web`, `daemon`. `daemon` не добавляется по умолчанию — команда должна явно
+разрешить headless-исполнение. Демон исполняет объявленные команды через
+`/v1/host/sessions/:id/command`; остальные получают `terminal-only`.
+
+- **Терминальными остаются:** `/wizard`, `/meet`, `/doctor`, `/image`,
+  `/exit`, `/clear` — им нужен интерактивный ввод (`CommandInput`), клипборд или
+  окружение локальной установки. `/doctor` диагностирует CLI-процесс;
+  daemon-only `/diagnostics` — состояние runtime (модули, очередь, сессии).
+- **`/run` исполняется демоном** как обычный ход (тот же `dispatchInteractive`).
+- **`/image`** в thin-клиенте заменяется Ctrl+V: клиент читает клипборд и шлёт
+  data-URL в `submit`; серверный `/image path` не вводится, чтобы не держать
+  два способа вставки.
+- Web-адаптер получает каталог из `GET /v1/host/commands` и показывает
+  `terminal-only` пометкой, а не пустотой.
 
 ## 10. Web-адаптер
 
@@ -384,6 +401,7 @@ Host-контракт для этого не нужен.
 | W10 | Один путь хода и полнота web-поверхности. **W10a закрыт 2026-11-14**: `POST /api/message` → `Host.submit` → общий `submitTurnFromHost` (INV-S2), `HostBridgeSubmitOptions` несёт `sessionId`/`clientTz`. **W10b закрыт**: SSE `log` (мост `OutputBus`), `subagent` (живой стор вынесен в `src/runtime/subagent-runs.ts`), картинки тулов (`tool.end` + `/v1/host/sessions/:id/images/:name`). **W10c закрыт**: `/v1/host/sessions/:id/{system-prompt,security,subagents}`, `/v1/host/search`, `/v1/host/file`, `/v1/host/sessions/:id/queue[/cancel|edit|start]` + прокси адаптера; общие выборки вынесены в `src/runtime/{security-view,file-search,file-view}.ts`. |
 | W11 | Паритет панелей настроек. **Закрыт 2026-11-14**: `/v1/host/providers`, `/mcp`, `memory` (CRUD), `plugins` (тумблер/settings/reload), `lsp` (таблица/правка/check/check-changed/doctor с SSE `lsp`), `setup` (apply/probes/scan/locale) + прокси адаптера; event-словарь дополнен `lsp`, `setup_done`. Чистые операции — в runtime (`providers-*`, `mcp-write`, `lsp-settings`, `setup-input`, `setup-policy`, `persist-config`). Гварды: `tests/service/host-settings-wire.test.ts`, `tests/webui-daemon-adapter.test.ts`, e2e `tests/e2e-separation.test.ts`. |
 | W12 | Каталог команд на проводе. **Закрыт 2026-11-16**: серверный реестр (`modules/service/runtime/commands*.ts`) исполняет `core/commands/spec.ts` через `/v1/host/sessions/:id/command` — help/status/config/model/provider/context/reasoning/verbose/security, сессии/export/memory/sysprompt/map/lsp/skill/plugins/reload; интерактивные (`wizard/meet/run/image/doctor/exit/clear`) отвечают явной ошибкой `terminal-only`. `/v1/host/commands` отдаёт каталог с доступностью; thin-REPL `/help` и web `/api/commands` читают его у демона. Гвард: `tests/service/host-command-catalog.test.ts`. |
+| W13 | Полировка границ. **Закрыт 2026-11-16**: `service.detachedTurnGraceMs` (дефолт 0) — окно переподключения отвязанного interactive-хода с событиями `task.detached/attached/detached_timeout` (thin-REPL на выходе кооперативно останавливает ход); `surfaces: ["daemon"]` в каталоге вместо списка `TERMINAL_ONLY`; `/run` исполняется демоном, daemon-only `/diagnostics` (не `/doctor`); i18n-аудит: гвард `tests/arch/i18n-module-level.test.ts` + [i18n-locale.md](../agents/i18n-locale.md); решение по терминальным командам — §9.1. Гварды: `tests/service/detached-turn.test.ts`, `tests/service/host-command-catalog.test.ts`. |
 
 ## 16. Тестирование и гейты
 

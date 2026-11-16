@@ -186,6 +186,9 @@ export async function runDaemonRepl(opts: DaemonReplOptions): Promise<void> {
   });
 
   unsubscribe();
+  // Graceful exit: локальный REPL на Ctrl+D глушит агент, thin-клиент —
+  // кооперативно останавливает ход (detached-grace не должен держать его зря).
+  if (host.isBusy()) host.interrupt();
   host.dispose();
   channel.writeLine(pc.dim(t("daemon.disconnected", { url: opts.url })));
 }

@@ -142,6 +142,8 @@ export interface AgentServiceState {
   lspDoctor?: unknown;
   /** Идёт диагностика LSP (single-flight). */
   lspProbing: boolean;
+  /** Таймеры окна переподключения отвязанных interactive-ходов (split W13). */
+  detachedTimers: Map<string, ReturnType<typeof setTimeout>>;
   startedAt: number;
 }
 
@@ -189,6 +191,7 @@ export function createServiceState(deps: ServiceDeps): AgentServiceState {
     pendingQuestions: new Map(),
     subagentRuns: new SubagentRunStore(),
     lspProbing: false,
+    detachedTimers: new Map(),
     readyRate: new Map(),
     maxSseClients: deps.maxSseClients ?? 32,
     sseIdleMs: deps.sseIdleMs ?? 120_000,

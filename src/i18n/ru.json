@@ -773,6 +773,8 @@
   "repl.sysprompt_desc": "Размер системного промпта и блоки (текст — через --full)",
   "repl.doctor": "Полная диагностика: окружение, модули, плагины, провайдер, LSP, конфиг",
   "repl.doctor_usage": "Использование: /doctor",
+  "repl.diagnostics": "Диагностика демона: версия, модули, очередь, сессии",
+  "repl.diagnostics_usage": "Использование: /diagnostics",
   "repl.sysprompt_usage": "Использование: /sysprompt [--full]",
   "repl.sysprompt_full_hint": "Полный текст промпта скрыт — выполните /sysprompt --full.",
   "repl.sysprompt_tokens": "Системный промпт ({count} токенов):",
@@ -2807,6 +2809,8 @@
   "config.key.service.syncWaitMs": "кап синхронного ожидания (мс)",
   "config.desc.service.syncWaitMs": "Верхняя граница wait:true до возврата 202.",
   "config.key.service.maxQueueLength": "макс. задач в очереди сессии",
+  "config.key.service.detachedTurnGraceMs": "окно отвязки хода (мс)",
+  "config.desc.service.detachedTurnGraceMs": "Сколько interactive-ход живёт после ухода последнего SSE-клиента; 0 — отменять сразу.",
   "config.desc.service.maxQueueLength": "Кап FIFO-очереди на сессию; переполнение → queue-full.",
   "config.key.service.callbackTimeoutMs": "таймаут webhook (мс)",
   "config.desc.service.callbackTimeoutMs": "Таймаут доставки webhook-колбэка.",
@@ -2870,6 +2874,8 @@
   "daemon.command_plugin_system": "системный плагин нельзя выключить",
   "daemon.command_reloaded": "плагины и скиллы перечитаны",
   "daemon.command_no_models": "провайдер не вернул список моделей",
+  "daemon.command_run_started": "ход запущен: {jobId}",
+  "daemon.command_queue_full": "очередь сессии переполнена",
   "cli.web.daemon": "Отдать браузерный UI адаптером к запущенному демону (URL)",
   "cli.web_daemon_started": "mma web (демон) → {url} · демон {daemon}"
 }

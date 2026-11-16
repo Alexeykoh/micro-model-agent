@@ -17,6 +17,7 @@ import { errMsg } from "../../utils/error";
 import { bearerOk, isLoopback, sendProblem } from "./http/respond";
 import { resolveServiceTls, tlsPolicyError } from "./http/tls";
 import { handleApi } from "./http/routes";
+import { clearDetachedTimers } from "./api/detached-turns";
 import { problem } from "./runtime/problem";
 import { apiGuard, filterResponse } from "../../runtime/egress";
 import type { AgentServiceState } from "./state";
@@ -167,4 +168,5 @@ export function stopServiceServer(s: AgentServiceState): void {
   s.readyCache = undefined;
   s.pool.clear();
   s.envelopes.clear();
+  clearDetachedTimers(s);
 }

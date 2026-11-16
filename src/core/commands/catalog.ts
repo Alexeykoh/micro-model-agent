@@ -23,7 +23,7 @@ import type { OutputStream } from "../../output/types";
  * терминал, но с теми же возможностями ввода-вывода), поэтому команда без явного
  * списка `surfaces` доступна и на REPL, и на TUI: см. {@link isAvailable}.
  */
-export type CommandSurface = "terminal" | "tui" | "web";
+export type CommandSurface = "terminal" | "tui" | "web" | "daemon";
 
 /** Группа для `/help` и секций справки. */
 export type CommandGroup = "general" | "agent" | "session" | "skill";
@@ -53,7 +53,9 @@ export interface CommandSpec {
   /**
    * Где команда доступна. Без явного списка — терминальные поверхности
    * (`terminal`, `tui`). Список вида `["terminal", "tui", "web"]` означает «и
-   * браузер тоже»; `["web"]` — команда только браузера.
+   * браузер тоже»; `["daemon"]` — только headless-демон (thin-REPL/web по wire).
+   * `daemon` не добавляется по умолчанию: интерактивные команды остаются
+   * терминальными, а серверный реестр исполняет только объявленные.
    *
    * Нюанс: `/clear` и `/new` помечены `web`, но разбираются на КЛИЕНТЕ
    * (`assets/js/session/composer.ts`), а не серверным диспатчером, — поэтому
@@ -83,7 +85,7 @@ export interface CommandEntry extends CommandSpec {
  */
 export function isAvailable(entry: CommandEntry, surface: CommandSurface): boolean {
   const declared = entry.surfaces;
-  if (!declared) return surface !== "web";
+  if (!declared) return surface === "terminal" || surface === "tui";
   return declared.includes(surface);
 }
 

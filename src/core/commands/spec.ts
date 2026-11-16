@@ -34,7 +34,7 @@ const SPEC_DEFS: readonly CommandSpecDef[] = [
     usageKey: "repl.help_usage",
     examples: ["/help", "/help config"],
     group: "general",
-    surfaces: ["terminal", "tui", "web"],
+    surfaces: ["terminal", "tui", "web", "daemon"],
   },
   {
     name: "exit",
@@ -55,6 +55,7 @@ const SPEC_DEFS: readonly CommandSpecDef[] = [
     descriptionKey: "repl.run",
     usageKey: "repl.run_usage",
     group: "general",
+    surfaces: ["terminal", "tui", "daemon"],
   },
   {
     name: "image",
@@ -68,7 +69,7 @@ const SPEC_DEFS: readonly CommandSpecDef[] = [
     descriptionKey: "repl.new",
     usageKey: "repl.new_usage",
     group: "general",
-    surfaces: ["terminal", "tui", "web"],
+    surfaces: ["terminal", "tui", "web", "daemon"],
   },
 
   // ── agent ─────────────────────────────────────────────────────────────────
@@ -78,14 +79,14 @@ const SPEC_DEFS: readonly CommandSpecDef[] = [
     usageKey: "repl.config_usage",
     examples: ["/config", "/config model", "/config reasoning.mode high", "/config reset ui.verbosity"],
     group: "agent",
-    surfaces: ["terminal", "tui", "web"],
+    surfaces: ["terminal", "tui", "web", "daemon"],
   },
   {
     name: "status",
     descriptionKey: "repl.status",
     usageKey: "repl.status_usage",
     group: "agent",
-    surfaces: ["terminal", "tui", "web"],
+    surfaces: ["terminal", "tui", "web", "daemon"],
   },
   {
     name: "reasoning",
@@ -93,55 +94,55 @@ const SPEC_DEFS: readonly CommandSpecDef[] = [
     usageKey: "repl.reasoning_usage",
     examples: ["/reasoning", "/reasoning show", "/reasoning level high"],
     group: "agent",
-    surfaces: ["terminal", "tui", "web"],
+    surfaces: ["terminal", "tui", "web", "daemon"],
   },
   {
     name: "verbose",
     descriptionKey: "repl.verbose",
     usageKey: "repl.verbose_usage",
     group: "agent",
-    surfaces: ["terminal", "tui", "web"],
+    surfaces: ["terminal", "tui", "web", "daemon"],
   },
   {
     name: "model",
     descriptionKey: "repl.model",
     usageKey: "repl.model_usage",
     group: "agent",
-    surfaces: ["terminal", "tui", "web"],
+    surfaces: ["terminal", "tui", "web", "daemon"],
   },
   {
     name: "provider",
     descriptionKey: "repl.provider",
     usageKey: "repl.provider_usage",
     group: "agent",
-    surfaces: ["terminal", "tui", "web"],
+    surfaces: ["terminal", "tui", "web", "daemon"],
   },
   {
     name: "context",
     descriptionKey: "repl.context",
     usageKey: "repl.context_usage",
     group: "agent",
-    surfaces: ["terminal", "tui", "web"],
+    surfaces: ["terminal", "tui", "web", "daemon"],
   },
   {
     name: "security",
     descriptionKey: "repl.security",
     group: "agent",
-    surfaces: ["terminal", "tui", "web"],
+    surfaces: ["terminal", "tui", "web", "daemon"],
   },
   {
     name: "export",
     descriptionKey: "repl.export",
     usageKey: "repl.export_usage",
     group: "agent",
-    surfaces: ["terminal", "tui", "web"],
+    surfaces: ["terminal", "tui", "web", "daemon"],
   },
   {
     name: "memory",
     descriptionKey: "repl.memory_usage",
     usageKey: "repl.memory_usage",
     group: "agent",
-    surfaces: ["terminal", "tui", "web"],
+    surfaces: ["terminal", "tui", "web", "daemon"],
   },
   {
     name: "sessions",
@@ -153,7 +154,7 @@ const SPEC_DEFS: readonly CommandSpecDef[] = [
     // списка и `/resume` для выбора. Единственное расхождение имён между
     // фронтендами, поэтому объявлено явно, а не спрятано в двух реестрах.
     webName: "session",
-    surfaces: ["terminal", "tui", "web"],
+    surfaces: ["terminal", "tui", "web", "daemon"],
   },
   {
     name: "sysprompt",
@@ -161,6 +162,7 @@ const SPEC_DEFS: readonly CommandSpecDef[] = [
     usageKey: "repl.sysprompt_usage",
     examples: ["/sysprompt", "/sysprompt --full"],
     group: "agent",
+    surfaces: ["terminal", "tui", "daemon"],
   },
   {
     name: "doctor",
@@ -173,30 +175,35 @@ const SPEC_DEFS: readonly CommandSpecDef[] = [
     descriptionKey: "repl.map",
     usageKey: "repl.map_usage",
     group: "agent",
+    surfaces: ["terminal", "tui", "daemon"],
   },
   {
     name: "lsp",
     descriptionKey: "repl.lsp",
     usageKey: "repl.lsp_usage",
     group: "agent",
+    surfaces: ["terminal", "tui", "daemon"],
   },
   {
     name: "skill",
     descriptionKey: "repl.skill",
     usageKey: "repl.skill_usage",
     group: "skill",
+    surfaces: ["terminal", "tui", "daemon"],
   },
   {
     name: "plugins",
     descriptionKey: "repl.plugins",
     usageKey: "repl.plugins_usage",
     group: "agent",
+    surfaces: ["terminal", "tui", "daemon"],
   },
   {
     name: "reload",
     descriptionKey: "repl.reload",
     usageKey: "repl.reload_usage",
     group: "agent",
+    surfaces: ["terminal", "tui", "daemon"],
   },
   {
     name: "wizard",
@@ -226,18 +233,28 @@ const SPEC_DEFS: readonly CommandSpecDef[] = [
     aliases: ["use"],
     usageKey: "repl.resume_usage",
     group: "session",
+    surfaces: ["terminal", "tui", "daemon"],
   },
   {
     name: "rename",
     descriptionKey: "repl.rename",
     usageKey: "repl.rename_usage",
     group: "session",
+    surfaces: ["terminal", "tui", "daemon"],
   },
   {
     name: "delete",
     descriptionKey: "repl.delete",
     usageKey: "repl.delete_usage",
     group: "session",
+    surfaces: ["terminal", "tui", "daemon"],
+  },
+  {
+    name: "diagnostics",
+    descriptionKey: "repl.diagnostics",
+    usageKey: "repl.diagnostics_usage",
+    group: "agent",
+    surfaces: ["daemon"],
   },
 ];
 

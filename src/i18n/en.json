@@ -787,6 +787,8 @@
   "repl.sysprompt_desc": "System prompt size and blocks (use --full for the text)",
   "repl.doctor": "Full diagnostics: environment, modules, plugins, provider, LSP, config",
   "repl.doctor_usage": "Usage: /doctor",
+  "repl.diagnostics": "Daemon diagnostics: version, modules, queue, sessions",
+  "repl.diagnostics_usage": "Usage: /diagnostics",
   "repl.sysprompt_usage": "Usage: /sysprompt [--full]",
   "repl.sysprompt_full_hint": "Full prompt text hidden — run /sysprompt --full to print it.",
   "repl.sysprompt_tokens": "System prompt ({count} tokens):",
@@ -2807,6 +2809,8 @@
   "config.key.service.syncWaitMs": "sync wait cap (ms)",
   "config.desc.service.syncWaitMs": "Upper bound for wait:true before returning 202.",
   "config.key.service.maxQueueLength": "max queued tasks per session",
+  "config.key.service.detachedTurnGraceMs": "detached turn grace (ms)",
+  "config.desc.service.detachedTurnGraceMs": "How long an interactive turn survives after the last SSE client leaves; 0 cancels immediately.",
   "config.desc.service.maxQueueLength": "FIFO queue cap per session; overflow returns queue-full.",
   "config.key.service.callbackTimeoutMs": "webhook timeout (ms)",
   "config.desc.service.callbackTimeoutMs": "Timeout for delivering a webhook callback.",
@@ -2870,6 +2874,8 @@
   "daemon.command_plugin_system": "system plugin cannot be disabled",
   "daemon.command_reloaded": "reloaded plugins and skills",
   "daemon.command_no_models": "no models reported by provider",
+  "daemon.command_run_started": "turn started: {jobId}",
+  "daemon.command_queue_full": "session queue is full",
   "cli.web.daemon": "Serve the browser UI as an adapter over a running daemon URL",
   "cli.web_daemon_started": "mma web (daemon) → {url} · daemon {daemon}"
 }

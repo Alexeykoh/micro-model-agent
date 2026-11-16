@@ -7,6 +7,7 @@
  */
 import { t } from "../../../i18n/index";
 import { buildCommandCatalog } from "../../../core/commands/spec";
+import { isAvailable } from "../../../core/commands/catalog";
 import type { HostCommandResult } from "../../../core/host";
 import type { AgentServiceState } from "../state";
 import {
@@ -18,7 +19,6 @@ import {
   reasoningCommand,
   securityCommand,
   statusCommand,
-  TERMINAL_ONLY,
   verboseCommand,
 } from "./commands-core";
 import {
@@ -32,10 +32,12 @@ import {
   reloadCommand,
   renameCommand,
   resumeCommand,
+  runCommand,
   sessionsCommand,
   skillCommand,
   syspromptCommand,
 } from "./commands-data";
+import { diagnosticsCommand } from "./commands-diagnostics";
 import { fail, type CommandCtx, type CommandHandler } from "./commands-types";
 
 /** Карта команд: ключ — каноническое имя (правило #17, без цепочки `if`). */
@@ -63,6 +65,8 @@ const HANDLERS: Record<string, CommandHandler> = {
   skill: skillCommand,
   plugins: pluginsCommand,
   reload: reloadCommand,
+  run: runCommand,
+  diagnostics: diagnosticsCommand,
 };
 
 /** Алиас → каноническое имя (берётся из каталога + web-имя `/sessions`). */
@@ -88,7 +92,7 @@ export interface HostCommandInfo {
 /** Все объявленные команды с признаком «исполнима на проводе». */
 export function hostCommandCatalog(): HostCommandInfo[] {
   return buildCommandCatalog().map((spec) => {
-    const available = !TERMINAL_ONLY.has(spec.name) && !!HANDLERS[spec.name];
+    const available = isAvailable(spec, "daemon") && !!HANDLERS[spec.name];
     return {
       name: spec.name,
       description: spec.description,
@@ -111,11 +115,12 @@ export async function runHostCommand(
   const name = (rawName ?? "").toLowerCase();
   if (!name) return fail(t("daemon.command_requires_slash"));
   const canonical = aliasMap().get(name) ?? name;
-  if (TERMINAL_ONLY.has(canonical)) {
+  const spec = buildCommandCatalog().find((item) => item.name === canonical);
+  if (!spec) return fail(t("daemon.command_unknown", { name }));
+  if (!isAvailable(spec, "daemon") || !HANDLERS[spec.name]) {
     return fail(t("daemon.command_terminal_only", { name: canonical }));
   }
-  const handler = HANDLERS[canonical];
-  if (!handler) return fail(t("daemon.command_unknown", { name }));
+  const handler = HANDLERS[spec.name];
   const ctx: CommandCtx = { s, sessionId };
   try {
     return await handler(ctx, args);

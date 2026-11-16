@@ -92,10 +92,13 @@ describe("каталог команд", () => {
     for (const src of sources) {
       for (const m of src.matchAll(/\n\s{4}name: "([^"]+)",/g)) registered.add(m[1]);
     }
-    const catalogued = new Set(CATALOG.map((c) => c.name));
+    const allNames = new Set(CATALOG.map((c) => c.name));
+    const terminalNames = new Set(
+      CATALOG.filter((c) => isAvailable(c, "terminal")).map((c) => c.name),
+    );
     expect(registered.size).toBeGreaterThan(20);
-    expect([...registered].filter((n) => !catalogued.has(n))).toEqual([]);
-    expect([...catalogued].filter((n) => !registered.has(n))).toEqual([]);
+    expect([...registered].filter((n) => !allNames.has(n))).toEqual([]);
+    expect([...terminalNames].filter((n) => !registered.has(n))).toEqual([]);
   });
 
   it("команды, помеченные web, действительно поддержаны вебом", () => {

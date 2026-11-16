@@ -168,6 +168,11 @@
             `core/commands/spec.ts` через host wire; интерактивные команды
             отвечают `terminal-only`; `/v1/host/commands` кормит thin-REPL
             `/help` и web `/api/commands`.
+      - [x] **W13** — полировка границ: `service.detachedTurnGraceMs` +
+            события `task.detached/attached/detached_timeout`; `surfaces:
+            ["daemon"]` вместо списка `TERMINAL_ONLY`; `/run` на демоне,
+            `/diagnostics` daemon-only; i18n-аудит с гвардом; решение по
+            терминальным командам в §9.1 спеки.
 
       **Релиз:** `CHANGELOG`/версия `0.26.0` не трогали; `v0_26_0` не влит в `dev`.
       Обычный `mma web` остаётся in-process; `--daemon-url` — адаптер к демону.

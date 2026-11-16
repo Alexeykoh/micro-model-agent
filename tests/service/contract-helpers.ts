@@ -267,6 +267,7 @@ export function emittedEventTypes(serviceDir: string): string[] {
     "api/host-lsp.ts",
     "api/host-setup-write.ts",
     "runtime/prompt-io.ts",
+    "api/detached-turns.ts",
     "api/tasks-api.ts",
     "api/tasks-submit.ts",
     "api/tasks-runner.ts",

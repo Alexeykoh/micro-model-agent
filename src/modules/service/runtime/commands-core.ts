@@ -15,6 +15,7 @@ import {
 } from "../../../config/registry";
 import { applyConfigWrite } from "../../../runtime/config-write";
 import { buildCommandCatalog } from "../../../core/commands/spec";
+import { isAvailable } from "../../../core/commands/catalog";
 import { resolveVerbosity } from "../../../ui/theme";
 import { hostStateOf } from "./host-state";
 import type { HostCommandResult } from "../../../core/host";
@@ -64,25 +65,11 @@ export function helpCommand(ctx: CommandCtx, args: string[]): HostCommandResult 
   }
   const lines: string[] = [t("daemon.command_help_header")];
   for (const spec of catalog) {
-    const terminalOnly = TERMINAL_ONLY.has(spec.name);
-    lines.push(
-      `/${spec.name}${terminalOnly ? ` ${t("daemon.command_terminal_mark")}` : ""}  ${spec.description}`,
-    );
+    const markup = isAvailable(spec, "daemon") ? "" : ` ${t("daemon.command_terminal_mark")}`;
+    lines.push(`/${spec.name}${markup}  ${spec.description}`);
   }
   return ok(...lines);
 }
-
-/** Команды, которым нужен интерактивный терминал, а не headless-демон. */
-export const TERMINAL_ONLY = new Set([
-  "run",
-  "image",
-  "wizard",
-  "meet",
-  "init",
-  "doctor",
-  "exit",
-  "clear",
-]);
 
 /** `/status` — модель/провайдер/контекст/сессия. */
 export function statusCommand(ctx: CommandCtx): HostCommandResult {

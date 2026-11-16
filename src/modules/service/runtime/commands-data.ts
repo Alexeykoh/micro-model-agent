@@ -14,6 +14,7 @@ import {
   MAX_MEMORY_ENTRY_CHARS,
   MEMORY_CATEGORIES,
 } from "../../../runtime/memory-view";
+import { dispatchInteractive } from "../api/tasks-submit";
 import { fail, ok, type CommandCtx } from "./commands-types";
 
 /** Менеджер сессий или null (honest-ошибка у вызывающего). */
@@ -230,11 +231,19 @@ export function pluginsCommand(ctx: CommandCtx, args: string[]): ReturnType<type
   );
 }
 
-/** `/reload` — перечитать плагины и скиллы с диска. */
-export function reloadCommand(ctx: CommandCtx): ReturnType<typeof ok> {
+/** `/reload` — перечитать плагины и скиллы с диска. */export function reloadCommand(ctx: CommandCtx): ReturnType<typeof ok> {
   const plugins = ctx.s.deps.plugins;
   if (!plugins) return fail(t("daemon.command_plugins_unavailable"));
   plugins.reload();
   ctx.s.deps.skills?.reloadSources?.();
   return ok(t("daemon.command_reloaded"), `model ${ctx.s.config.model}`, `context ${ctx.s.config.contextWindow}`);
+}
+
+/** `/run <prompt…>` — поставить ход тем же путём, что submit (split W13). */
+export function runCommand(ctx: CommandCtx, args: string[]): ReturnType<typeof ok> {
+  const text = args.join(" ").trim();
+  if (!text) return fail(t("repl.run_usage"));
+  const created = dispatchInteractive(ctx.s, ctx.sessionId, text, ctx.s.tenant, []);
+  if (!created.ok) return fail(t("daemon.command_queue_full"));
+  return ok(t("daemon.command_run_started", { jobId: created.task.jobId }));
 }
