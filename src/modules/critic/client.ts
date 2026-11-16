@@ -115,8 +115,23 @@ export class CriticClient {
         { role: "user", content: renderPack(pack) },
       ];
       this.stage({ stage: "verdict", pass: 1 });
-      const firstRaw = await this.chat(messages, signal);
-      const first = this.parseVerdictChecked(firstRaw, "pass-1");
+      let firstRaw = await this.chat(messages, signal);
+      let first = this.parseVerdictChecked(firstRaw, "pass-1");
+      // Малая модель иногда отвечает tool-call XML вместо JSON. Один
+      // корректирующий повтор дешевле, чем потерять критика на весь ход.
+      if (!first && !signal?.aborted) {
+        const retryMessages: Message[] = [
+          ...messages,
+          {
+            role: "user",
+            content:
+              "Your previous reply was not valid JSON. Reply with JSON ONLY, matching the schema; no prose and no tool calls.",
+          },
+        ];
+        this.stage({ stage: "verdict", pass: 1 });
+        firstRaw = await this.chat(retryMessages, signal);
+        first = this.parseVerdictChecked(firstRaw, "pass-1-retry");
+      }
       this.stage({ stage: "verdict", pass: 1, verdict: first ?? undefined });
       if (!first || first.status === "ok" || !opts?.runCheck) return first;
       return await verifyWithChecks(

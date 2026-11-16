@@ -91,6 +91,14 @@ describe("CriticClient degraded observability (§5.8, §1.10)", () => {
     expect(logs.some((l) => l.includes("critic_degraded"))).toBe(true);
   });
 
+  it("retries once with a JSON-only reminder after a tool-call reply", async () => {
+    const provider = scripted(["<tool_call><function=bash>uname -a</function></tool_call>", finalOk]);
+    const client = new CriticClient({ provider });
+    const verdict = await client.verify(bigPack());
+    expect(verdict?.status).toBe("ok");
+    expect(provider.calls.n).toBe(2);
+  });
+
   it("logs critic_degraded when jsonrepair rescues a truncated verdict into a false ok", async () => {
     // Обрезанный по maxTokens вердикт не разбирается, а чинится: verdict
     // получается валидным, но это НЕ то, что модель сказала. Раньше это
