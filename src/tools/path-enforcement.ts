@@ -58,10 +58,10 @@ export function checkToolPath(
     return {
       success: false,
       blocked: true,
-      output: t("tool.path_blocked", {
+      output: `[SECURITY BLOCKED] ${t("tool.path_blocked", {
         path: value,
         reason: ` — ${sensitive}`,
-      }),
+      })}`,
       toolCallId,
     };
   }
