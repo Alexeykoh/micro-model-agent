@@ -43,6 +43,10 @@ const skillsPanel = readFileSync(
   new URL("../src/modules/webui/assets/js/settings/panels-skills.ts", import.meta.url),
   "utf-8",
 );
+const securityPanel = readFileSync(
+  new URL("../src/modules/webui/assets/js/settings/panels-security.ts", import.meta.url),
+  "utf-8",
+);
 
 describe("web UI layout guards", () => {
   it("makes the hidden attribute beat component display rules", () => {
@@ -128,6 +132,15 @@ describe("web UI layout guards", () => {
     expect(memoryPanel).toContain('"settings-details"');
     expect(memoryPanel).toContain('"mem-filters"');
     expect(skillsPanel).toContain("web.settings.search_skills");
+  });
+
+  it("splits Security into overview + focused tabs", () => {
+    expect(securityPanel).toContain('"web.settings.tab_security_overview"');
+    expect(securityPanel).toContain('"web.settings.tab_security_dlp"');
+    expect(securityPanel).toContain('"security.dataPolicy"');
+    expect(securityPanel).toContain('"security.dlp.provider"');
+    expect(securityPanel).toContain('"security.approvals"');
+    expect(securityPanel).toContain("renderSectionsInto");
   });
 
   it("keeps the setup footer reachable and the intro responsive", () => {
