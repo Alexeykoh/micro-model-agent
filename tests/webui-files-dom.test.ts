@@ -112,6 +112,12 @@ g.fetch = async (url: string): Promise<Response> => {
   }
   if (url.startsWith("/api/file")) {
     const p = decodeURIComponent(url.split("path=")[1] || "");
+    if (p.endsWith(".png")) {
+      return new Response(new Uint8Array([137, 80, 78, 71]), {
+        status: 200,
+        headers: { "content-type": "image/png" },
+      });
+    }
     return new Response(fileTexts[p] ?? fileText, {
       status: 200,
       headers: { "content-type": "text/plain; charset=utf-8" },
@@ -175,6 +181,19 @@ describe("files tab DOM", () => {
     expect(doc("filesDetail").hidden).toBe(false);
     expect(crumbs()).toEqual(["src", "index.ts"]);
     expect(doc("filesBody").textContent).toContain("export const x = 1");
+  });
+
+  it("shows an image in the full sidebar and opens the lightbox on click", async () => {
+    await sidebar.openFile("cat.png");
+    await flush();
+    const img = doc("filesBody").querySelector<HTMLImageElement>("img.fimg");
+    expect(img).toBeTruthy();
+    expect(doc("pane-files").classList.contains("f-full")).toBe(true);
+    expect(doc("filesSide").hidden).toBe(true);
+    img!.click();
+    const lightbox = win.document.querySelector<HTMLElement>(".lightbox");
+    expect(lightbox).toBeTruthy();
+    expect(lightbox!.hidden).toBe(false);
   });
 
   it("reveals and opens a workspace file from a chat link", async () => {
