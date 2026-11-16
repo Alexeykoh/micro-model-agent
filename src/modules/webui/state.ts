@@ -209,6 +209,9 @@ export type WorkspaceStore = Pick<
   | "setupRequired"
 >;
 
+/** Роль: панель Tools (сессионные on/off + каталог тулов). */
+export type ToolStore = Pick<WebUiState, "toolOverrides" | "toolCatalog">;
+
 /** Только положительный int; мусор даёт фолбэк 5. */
 export function parseMaxClients(raw: string | undefined): number {
   const n = Number(raw);
