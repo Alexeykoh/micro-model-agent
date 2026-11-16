@@ -16,6 +16,7 @@ import type { WebUiWiring } from "./state-contracts";
 export type { QueuedMessage, WebSessionManager } from "./state-session";
 export type {
   WebPluginManager,
+  WebReloadReport,
   WebSkillInfo,
   WebSkillsModule,
   WebUiAssets,

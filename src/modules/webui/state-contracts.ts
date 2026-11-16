@@ -106,6 +106,15 @@ export interface WebPluginManager {
 }
 
 /**
+ * Итог мягкого reload источников: какие `AGENTS.md` перечитаны и сколько
+ * блоков инструкций пришло на замену. Плагины/скиллы отчитываются отдельно.
+ */
+export interface WebReloadReport {
+  files: string[];
+  instructions: number;
+}
+
+/**
  * Коллабораторы bootstrap для REST конфига/сессий/моделей. Вяжет `module.ts`;
  * опциональны, чтобы тесты гоняли точки изолированно (отсутствующий даёт 503,
  * никогда — краш).
@@ -156,6 +165,12 @@ export interface WebUiWiring {
   workspace?: string;
   /** Загруженные источники AGENTS.md (проект + глобальный) или `disabled` через `--no-agents-md`. */
   agentsMd?: { files: string[]; disabled: boolean };
+  /**
+   * Мягкий reload источников (`/reload`): перечитать конфиг и `AGENTS.md` с
+   * диска, не гася процесс. Вяжет CLI (`runWeb`); `undefined` — режим не умеет
+   * (например, daemon-адаптер без локального рантайма).
+   */
+  reload?: () => Promise<WebReloadReport>;
   /** Статистика карты проекта (`null`, пока обход индекса не кончился). */
   projectMapStats?: () => { files: number; symbols: number; tokens: number } | null;
   /**

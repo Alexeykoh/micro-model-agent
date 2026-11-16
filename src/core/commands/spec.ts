@@ -203,7 +203,7 @@ const SPEC_DEFS: readonly CommandSpecDef[] = [
     descriptionKey: "repl.reload",
     usageKey: "repl.reload_usage",
     group: "agent",
-    surfaces: ["terminal", "tui", "daemon"],
+    surfaces: ["terminal", "tui", "web", "daemon"],
   },
   {
     name: "wizard",

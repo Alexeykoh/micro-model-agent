@@ -115,6 +115,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     gitPeek(state.gitCache, deps.baseDir, state.filesRevision, () => pushState(state));
   }
   state.agentsMd = deps.agentsMd;
+  if (deps.reload) state.reload = deps.reload;
   if (deps.indexer) {
     state.projectMapStats = () => deps.indexer?.stats() ?? null;
     if (deps.indexer.refresh) {

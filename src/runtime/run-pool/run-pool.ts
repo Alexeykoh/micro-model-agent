@@ -21,6 +21,7 @@ import { startSweeper, stopSweeper, sweepIfDue, sweepRunners, type SweepState } 
 
 export { RUNNER_IDLE_MS, RUNNER_LRU_MAX } from "./pool-sweep";
 import { SlotQueue } from "./run-queue";
+import { dropIdleRunners } from "./runner-gc";
 import {
   anyBusyOf,
   busyIdsOf,
@@ -268,6 +269,11 @@ export class RunPool {
     this.disposeRunner(id);
     this.slots.delete(id);
     this.clientTz.delete(id);
+  }
+
+  /** Сбросить простаивающие раннеры — мягкий reload промпта (см. `runner-gc`). */
+  dropIdle(): number {
+    return dropIdleRunners(this);
   }
 
   /** Полный сброс (стоп сервера): раннеры, слоты, очереди. */

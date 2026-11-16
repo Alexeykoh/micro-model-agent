@@ -56,6 +56,11 @@ export interface ServiceDeps {
   saveConfig?: (config: AppConfig, key?: string) => void;
   /** Хук пересборки живого агента после записи ключа. */
   reconfigure?: (config: AppConfig) => void | Promise<void>;
+  /**
+   * Мягкий reload источников (`/reload`): перечитать конфиг и `AGENTS.md` с
+   * диска, не гася процесс. Вяжет CLI; `undefined` — только плагины/скиллы.
+   */
+  reloadSources?: () => Promise<import("../../core/api").ReloadSourcesResult>;
   /** Оверрайд bearer-токена (иначе env `MMA_SERVICE_TOKEN`, затем `service.token`). */
   token?: string;
   /** Тестовый шов: fetch для webhook-доставки (дефолт — глобальный `fetch`). */

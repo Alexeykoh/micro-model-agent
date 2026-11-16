@@ -31,6 +31,11 @@ export interface WebUiDeps {
   baseDir?: string;
   /** Загруженные источники AGENTS.md; `disabled` при `--no-agents-md`. */
   agentsMd?: { files: string[]; disabled: boolean };
+  /**
+   * Мягкий reload источников (`/reload`): конфиг + `AGENTS.md` с диска без
+   * перезапуска процесса. Вяжет CLI, у которого есть `configDir`/`baseDir`.
+   */
+  reload?: () => Promise<import("./state-contracts").WebReloadReport>;
   /** Модуль карты проекта (индекс) для статистики сайдбара. */
   indexer?: WebIndexer;
   /** Модуль LSP (диагностика) для вкладки LSP сайдбара. */

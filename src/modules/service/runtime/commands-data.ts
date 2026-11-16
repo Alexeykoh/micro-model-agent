@@ -231,12 +231,30 @@ export function pluginsCommand(ctx: CommandCtx, args: string[]): ReturnType<type
   );
 }
 
-/** `/reload` — перечитать плагины и скиллы с диска. */export function reloadCommand(ctx: CommandCtx): ReturnType<typeof ok> {
+/** `/reload` — перечитать конфиг, AGENTS.md, плагины и скиллы с диска. */
+export async function reloadCommand(
+  ctx: CommandCtx,
+): Promise<ReturnType<typeof ok>> {
   const plugins = ctx.s.deps.plugins;
   if (!plugins) return fail(t("daemon.command_plugins_unavailable"));
   plugins.reload();
   ctx.s.deps.skills?.reloadSources?.();
-  return ok(t("daemon.command_reloaded"), `model ${ctx.s.config.model}`, `context ${ctx.s.config.contextWindow}`);
+  const sources = await ctx.s.deps.reloadSources?.();
+  if (sources) {
+    await ctx.s.deps.reconfigure?.(ctx.s.config);
+    ctx.s.pool.dropIdle();
+  }
+  const lines = [
+    t("daemon.command_reloaded"),
+    `model ${ctx.s.config.model}`,
+    `context ${ctx.s.config.contextWindow}`,
+  ];
+  if (sources) {
+    lines.push(
+      `AGENTS.md: ${sources.files.length} file(s), ${sources.instructions.length} block(s)`,
+    );
+  }
+  return ok(...lines);
 }
 
 /** `/run <prompt…>` — поставить ход тем же путём, что submit (split W13). */

@@ -30,3 +30,22 @@ export function selectEvictions(
   }
   return evict;
 }
+
+/**
+ * Сбросить простаивающие раннеры (нет хода и нет очереди) — мягкий reload
+ * промпта: следующий ход сессии соберётся заново, идущие ходы не рвутся.
+ */
+export function dropIdleRunners(pool: {
+  runnerIds(): string[];
+  isBusy(id: string): boolean;
+  queueLen(id: string): number;
+  drop(id: string): void;
+}): number {
+  let dropped = 0;
+  for (const id of pool.runnerIds()) {
+    if (pool.isBusy(id) || pool.queueLen(id) > 0) continue;
+    pool.drop(id);
+    dropped++;
+  }
+  return dropped;
+}
