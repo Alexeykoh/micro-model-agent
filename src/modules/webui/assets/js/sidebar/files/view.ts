@@ -8,6 +8,7 @@
 import { el } from "../../dom.js";
 import { t } from "../../i18n.js";
 import { renderMarkdown } from "../../../md.js";
+import { openLightbox } from "../../lightbox.js";
 
 export interface FetchedFile {
   ok: boolean;
@@ -109,7 +110,11 @@ function paintMedia(body: HTMLElement, path: string, mime: string): void {
     const img = document.createElement("img");
     img.className = "fimg";
     img.alt = path;
+    img.title = path;
     img.src = src;
+    // The sidebar is the quick look; a click opens the same full-screen
+    // lightbox as feed thumbnails (zoom, open-in-tab, copy link).
+    img.addEventListener("click", () => openLightbox(src, path));
     body.appendChild(img);
     return;
   }

@@ -159,4 +159,38 @@ describe("GET /api/models reasoning shape", () => {
       });
     });
   });
+
+  it("includes resolved vision/tools capabilities for the chip", async () => {
+    const s = createWebUiState();
+    s.knownModels = () => ["qwen3.8-27b"];
+    const config = testConfig();
+    config.provider.type = "openai-compat";
+    config.provider.baseUrl = "http://host.docker.internal:8080/v1";
+    config.model = "qwen3.8-27b";
+    s.config = config;
+    s.providerReasoning = () => ({
+      strategy: "openai-effort",
+      reachable: true,
+      vision: true,
+      tools: true,
+    });
+    await withServer(s, async (base) => {
+      const res = await doFetch(`${base}/api/models`);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body.capabilities).toEqual({ vision: true, tools: true });
+    });
+  });
+
+  it("does not invent capabilities when the probe is not wired", async () => {
+    const s = createWebUiState();
+    s.knownModels = () => ["m"];
+    const config = testConfig();
+    s.config = config;
+    await withServer(s, async (base) => {
+      const res = await doFetch(`${base}/api/models`);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body.capabilities).toBeUndefined();
+    });
+  });
 });

@@ -177,7 +177,7 @@ export async function loadConfig(): Promise<void> {
 }
 
 export async function loadModels(): Promise<void> {
-  const r = await api<{ models?: Dict[]; reasoning?: Dict }>("/api/models");
+  const r = await api<{ models?: Dict[]; reasoning?: Dict; capabilities?: Dict }>("/api/models");
   if (!r.ok || !r.data) {
     // Попытка была: иначе редактор экспертов будет ретраить список на каждый
     // рендер (офлайн-провайдер неотличим от «ещё не загружено»).
@@ -190,6 +190,12 @@ export async function loadModels(): Promise<void> {
   // the 4th selector row renders from this, never from a separate GET.
   if (r.data.reasoning && typeof r.data.reasoning === "object")
     session.reasoning = r.data.reasoning;
+  // Capabilities ride along too: the model chip renders from this, so a switch
+  // never needs a second request.
+  session.capabilities =
+    r.data.capabilities && typeof r.data.capabilities === "object"
+      ? (r.data.capabilities as { vision?: boolean; tools?: boolean })
+      : null;
   renderSelectors();
 }
 
