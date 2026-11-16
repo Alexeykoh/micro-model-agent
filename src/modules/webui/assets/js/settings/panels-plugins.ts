@@ -118,39 +118,46 @@ function statusBar(plugins: number, mcp: number, lsp: number): HTMLElement {
   return bar;
 }
 
-/** One plugin row; `locked` marks harness modules as read-only. */
+/** One plugin card; `locked` marks harness modules as read-only. */
 function pluginLine(p: Dict, locked: boolean): HTMLElement {
-  const line = el("div", "list-line" + (locked ? " system-plugin" : ""));
-  line.appendChild(el("span", "g", p.enabled === false ? "–" : "✓"));
+  const card = el("div", "plugin-card" + (locked ? " system-plugin" : ""));
+  const head = el("div", "plugin-card-head");
+  const title = el("div", "plugin-card-title");
+  title.appendChild(el("span", "g", p.enabled === false ? "–" : "✓"));
   const nameEl = el("span", "name", p.name);
   nameEl.title = p.name;
-  line.appendChild(nameEl);
-  if (p.version) line.appendChild(el("span", "src", "v" + p.version));
-  if (p.source && !locked) {
-    const src = el("span", "src", p.source);
-    src.title = p.source;
-    line.appendChild(src);
+  title.appendChild(nameEl);
+  const meta: string[] = [];
+  if (p.version) meta.push("v" + p.version);
+  if (p.builtin) meta.push(t("web.settings.builtin"));
+  if (p.source && !locked) meta.push(String(p.source));
+  if (meta.length) {
+    const metaEl = el("span", "plugin-card-meta", meta.join(" · "));
+    metaEl.title = meta.join(" · ");
+    title.appendChild(metaEl);
   }
-  if (p.builtin) line.appendChild(el("span", "src", t("web.settings.builtin")));
-  const desc = pluginDescription(p);
-  if (desc) line.appendChild(el("span", "plugin-desc", desc));
+  head.appendChild(title);
+
   if (locked) {
     // Системный модуль — часть харнесса: тумблер был бы ложным affordance
-    // (его нельзя нажать). Состояние уже видно глифом `✓/–`.
-    line.appendChild(el("span", "src system-note", t("web.settings.plugins_system_locked")));
+    // (его нельзя нажать). Состояние видно глифом `✓/–`.
+    head.appendChild(el("span", "plugin-card-locked", t("web.settings.plugins_system_locked")));
   } else {
-    // Контролы строки — в прибитой вправо ячейке: иначе `flex-wrap` у
-    // `.list-line` роняет тумблер длинных строк на вторую линию влево.
-    const actions = el("span", "row-actions");
-    actions.appendChild(
-      makeToggle(p.enabled !== false, () => {
-        void togglePlugin(p.name, p.enabled === false);
-      }),
-    );
+    const actions = el("div", "plugin-card-actions");
+    const toggle = makeToggle(p.enabled !== false, () => {
+      void togglePlugin(p.name, p.enabled === false);
+    });
+    toggle.title = t(p.enabled === false ? "web.plugins.enable" : "web.plugins.disable");
+    toggle.setAttribute("aria-label", toggle.title);
+    actions.appendChild(toggle);
     if (p.hasSettings === true) actions.appendChild(settingsChip(p.name, openPluginSettings));
-    line.appendChild(actions);
+    head.appendChild(actions);
   }
-  return line;
+  card.appendChild(head);
+
+  const desc = pluginDescription(p);
+  if (desc) card.appendChild(el("div", "plugin-card-desc", desc));
+  return card;
 }
 
 function pluginsPane(data: Dict | null, loaderSections: Dict[]): HTMLElement {

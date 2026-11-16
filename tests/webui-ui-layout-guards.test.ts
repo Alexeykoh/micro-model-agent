@@ -122,7 +122,11 @@ describe("web UI layout guards", () => {
     expect(pluginsPanel).toContain('["lsp", "web.settings.tab_lsp"]');
     expect(pluginsPanel).toContain("renderMcpSection");
     expect(pluginsPanel).not.toContain('renderSections("plugins"');
+    expect(pluginsPanel).toContain('"plugin-card"');
+    expect(pluginsPanel).toContain('"plugin-card-actions"');
     expect(css).toMatch(/\.settings-tabs\s*,?[\s\S]*?border-bottom:/);
+    expect(css).toMatch(/\.plugin-card\s*\{[^}]*border-radius:\s*8px/i);
+    expect(css).toMatch(/\.plugin-btn\s*\{[^}]*border:\s*1px solid var\(--border-2\)/i);
   });
 
   it("splits Agent into focused tabs and folds memory rules", () => {
