@@ -10,7 +10,9 @@ services:
     image: mma-web-test:0.26.0
     container_name: mma-web-test
     ports:
-      - "7334:7333"
+      # Явный 0.0.0.0: без него Docker на Windows может опубликовать только
+      # loopback/IPv6, и Hamachi-клиенты не достучатся.
+      - "0.0.0.0:7334:7333"
     environment:
       MMA_CONFIG_DIR: /config
       MMA_WEBUI_HOST: 0.0.0.0

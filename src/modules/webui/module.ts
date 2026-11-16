@@ -34,6 +34,7 @@ import {
 } from "./state";
 import { pushState } from "./session/session-status";
 import { submitTurnFromHost } from "./session/turns";
+import { applyToolOverrides } from "./session/tools-view";
 import { emitSessions } from "./session/sessions-api";
 // Чистые снапшот-хелперы живут в `./host-state`; реэкспорт, чтобы существующие
 // импортёры (`webui-usage`, `webui-plan` тесты) не чинить.
@@ -116,6 +117,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   }
   state.agentsMd = deps.agentsMd;
   if (deps.reload) state.reload = deps.reload;
+  state.toolCatalog = () => deps.toolRegistry?.getAll?.() ?? [];
   if (deps.indexer) {
     state.projectMapStats = () => deps.indexer?.stats() ?? null;
     if (deps.indexer.refresh) {
@@ -174,6 +176,8 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     const spawnRunner = deps.spawnRunner;
     state.pool.setFactory((id: string) => {
       const runner = spawnRunner(id);
+      const overrides = state.toolOverrides.get(id);
+      if (overrides) applyToolOverrides(runner, overrides);
       installWebPromptIO({
         state,
         agent: runner.agent,

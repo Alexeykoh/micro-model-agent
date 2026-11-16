@@ -39,11 +39,23 @@ export function earlyToolRejection(
     };
   }
 
+  // Ручные per-session тумблеры (`mma web` → Tools): выключенный тул не
+  // исполняется даже при `alwaysOn`; включённый — проходит мимо tag-фильтра.
+  const overrides = ctx.toolOverrides;
+  if (overrides?.disabled?.includes(call.name)) {
+    return {
+      success: false,
+      output: t("tool.disabled_blocked", { name: call.name }),
+      toolCallId: call.id,
+    };
+  }
+  const forcedOn = overrides?.enabled?.includes(call.name) === true;
+
   // Теги ограничивают исполнение, а не только схему (INV-11): вызов тула вне
   // активного набора тегов блокируется ДО хендлера. Критерий — тот же, что у
   // `filterToolsByTags` (alwaysOn переживает сужение); пустой набор тегов —
   // легаси «все тулы».
-  if (filterToolsByTags([tool], ctx.activeToolTags ?? []).length === 0) {
+  if (!forcedOn && filterToolsByTags([tool], ctx.activeToolTags ?? []).length === 0) {
     return {
       success: false,
       output: t("tool.tags_blocked", { name: call.name }),

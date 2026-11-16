@@ -85,6 +85,7 @@ import type { FaceState } from "./js/loader.js";
 import { applyUpdateEvent } from "./js/update-ui.js";
 import { connectSSE as wireSse } from "./js/sse.js";
 import { initSubagentView, onSubagentEvent } from "./js/feed/subagent.js";
+import { initToolsPanel } from "./js/session/tools-panel.js";
 import {
   applyState,
   ensureTabState,
@@ -253,7 +254,7 @@ async function boot(): Promise<void> {
     initSidebar();
     initSidebarDrawer();
     initShortcuts();
-    initSubagentView();
+    initSubagentView(); initToolsPanel();
     applySidebarI18n();
     initFiles({ insertPath: (p) => insertIntoDraft("@" + p + " ") });
     bootStage("web.loader.step.models", 45);

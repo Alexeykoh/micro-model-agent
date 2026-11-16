@@ -5,11 +5,15 @@ import type { ToolContext, ToolDefinition } from "../../src/tools/types";
 
 /** W2.6 — теги ограничивают исполнение, а не только схему (INV-11). */
 describe("ToolExecutor tag enforcement (INV-11)", () => {
-  function makeExecutor(activeToolTags: string[]): ToolExecutor {
+  function makeExecutor(
+    activeToolTags: string[],
+    toolOverrides?: ToolContext["toolOverrides"],
+  ): ToolExecutor {
     const ctx = {
       config: {} as any,
       baseDir: process.cwd(),
       activeToolTags,
+      toolOverrides,
       logger: {
         info: vi.fn(),
         error: vi.fn(),
@@ -63,5 +67,20 @@ describe("ToolExecutor tag enforcement (INV-11)", () => {
   it("treats an empty tag set as legacy 'all tools'", async () => {
     const result = await makeExecutor([]).execute({ id: "1", name: "untagged", arguments: {} });
     expect(result.success).toBe(true);
+  });
+
+  it("lets a manual override enable a tool outside the active tags", async () => {
+    const exec = makeExecutor(["file"], { enabled: ["untagged"] });
+    const result = await exec.execute({ id: "1", name: "untagged", arguments: {} });
+    expect(result.success).toBe(true);
+    expect(exec.getToolDefinitions(["file"]).map((t) => t.name)).toContain("untagged");
+  });
+
+  it("lets a manual override disable an alwaysOn tool", async () => {
+    const exec = makeExecutor(["file"], { disabled: ["structural"] });
+    const result = await exec.execute({ id: "1", name: "structural", arguments: {} });
+    expect(result.success).toBe(false);
+    expect(result.output).toContain("disabled");
+    expect(exec.getToolDefinitions(["file"]).map((t) => t.name)).not.toContain("structural");
   });
 });
