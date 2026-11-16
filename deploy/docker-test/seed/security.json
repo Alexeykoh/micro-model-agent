@@ -1,0 +1,7 @@
+{
+  "security": {
+    "dataPolicy": {
+      "trustedHosts": ["host.docker.internal"]
+    }
+  }
+}
