@@ -11,6 +11,7 @@ import type { ToolResult } from "../../tools/types";
 import type { ReasoningState } from "../../tools/set-thinking";
 import type { CostTracker } from "../../modules/pricing/index";
 import { CostTracker as CostTrackerCtor } from "../../modules/pricing/index";
+import { reasoningCapsForProvider } from "../../modules/providers/reasoning-resolve";
 import { createPolicyState, type PolicyState } from "../../modules/reasoning/policy";
 import { ContextRenderer } from "./context-renderer";
 import type { PromptBlockKind, PromptProfile } from "../types";
@@ -140,13 +141,23 @@ export class AgentBase {
     levels?: string[] | null;
     reasoningOff?: boolean;
     reachable?: boolean;
+    /** Разрешённые возможности активной пары (preset → probe → override). */
+    vision?: boolean;
+    tools?: boolean;
   } {
     const ref = this.deps.capabilitiesProbeRef;
+    const caps = reasoningCapsForProvider(
+      this.deps.config.provider,
+      ref?.probe,
+      this.deps.config.modelCapabilities?.[this.deps.config.model],
+    );
     return {
       strategy: ref?.reasoningStrategy,
       levels: ref?.reasoningLevels ?? null,
       reasoningOff: ref?.reasoningOff,
       reachable: ref?.reachable,
+      vision: caps.vision,
+      tools: caps.tools,
     };
   }
 

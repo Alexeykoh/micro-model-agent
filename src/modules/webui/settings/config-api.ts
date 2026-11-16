@@ -227,6 +227,11 @@ export function handleModelsGet(
       levels: probe?.levels,
       reasoningOff: probe?.reasoningOff,
     });
+    // Capabilities активной модели для чипа композера. Отдельного запроса нет:
+    // композер и так перечитывает список моделей после смены пары.
+    if (probe) {
+      body.capabilities = { vision: probe.vision === true, tools: probe.tools === true };
+    }
   }
   sendJson(res, 200, body);
 }

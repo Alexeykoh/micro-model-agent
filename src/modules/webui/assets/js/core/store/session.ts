@@ -18,6 +18,12 @@ export interface SessionSlice {
   sessionsError: string | null;
   // biome-ignore lint/suspicious/noExplicitAny: opaque reasoning payload.
   reasoning: any;
+  /**
+   * Разрешённые возможности активной модели (`GET /api/models` → `capabilities`).
+   * `null` — ещё не загружены/не поддерживаются сервером: чип скрыт, а не
+   * показывает ложное `text-only`.
+   */
+  capabilities: { vision?: boolean; tools?: boolean } | null;
 }
 
 export const session: SessionSlice = {
@@ -32,6 +38,7 @@ export const session: SessionSlice = {
   queuedIds: {},
   sessionsError: null,
   reasoning: undefined,
+  capabilities: null,
 };
 
 /**

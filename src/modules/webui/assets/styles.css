@@ -637,6 +637,17 @@ body.light .codeblock { border: 1px solid var(--border); }
   margin-left: auto; color: var(--dim-a); font-size: 11.5px;
   cursor: default; white-space: nowrap;
 }
+/* Active model abilities (vision / tools / reasoning): a quiet status chip
+   next to the model selector, not a fifth dropdown. */
+.caps-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--dim-a); font-size: 11.5px; cursor: default; white-space: nowrap;
+  padding-left: 8px; border-left: 1px solid var(--border);
+}
+.caps-chip[hidden] { display: none; }
+.caps-chip .cap-ico { display: inline-flex; align-items: center; }
+.caps-chip .cap-ico svg { width: 13px; height: 13px; }
+.caps-chip .cap-ico:hover { color: var(--fg); }
 .speed-tip { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; }
 .speed-tip-h { color: var(--fg); }
 .speed-tip-row { color: var(--dim-a); }
