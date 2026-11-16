@@ -3,7 +3,7 @@ import { ToolRegistry } from "../src/tools/registry";
 import type { ToolDefinition } from "../src/tools/types";
 import { buildHiddenToolsBlock } from "../src/tools/hidden-tools-block";
 import { enableToolsTool } from "../src/tools/enable-tools";
-import { filterToolsByTags } from "../src/tools/filter-tools";
+import { filterToolsByTags, filterToolsWithOverrides } from "../src/tools/filter-tools";
 import type { ToolContext } from "../src/tools/types";
 
 function tool(name: string, tags?: string[], alwaysOn?: boolean): ToolDefinition {
@@ -149,5 +149,34 @@ describe("filterToolsByTags", () => {
     const tools = [tool("read_file", ["file"]), tool("untagged")];
     const filtered = filterToolsByTags(tools, ["file"]);
     expect(filtered.map((t) => t.name)).toEqual(["read_file"]);
+  });
+});
+
+describe("filterToolsWithOverrides", () => {
+  const tools = [
+    tool("read_file", ["file"], true),
+    tool("web_search", ["research"]),
+    tool("plan", undefined, true),
+  ];
+
+  it("adds a force-enabled tool outside the active tags", () => {
+    const names = filterToolsWithOverrides(tools, ["file"], { enabled: ["web_search"] }).map(
+      (t) => t.name,
+    );
+    expect(names).toEqual(["read_file", "web_search", "plan"]);
+  });
+
+  it("removes a force-disabled tool even when it is alwaysOn", () => {
+    const names = filterToolsWithOverrides(tools, ["file"], {
+      disabled: ["plan"],
+    }).map((t) => t.name);
+    expect(names).toEqual(["read_file"]);
+  });
+
+  it("keeps the tag baseline when no overrides are set", () => {
+    expect(filterToolsWithOverrides(tools, ["file"]).map((t) => t.name)).toEqual([
+      "read_file",
+      "plan",
+    ]);
   });
 });

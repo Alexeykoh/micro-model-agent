@@ -37,6 +37,7 @@ import { handleSetupApi } from "./settings/setup-api";
 import { handleLspDoctorGet, handleLspCheckPost, handleLspCheckChangedPost, handleLspDoctorPost } from "./lsp/lsp-api";
 import { readJsonBody } from "./http/body";
 import { handleUpdatePost } from "./chat/update-api";
+import { handleToolsGet, handleToolsPost } from "./settings/tools-api";
 import { apiGuardFor, filterResponse } from "../../runtime/egress";
 import { serveStatic } from "./static-assets";
 import { handleFaviconGet } from "./favicon";
@@ -122,6 +123,8 @@ const API_ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse, s: 
   "POST /api/config": (req, res, s) => handleConfigPost(req, res, s),
   "POST /api/answer": (req, res, s) => handleAnswerPost(req, res, s),
   "GET /api/i18n": (_req, res, s) => handleI18nGet(res, s),
+  "GET /api/tools": (req, res, s) => handleToolsGet(req, res, s),
+  "POST /api/tools": (req, res, s) => void handleToolsPost(req, res, s),
   "GET /api/commands": (_req, res) => {
     sendJson(res, 200, { commands: webCommandList() });
   },

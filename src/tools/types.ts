@@ -156,6 +156,8 @@ export interface ToolContext {
    * набора. Пустой при выключенном on-demand — getAllForLLM отдаёт всё (legacy).
    */
   activeToolTags?: string[];
+  /** Ручные per-session on/off тулов (`mma web` → Tools); allowlist главнее. */
+  toolOverrides?: { enabled?: string[]; disabled?: string[] };
   /**
    * Строгий allowlist тулов на ход/сессию. Когда задан, модели видны и
    * исполнимы ТОЛЬКО эти имена — `alwaysOn` и теги его НЕ обходят.

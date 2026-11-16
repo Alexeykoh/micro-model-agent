@@ -13,6 +13,7 @@ import {
 } from "./executor-security";
 import { runBeforeToolPlugins, runAfterToolPlugins } from "./executor-hooks";
 import { runToolWithTimeout } from "./executor-call";
+import { filterToolsWithOverrides } from "./filter-tools";
 import { finalizeToolResult, logToolResult } from "./executor-result";
 
 /** Исполнитель: реестр, контекст, плагины, сессионное мемо. */
@@ -211,32 +212,41 @@ export class ToolExecutor {
     return result;
   }
 
-  /** Теги тулов, реально попавших в схему LLM (allowlist-aware, гейт B12). */
+  /** Теги тулов, реально попавших в схему LLM (allowlist + overrides, гейт B12). */
   getVisibleTags(tags?: string[]): Set<string> {
-    const allow = allowedToolNames(this.ctx);
-    return this.registry.visibleTagsOf(tags, allow ? [...allow] : undefined);
+    const out = new Set<string>();
+    for (const def of this.selectForLLM(tags)) {
+      for (const tag of this.registry.get(def.name)?.tags ?? []) out.add(tag);
+    }
+    return out;
   }
 
-  /** Определения тулов с учётом allowlist (для схемы LLM). */
+  /** Определения тулов с учётом allowlist и per-session overrides (схема LLM). */
   getToolDefinitions(tags?: string[]): Array<{
     name: string;
     description: string;
     parameters: Record<string, unknown>;
     boundedOutput?: boolean;
   }> {
+    return this.selectForLLM(tags).map((t) => ({
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters,
+      boundedOutput: t.boundedOutput,
+    }));
+  }
+
+  /** Allowlist → теги → ручные on/off; allowlist остаётся жёсткой границей. */
+  private selectForLLM(tags?: string[]) {
     const allow = allowedToolNames(this.ctx);
-    if (allow) {
-      return this.registry
-        .getAll()
-        .filter((t) => allow.has(t.name))
-        .map((t) => ({
-          name: t.name,
-          description: t.description,
-          parameters: t.parameters,
-          boundedOutput: t.boundedOutput,
-        }));
-    }
-    return this.registry.getAllForLLM(tags);
+    const pool = allow
+      ? this.registry.getAll().filter((t) => allow.has(t.name))
+      : this.registry.getAll();
+    return filterToolsWithOverrides(
+      pool,
+      allow ? [] : (tags ?? this.ctx.activeToolTags ?? []),
+      this.ctx.toolOverrides,
+    );
   }
 
   /** Доступ к реестру. */
