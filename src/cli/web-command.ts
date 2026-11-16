@@ -181,6 +181,17 @@ export async function runWeb(opts: WebCommandOptions): Promise<void> {
       disabled: noAgentsMd,
       files: noAgentsMd ? [] : agentsMdPaths(baseDir, configDir).filter((p) => existsSync(p)),
     },
+    reload: async () => {
+      const { reloadSources } = await import("../core/sources-reload");
+      const result = reloadSources({
+        config,
+        configDir,
+        baseDir,
+        noAgentsMd: noAgentsMd === true,
+      });
+      agent.reloadInstructions(result.instructions);
+      return { files: result.files, instructions: result.instructions.length };
+    },
     indexer: indexerModule,
     lsp: lspModule,
     contextProbe,

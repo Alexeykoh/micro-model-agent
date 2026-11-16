@@ -158,25 +158,31 @@ function detailsNode(summary: Dict): HTMLElement {
   for (const dataClass of CLASSES) {
     const count = statsOf(summary, dataClass);
     if (count <= 0) continue;
-    const row = el("div", "dlp-row");
-    row.appendChild(el("span", "dlp-class", t("web.dlp.class." + dataClass)));
+    // Каждый класс — свёрнутый блок: pop-up открывается обзором счётчиков,
+    // а список позиций (десятки строк) раскрывается только по запросу.
+    const sec = document.createElement("details");
+    sec.className = "dlp-sec";
+    const head = document.createElement("summary");
+    head.className = "dlp-row dlp-summary";
+    head.appendChild(el("span", "dlp-class", t("web.dlp.class." + dataClass)));
     const kinds = kindsOf(summary, dataClass);
     // Секреты не имеют полезного публичного вида — раскрываем их ниже по типам.
     if (kinds.length && dataClass !== "secret") {
-      row.appendChild(el("span", "dlp-kinds", t("web.dlp.kinds", { list: kinds.join(", ") })));
+      head.appendChild(el("span", "dlp-kinds", t("web.dlp.kinds", { list: kinds.join(", ") })));
     }
-    row.appendChild(el("b", "dlp-count", String(count)));
-    wrap.appendChild(row);
+    head.appendChild(el("b", "dlp-count", String(count)));
+    sec.appendChild(head);
     if (dataClass === "secret") {
-      for (const secret of secrets) wrap.appendChild(secretRow(secret));
+      for (const secret of secrets) sec.appendChild(secretRow(secret));
     }
     const classHits = hits.filter((h) => h.dataClass === dataClass);
     if (classHits.length) {
       const list = el("div", "dlp-hits");
       list.appendChild(el("div", "dlp-hits-title", t("web.dlp.hits_title")));
       for (const hit of classHits) list.appendChild(hitRow(hit));
-      wrap.appendChild(list);
+      sec.appendChild(list);
     }
+    wrap.appendChild(sec);
   }
 
   const truncated = num(summary.hitsTruncated);

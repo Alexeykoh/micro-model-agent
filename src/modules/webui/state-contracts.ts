@@ -105,6 +105,35 @@ export interface WebPluginManager {
   getPlugin?(name: string): AgentPlugin | null;
 }
 
+/** Минимальный вид тула для панели Tools (реестр ядра удовлетворяет структурно). */
+export interface WebToolInfo {
+  name: string;
+  description: string;
+  tags?: string[];
+  alwaysOn?: boolean;
+}
+
+/** Тул в ответе `/api/tools`: базовое состояние + ручной override. */
+export interface WebToolView extends WebToolInfo {
+  enabled: boolean;
+  override: "on" | "off" | null;
+}
+
+/** Ручные переопределения видимости тулов для одной сессии. */
+export interface ToolOverrideSet {
+  enabled: string[];
+  disabled: string[];
+}
+
+/**
+ * Итог мягкого reload источников: какие `AGENTS.md` перечитаны и сколько
+ * блоков инструкций пришло на замену. Плагины/скиллы отчитываются отдельно.
+ */
+export interface WebReloadReport {
+  files: string[];
+  instructions: number;
+}
+
 /**
  * Коллабораторы bootstrap для REST конфига/сессий/моделей. Вяжет `module.ts`;
  * опциональны, чтобы тесты гоняли точки изолированно (отсутствующий даёт 503,
@@ -154,8 +183,16 @@ export interface WebUiWiring {
   assetEtag?: () => string | undefined;
   /** Рабочий каталог агента (`-d`) для секции «окружение» сайдбара и `/status`. */
   workspace?: string;
+  /** Каталог всех тулов ядра для панели Tools (без сессионного фильтра). */
+  toolCatalog?: () => WebToolInfo[];
   /** Загруженные источники AGENTS.md (проект + глобальный) или `disabled` через `--no-agents-md`. */
   agentsMd?: { files: string[]; disabled: boolean };
+  /**
+   * Мягкий reload источников (`/reload`): перечитать конфиг и `AGENTS.md` с
+   * диска, не гася процесс. Вяжет CLI (`runWeb`); `undefined` — режим не умеет
+   * (например, daemon-адаптер без локального рантайма).
+   */
+  reload?: () => Promise<WebReloadReport>;
   /** Статистика карты проекта (`null`, пока обход индекса не кончился). */
   projectMapStats?: () => { files: number; symbols: number; tokens: number } | null;
   /**

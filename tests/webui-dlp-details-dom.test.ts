@@ -89,6 +89,23 @@ describe("DLP details popup", () => {
     expect(text).toContain("file matched a block rule");
   });
 
+  it("все секции pop-up свёрнуты по умолчанию", () => {
+    const badge = egressBadge({
+      total: 2,
+      stats: { path: 1, secret: 1 },
+      kinds: { path: ["windows-abs"] },
+      targets: [],
+    });
+    badge!.click();
+
+    const host = document.getElementById("subHost") as HTMLElement;
+    const sections = host.querySelectorAll("details.dlp-sec");
+    expect(sections.length).toBe(2);
+    for (const section of sections) {
+      expect((section as HTMLDetailsElement).open).toBe(false);
+    }
+  });
+
   it("без детализации (старая история) рисует только «Секреты»", () => {
     const badge = egressBadge({
       total: 1,

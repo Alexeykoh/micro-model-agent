@@ -2,11 +2,19 @@
 // `panels.ts` (файл держится у потолка размера), запись идёт в конфиг через
 // `postConfig`, а не только в localStorage: см.
 // docs/specs/2026-10-30-webui-theme-persistence-design.md.
-import { el } from "../dom.js";
+import { el, makeToggle } from "../dom.js";
 import { t } from "../i18n.js";
 import { buildThemePicker } from "./theme-picker.js";
 import { postConfig } from "./write.js";
-import { applyTheme, applyUiTheme, currentTheme, currentUiTheme } from "./theme.js";
+import {
+  applyTheme,
+  applyThemeEffects,
+  applyUiTheme,
+  currentTheme,
+  currentUiTheme,
+  themeEffectsEnabled,
+} from "./theme.js";
+import { hasThemeWeather } from "./weather.js";
 import { THEME_MODES } from "./theme-state.js";
 
 /** Фабрика строки настройки (`row` из `panels.ts`), чтобы не тянуть его сюда. */
@@ -33,6 +41,15 @@ async function pick(
   // Повторное применение закрывает гонку с `loadConfig` (SSE `config`), который
   // мог сбросить локальный оверрайд, пока запись была в полёте.
   apply(ok ? value : before);
+  rerender();
+}
+
+/** Запись тумблера частиц: мгновенно применяем, при отказе сервера — назад. */
+async function pickEffects(value: boolean, rerender: () => void): Promise<void> {
+  applyThemeEffects(value);
+  rerender();
+  if (await postConfig("ui.themeEffects", value, false)) return;
+  applyThemeEffects(!value);
   rerender();
 }
 
@@ -71,6 +88,19 @@ export function buildThemeCard(rerender: () => void, row: RowFactory): HTMLEleme
       }),
     ),
   );
+  // Тумблер имеет смысл только у тем с падающими частицами (winter/autumn).
+  if (hasThemeWeather(currentUiTheme())) {
+    body.appendChild(
+      row(
+        t("web.settings.themeEffects"),
+        makeToggle(themeEffectsEnabled(), (next) => {
+          void pickEffects(next, rerender);
+          return true;
+        }),
+        t("web.settings.themeEffects.desc"),
+      ),
+    );
+  }
   card.appendChild(body);
   return card;
 }

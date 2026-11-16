@@ -217,6 +217,7 @@ export const DEFAULTS: AppConfig = {
     fontSize: "comfortable",
     theme: "console",
     themeMode: "auto",
+    themeEffects: true,
     // Мастер выключен: звук не появляется сам после апгрейда (quiet by default).
     sounds: { enabled: true, done: true, question: true, failed: true, volume: 50 },
   },

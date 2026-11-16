@@ -44,6 +44,7 @@ import {
   promptBlocksForTest,
   pushPromptBlock,
   removePromptBlock,
+  replaceInstructionBlocks,
   requireToolContext,
   runToolByName,
 } from "./surface";
@@ -68,7 +69,6 @@ export class AgentBase {
   /** Профиль системного промпта (S-04); job-ход ставит `service-job`. */
   promptProfile: PromptProfile = "full";
   /** Kind → блок-замена для instructions/project-map сверх бюджета (резолв раз до первого LLM-вызова). */
-  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: читается через PromptPhaseHost
   private promptOverrides = new Map<PromptBlockKind, PromptBlock>();
   /** Идентичность, против которой гонялась проба. Сравнение ПО ЗНАЧЕНИЮ: все
    *  write-пути мутят живой конфиг in place и передают ТОТ ЖЕ объект в
@@ -185,6 +185,22 @@ export class AgentBase {
   /** Убирает ранее запушенный блок (по ссылке). */
   removePromptBlock(block: PromptBlock): void {
     removePromptBlock(this.deps, block);
+  }
+
+  /**
+   * Мягкий reload `AGENTS.md` без перезапуска процесса: подменяет блоки
+   * инструкций на месте и обновляет системное сообщение живого контекста.
+   * Overflow-override инструкций сбрасывается — иначе старая версия осталась
+   * бы приоритетнее свежей.
+   *
+   * @param blocks свежие блоки `kind: "instructions"` (пусто — убрать).
+   * @returns сколько блоков пришло на замену.
+   */
+  reloadInstructions(blocks: readonly PromptBlock[]): number {
+    this.promptOverrides.delete("instructions");
+    const count = replaceInstructionBlocks(this.deps.promptBlocks, blocks);
+    this.refreshSystemPrompt();
+    return count;
   }
 
   /** Тестовый вид текущих блоков промпта. */

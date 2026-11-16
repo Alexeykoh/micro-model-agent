@@ -93,6 +93,17 @@ export async function runServe(opts: ServeCommandOptions): Promise<void> {
         }
       : {}),
     reconfigure: (cfg) => agent.reconfigure(cfg),
+    reloadSources: async () => {
+      const { reloadSources } = await import("../core/sources-reload");
+      const result = reloadSources({
+        config,
+        configDir,
+        baseDir,
+        noAgentsMd: opts.noAgentsMd === true,
+      });
+      agent.reloadInstructions(result.instructions);
+      return result;
+    },
     host: opts.host,
     port: opts.port,
     token,
