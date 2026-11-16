@@ -99,7 +99,14 @@ describe("web config registry extras", () => {
     // `ui.theme*` — by the bespoke theme card (`theme-panel.ts`) above the
     // generated UI sections.
     // `version` is rendered by the bespoke General "about" card.
-    const bespoke = new Set(["model", "provider.active", "ui.theme", "ui.themeMode", "version"]);
+    const bespoke = new Set([
+      "model",
+      "provider.active",
+      "ui.theme",
+      "ui.themeMode",
+      "ui.themeEffects",
+      "version",
+    ]);
     const unplaced = buildConfigRegistry()
       .map((e) => e.key)
       .filter((k) => !seen.has(k) && !bespoke.has(k));
