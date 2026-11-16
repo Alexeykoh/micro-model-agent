@@ -7,9 +7,9 @@ import { tabstripEl, el, icon } from "../dom.js";
 import { t } from "../i18n.js";
 import { tabs as tabState, session } from "../store.js";
 import type { Dict } from "../core/store/types.js";
-import { renderSessBar } from "./composer.js";
+import { renderSessBar, reflectBusy } from "./composer.js";
+import { clearActiveSession } from "./tab-switch.js";
 import { notifyTabStatus } from "../sounds.js";
-import { refreshPauseButton } from "./pause.js";
 import { nextTabStatus, statusTitle as statusTitleOf, TAB_DOT } from "./tab-status.js";
 
 type OpenTab = (id: string, name?: string, kind?: string, server?: boolean, activate?: boolean) => void;
@@ -82,13 +82,16 @@ export function renderTabstrip(): void {
     tabstripEl.appendChild(tab);
   });
   // Заголовок вкладки браузера следует за активной сессией (см. pageTitle).
-  document.title = pageTitle(tabState.tabs.find((x: Dict) => x.id === tabState.activeTabId) || null);
+  const active = tabState.tabs.find((x: Dict) => x.id === tabState.activeTabId) || null;
+  // Локальный «новый чат» — не серверная сессия: активной у окна нет, и хром
+  // (рельс/маскот/Trace) не продолжает ход прошлой вкладки.
+  if (active && active.kind !== "session") clearActiveSession();
+  document.title = pageTitle(active);
   scrollActiveTabIntoView();
   renderSessBar();
-  // Кнопка паузы живёт в композере и зависит от активной вкладки + статуса хода:
-  // перерисовка полоски — та же точка синхронизации (pause.ts сам не знает
-  // про вкладки, DAG остаётся ацикличным).
-  refreshPauseButton();
+  // Переключение вкладки меняет и оконный хром: рельс/стоп-кнопка говорят о
+  // ходе СВОЕЙ сессии.
+  reflectBusy();
 }
 
 // Keep the active tab visible, aligned to its START so the beginning of the

@@ -431,7 +431,11 @@ describe("webui assets", () => {
     expect(js(a)).toContain("railEvent(");
     expect(js(a)).toContain('["tool_start", "tool_end", "text", "plan"]');
     expect(js(a)).toContain('"ui.activityRail"');
-    expect(js(a)).toContain("setBusy(session.busy)");
+    // Рельс — оконный хром одной вкладки: видимость по ЕЁ ходу, а счётчики
+    // чужой (фоновой) сессии его не двигают.
+    expect(js(a)).toContain("setBusy(own)");
+    expect(js(a)).toContain("key !== railKey()");
+    expect(js(a)).toContain("railPlan(d, d.sessionId)");
   });
 
   it("pins queued messages above the composer instead of into the stream", () => {
@@ -692,8 +696,8 @@ describe("webui assets", () => {
     expect(a.css).toContain(".rail-wrap.l-line .rail-l1, .rail-wrap.l-line .rail-l2 {");
     expect(a.css).toContain("flex-wrap: nowrap; white-space: nowrap;");
     // An empty `last:` must not leave a dangling separator or em dash.
-    expect(a.jsModules?.["js/rail.js"] || "").toContain("lastSepEl.hidden = !lastTool");
-    expect(a.jsModules?.["js/rail.js"] || "").toContain("lastEl.hidden = !lastTool");
+    expect(a.jsModules?.["js/rail.js"] || "").toContain("lastSepEl.hidden = !st.lastTool");
+    expect(a.jsModules?.["js/rail.js"] || "").toContain("lastEl.hidden = !st.lastTool");
   });
 
   it("toggles a plugin immediately without opening its popup", () => {

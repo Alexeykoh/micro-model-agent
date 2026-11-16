@@ -8,14 +8,27 @@
 // закрытую вкладку. Глобальные эффекты применяются только при актуальном номере.
 import { api } from "../api.js";
 import type { Dict } from "../core/store/types.js";
-import { loadHistory } from "../feed.js";
-import { setSessionLoading } from "../sidebar.js";
+import { loadHistory, resetSpeedChip } from "../feed.js";
+import { sidebarSessionChanged, setSessionLoading } from "../sidebar.js";
+import { session } from "../store.js";
 
 let switchSeq = 0;
 
 /** Отметить переключение вкладки; возвращает его номер для guard'ов. */
 export function nextSwitchSeq(): number {
   return ++switchSeq;
+}
+
+/**
+ * У окна больше нет активной СЕРВЕРНОЙ сессии (открыт локальный «новый чат»).
+ * Оконный хром — рельс, маскот, Trace — обязан замолчать: иначе он продолжает
+ * показывать ход прошлой вкладки, и кажется, что новый чат уже работает.
+ */
+export function clearActiveSession(): void {
+  if (!session.activeSessionId) return;
+  session.activeSessionId = null;
+  sidebarSessionChanged(null);
+  resetSpeedChip();
 }
 
 /** true — номер ещё актуален (пользователь не переключился дальше). */

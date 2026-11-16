@@ -3,7 +3,7 @@
 // (file-size rule 6) so the composition root stays a wiring file: no module
 // here imports `app.ts`, so the frontend DAG stays acyclic.
 import { api } from "./js/api.js";
-import { tabs as tabState, session, settings } from "./js/store.js";
+import { tabs as tabState, session, settings, activeTurnRunning } from "./js/store.js";
 import { routeState, storeSnapshot, applyCounters, shouldHydrateAutoOpen } from "./js/state-sync.js";
 import type { Dict } from "./js/core/store/types.js";
 import {
@@ -19,10 +19,9 @@ import { setPlan as railPlan } from "./js/rail.js";
 import {
   sidebarSessionChanged, sidebarMapState, sidebarMapIndicator, setSessionLoading,
   sidebarLspState, sidebarFilesState, sidebarPluginsState, sidebarFilesChanged,
-  sidebarGitChanged,
+  sidebarGitChanged, sidebarBusy,
 } from "./js/sidebar.js";
 import { setUpdateInfo } from "./js/update-state.js";
-import { refreshPauseButton } from "./js/session/pause.js";
 
 // Track the workspace file-change counter: a rise (missed SSE fallback) makes
 // the Files tab re-read its expanded directories.
@@ -38,7 +37,7 @@ export function renderActiveState(): void {
   const tab = tabState.tabs.find((x) => x.id === tabState.activeTabId) || null;
   const host = (tab && tab.state) || {};
   session.host = host;
-  const sid = host.sessionId || (tab && tab.id) || null;
+  const sid = tab && tab.kind === "session" ? host.sessionId || String(tab.id) : null;
   session.activeSessionId = sid;
   if (!tabState.tabs.length) showEmptyFeed();
   renderPlan(tab?.livePlan ?? host.plan); // живой план (событие plan) важнее снапшота
@@ -69,9 +68,9 @@ export function renderActiveState(): void {
     }
   }
   sidebarSessionChanged(sid);
-  // Пауза — поле проекции `state`: перерисовать кнопку на каждый снимок
-  // (переключение вкладок обновляет её через renderTabstrip).
-  refreshPauseButton();
+  // Trace «live» — только у хода активной вкладки: фоновая сессия подсвечивала
+  // бы чужую работу в окне, глядящем на новый чат.
+  sidebarBusy(activeTurnRunning());
   renderWorkspace(host);
   // Update fact is global (not per-tab): publish it to the chrome readers and
   // badge the settings gear; refresh an empty feed so the update card appears.

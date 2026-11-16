@@ -54,6 +54,8 @@ export interface LlmPhaseInput {
   tokenTracker: TokenTracker;
   reasoningResolver: ReasoningEffortResolver;
   onChunk?: (chunk: string) => void;
+  /** Куда отдавать текст ответа (может быть буфером `after-review`). */
+  onDraftText?: (chunk: string) => void;
   onMeta?: OnMeta;
   onReasoning?: (reasoning: string) => void;
   onPhase?: OnPhase;
@@ -80,7 +82,7 @@ export async function runLlmPhase(
   const { deps } = host;
   const { state, slog, input, history, allToolsForBudget, tokenTracker, reasoningResolver } = inp;
   const { contextManager, pluginManager, logger, config } = deps;
-  const { onChunk, onReasoning, onPhase } = inp;
+  const { onChunk, onDraftText, onReasoning, onPhase } = inp;
 
   const llmStart = Date.now();
   // Сырая оценка на момент отправки — вход калибровки по реальному usage.
@@ -159,6 +161,7 @@ export async function runLlmPhase(
         isShutdownRequested: () => host.isShutdownRequested(),
         getAbortSignal: () => host.getAbortSignal(),
         onChunk,
+        onText: onDraftText ?? onChunk,
         onReasoning,
       },
       stream,

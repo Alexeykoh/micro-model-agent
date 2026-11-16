@@ -91,6 +91,10 @@ class Mascot {
       this.canvas.width = Math.round(w * dpr);
       this.canvas.height = Math.round(h * dpr);
       this.paletteVersion = -1;
+      // Re-read the wrapper radius on every resize: the first draw can happen
+      // while the face is still detached (size 0), so the theme's square
+      // corners would otherwise never reach the canvas.
+      this.radius = radiusFraction(this.canvas);
       this.draw();
     };
     if (typeof ResizeObserver === "function") {

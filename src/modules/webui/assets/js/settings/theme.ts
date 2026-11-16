@@ -9,6 +9,15 @@ import type { Dict } from "../core/store/types.js";
 import { UI_THEME_IDS } from "./themes.js";
 import { applyThemeWeather } from "./weather.js";
 import {
+  applyOmarchyVars,
+  clearOmarchyVars,
+  osThemeKnown,
+  osThemesAvailable,
+  setOsThemeInfo,
+  type OsThemeInfo,
+} from "./os-theme.js";
+import { api } from "../api.js";
+import {
   DEFAULT_THEME_MODE,
   DEFAULT_THEME_SKIN,
   THEME_MODE_KEY,
@@ -94,11 +103,26 @@ export function applyTheme(theme: string): void {
 
 /** Применяет скин и зеркалит его в кэш. Невалидный id → дефолт. */
 export function applyUiTheme(theme: string): void {
-  const skin = isThemeSkin(theme) ? theme : DEFAULT_THEME_SKIN;
+  let skin = isThemeSkin(theme) ? theme : DEFAULT_THEME_SKIN;
+  // `omarchy` — тема ОС: на не-Linux её просто нет (пока платформа не известна,
+  // не блокируем, чтобы не мигать консолью из кэша).
+  if (skin === "omarchy" && osThemeKnown() && !osThemesAvailable()) skin = DEFAULT_THEME_SKIN;
   appliedSkin = skin;
   cacheSet(THEME_SKIN_KEY, skin);
   for (const id of UI_THEME_IDS) document.body.classList.toggle(id, id === skin);
+  if (skin === "omarchy") applyOmarchyVars();
+  else clearOmarchyVars();
   applyThemeWeather(skin, themeEffectsEnabled());
+}
+
+/** Загружает снимок ОС: платформа + активная тема Omarchy. */
+export async function loadOsTheme(): Promise<void> {
+  const r = await api<OsThemeInfo>("/api/os-theme");
+  if (!r.ok || !r.data) return;
+  setOsThemeInfo(r.data);
+  // Repaint through the normal path: on a non-Linux host this also drops a
+  // cached `omarchy` skin back to the default.
+  if (currentUiTheme() === "omarchy") applyUiTheme("omarchy");
 }
 
 /**
@@ -139,7 +163,8 @@ export async function migrateThemeCache(
   const mode = themeModeMigration(ui.themeMode, cacheGet(THEME_MODE_KEY));
   if (mode) writes.push({ key: "ui.themeMode", value: mode, apply: applyTheme });
   const skin = themeSkinMigration(ui.theme, cacheGet(THEME_SKIN_KEY));
-  if (skin) writes.push({ key: "ui.theme", value: skin, apply: applyUiTheme });
+  if (skin && (skin !== "omarchy" || osThemesAvailable()))
+    writes.push({ key: "ui.theme", value: skin, apply: applyUiTheme });
   if (!writes.length) return false;
   let changed = false;
   for (const write of writes) {

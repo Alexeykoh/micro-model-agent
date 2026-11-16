@@ -42,4 +42,11 @@ describe("sidebar tabs: container-adaptive labels", () => {
   it("compact-tabs toggles sb-expanded on the strip (the CSS hook)", () => {
     expect(compact).toMatch(/classList\.toggle\("sb-expanded",\s*expanded\)/);
   });
+
+  it("the toggle lives outside the scrolling strip and the bar has a gap", () => {
+    expect(compact).toContain("const container = bar.parentElement ?? bar");
+    expect(compact).not.toContain("bar.appendChild(btn)");
+    expect(css).toMatch(/\.sb-tabs\s*\{[^}]*padding-bottom:\s*4px/);
+    expect(css).toMatch(/\.sb-tab-toggle\s*\{[^}]*align-self:\s*flex-start/);
+  });
 });

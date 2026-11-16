@@ -243,7 +243,7 @@ export const PANEL_SECTIONS: Record<string, Dict[]> = {
     { id: "sessions.isolation", titleKey: "web.settings.sec.sessions.isolation", descKey: "web.settings.sec.sessions.isolation.desc", keys: ["sessionIsolation.enabled", "sessionIsolation.isolatePlugins", "sessionIsolation.isolateTempFiles"] },
   ],
   ui: [
-    { id: "ui.chat", titleKey: "web.settings.sec.ui.chat", descKey: "web.settings.sec.ui.chat.desc", keys: ["ui.fontSize", "ui.activityRail", "ui.spinner", "ui.showContextStats", "ui.showCompaction"] },
+    { id: "ui.chat", titleKey: "web.settings.sec.ui.chat", descKey: "web.settings.sec.ui.chat.desc", keys: ["ui.fontSize", "ui.activityRail", "ui.spinner", "ui.showContextStats", "ui.showCompaction", "ui.draftMode"] },
     { id: "ui.sounds", titleKey: "web.settings.sec.ui.sounds", descKey: "web.settings.sec.ui.sounds.desc", keys: ["ui.sounds.enabled", "ui.sounds.done", "ui.sounds.question", "ui.sounds.failed", "ui.sounds.volume"] },
     { id: "ui.images", titleKey: "web.settings.sec.ui.images", descKey: "web.settings.sec.ui.images.desc", keys: ["images.maxCount", "images.maxBytes"] },
   ],

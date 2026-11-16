@@ -12,7 +12,7 @@ import { closeAllMenus } from "../core/menus.js";
 import { setIndicator } from "../dialog.js";
 import { saveErrorText } from "./save-error.js";
 import { setLayout } from "../rail.js";
-import { syncThemeFromConfig } from "./theme.js";
+import { syncThemeFromConfig, loadOsTheme } from "./theme.js";
 
 // The composer selector chips/menus live in `selectors-write.ts`. It imports
 // this funnel (and `paintSelectorPending`), so the edge back must be a
@@ -166,6 +166,9 @@ export async function loadConfig(): Promise<void> {
   settings.config = r.data.config || {};
   settings.registry = Array.isArray(r.data.registry) ? r.data.registry : [];
   settings.webToken = typeof r.data.webToken === "string" ? r.data.webToken : null;
+  // The OS snapshot must land before syncThemeFromConfig: on Linux the
+  // `omarchy` skin reads colours from the active OS theme; elsewhere it is absent.
+  await loadOsTheme();
   // Тема — серверная настройка: конфиг важнее кэша и локального выбора.
   syncThemeFromConfig();
   applyFontSize();

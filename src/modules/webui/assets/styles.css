@@ -783,6 +783,7 @@ body.light .sel > button { border: 1px solid var(--border); }
 .composer .inp {
   flex: 1 1 auto; width: auto; min-width: 0; min-height: 32px;
   background: transparent; border: none; border-radius: 0; padding: 6px 8px;
+  overflow-y: hidden;
 }
 /* Mention highlight mirror: same box as the textarea, glyphs transparent;
    only the `@path` token background renders, behind the real text. */
@@ -822,25 +823,16 @@ body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
 .composer .inp:focus,
 .composer .inp:focus-visible { box-shadow: none; border: none; outline: none; }
 .composer .attach-btn,
-.composer .send-btn,
-.composer .pause-btn {
+.composer .send-btn {
   flex: 0 0 auto; width: 32px; height: 32px; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer; background: none; border: none; border-radius: 6px;
   color: var(--muted);
 }
 .composer .attach-btn:hover,
-.composer .send-btn:hover,
-.composer .pause-btn:hover { background: var(--hover-bg); color: var(--fg); }
+.composer .send-btn:hover { background: var(--hover-bg); color: var(--fg); }
 .composer .send-btn { color: var(--accent); }
 .composer .send-btn.busy { color: var(--yellow); }
-/* Пауза — сосед стопа в композере: тот же размер/поведение; в состоянии
-   «на паузе» подкрашивается акцентом, чтобы «ход ждёт» читалось без подписи. */
-.composer .pause-btn { color: var(--muted); }
-.composer .pause-btn[hidden] { display: none; }
-.composer .pause-btn.paused { color: var(--accent); }
-.composer .pause-btn:disabled { opacity: .5; cursor: default; }
-.composer .pause-btn .svg-icon { width: 15px; height: 15px; }
 .composer .send-btn:disabled { opacity: .5; cursor: default; }
 .composer .svg-icon { width: 17px; height: 17px; }
 
@@ -1250,6 +1242,8 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
   container: sbtabs / inline-size;
   display: flex; flex-wrap: nowrap; gap: 6px; flex: 1 1 auto; min-width: 0;
   overflow-x: auto; overflow-y: hidden;
+  /* Gap between the tab tiles and the horizontal scrollbar. */
+  padding-bottom: 4px;
 }
 .sb-tabs::-webkit-scrollbar { height: 4px; }
 .sb-tabs::-webkit-scrollbar-track { background: transparent; }
@@ -1267,6 +1261,9 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
 .sb-tab.sb-hidden { display: none; }
 .sb-tab-toggle {
   width: 32px; min-width: 32px; height: 32px; flex: 0 0 auto;
+  /* The tab strip is 4px taller because of the scrollbar gap; align the
+     toggle with the tiles, not with the centre of the padded strip. */
+  align-self: flex-start;
   display: inline-flex; align-items: center; justify-content: center;
   border: 1px solid var(--border-2); border-radius: 6px;
   background: transparent; color: var(--stab-fg); cursor: pointer; font: inherit;
@@ -1333,6 +1330,8 @@ body.sb-resizing { cursor: col-resize; user-select: none; }
 .sb.sb-loading .sb-loadface .mdl { --s: 40px; }
 .composer-face { display: inline-flex; align-items: center; align-self: center; }
 .composer-face .mdl, .composer-face .mdl.sm { --s: 40px; align-self: center; }
+.composer-face .mdl { cursor: pointer; }
+.composer-face .mdl:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: no-preference) {
   #pane-session { transition: opacity .15s ease; }
 }
@@ -2856,30 +2855,6 @@ body.light .mdl.has-canvas { box-shadow: none; }
 }
 .mdl .orb, .mdl .keys, .mdl .grow, .mdl .fly, .mdl .dust, .mdl .q, .mdl .spark, .mdl .star { display: none; }
 
-/* MMART greeting bubble: clicking an idle face pops a localized "Привет! Я
-   MMART". The text comes from loader.ts (`setGreetResolver`), so it follows
-   `config.locale`. Deliberately not in the `display:none` group above — it
-   uses visibility/opacity so the fade transition survives. */
-.mdl-tip {
-  position: absolute; bottom: calc(100% + 9px); left: 50%;
-  transform: translateX(-50%) translateY(4px);
-  visibility: hidden; opacity: 0;
-  background: var(--surface); color: var(--fg);
-  border: 1px solid color-mix(in srgb, var(--fg) 18%, transparent);
-  border-radius: 8px; padding: 5px 10px;
-  /* Never scale below a legible size: the small face (22px) would give 4.6px. */
-  font-size: max(12px, calc(var(--s) * .24)); line-height: 1.3; font-weight: 500;
-  white-space: nowrap; pointer-events: none; z-index: 70;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, .28);
-  transition: opacity .18s var(--ease), transform .18s var(--ease), visibility .18s;
-}
-.mdl.show-tip .mdl-tip { visibility: visible; opacity: 1; transform: translateX(-50%) translateY(0); }
-.mdl-tip::after {
-  content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
-  border: 5px solid transparent; border-top-color: var(--surface);
-}
-@media (prefers-reduced-motion: reduce) { .mdl-tip { transition: none; } }
-
 /* state colors (eyes stay contrasty against the fill) */
 .c-active { --face-c: var(--accent); --eye-c: var(--accent-bg); }
 .c-recon { --face-c: var(--recon); --eye-c: #08222f; }
@@ -3667,3 +3642,51 @@ body.light .c-dim { --face-c: var(--panel); }
 .volume-ctl .volume-btn:active { background: rgba(255,255,255,0.16); transform: scale(0.96); }
 .volume-ctl .volume-btn { background: rgba(255,255,255,0.04); }
 .volume-ctl input { text-align: center; }
+
+/* ---- MMART flight: opened from the composer mascot ---- */
+/* The overlay is a themed modal; the canvas draws the pixel mascot. */
+.game-overlay {
+  position: fixed; inset: 0; z-index: 65; display: none;
+  align-items: center; justify-content: center; padding: 18px;
+  background: var(--overlay); backdrop-filter: blur(2px);
+}
+.game-overlay[hidden] { display: none; }
+.game-overlay.open { display: flex; }
+.game-box {
+  width: min(680px, 96vw); max-height: 94vh; display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--border-2); border-radius: 10px;
+  box-shadow: var(--shadow-modal); overflow: hidden;
+}
+.game-top {
+  display: flex; align-items: center; gap: 14px; padding: 10px 14px;
+  border-bottom: 1px solid var(--border); color: var(--fg); font-size: 13px;
+}
+.game-title { font-weight: 600; letter-spacing: .03em; color: var(--accent); }
+.game-stat { display: inline-flex; align-items: baseline; gap: 5px; color: var(--dim-a); font-size: 11.5px; }
+.game-stat:first-of-type { margin-left: auto; }
+.game-stat b {
+  color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums;
+  min-width: 1.2em; text-align: right;
+}
+.game-close {
+  margin-left: 4px; width: 28px; height: 28px; padding: 0; flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: none; border: 1px solid transparent; border-radius: 4px;
+  color: var(--dim-a); cursor: pointer;
+}
+.game-close:hover { color: var(--fg); border-color: var(--border-2); background: var(--hover-bg); }
+.game-close svg { width: 14px; height: 14px; }
+
+.game-stage {
+  position: relative; width: 100%; aspect-ratio: 3 / 2; overflow: hidden;
+  max-height: calc(94vh - 52px);
+  background: var(--bg); outline: none; touch-action: manipulation;
+}
+.game-stage:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.game-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+.game-hint {
+  position: absolute; left: 0; right: 0; bottom: 12px; text-align: center;
+  color: var(--dim-a); font-size: 12px; pointer-events: none;
+  text-shadow: 0 1px 2px var(--bg);
+}
+.game-hint[hidden] { display: none; }

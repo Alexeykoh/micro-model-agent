@@ -7,10 +7,10 @@
 import { feed } from "./feed.js";
 import { tabs } from "./tabs.js";
 import { settings } from "./settings.js";
-import { session } from "./session.js";
+import { session, activeTurnRunning, ownsActiveSession } from "./session.js";
 import type { Dict } from "./types.js";
 
-export { feed, tabs, settings, session };
+export { feed, tabs, settings, session, activeTurnRunning, ownsActiveSession };
 export { streamStateFor } from "./feed.js";
 export type { FeedSlice, FeedStreamState } from "./feed.js";
 

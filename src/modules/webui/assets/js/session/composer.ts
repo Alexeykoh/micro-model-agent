@@ -4,7 +4,7 @@
 import { inp, sendBtn, el, icon } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
-import { tabs as tabState, session, settings } from "../store.js";
+import { tabs as tabState, session, settings, activeTurnRunning } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 import { contextLabel } from "../format.js";
 import {
@@ -276,9 +276,7 @@ if (sendBtn) {
 // бежит ход СВОЕЙ сессии; чужой ход композер не блокирует (send встанет
 // в per-session очередь). Глобальный rail (`setBusy`) живёт своим флагом.
 export function reflectBusy(): void {
-  const tab = deps.activeTab();
-  const running = session.runningSessionIds || [];
-  const own = !!(tab && tab.kind === "session" && running.includes(tab.id));
+  const own = activeTurnRunning();
   if (inp) inp.setAttribute("aria-busy", own ? "true" : "false");
   const area = document.querySelector(".input-area");
   if (area) area.classList.toggle("busy", own);
@@ -294,7 +292,8 @@ export function reflectBusy(): void {
   }
   const escHint = document.getElementById("hintEsc");
   if (escHint) escHint.hidden = !own;
-  setBusy(session.busy);
+  // Рельс — оконный хром: только ход активной вкладки (чужой фон — её бейдж).
+  setBusy(own);
   // Server queue counters (`state` SSE) drive the pinned strip.
   renderQueueStrip();
 }

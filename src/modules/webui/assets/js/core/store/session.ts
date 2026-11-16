@@ -33,3 +33,23 @@ export const session: SessionSlice = {
   sessionsError: null,
   reasoning: undefined,
 };
+
+/**
+ * Идёт ли ход АКТИВНОЙ сессии. Оконный хром (рельс, маскот, Trace) говорит
+ * только о вкладке на экране: фоновая работа второй сессии — её бейдж в
+ * полоске вкладок, а не «думаю» в свежем чате. Легаси-фолбэк (`busy` без
+ * per-session id) относим к активной: иначе на старом сервере рельс молчит.
+ */
+export function activeTurnRunning(): boolean {
+  const id = session.activeSessionId;
+  if (!id) return false;
+  const running = session.runningSessionIds || [];
+  if (running.length) return running.includes(id);
+  return !!session.busy;
+}
+
+/** Событие принадлежит активной вкладке (без `sessionId` — глобальное/легаси). */
+export function ownsActiveSession(sessionId?: string | null): boolean {
+  if (!sessionId) return true;
+  return sessionId === session.activeSessionId;
+}

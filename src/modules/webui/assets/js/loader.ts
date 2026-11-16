@@ -1,8 +1,7 @@
 // Loader faces — a small squircle "agent presence". One component for the boot
 // splash, the in-feed busy line, the activity rail and the first-run wizard.
-// The mascot is called **MMART** (MMA + art): clicking it pops a localized
-// greeting bubble. Rendering is Canvas 2D (`mascot-canvas.ts`); the wrapper
-// keeps the state classes, size and greeting bubble.
+// The mascot is called **MMART** (MMA + art). Rendering is Canvas 2D
+// (`mascot-canvas.ts`); the wrapper keeps state classes and sizes.
 // See docs/specs/2026-10-08-loader-webui-design.md.
 
 import { attachMascot, mascotLookAt, mascotPokeAll, type MascotHandle } from "./mascot-canvas.js";
@@ -10,15 +9,6 @@ import { FACE_CLASS, type FaceSize, type FaceState } from "./loader-states.js";
 
 export { loaderStateFor, lspOutputSignal, toolState } from "./loader-states.js";
 export type { FaceSize, FaceState, LoaderSignal } from "./loader-states.js";
-
-// ---- MMART: the mascot's identity and its greeting bubble ----
-export const MMART_NAME = "MMART";
-// app.ts injects the localized resolver so this module stays import-time-safe
-// under `bun test` (i18n → api touches `location`, which is undefined there).
-let greetResolver: () => string = () => `Привет! Я ${MMART_NAME}`;
-export function setGreetResolver(fn: () => string): void {
-  greetResolver = fn;
-}
 
 function el(tag: string, cls?: string, text?: string): HTMLElement {
   const node = document.createElement(tag);
@@ -36,7 +26,6 @@ export function createFace(state: FaceState = "think", size: FaceSize | null = n
   const canvas = document.createElement("canvas");
   canvas.className = "mdl-cv";
   face.appendChild(canvas);
-  face.appendChild(el("span", "mdl-tip"));
   handles.set(face, attachMascot(canvas, state));
   setFaceState(face, state);
   return face;
@@ -50,34 +39,7 @@ export function setFaceState(face: HTMLElement | null, state: FaceState): void {
   handles.get(face)?.setState(state);
 }
 
-// ---- cursor tracking, click-to-blink and the MMART greeting for idle faces
-// (`.track` / `.poke`) ----
-const tipTimers = new WeakMap<HTMLElement, number>();
-
-function showGreeting(m: HTMLElement): void {
-  const tip = m.querySelector<HTMLElement>(".mdl-tip");
-  if (!tip) return;
-  tip.textContent = greetResolver();
-  m.classList.add("show-tip");
-  const prev = tipTimers.get(m);
-  if (prev !== undefined) window.clearTimeout(prev);
-  tipTimers.set(
-    m,
-    window.setTimeout(() => {
-      m.classList.remove("show-tip");
-      tipTimers.delete(m);
-    }, 2200),
-  );
-}
-
-// The click landed on the face itself (its own parts count). Anything else in
-// the document only lets it blink — the greeting is not a page-wide easter egg.
-function clickOnFace(e: MouseEvent): HTMLElement | null {
-  const node = e.target as HTMLElement | null;
-  if (!node || typeof node.closest !== "function") return null;
-  return node.closest<HTMLElement>(".mdl.poke");
-}
-
+// ---- cursor tracking and click-to-blink for idle faces (`.track` / `.poke`) ----
 let cursorWired = false;
 
 export function initCursor(): void {
@@ -87,11 +49,7 @@ export function initCursor(): void {
   window.addEventListener("mouseleave", () => mascotLookAt(-10000, -10000));
   // Click anywhere → idle faces blink. Every click restarts the blink, so fast
   // clicking keeps up (no lock-out guard).
-  window.addEventListener("click", (e) => {
-    mascotPokeAll();
-    const hit = clickOnFace(e);
-    if (hit) showGreeting(hit);
-  });
+  window.addEventListener("click", () => mascotPokeAll());
 }
 
 // Static `.mdl` markup in index.html (boot splash, sidebar loader) is upgraded

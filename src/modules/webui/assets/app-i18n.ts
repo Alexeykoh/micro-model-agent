@@ -5,12 +5,12 @@
 import { msgs, inp, connStatus, setIcon } from "./js/dom.js";
 import { I18N, t } from "./js/i18n.js";
 import { renderSelectors, setConnStatus, setStaleBar } from "./js/settings.js";
-import { setGreetResolver } from "./js/loader.js";
 import { showEmptyFeed } from "./js/feed.js";
 import { renderSessionsDropdown } from "./js/session/tabs.js";
 import { applyRailI18n } from "./js/rail.js";
 import { applySidebarI18n } from "./js/sidebar.js";
 import { refreshSkillsIndicatorI18n } from "./js/session/skills-indicator.js";
+import { applyComposerFaceI18n } from "./js/composer-face.js";
 
 export function applyStaticI18n(): void {
   document.documentElement.lang = I18N.locale;
@@ -31,12 +31,7 @@ export function applyStaticI18n(): void {
   // Стадия boot (A3) важнее общей подписи: её не затираем при локализации.
   const bootCap = document.getElementById("bootCap");
   if (bootCap && !bootCap.dataset.stage) bootCap.textContent = t("web.loader.boot");
-  // MMART's click bubble: bound lazily (not at import) so `loader.ts` stays
-  // import-safe under `bun test`, and re-bound here after a locale switch.
-  setGreetResolver(() => t("web.loader.greet"));
-  // A bubble already open must restate the greeting in the new locale.
-  const greetTip = document.getElementById("composerFace")?.querySelector<HTMLElement>(".mdl-tip");
-  if (greetTip) greetTip.textContent = t("web.loader.greet");
+  applyComposerFaceI18n();
 
   // Chrome controls: Lucide icon + label, plus matching title/aria-label.
   const controls: Record<string, [string, string]> = {

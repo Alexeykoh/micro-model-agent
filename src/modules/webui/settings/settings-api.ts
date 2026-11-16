@@ -25,6 +25,7 @@ import {
   handlePluginSettingsUpdate,
 } from "./settings-api-plugin-settings";
 import type { SettingsState } from "./settings-api-write";
+import { handleOsThemeGet } from "./os-theme";
 
 export type { McpServerView } from "./settings-api-mcp";
 export { createMcpServer, deleteMcpServer, updateMcpServer, type McpWriteResult } from "./settings-api-mcp-write";
@@ -48,6 +49,7 @@ const SETTINGS_EXACT: Record<string, SettingsHandler> = {
   "GET /api/memory": (_req, res, _param, s) => handleMemoryGet(res, s),
   "POST /api/memory": (req, res, _param, s) => handleMemoryPost(req, res, s),
   "GET /api/skills": (_req, res, _param, s) => handleSkillsGet(res, s),
+  "GET /api/os-theme": (_req, res) => handleOsThemeGet(res),
   "GET /api/plugins": (_req, res, _param, s) => handlePluginsGet(res, s),
   // Отдельное пространство действий, а не `/api/plugins/reload`: `reload` —
   // допустимое имя плагина, и exact-first сделал бы его невыключаемым.

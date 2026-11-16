@@ -16,8 +16,9 @@ import { runIterationPrologue, type IterationPrologueHost } from "./iteration-pr
 import { runLlmPhase, type LlmPhaseHost } from "./loop-llm";
 import { runToolBatchPhase, type BatchHost } from "./loop-batch";
 import { runFinalGates, type GateTimings } from "./loop-gates";
-import { gatherTurnToolEvents } from "./critic-events";
 import { buildLoopResult, type LoopResultHost } from "./loop-result";
+import { createDraftSink } from "./draft-buffer";
+import { runForcedFinal } from "./loop-final";
 import { snapshotLoopState } from "../../modules/session/checkpoint";
 import { getOtelAdapter } from "../../modules/otel/adapter";
 import { costBudgetExceeded } from "./cost-budget";
@@ -40,6 +41,7 @@ export interface LoopRunCtx {
     tokenTracker: TokenTracker,
     onChunk?: (chunk: string) => void,
     slog?: SessionLogger,
+    record?: boolean,
   ): Promise<string>;
 }
 
@@ -87,6 +89,17 @@ export async function executeAgentLoop(
     auditGate,
     criticGate,
   } = createLoopModules(ctx.loopSetupHost(), slog);
+  const draft = createDraftSink(onChunk, config.ui?.draftMode);
+  const deferRecord = config.ui?.draftMode === "after-review";
+  // В after-review отклонённый черновик не показывался, поэтому и плашка
+  // «черновик отозван» была бы ложной. Progress-строки критика остаются.
+  const gateMeta: OnMeta | undefined =
+    deferRecord && onMeta
+      ? (text, kind, info) => {
+          if (kind === "retract") return;
+          onMeta(text, kind, info);
+        }
+      : onMeta;
 
   // Всё, что харнесс вставляет модели в контекст (директивы, recovery-гайданс,
   // статус плана), пишется в журнал сессии событием `directive`: иначе при
@@ -128,13 +141,26 @@ export async function executeAgentLoop(
       tokenTracker,
       reasoningResolver,
       onChunk,
+      onDraftText: draft.onText,
       onMeta,
       onReasoning,
       onPhase,
     });
-    if (llm.kind === "continue") continue;
-    if (llm.kind === "break") break;
-    if (llm.kind === "return") return finishSpan(llm.result);
+    if (llm.kind === "continue") {
+      draft.discard();
+      continue;
+    }
+    if (llm.kind === "break") {
+      draft.discard();
+      break;
+    }
+    if (llm.kind === "return") {
+      draft.discard();
+      return finishSpan(llm.result);
+    }
+    // Tool-call iteration: text is narration, not a final candidate, so show
+    // it before the (potentially long) tool batch runs.
+    if (llm.sawToolCall) draft.flush();
 
     // Cost/LLM-gateway MVP: per-run бюджет. Превышение — форс-финал
     // (`stopReason=cost_budget` + critic), как для max_iters.
@@ -187,12 +213,13 @@ export async function executeAgentLoop(
       input,
       slog,
       onChunk,
-      onMeta,
+      onMeta: gateMeta,
       hallucinationGate,
       criticGate,
       auditGate,
       timings,
       isShutdownRequested: () => ctx.isShutdownRequested(),
+      draft,
     });
     // Агрегат простоя хода в гейтах (A15): одна запись на проход — по ней видно,
     // где именно уходят секунды после уже доставленного ответа.
@@ -212,14 +239,21 @@ export async function executeAgentLoop(
     (state.iteration >= config.maxToolIterations && !state.finalAnswerAccepted)
   ) {
     const reason = state.finalizeReason ?? "max_iters";
-    logger.diagnostic("info", `Forcing final answer without tools (${reason})`);
-    const text = await ctx.finalizeWithoutTools(state, tokenTracker, onChunk, slog);
-    // INV-C7: форс-финал тоже проходит через критика. Иначе самый длинный
-    // (и самый рискованный) ход остаётся единственным непроверенным.
-    const forcedCriticStarted = Date.now();
-    // Прерванный ход не проверяем: пользователь уже остановил работу.
-    if (ctx.isShutdownRequested()) {
-      state.stopReason = reason;
+    const shutdown = await runForcedFinal({
+      deps: ctx.deps,
+      state,
+      tokenTracker,
+      slog,
+      criticGate,
+      auditGate,
+      draft,
+      gateMeta,
+      input,
+      reason,
+      finalize: (onChunk) => ctx.finalizeWithoutTools(state, tokenTracker, onChunk, slog, false),
+      isShutdownRequested: () => ctx.isShutdownRequested(),
+    });
+    if (shutdown) {
       return finishSpan(buildLoopResult(
         ctx.loopResultHost(),
         state,
@@ -227,50 +261,6 @@ export async function executeAgentLoop(
         state.iteration >= config.maxToolIterations && !state.finalAnswerAccepted,
       ));
     }
-    const action = await criticGate.evaluate({
-      state,
-      iteration: state.iteration,
-      logger,
-      contextManager,
-      slog,
-      task: input,
-      planSummary: ctx.deps.planSummary?.() ?? undefined,
-      planPendingSteps: ctx.deps.planPendingSteps?.() ?? undefined,
-      toolEvents: gatherTurnToolEvents(contextManager, state.criticHistoryMark),
-      beforeFinish: true,
-      answerText: text,
-      onMeta,
-    });
-    const forcedCriticMs = Date.now() - forcedCriticStarted;
-    slog.logGateTiming({
-      iteration: state.iteration,
-      total: forcedCriticMs,
-      gates: { critic: forcedCriticMs },
-    });
-    if (action === "retry") {
-      // Критик потребовал починки: один форс-вызов с его требованием.
-      await ctx.finalizeWithoutTools(state, tokenTracker, onChunk, slog);
-    }
-    // S6: детерминированный аудит на форс-финале. Критик — LLM-гейт, он может
-    // таймаутнуть; без аудита самый рискованный ход остаётся единственным
-    // непроверенным. `exhausted` сам взводит `auditFailed`.
-    const auditVerdict = await auditGate.evaluate({
-      state,
-      iteration: state.iteration,
-      maxIterations: config.maxToolIterations,
-      logger,
-      contextManager,
-      slog,
-      onMeta,
-    });
-    if (auditVerdict?.action === "reject") {
-      // Аудит отклонил ответ: один форс-вызов с его требованием. Бюджет гейтов
-      // уже потрачен, поэтому прогон завершается честным провалом, а не
-      // «успехом» с незакрытым планом.
-      await ctx.finalizeWithoutTools(state, tokenTracker, onChunk, slog);
-      state.auditFailed = true;
-    }
-    state.stopReason = reason;
   }
 
   return finishSpan(buildLoopResult(

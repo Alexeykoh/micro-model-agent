@@ -12,8 +12,10 @@ import {
   applyUiTheme,
   currentTheme,
   currentUiTheme,
+  loadOsTheme,
   themeEffectsEnabled,
 } from "./theme.js";
+import { osThemesAvailable } from "./os-theme.js";
 import { hasThemeWeather } from "./weather.js";
 import { THEME_MODES } from "./theme-state.js";
 
@@ -82,10 +84,19 @@ export function buildThemeCard(rerender: () => void, row: RowFactory): HTMLEleme
   body.appendChild(
     row(
       t("web.settings.theme"),
-      buildThemePicker(currentUiTheme(), (id) => {
-        const before = currentUiTheme();
-        void pick("ui.theme", id, applyUiTheme, before, rerender);
-      }),
+      buildThemePicker(
+        currentUiTheme(),
+        (id) => {
+          void (async () => {
+            // Re-read the OS theme on pick: the user may have switched the
+            // Omarchy theme after the page loaded.
+            if (id === "omarchy") await loadOsTheme();
+            const before = currentUiTheme();
+            await pick("ui.theme", id, applyUiTheme, before, rerender);
+          })();
+        },
+        osThemesAvailable(),
+      ),
     ),
   );
   // Тумблер имеет смысл только у тем с падающими частицами (winter/autumn).

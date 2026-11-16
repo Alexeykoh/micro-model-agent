@@ -10,6 +10,7 @@ import { MAX_BODY_BYTES, readJsonBody } from "../../runtime/http-body";
 import type { WebUiState } from "./state";
 import { sendJson } from "./util";
 import type { WebDaemonHost } from "./daemon-contracts";
+import { handleOsThemeGet } from "./settings/os-theme";
 import { ROUTES, pluginRoute, type Ctx } from "./daemon-api-routes";
 
 /** `METHOD /api/sessions/:id[/history|/log]`. */
@@ -94,6 +95,10 @@ export async function handleDaemonApi(
   const ctx: Ctx = { req, res, reqUrl, s, host };
   const route = ROUTES[`${req.method} ${reqUrl.pathname}`];
   try {
+    if (req.method === "GET" && reqUrl.pathname === "/api/os-theme") {
+      handleOsThemeGet(res);
+      return;
+    }
     if (route) {
       await route(ctx);
       return;

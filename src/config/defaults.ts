@@ -215,6 +215,7 @@ export const DEFAULTS: AppConfig = {
     verbose: false,
     verbosity: "quiet",
     fontSize: "comfortable",
+    draftMode: "live",
     theme: "console",
     themeMode: "auto",
     themeEffects: true,

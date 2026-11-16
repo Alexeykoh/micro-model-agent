@@ -52,6 +52,8 @@ export async function finalizeWithoutTools(
   tokenTracker: TokenTracker,
   onChunk?: (chunk: string) => void,
   slog?: SessionLogger,
+  /** false — не писать assistant-сообщение до прохождения critic/audit. */
+  record = true,
 ): Promise<string> {
   const { contextManager } = host.deps;
   contextManager.addMessage({
@@ -80,12 +82,30 @@ export async function finalizeWithoutTools(
   }
   if (text.trim()) {
     state.lastText = text;
-    state.finalAnswerAccepted = true;
+    // In-memory context keeps the candidate for a repair retry; the accepted
+    // one is logged/saved by `recordFinalAnswer` only.
     contextManager.addMessage({ role: "assistant", content: text });
-    if (host.deps.config.session.autoSave) slog?.saveAssistantMessage(text);
-    slog?.logAssistant(text, "", undefined, state.iteration, state.lastFinishReason);
+    if (record) recordFinalAnswer(host.deps, state, text, slog);
   }
   return text;
+}
+
+/**
+ * Фиксирует принятый финальный ответ: контекст, история сессии, автосохранение.
+ * Вынесено из `finalizeWithoutTools`, чтобы `after-review` мог записать ответ
+ * только после прохождения critic/audit.
+ */
+export function recordFinalAnswer(
+  deps: AgentDeps,
+  state: LoopState,
+  text: string,
+  slog?: SessionLogger,
+): void {
+  if (!text.trim()) return;
+  state.lastText = text;
+  state.finalAnswerAccepted = true;
+  if (deps.config.session.autoSave) slog?.saveAssistantMessage(text);
+  slog?.logAssistant(text, "", undefined, state.iteration, state.lastFinishReason);
 }
 
 /** Стрим tool-less ответа для форс-финала; учитывает API-usage по done-чанкам. */

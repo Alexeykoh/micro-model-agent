@@ -16,6 +16,7 @@ import { attachActivityStream } from "./core/activity-stream.js";
 // (not via `SseDeps`) keeps the composition root in `app.ts` untouched.
 import { loadModels } from "./settings/write.js";
 import { applySkillsEvent } from "./session/skills-indicator.js";
+import { railTurnEnd } from "./rail.js";
 export function connectSSE(deps: SseDeps): void {
   const {
     token,
@@ -119,6 +120,7 @@ export function connectSSE(deps: SseDeps): void {
       (d) => {
         onTurnEnd(d);
         drainQueuedTurn(d.sessionId);
+        railTurnEnd(d.sessionId);
         if (sidebarOwns(d)) {
           sidebarTurnEnd(d.turnSeq);
           sidebarBusy(false);
@@ -161,8 +163,8 @@ export function connectSSE(deps: SseDeps): void {
         speedChunk(d.sessionId, d.chunk || "");
         renderLiveSpeed(d.sessionId);
       }
-      if (ev === "plan") railPlan(d);
-      else railEvent(ev, d.name);
+      if (ev === "plan") railPlan(d, d.sessionId);
+      else railEvent(ev, d.name, d.sessionId);
     });
   }
   // Live tok/s в чипе футера: reasoning — тоже генерация, иначе во время фазы
@@ -250,7 +252,8 @@ export function connectSSE(deps: SseDeps): void {
   es.addEventListener("state", (e) => {
     const d = parse(e);
     if (!d) return;
-    sidebarBusy(!!d.busy);
+    // Индикатор Trace выставляет `renderActiveState` — только по ходу
+    // АКТИВНОЙ сессии (глобальный `busy` зажигал его чужой работой).
     applyState(d);
   });
   es.addEventListener("sessions", (e) => {
