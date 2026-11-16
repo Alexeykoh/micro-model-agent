@@ -13,6 +13,10 @@ COPY package.json bun.lock ./
 # `prepare` installs host git hooks; not needed inside the image.
 RUN bun install --frozen-lockfile --ignore-scripts
 
+# Browser tool: Chromium + system libraries. Kept in its own layer so source
+# edits don't redownload ~150 MB. `ms-playwright` lands in /root/.cache.
+RUN bunx playwright install --with-deps chromium
+
 COPY . .
 RUN chmod +x /app/deploy/docker-test/entrypoint.sh \
     && mkdir -p /config /workspace
