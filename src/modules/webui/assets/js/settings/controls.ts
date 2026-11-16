@@ -263,9 +263,10 @@ export const PANEL_SECTIONS: Record<string, Dict[]> = {
     { id: "advanced.diagnostics", titleKey: "web.settings.sec.advanced.diagnostics", descKey: "web.settings.sec.advanced.diagnostics.desc", keys: ["logLevel"] },
     { id: "advanced.retry", titleKey: "web.settings.sec.advanced.retry", descKey: "web.settings.sec.advanced.retry.desc", keys: ["retry.maxRetries", "retry.baseDelay", "retry.maxDelay", "retry.maxStreamRetries", "retry.noDataTimeoutMs"] },
     { id: "advanced.service", titleKey: "web.settings.sec.advanced.service", descKey: "web.settings.sec.advanced.service.desc", keys: ["pricing.enabled", "pricing.overrides", "otel.enabled", "otel.endpoint", "otel.serviceName"] },
+    { id: "advanced.plugins", titleKey: "web.settings.sec.advanced.plugins", descKey: "web.settings.sec.advanced.plugins.desc", keys: ["plugins.disabled"] },
   ],
   plugins: [
-    { id: "plugins.registry", titleKey: "web.settings.sec.plugins.registry", descKey: "web.settings.sec.plugins.registry.desc", keys: ["plugins.disabled", "plugins.maxDrafts"] },
+    { id: "plugins.loader", titleKey: "web.settings.sec.plugins.loader", descKey: "web.settings.sec.plugins.loader.desc", keys: ["plugins.maxDrafts"] },
     { id: "plugins.lsp", titleKey: "web.settings.sec.plugins.lsp", descKey: "web.settings.sec.plugins.lsp.desc", keys: ["lsp.enabled", "lsp.offline", "lsp.typescriptEngine"] },
   ],
 };

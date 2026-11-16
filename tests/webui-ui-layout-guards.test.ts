@@ -27,6 +27,10 @@ const capabilitiesRegistry = readFileSync(
   new URL("../src/config/registry-extra-capabilities.ts", import.meta.url),
   "utf-8",
 );
+const pluginsPanel = readFileSync(
+  new URL("../src/modules/webui/assets/js/settings/panels-plugins.ts", import.meta.url),
+  "utf-8",
+);
 
 describe("web UI layout guards", () => {
   it("makes the hidden attribute beat component display rules", () => {
@@ -94,6 +98,15 @@ describe("web UI layout guards", () => {
     expect(tableEditor).toContain("table-field-label");
     expect(css).toMatch(/\.table-stack \.table-row\s*\{[^}]*grid-template-columns:\s*1fr/i);
     expect(capabilitiesRegistry).toMatch(/jsonShape\("experts"[\s\S]*?layout:\s*"stack"/);
+  });
+
+  it("splits Plugins/MCP/LSP into focused sub-tabs", () => {
+    expect(pluginsPanel).toContain('"settings-tabs"');
+    expect(pluginsPanel).toContain('["mcp", "web.settings.tab_mcp"]');
+    expect(pluginsPanel).toContain('["lsp", "web.settings.tab_lsp"]');
+    expect(pluginsPanel).toContain("renderMcpSection");
+    expect(pluginsPanel).not.toContain('renderSections("plugins"');
+    expect(css).toMatch(/\.settings-tabs\s*,?[\s\S]*?border-bottom:/);
   });
 
   it("keeps the setup footer reachable and the intro responsive", () => {

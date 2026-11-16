@@ -63,6 +63,13 @@ describe("settings IA", () => {
     expect(keysOf("advanced")).not.toContain("version");
   });
 
+  it("keeps the raw plugin skip list out of the Plugins tab", () => {
+    expect(keysOf("plugins")).toContain("plugins.maxDrafts");
+    expect(keysOf("plugins")).not.toContain("plugins.disabled");
+    expect(keysOf("advanced")).toContain("plugins.disabled");
+    expect(keyToPanel().get("plugins.disabled")).toBe("advanced");
+  });
+
   it("localizes every new tab/section label", () => {
     for (const key of [
       "web.settings.service",

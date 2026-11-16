@@ -1,6 +1,6 @@
-// Plugins / MCP / LSP panel: system + user plugin rows, live toggles, reload,
-// MCP server list with add/edit dialog, and the LSP section. Extracted from
-// `panels.ts` (rule 6); the LSP part lives in `./panels-lsp.js`.
+// Plugins / MCP / LSP panel shell: status bar, three focused sub-tabs, plugin
+// rows and the live registry reload. MCP lives in `panels-plugins-mcp.ts`, LSP
+// in `panels-lsp.ts`; each file stays under the 300-line rule.
 import { el, icon, makeToggle } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
@@ -8,11 +8,21 @@ import { settings } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 import { setIndicator } from "../dialog.js";
 import { PANEL_SECTIONS } from "./controls.js";
-import { groupHeader, placeholderFor, chip, renderSections } from "./panels-shared.js";
+import { groupHeader, placeholderFor, renderSectionsInto } from "./panels-shared.js";
 import { renderLspSection } from "./panels-lsp.js";
+import { renderMcpSection } from "./panels-plugins-mcp.js";
 import { openSubDialog } from "./subdialog.js";
 import { mcpForm } from "./mcp-form.js";
 import { pluginSettingsForm, settingsChip } from "./plugin-settings-form.js";
+
+const TABS: Array<[string, string]> = [
+  ["plugins", "web.settings.tab_plugins"],
+  ["mcp", "web.settings.tab_mcp"],
+  ["lsp", "web.settings.tab_lsp"],
+];
+
+// Stays across re-renders (registry reload, SSE plugins event, LSP refresh).
+let activeTab = "plugins";
 
 /** Перечитать каталоги с диска: выгрузка → сброс кэша → чтение заново. */
 async function reloadPlugins(): Promise<void> {
@@ -79,62 +89,96 @@ function refreshLsp(): void {
   void loadLsp();
 }
 
-export function renderPluginsPanel(): void {
-  const container = document.querySelector<HTMLElement>('[data-panel="plugins"]');
-  if (!container) return;
-  container.textContent = "";
-  if (settings.pluginsData === undefined || settings.pluginsData === null) {
-    container.appendChild(
-      placeholderFor(settings.pluginsData, t("web.settings.plugins_unavailable")),
-    );
-    return;
+function pane(name: string): HTMLElement {
+  const box = el("div", "settings-pane");
+  box.setAttribute("role", "tabpanel");
+  box.dataset.pane = name;
+  return box;
+}
+
+function statusBar(plugins: number, mcp: number, lsp: number): HTMLElement {
+  const bar = el("div", "settings-status");
+  bar.appendChild(
+    el(
+      "span",
+      "settings-status-text",
+      t("web.settings.integrations_status", {
+        plugins: String(plugins),
+        mcp: String(mcp),
+        lsp: String(lsp),
+      }),
+    ),
+  );
+  const reload = el("button", "sec-add");
+  reload.type = "button";
+  reload.appendChild(icon("refresh"));
+  reload.appendChild(el("span", "", t("web.plugins.reload")));
+  reload.addEventListener("click", () => void reloadPlugins());
+  bar.appendChild(reload);
+  return bar;
+}
+
+/** One plugin row; `locked` marks harness modules as read-only. */
+function pluginLine(p: Dict, locked: boolean): HTMLElement {
+  const line = el("div", "list-line" + (locked ? " system-plugin" : ""));
+  line.appendChild(el("span", "g", p.enabled === false ? "–" : "✓"));
+  const nameEl = el("span", "name", p.name);
+  nameEl.title = p.name;
+  line.appendChild(nameEl);
+  if (p.version) line.appendChild(el("span", "src", "v" + p.version));
+  if (p.source && !locked) {
+    const src = el("span", "src", p.source);
+    src.title = p.source;
+    line.appendChild(src);
   }
-  const data = settings.pluginsData;
+  if (p.builtin) line.appendChild(el("span", "src", t("web.settings.builtin")));
+  const desc = pluginDescription(p);
+  if (desc) line.appendChild(el("span", "plugin-desc", desc));
+  if (locked) {
+    // Системный модуль — часть харнесса: тумблер был бы ложным affordance
+    // (его нельзя нажать). Состояние уже видно глифом `✓/–`.
+    line.appendChild(el("span", "src system-note", t("web.settings.plugins_system_locked")));
+  } else {
+    // Контролы строки — в прибитой вправо ячейке: иначе `flex-wrap` у
+    // `.list-line` роняет тумблер длинных строк на вторую линию влево.
+    const actions = el("span", "row-actions");
+    actions.appendChild(
+      makeToggle(p.enabled !== false, () => {
+        void togglePlugin(p.name, p.enabled === false);
+      }),
+    );
+    if (p.hasSettings === true) actions.appendChild(settingsChip(p.name, openPluginSettings));
+    line.appendChild(actions);
+  }
+  return line;
+}
+
+function pluginsPane(data: Dict | null, loaderSections: Dict[]): HTMLElement {
+  const box = pane("plugins");
+  if (!data) {
+    box.appendChild(placeholderFor(settings.pluginsData, t("web.settings.plugins_unavailable")));
+    renderSectionsInto(box, loaderSections);
+    return box;
+  }
   const all = (data.plugins || []) as Dict[];
   const system = all.filter((p) => p.system === true);
   const user = all.filter((p) => p.system !== true);
   const list = el("div", "settings-list");
 
-  /** One plugin row; `locked` marks harness modules as read-only. */
-  const pluginLine = (p: Dict, locked: boolean): HTMLElement => {
-    const line = el("div", "list-line" + (locked ? " system-plugin" : ""));
-    line.appendChild(el("span", "g", p.enabled === false ? "–" : "✓"));
-    const nameEl = el("span", "name", p.name);
-    nameEl.title = p.name;
-    line.appendChild(nameEl);
-    if (p.version) line.appendChild(el("span", "src", "v" + p.version));
-    if (p.source && !locked) {
-      const src = el("span", "src", p.source);
-      src.title = p.source;
-      line.appendChild(src);
-    }
-    if (p.builtin) line.appendChild(el("span", "src", t("web.settings.builtin")));
-    const desc = pluginDescription(p);
-    if (desc) line.appendChild(el("span", "plugin-desc", desc));
-    if (locked) {
-      // Системный модуль — часть харнесса: тумблер был бы ложным affordance
-      // (его нельзя нажать). Состояние уже видно глифом `✓/–`, остаётся
-      // тихая пометка «системный · всегда включён».
-      const note = el("span", "src system-note", t("web.settings.plugins_system_locked"));
-      line.appendChild(note);
-    } else {
-      // Контролы строки — в прибитой вправо ячейке: иначе `flex-wrap` у
-      // `.list-line` роняет тумблер длинных строк на вторую линию влево и
-      // у каждой строки он оказывается в своём месте.
-      const actions = el("span", "row-actions");
-      // Живой тумблер вместо статуса: тот же контракт, что у строки MCP ниже.
-      // `onFlip` ничего не возвращает — состояние перерисовывается из ответа.
-      actions.appendChild(
-        makeToggle(p.enabled !== false, () => {
-          void togglePlugin(p.name, p.enabled === false);
-        }),
-      );
-      // Подстраница настроек: только если у плагина есть манифест + файл.
-      if (p.hasSettings === true) actions.appendChild(settingsChip(p.name, openPluginSettings));
-      line.appendChild(actions);
-    }
-    return line;
-  };
+  // User plugins first — they are the thing the user came to manage; harness
+  // modules are read-only context and stay below.
+  list.appendChild(
+    Object.assign(groupHeader(t("web.settings.plugins_header"), user.length), {
+      id: "settings-plugins",
+    }),
+  );
+  if (!user.length) {
+    list.appendChild(el("div", "placeholder", t("web.settings.no_plugins")));
+  }
+  user.forEach((p) => list.appendChild(pluginLine(p, false)));
+  const pnote = el("div", "settings-note");
+  pnote.textContent = t("web.settings.plugins_note");
+  list.appendChild(pnote);
 
   if (system.length) {
     list.appendChild(
@@ -147,97 +191,64 @@ export function renderPluginsPanel(): void {
     list.appendChild(note);
     system.forEach((p) => list.appendChild(pluginLine(p, true)));
   }
-
-  list.appendChild(
-    Object.assign(groupHeader(t("web.settings.plugins_header"), user.length), {
-      id: "settings-plugins",
-    }),
-  );
-  if (!user.length) {
-    const empty = el("div", "placeholder");
-    empty.textContent = t("web.settings.no_plugins");
-    list.appendChild(empty);
-  }
-  user.forEach((p) => list.appendChild(pluginLine(p, false)));
-  const pnote = el("div", "settings-note");
-  pnote.textContent = t("web.settings.plugins_note");
-  list.appendChild(pnote);
-  const reloadBtn = el("button", "sec-add");
-  reloadBtn.type = "button";
-  reloadBtn.appendChild(icon("refresh"));
-  reloadBtn.appendChild(el("span", "", t("web.plugins.reload")));
-  reloadBtn.addEventListener("click", () => void reloadPlugins());
-  list.appendChild(reloadBtn);
-
-  list.appendChild(
-    Object.assign(groupHeader(t("web.settings.mcp_servers"), (data.mcp || []).length), {
-      id: "settings-mcp",
-    }),
-  );
-  const mcpAdd = el("button", "sec-add");
-  mcpAdd.type = "button";
-  mcpAdd.appendChild(icon("plus"));
-  mcpAdd.appendChild(el("span", "", t("web.settings.mcp_add")));
-  mcpAdd.addEventListener("click", () => openMcpForm("add", null));
-  list.appendChild(mcpAdd);
-  if (!(data.mcp || []).length) {
-    const empty = el("div", "placeholder");
-    empty.textContent = t("web.settings.no_mcp");
-    list.appendChild(empty);
-  }
-  (data.mcp || []).forEach((m: Dict) => {
-    const line = el("div", "list-line");
-    const on = m.status !== "disabled";
-    const toggle = makeToggle(on, (next) => {
-      void api<Dict>("/api/mcp/" + encodeURIComponent(m.id || m.name), {
-        method: "POST",
-        body: { enabled: next },
-      }).then(async (r) => {
-        if (r.ok && r.data && r.data.ok) {
-          setIndicator(t("web.settings.mcp_saved"), false);
-          await loadPlugins();
-        } else {
-          setIndicator(t("web.settings.save_failed"), true);
-        }
-      });
-    });
-    toggle.title = on ? t("web.settings.mcp_disable") : t("web.settings.mcp_enable");
-    toggle.setAttribute("aria-label", toggle.title);
-    line.appendChild(toggle);
-    const nameEl = el("span", "name", m.name);
-    nameEl.title = m.name;
-    line.appendChild(nameEl);
-    line.appendChild(el("span", "st", m.status || "—"));
-    line.appendChild(chip(t("web.settings.edit"), "", () => openMcpForm("edit", m)));
-    line.appendChild(
-      chip(t("web.settings.delete"), "danger", async () => {
-        const r = await api<Dict>("/api/mcp/" + encodeURIComponent(m.id || m.name), {
-          method: "DELETE",
-        });
-        if (r.ok && r.data && r.data.ok) {
-          setIndicator(t("web.settings.mcp_saved"), false);
-          await loadPlugins();
-        } else {
-          setIndicator((r.data && r.data.error) || t("web.settings.delete_failed"), true);
-        }
-      }),
-    );
-    list.appendChild(line);
-  });
-  if (settings.mcpForm) list.appendChild(mcpForm());
-  if ((data.mcp || []).length) {
-    const mnote = el("div", "settings-note");
-    mnote.textContent = t("web.settings.mcp_note");
-    list.appendChild(mnote);
-  }
-  renderLspSection(list, refreshLsp);
-  container.appendChild(list);
-  renderSections("plugins", PANEL_SECTIONS.plugins || []);
+  box.appendChild(list);
+  renderSectionsInto(box, loaderSections);
+  return box;
 }
 
-// Inline MCP add/edit form lives in `./mcp-form.js` (validation/error state is
-// part of the form, not the panel). Secrets are never echoed by the API, so
-// env/headers start blank — leaving them blank on edit keeps stored values.
+export function renderPluginsPanel(): void {
+  const container = document.querySelector<HTMLElement>('[data-panel="plugins"]');
+  if (!container) return;
+  container.textContent = "";
+  const data = settings.pluginsData || null;
+  const all = data ? ((data.plugins || []) as Dict[]) : [];
+  const mcp = data ? ((data.mcp || []) as Dict[]) : [];
+  const lsp = Array.isArray(settings.lsp) ? settings.lsp.length : 0;
+  const sections = PANEL_SECTIONS.plugins || [];
+
+  container.appendChild(statusBar(all.length, mcp.length, lsp));
+
+  const panes: Record<string, HTMLElement> = {
+    plugins: pluginsPane(data, sections.filter((s) => s.id === "plugins.loader")),
+    mcp: pane("mcp"),
+    lsp: pane("lsp"),
+  };
+  if (data) {
+    renderMcpSection(panes.mcp, data, { openForm: openMcpForm, reload: loadPlugins });
+  } else {
+    panes.mcp.appendChild(placeholderFor(data, t("web.settings.plugins_unavailable")));
+  }
+  renderLspSection(panes.lsp, refreshLsp);
+  renderSectionsInto(
+    panes.lsp,
+    sections.filter((s) => s.id === "plugins.lsp"),
+  );
+
+  const buttons = new Map<string, HTMLButtonElement>();
+  const select = (key: string): void => {
+    if (!panes[key]) return;
+    activeTab = key;
+    for (const [name, node] of Object.entries(panes)) node.hidden = name !== key;
+    for (const [name, btn] of buttons) {
+      btn.classList.toggle("on", name === key);
+      btn.setAttribute("aria-selected", name === key ? "true" : "false");
+    }
+  };
+
+  const tabs = el("div", "settings-tabs");
+  tabs.setAttribute("role", "tablist");
+  TABS.forEach(([key, labelKey]) => {
+    const btn = el("button", "settings-tab", t(labelKey));
+    btn.type = "button";
+    btn.setAttribute("role", "tab");
+    btn.addEventListener("click", () => select(key));
+    tabs.appendChild(btn);
+    buttons.set(key, btn);
+  });
+  container.appendChild(tabs);
+  Object.values(panes).forEach((node) => container.appendChild(node));
+  select(activeTab);
+}
 
 /** Open the MCP add/edit nested dialog. */
 function openMcpForm(mode: string, entry: Dict | null): void {
