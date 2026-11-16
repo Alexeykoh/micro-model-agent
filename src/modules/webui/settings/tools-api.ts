@@ -1,13 +1,28 @@
 /** REST панели Tools: список тулов сессии и ручные on/off-тумблеры. */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { readJsonBody, MAX_BODY_BYTES } from "../../../runtime/http-body";
-import { broadcast, type WebUiState } from "../state";
+import {
+  broadcast,
+  type ConfigStore,
+  type RuntimeState,
+  type SessionStore,
+  type SseTransport,
+  type ToolStore,
+  type WorkspaceStore,
+} from "../state";
 import { sendJson } from "../util";
 import { listTools, setToolOverride } from "../session/tools-view";
 
+type ToolsState = SessionStore &
+  ConfigStore &
+  WorkspaceStore &
+  RuntimeState &
+  SseTransport &
+  ToolStore;
+
 /** Активная сессия запроса: явный `?session=`, иначе серверно-активная. */
 function sessionOf(
-  s: WebUiState,
+  s: ToolsState,
   requested?: string | null,
 ): string | null {
   const id = requested?.trim() || s.sessionManager?.getActive?.() || s.activeSessionId || null;
@@ -18,7 +33,7 @@ function sessionOf(
 export function handleToolsGet(
   req: IncomingMessage,
   res: ServerResponse,
-  s: WebUiState,
+  s: ToolsState,
 ): void {
   const url = new URL(req.url ?? "/", "http://localhost");
   const sessionId = sessionOf(s, url.searchParams.get("session"));
@@ -33,7 +48,7 @@ export function handleToolsGet(
 export async function handleToolsPost(
   req: IncomingMessage,
   res: ServerResponse,
-  s: WebUiState,
+  s: ToolsState,
 ): Promise<void> {
   const body = await readJsonBody(req, MAX_BODY_BYTES);
   const sessionId = sessionOf(s, typeof body?.sessionId === "string" ? body.sessionId : null);
