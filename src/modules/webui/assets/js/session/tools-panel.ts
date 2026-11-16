@@ -28,8 +28,10 @@ let btnBound = false;
 let openSession: string | null = null;
 let tools: ToolView[] = [];
 let query = "";
+let filter = "all";
 let listHost: HTMLElement | null = null;
 let countHost: HTMLElement | null = null;
+let chipsHost: HTMLElement | null = null;
 
 function toolsBtn(): HTMLElement | null {
   return document.getElementById("toolsBtn");
@@ -55,17 +57,46 @@ function statusText(tool: ToolView): string {
 }
 
 function matches(tool: ToolView): boolean {
+  const tags = tool.tags ?? [];
+  if (filter !== "all" && !tags.includes(filter)) return false;
   const q = query.trim().toLowerCase();
   if (!q) return true;
-  return [tool.name, tool.description ?? "", ...(tool.tags ?? [])]
+  return [tool.name, tool.description ?? "", ...tags]
     .join(" ")
     .toLowerCase()
     .includes(q);
 }
 
+/** Tag counts for the filter chips (`all` first, then alphabetical). */
+function filterChips(): Array<[string, number]> {
+  const counts = new Map<string, number>();
+  for (const tool of tools) {
+    for (const tag of tool.tags ?? []) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+function renderChips(): void {
+  if (!chipsHost) return;
+  chipsHost.textContent = "";
+  const chip = (id: string, label: string) => {
+    const btn = el("button", "tools-chip" + (filter === id ? " on" : ""), label);
+    btn.type = "button";
+    btn.setAttribute("aria-pressed", filter === id ? "true" : "false");
+    btn.addEventListener("click", () => {
+      filter = id;
+      renderChips();
+      renderList();
+    });
+    chipsHost!.appendChild(btn);
+  };
+  chip("all", `${t("web.tools.all")} ${tools.length}`);
+  for (const [tag, count] of filterChips()) chip(tag, `${tag} ${count}`);
+}
+
 function renderList(): void {
   if (!listHost) return;
-  const shown = tools.filter(matches);
+  const shown = tools.filter(matches).sort((a, b) => a.name.localeCompare(b.name));
   const on = tools.filter((tool) => tool.enabled).length;
   if (countHost) {
     countHost.textContent = t("web.tools.count", { on, total: tools.length });
@@ -109,6 +140,7 @@ async function load(sessionId: string): Promise<void> {
     return;
   }
   tools = Array.isArray(r.data.tools) ? r.data.tools : [];
+  renderChips();
   renderList();
 }
 
@@ -124,6 +156,7 @@ async function flip(name: string, enabled: boolean): Promise<void> {
     return;
   }
   tools = Array.isArray(r.data.tools) ? r.data.tools : tools;
+  renderChips();
   renderList();
 }
 
@@ -133,6 +166,7 @@ export async function openToolsPanel(): Promise<void> {
   openSession = sid || null;
   tools = [];
   query = "";
+  filter = "all";
   const box = el("div", "tools-panel");
   const head = el("div", "tools-head");
   countHost = el("span", "tools-count", "");
@@ -147,6 +181,8 @@ export async function openToolsPanel(): Promise<void> {
   });
   head.appendChild(search);
   box.appendChild(head);
+  chipsHost = el("div", "tools-filters");
+  box.appendChild(chipsHost);
   listHost = el("div", "tools-list");
   box.appendChild(listHost);
   openSubDialog(t("web.tools.title"), box);

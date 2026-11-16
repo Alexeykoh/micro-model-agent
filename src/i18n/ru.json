@@ -2175,6 +2175,7 @@
   "web.tools.title": "Инструменты · эта сессия",
   "web.tools.count": "включено {on} из {total}",
   "web.tools.search": "поиск инструментов",
+  "web.tools.all": "все",
   "web.tools.no_match": "Ничего не найдено.",
   "web.tools.unavailable": "Инструменты недоступны: {reason}",
   "web.tools.no_session": "Сначала откройте сессию чата.",
