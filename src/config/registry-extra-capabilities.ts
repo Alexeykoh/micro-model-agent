@@ -60,6 +60,8 @@ export const CAPABILITY_DEFS: ConfigKeyDef[] = [
       (e.description === undefined || typeof e.description === "string")),
     {
       kind: "table",
+      // Five+ columns do not fit the settings column: stack fields vertically.
+      layout: "stack",
       columns: [
         { key: "name" },
         { key: "provider", optional: true, optionsSource: "providers", resets: ["model"], emptyLabelKey: "web.settings.active_provider" },

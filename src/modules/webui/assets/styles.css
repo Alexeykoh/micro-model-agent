@@ -823,12 +823,15 @@ body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
    (`.think-h .lvl`): рамка + фон + радиус, иначе это читалось как серый текст. */
 .ws-line .gchip {
   display: inline-flex; align-items: center; gap: 4px;
-  flex: 0 1 auto; min-width: 0; max-width: 16rem;
+  flex: 0 1 auto; min-width: 0; max-width: 22rem;
   padding: 1px 8px; border: 1px solid var(--border-2); border-radius: 999px;
   background: var(--hover-bg-2);
   color: var(--dim-a); font-size: 11px; line-height: 1.6;
-  font-variant-numeric: tabular-nums; white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+}
+.ws-line .gchip-text {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* Ветка — основная: читается первой, не схлопывается раньше счётчика. */
 .ws-line .gchip-branch { color: var(--fg); background: var(--surface); font-weight: 600; flex-shrink: 1; }
@@ -1860,6 +1863,33 @@ body.light .kv .wn { color: var(--yellow); }
   gap: 6px 14px; min-width: 0;
 }
 .row:last-child { border-bottom: none; }
+/* Master switches (security.enabled) gate everything below them: bigger label,
+   accent outline and a larger toggle so they read as the section's status. */
+.row-master {
+  margin: 2px 0 14px; padding: 12px 14px;
+  border: 1px solid var(--accent); border-radius: 8px;
+  background: var(--accent-bg);
+}
+.row-master .row-name { font-size: 15px; font-weight: 600; color: var(--accent); }
+.row-master .row-desc { color: var(--muted); font-size: 12px; }
+.row-master .toggle { width: 44px; height: 24px; border-radius: 12px; }
+.row-master .toggle::after { width: 18px; height: 18px; top: 3px; left: 3px; }
+.row-master .toggle.on::after { left: 23px; }
+/* Whole-section variant: the "about" card, the active model, Reasoning →
+   Display and Network → Web search. No horizontal padding — content aligns
+   with the rest of the panel, the accent frame carries the emphasis. */
+.settings-section.master-card {
+  padding: 12px 14px; border: 1px solid var(--accent); border-radius: 8px;
+  background: var(--accent-bg);
+}
+.master-card .sec-head { border-bottom-color: var(--accent); }
+.master-card .sec-title { color: var(--accent); font-size: 14px; letter-spacing: .04em; }
+.master-card .sec-body { padding-top: 10px; }
+/* The card's own subject, not just its section title, carries the accent:
+   app name/version in About, the running model in Model & Provider. */
+.master-card .upd-row .row-name { font-size: 15px; font-weight: 600; color: var(--accent); }
+.master-card .upd-row .val { font-size: 13px; }
+.master-card .model-active-main .m-name { font-size: 15px; font-weight: 600; color: var(--accent); }
 .row > .row-label { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .row-label .row-name { overflow-wrap: anywhere; }
 .row-label .row-desc { color: var(--dim-a); font-size: 11.5px; line-height: 1.35; overflow-wrap: anywhere; max-width: 60ch; }
@@ -1936,6 +1966,39 @@ body.light .toggle:not(.on) { background: var(--toggle-off); }
   padding-left: 20px;
 }
 .settings-list .list-line .toggle:disabled { opacity: .45; cursor: default; }
+/* Plugin entries are cards: title/meta left, switch + actions right, description
+   full width below. System modules keep the same shape but read-only. */
+.plugin-card {
+  border: 1px solid var(--border-2); border-radius: 8px;
+  padding: 10px 12px; margin: 8px 0; background: var(--surface);
+}
+.plugin-card.system-plugin { background: transparent; border-color: var(--border-3); }
+.plugin-card-head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0;
+}
+.plugin-card-title { display: flex; align-items: baseline; gap: 8px; flex: 1 1 240px; min-width: 0; }
+.plugin-card-title .name {
+  color: var(--fg); font-size: 13px; font-weight: 500;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.plugin-card-meta {
+  color: var(--dim-a); font-size: 11px; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.plugin-card-actions { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.plugin-card-locked { margin-left: auto; color: var(--dim-a); font-size: 11px; }
+.plugin-card-desc {
+  color: var(--dim-a); font-size: 11.5px; line-height: 1.5;
+  margin-top: 4px; overflow-wrap: anywhere;
+}
+.plugin-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  font: inherit; font-size: 11.5px; cursor: pointer;
+  padding: 4px 9px; border: 1px solid var(--border-2); border-radius: 6px;
+  background: var(--surface); color: var(--muted);
+}
+.plugin-btn:hover { color: var(--fg); border-color: var(--accent); }
+.plugin-btn .svg-icon { width: 13px; height: 13px; }
 .settings-note.compact { padding: 2px 0 6px; line-height: 1.5; }
 .lsp-fix { margin-top: 6px; }
 
@@ -2022,6 +2085,23 @@ body.light .toggle:not(.on) { background: var(--toggle-off); }
 .sec-add:hover { text-decoration: underline; }
 .sec-add .svg-icon { width: 13px; height: 13px; }
 .sec-body { padding-top: 8px; }
+/* Collapsible settings block (memory rules): title acts as the toggle. */
+.settings-details { margin: 0 0 16px; }
+.settings-details-summary {
+  cursor: pointer; padding: 6px 0; font-size: 11.5px; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--dim-a); list-style-position: inside;
+}
+.settings-details-summary:hover { color: var(--fg); }
+.settings-details-body { padding: 4px 0 8px; }
+/* Category/type filter chips (memory, skills). */
+.mem-filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.mem-filter {
+  font: inherit; font-size: 11.5px; cursor: pointer;
+  padding: 3px 9px; border-radius: 999px;
+  border: 1px solid var(--border-2); background: var(--surface); color: var(--muted);
+}
+.mem-filter:hover { color: var(--fg); }
+.mem-filter.on { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
 
 /* model panel: persistent active summary + focused tabs */
 .model-active { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-width: 0; }
@@ -2032,19 +2112,28 @@ body.light .toggle:not(.on) { background: var(--toggle-off); }
 }
 .model-active-main .m-meta { font-size: 11.5px; color: var(--dim-a); overflow-wrap: anywhere; }
 .model-active-actions { display: flex; gap: 12px; flex-wrap: wrap; flex: 0 0 auto; }
-.model-tabs {
+.model-tabs, .settings-tabs {
   display: flex; gap: 2px; flex-wrap: wrap;
   margin: 2px 0 16px; border-bottom: 1px solid var(--border-3);
 }
-.model-tab {
+.model-tab, .settings-tab {
   font: inherit; font-size: 12.5px; cursor: pointer;
   padding: 7px 12px; margin-bottom: -1px;
   background: none; border: none; border-bottom: 2px solid transparent;
   color: var(--muted);
 }
-.model-tab:hover { color: var(--fg); }
-.model-tab.on { color: var(--accent); border-bottom-color: var(--accent); }
-.model-pane { display: block; }
+.model-tab:hover, .settings-tab:hover { color: var(--fg); }
+.model-tab.on, .settings-tab.on { color: var(--accent); border-bottom-color: var(--accent); }
+.model-pane, .settings-pane { display: block; }
+/* Plugins/MCP/LSP status strip: counts on the left, reload on the right. */
+.settings-status {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  flex-wrap: wrap; padding: 8px 0 10px; margin-bottom: 4px;
+  border-bottom: 1px solid var(--border-3);
+}
+.settings-status-text { color: var(--dim-a); font-size: 12px; }
+.settings-status .sec-add { margin-left: auto; }
+.sec-count { color: var(--dim-b); font-size: 11.5px; margin-left: 4px; }
 .model-pane-actions { display: flex; justify-content: flex-end; margin-bottom: 8px; }
 .model-pane-actions .sec-add { margin-left: 0; }
 
@@ -2186,6 +2275,19 @@ body.light .toggle:not(.on) { background: var(--toggle-off); }
   color: var(--fg); font: inherit; font-size: 12px; padding: 4px 6px; text-align: left;
 }
 .table-row input[type="checkbox"] { width: auto; justify-self: start; accent-color: var(--accent); }
+/* Wide record tables (experts): fields stack vertically instead of squeezing
+   five+ columns into unreadable cells. */
+.table-stack .table-head { display: none; }
+.table-stack .table-row {
+  grid-template-columns: 1fr; gap: 8px;
+  padding: 10px; margin-bottom: 8px;
+  border: 1px solid var(--border-2); border-radius: 6px; background: var(--surface);
+}
+.table-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.table-field-label {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--dim-a);
+}
+.table-stack .table-row .table-rm { justify-self: end; }
 .table-row .table-rm { color: var(--dim-a); }
 .table-row .table-rm:hover { color: var(--red-strong); }
 .table-body:empty::after { content: "—"; color: var(--dim-b); font-size: 12px; }

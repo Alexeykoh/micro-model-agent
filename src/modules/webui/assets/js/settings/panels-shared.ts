@@ -88,7 +88,7 @@ function configControl(def: Dict, key: string): HTMLElement {
 // then its setting rows. Titles come from PANEL_SECTIONS so a section name can
 // never drift from the keys under it.
 function sectionCard(section: Dict): HTMLElement {
-  const card = el("div", "settings-section");
+  const card = el("div", "settings-section" + (section.master ? " master-card" : ""));
   const head = el("div", "sec-head");
   head.appendChild(el("span", "sec-title", t(section.titleKey)));
   card.appendChild(head);
@@ -100,7 +100,11 @@ function sectionCard(section: Dict): HTMLElement {
   section.keys.forEach((key: string) => {
     const def = defFor(key);
     if (!def) return;
-    body.appendChild(row(configLabel(def), configControl(def, key), descFor(def.key)));
+    const r = row(configLabel(def), configControl(def, key), descFor(def.key));
+    // The security master switch disables everything below it — give it a
+    // visually distinct "master" treatment instead of a normal list row.
+    if (key === "security.enabled") r.classList.add("row-master");
+    body.appendChild(r);
   });
   card.appendChild(body);
   return card;

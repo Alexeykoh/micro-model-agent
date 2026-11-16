@@ -129,7 +129,10 @@ export function renderFooter(
   }
   // Git — сразу после пути, в той же строке: одна строка вместо двух.
   for (const chip of chips) {
-    const node = make("span", chip.cls, chip.text);
+    const node = make("span", chip.cls, "");
+    // Text goes into its own span: `text-overflow: ellipsis` does not apply to
+    // an anonymous flex item, so a long branch chain used to be hard-clipped.
+    node.appendChild(make("span", "gchip-text", chip.text));
     if (chip.title) node.title = chip.title;
     el.appendChild(node);
   }
