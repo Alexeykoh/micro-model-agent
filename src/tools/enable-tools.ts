@@ -23,7 +23,7 @@ export const enableToolsTool: ToolDefinition = {
         type: "array",
         items: { type: "string" },
         description:
-          'Tool tags to enable (e.g. ["research"] for web_search/web_fetch, ["browser"] for the browser, ["memory"] for remember/recall, ["shell"] for process management).',
+          'Tool tags to enable (e.g. ["research"] for web_search/web_fetch, ["browser"] for the browser, ["shell"] for process management).',
       },
     },
     required: ["tags"],

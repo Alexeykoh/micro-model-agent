@@ -4,6 +4,8 @@ import type { ToolDefinition } from "../src/tools/types";
 import { buildHiddenToolsBlock } from "../src/tools/hidden-tools-block";
 import { enableToolsTool } from "../src/tools/enable-tools";
 import { filterToolsByTags, filterToolsWithOverrides } from "../src/tools/filter-tools";
+import { rememberTool } from "../src/tools/remember";
+import { recallTool } from "../src/tools/recall";
 import type { ToolContext } from "../src/tools/types";
 
 function tool(name: string, tags?: string[], alwaysOn?: boolean): ToolDefinition {
@@ -178,5 +180,12 @@ describe("filterToolsWithOverrides", () => {
       "read_file",
       "plan",
     ]);
+  });
+});
+
+describe("memory tools", () => {
+  it("stay in the schema even when the active tags are narrow", () => {
+    const visible = filterToolsByTags([rememberTool, recallTool], ["file", "code"]);
+    expect(visible.map((t) => t.name)).toEqual(["remember", "recall"]);
   });
 });
