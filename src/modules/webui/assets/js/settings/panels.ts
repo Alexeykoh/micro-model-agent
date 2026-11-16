@@ -26,7 +26,7 @@ export function renderPanel(panel: string): void {
 // Bespoke (not a registry key) because it mixes a read-only value with an action.
 function aboutCard(): HTMLElement {
   const upd = getUpdateInfo();
-  const card = el("div", "settings-section");
+  const card = el("div", "settings-section master-card");
   const head = el("div", "sec-head");
   head.appendChild(el("span", "sec-title", t("web.update.sec")));
   card.appendChild(head);

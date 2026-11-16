@@ -1864,7 +1864,7 @@ body.light .kv .wn { color: var(--yellow); }
    accent outline and a larger toggle so they read as the section's status. */
 .row-master {
   margin: 2px 0 14px; padding: 12px 14px;
-  border: 1px solid var(--accent); border-left-width: 4px; border-radius: 8px;
+  border: 1px solid var(--accent); border-radius: 8px;
   background: var(--accent-bg);
 }
 .row-master .row-name { font-size: 15px; font-weight: 600; color: var(--accent); }
@@ -1872,6 +1872,21 @@ body.light .kv .wn { color: var(--yellow); }
 .row-master .toggle { width: 44px; height: 24px; border-radius: 12px; }
 .row-master .toggle::after { width: 18px; height: 18px; top: 3px; left: 3px; }
 .row-master .toggle.on::after { left: 23px; }
+/* Whole-section variant: the "about" card, the active model, Reasoning →
+   Display and Network → Web search. No horizontal padding — content aligns
+   with the rest of the panel, the accent frame carries the emphasis. */
+.settings-section.master-card {
+  padding: 12px 14px; border: 1px solid var(--accent); border-radius: 8px;
+  background: var(--accent-bg);
+}
+.master-card .sec-head { border-bottom-color: var(--accent); }
+.master-card .sec-title { color: var(--accent); font-size: 14px; letter-spacing: .04em; }
+.master-card .sec-body { padding-top: 10px; }
+/* The card's own subject, not just its section title, carries the accent:
+   app name/version in About, the running model in Model & Provider. */
+.master-card .upd-row .row-name { font-size: 15px; font-weight: 600; color: var(--accent); }
+.master-card .upd-row .val { font-size: 13px; }
+.master-card .model-active-main .m-name { font-size: 15px; font-weight: 600; color: var(--accent); }
 .row > .row-label { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .row-label .row-name { overflow-wrap: anywhere; }
 .row-label .row-desc { color: var(--dim-a); font-size: 11.5px; line-height: 1.35; overflow-wrap: anywhere; max-width: 60ch; }
@@ -2198,6 +2213,19 @@ body.light .toggle:not(.on) { background: var(--toggle-off); }
   color: var(--fg); font: inherit; font-size: 12px; padding: 4px 6px; text-align: left;
 }
 .table-row input[type="checkbox"] { width: auto; justify-self: start; accent-color: var(--accent); }
+/* Wide record tables (experts): fields stack vertically instead of squeezing
+   five+ columns into unreadable cells. */
+.table-stack .table-head { display: none; }
+.table-stack .table-row {
+  grid-template-columns: 1fr; gap: 8px;
+  padding: 10px; margin-bottom: 8px;
+  border: 1px solid var(--border-2); border-radius: 6px; background: var(--surface);
+}
+.table-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.table-field-label {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--dim-a);
+}
+.table-stack .table-row .table-rm { justify-self: end; }
 .table-row .table-rm { color: var(--dim-a); }
 .table-row .table-rm:hover { color: var(--red-strong); }
 .table-body:empty::after { content: "—"; color: var(--dim-b); font-size: 12px; }

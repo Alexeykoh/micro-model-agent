@@ -213,7 +213,7 @@ export const PANEL_SECTIONS: Record<string, Dict[]> = {
     { id: "context.log", titleKey: "web.settings.sec.context.log", descKey: "web.settings.sec.context.log.desc", keys: ["contextLog.enabled", "contextLog.redact"] },
   ],
   reasoning: [
-    { id: "reasoning.display", titleKey: "web.settings.sec.reasoning.display", keys: ["showReasoning"] },
+    { id: "reasoning.display", titleKey: "web.settings.sec.reasoning.display", master: true, keys: ["showReasoning"] },
     { id: "reasoning.effort", titleKey: "web.settings.sec.reasoning.effort", descKey: "web.settings.sec.reasoning.effort.desc", keys: ["reasoning.mode", "reasoning.min", "reasoning.max", "reasoning.baseline", "reasoning.overrideCooldown"] },
   ],
   memory: [
@@ -227,7 +227,7 @@ export const PANEL_SECTIONS: Record<string, Dict[]> = {
     { id: "agent.hallucination", titleKey: "web.settings.sec.agent.hallucination", descKey: "web.settings.sec.agent.hallucination.desc", keys: ["hallucination.judge.enabled"] },
   ],
   network: [
-    { id: "network.web", titleKey: "web.settings.sec.network.web", descKey: "web.settings.sec.network.web.desc", keys: ["webSearch.enabled"] },
+    { id: "network.web", titleKey: "web.settings.sec.network.web", descKey: "web.settings.sec.network.web.desc", master: true, keys: ["webSearch.enabled"] },
     { id: "network.error", titleKey: "web.settings.sec.network.error", descKey: "web.settings.sec.network.error.desc", keys: ["errorWebSearch.enabled", "errorWebSearch.threshold", "errorWebSearch.maxResults", "errorWebSearch.maxQueryChars", "errorWebSearch.maxSearchesPerSession", "errorWebSearch.requestTimeoutMs"] },
   ],
   service: [

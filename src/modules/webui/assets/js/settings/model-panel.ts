@@ -63,6 +63,7 @@ function activeEntry(entries: Dict[], activeName: string): Dict | null {
 /** Persistent summary: what is actually running right now. */
 function activeCard(cfg: Dict, entries: Dict[], activeName: string, select: (k: string) => void): HTMLElement {
   const card = settingsSection("web.settings.active_model");
+  card.el.classList.add("master-card");
   const entry = activeEntry(entries, activeName);
   const row = el("div", "model-active");
   const main = el("div", "model-active-main");

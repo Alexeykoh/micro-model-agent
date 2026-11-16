@@ -23,6 +23,10 @@ const panelsShared = readFileSync(
   new URL("../src/modules/webui/assets/js/settings/panels-shared.ts", import.meta.url),
   "utf-8",
 );
+const capabilitiesRegistry = readFileSync(
+  new URL("../src/config/registry-extra-capabilities.ts", import.meta.url),
+  "utf-8",
+);
 
 describe("web UI layout guards", () => {
   it("makes the hidden attribute beat component display rules", () => {
@@ -70,15 +74,26 @@ describe("web UI layout guards", () => {
     expect(input).toMatch(/width:\s*100%/i);
   });
 
-  it("makes the security master switch visually dominant", () => {
+  it("makes the security master switch visually dominant without a left gutter", () => {
     expect(panelsShared).toContain('key === "security.enabled"');
     expect(panelsShared).toContain('"row-master"');
+    expect(panelsShared).toContain("master-card");
     const rule = css.match(/\.row-master\s*\{([^}]*)\}/)?.[1] ?? "";
     expect(rule).toMatch(/border:\s*1px solid var\(--accent\)/i);
     expect(rule).toMatch(/background:\s*var\(--accent-bg\)/i);
+    expect(rule).toMatch(/padding:\s*12px 14px/i);
     const name = css.match(/\.row-master \.row-name\s*\{([^}]*)\}/)?.[1] ?? "";
     expect(name).toMatch(/font-size:\s*15px/i);
     expect(name).toMatch(/color:\s*var\(--accent\)/i);
+    expect(panelsShared).toContain('section.master ? " master-card"');
+  });
+
+  it("stacks wide record tables vertically", () => {
+    expect(tableEditor).toContain('editor.layout === "stack"');
+    expect(tableEditor).toContain("table-row-stack");
+    expect(tableEditor).toContain("table-field-label");
+    expect(css).toMatch(/\.table-stack \.table-row\s*\{[^}]*grid-template-columns:\s*1fr/i);
+    expect(capabilitiesRegistry).toMatch(/jsonShape\("experts"[\s\S]*?layout:\s*"stack"/);
   });
 
   it("keeps the setup footer reachable and the intro responsive", () => {
