@@ -127,6 +127,13 @@ export abstract class RemotePanelClient {
     return res.json();
   }
 
+  /** Каталог команд демона (split W12). */
+  async commands(): Promise<unknown> {
+    const res = await this.request(`${this.base}/v1/host/commands`);
+    if (!res.ok) throw new Error(`daemon commands failed: ${res.status} ${await safeText(res)}`);
+    return res.json();
+  }
+
   /** Вьюер файла: байты + статус (ошибки вьюера отдаются текстом). */
   async fileView(
     path: string,

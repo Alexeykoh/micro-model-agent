@@ -90,6 +90,11 @@ and `executeCommand(line)`.
   wizard are served by `/v1/host/*` and proxied by the web adapter; pure
   validation/CRUD lives in `src/runtime/` so the browser surface and the daemon
   cannot drift. The end-to-end guard is `tests/e2e-separation.test.ts`.
+- **Command catalog (W12):** one catalog (`src/core/commands/spec.ts`) is
+  executed by the daemon registry (`modules/service/runtime/commands*.ts`).
+  Thin-REPL `/help` and web `/api/commands` read `/v1/host/commands`; commands
+  that need an interactive terminal answer `terminal-only` instead of failing
+  silently.
 - **WebUi module** (`src/modules/webui/`): statics, REST/SSE and settings; in
   daemon mode it proxies `/api/*` to `/v1/host/*` (`daemon-api.ts`) and maps
   events (`daemon-events.ts`). Unsupported panels return `501`, never an empty

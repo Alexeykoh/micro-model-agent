@@ -150,10 +150,6 @@ export async function runDaemonRepl(opts: DaemonReplOptions): Promise<void> {
       channel.clearScreen();
       return;
     }
-    if (trimmed === "/help") {
-      channel.writeLine(t("daemon.help"));
-      return;
-    }
     if (trimmed.startsWith("/")) {
       await runRemoteCommand(host, trimmed, channel);
       return;

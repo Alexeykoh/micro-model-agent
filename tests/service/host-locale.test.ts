@@ -54,23 +54,23 @@ describe("X-Mma-Locale on the host wire (W9)", () => {
   it("answers in the client locale", async () => {
     const ru = await unsupported("ru");
     expect(ru.status).toBe(200);
-    expect(String(ru.json.error)).toContain("не поддерживается");
+    expect(String(ru.json.error)).toContain("неизвестная команда");
 
     const en = await unsupported("en");
-    expect(String(en.json.error)).toContain("not supported");
+    expect(String(en.json.error)).toContain("unknown command");
   });
 
   it("falls back to the process locale for a missing or unknown header", async () => {
     const none = await unsupported();
-    expect(String(none.json.error)).toContain("not supported");
+    expect(String(none.json.error)).toContain("unknown command");
 
     const unknown = await unsupported("de");
-    expect(String(unknown.json.error)).toContain("not supported");
+    expect(String(unknown.json.error)).toContain("unknown command");
   });
 
   it("does not leak the request locale into the process", async () => {
     await unsupported("ru");
     const after = await unsupported();
-    expect(String(after.json.error)).toContain("not supported");
+    expect(String(after.json.error)).toContain("unknown command");
   });
 });

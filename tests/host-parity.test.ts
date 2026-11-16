@@ -111,7 +111,7 @@ function hostContract(name: string, make: () => Host): void {
       const host = make();
       const result = await host.executeCommand("/definitely-not-a-command");
       expect(result.ok).toBe(false);
-      expect(String(result.error)).toContain("not supported");
+      expect(String(result.error)).toContain("unknown");
     });
 
     it("subscribes to events and unsubscribes safely", () => {

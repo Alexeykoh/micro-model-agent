@@ -101,6 +101,12 @@ function fakeDaemon() {
     setupTest: async () => ({ status: 200, body: { ok: true } }),
     setupContext: async () => ({ status: 200, body: { ok: true, contextWindow: 8192 } }),
     setupLocale: async (locale: string) => ({ status: 200, body: { ok: true, locale } }),
+    commands: async () => ({
+      commands: [
+        { name: "help", description: "Help", available: true },
+        { name: "wizard", description: "Wizard", available: false, reason: "terminal-only" },
+      ],
+    }),
     executeCommand: async (line) => {
       calls.commands.push(line);
       return { ok: true, output: ["status: ok"] };
@@ -182,6 +188,13 @@ describe("web daemon adapter (W4)", () => {
       const search = await doFetch(`${base}/api/search?q=a&names=1`);
       expect(search.status).toBe(200);
       expect(((await search.json()) as { results: unknown[] }).results).toHaveLength(1);
+
+      const commands = await doFetch(`${base}/api/commands`);
+      expect(commands.status).toBe(200);
+      const commandList = ((await commands.json()) as { commands: Array<{ name: string; desc: string }> })
+        .commands;
+      expect(commandList.some((c) => c.name === "help")).toBe(true);
+      expect(commandList.find((c) => c.name === "wizard")?.desc).toContain("terminal-only");
 
       const prompt = await doFetch(`${base}/api/sessions/S1/system-prompt`);
       expect(prompt.status).toBe(200);

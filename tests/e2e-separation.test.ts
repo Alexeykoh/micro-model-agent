@@ -209,5 +209,11 @@ describe("e2e: daemon + web adapter (W11)", () => {
     expect(
       (sessions.body.sessions as Array<{ id: string }>).some((s) => s.id === sessionId),
     ).toBe(true);
+
+    const commands = await json("/api/commands");
+    expect(commands.status).toBe(200);
+    const list = commands.body.commands as Array<{ name: string; desc: string }>;
+    expect(list.some((c) => c.name === "config")).toBe(true);
+    expect(list.find((c) => c.name === "wizard")?.desc).toContain("terminal-only");
   });
 });

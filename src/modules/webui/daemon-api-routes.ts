@@ -6,7 +6,6 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { MAX_BODY_BYTES, readJsonBody } from "../../runtime/http-body";
 import { broadcast, type WebUiState } from "./state";
 import { sendJson } from "./util";
-import { webCommandList } from "./chat/commands";
 import { handleI18nGet } from "./i18n/i18n-api";
 import { handleFaviconGet } from "./favicon";
 import type { WebDaemonHost } from "./daemon-contracts";
@@ -170,8 +169,17 @@ export const ROUTES: Record<string, Handler> = {
     const result = await host.mcpCreate(body);
     sendJson(res, result.status, (result.body ?? {}) as Record<string, unknown>);
   },
-  "GET /api/commands": ({ res }) => {
-    sendJson(res, 200, { commands: webCommandList() });
+  "GET /api/commands": async ({ res, host }) => {
+    const catalog = (await host.commands()) as {
+      commands?: Array<{ name: string; description: string; usage?: string; available: boolean }>;
+    };
+    sendJson(res, 200, {
+      commands: (catalog.commands ?? []).map((c) => ({
+        name: c.name,
+        usage: c.usage ?? `/${c.name}`,
+        desc: c.available ? c.description : `${c.description} (terminal-only)`,
+      })),
+    });
   },
   "GET /api/sessions": async ({ res, host }) => {
     sendJson(res, 200, { sessions: await host.listSessions() });
@@ -254,9 +262,7 @@ export async function pluginRoute(
   rest: string,
 ): Promise<{ status: number; body: unknown } | undefined> {
   const isSettings = rest.endsWith("/settings");
-  const name = decodeURIComponent(
-    isSettings ? rest.slice(0, rest.length - "/settings".length) : rest,
-  );
+  const name = decodeURIComponent(isSettings ? rest.slice(0, rest.length - "/settings".length) : rest);
   if (!name) return undefined;
   if (isSettings) {
     if (req.method === "GET") return host.pluginSettingsGet(name);

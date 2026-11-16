@@ -50,6 +50,8 @@ export interface WebDaemonHost extends Host {
   interruptSubagent(sessionId: string, runId: string): Promise<unknown>;
   /** Поиск по workspace (панель Files / `@`-mentions). */
   search(query: string, namesOnly: boolean): Promise<unknown>;
+  /** Каталог команд с признаком исполняемости на проводе. */
+  commands(): Promise<unknown>;
   /** Вьюер файла: статус, mime и байты. */
   fileView(path: string, download: boolean): Promise<{ status: number; mime: string; bytes: Uint8Array }>;
   /** Очередь сессии. */

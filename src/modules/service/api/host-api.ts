@@ -17,6 +17,7 @@ import { PROTOCOL_VERSION } from "../../daemon/protocol";
 import { readJsonBodyOrProblem, sendJson, sendProblem } from "../http/respond";
 import { problem } from "../runtime/problem";
 import { hostStateOf } from "../runtime/host-state";
+import { hostCommandCatalog } from "../runtime/commands";
 import type { AgentServiceState } from "../state";
 import { handleHostFile } from "./host-file";
 import { handleHostFiles } from "./host-files";
@@ -64,6 +65,10 @@ export async function handleHostApi(
       ? s.models.getFor(provider)
       : { models: s.models.get(), loading: false };
     sendJson(res, 200, resolved);
+    return true;
+  }
+  if (parts.length === 3 && parts[2] === "commands" && req.method === "GET") {
+    sendJson(res, 200, { commands: hostCommandCatalog() });
     return true;
   }
   if (parts[2] === "files") return handleHostFiles(req, res, reqUrl, s, parts);

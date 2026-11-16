@@ -341,7 +341,7 @@ describe("host command wire", () => {
     });
     expect(status.status).toBe(200);
     expect(status.json.ok).toBe(true);
-    expect((status.json.output as string[]).some((l) => l.startsWith("model:"))).toBe(true);
+    expect((status.json.output as string[]).join(" ")).toContain("qwen");
 
     const help = await httpJson(`${base}/v1/host/sessions/${sessionId}/command`, {
       method: "POST",
@@ -351,10 +351,10 @@ describe("host command wire", () => {
 
     const unknown = await httpJson(`${base}/v1/host/sessions/${sessionId}/command`, {
       method: "POST",
-      json: { line: "/provider add" },
+      json: { line: "/definitely-not-a-command" },
     });
     expect(unknown.json.ok).toBe(false);
-    expect(String(unknown.json.error)).toContain("not supported");
+    expect(String(unknown.json.error)).toContain("unknown");
   });
 });
 

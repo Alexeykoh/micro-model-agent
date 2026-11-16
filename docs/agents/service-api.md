@@ -248,6 +248,7 @@ timestamp, windowMs?})`: сравнение за константное врем
 | GET | `/v1/host/sessions/:id/log?since=&limit=` | хвост `session.jsonl` |
 | GET/POST | `/v1/host/config` | отредактированный конфиг + реестр ключей / запись ключа |
 | GET | `/v1/host/models?provider=` | модели активного/указанного провайдера |
+| GET | `/v1/host/commands` | каталог команд с признаком доступности на проводе |
 | GET | `/v1/host/files?path=` | листинг директории workspace (панель Files) |
 | GET | `/v1/host/file?path=&download=` | вьюер файла (тот же джейл/кап, что `/api/file`) |
 | GET | `/v1/host/search?q=&names=1` | поиск по workspace (Files, `@`-mentions) |
@@ -271,7 +272,7 @@ timestamp, windowMs?})`: сравнение за константное врем
 | POST | `/v1/host/sessions/:id/interrupt` | идемпотентная отмена хода: `{interrupted}` |
 | POST | `/v1/host/sessions/:id/pause` / `resume` | durable-пауза агента (409 без раннера) |
 | POST | `/v1/host/sessions/:id/answer` | `{id, answer}` на висящий вопрос |
-| POST | `/v1/host/sessions/:id/command` | `{line}` → `{ok, output[]}`; серверное подмножество команд |
+| POST | `/v1/host/sessions/:id/command` | `{line}` → `{ok, output[]}`; каталог команд (интерактивные — `terminal-only`) |
 
 `images` в submit — data-URL (≤10, ≤70 МБ): клиент читает клипборд сам (Ctrl+V в
 thin-REPL), демон не имеет доступа к буферу. `X-Mma-Locale` — локаль клиента на
