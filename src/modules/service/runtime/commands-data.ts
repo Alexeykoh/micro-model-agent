@@ -243,6 +243,7 @@ export async function reloadCommand(
   if (sources) {
     await ctx.s.deps.reconfigure?.(ctx.s.config);
     ctx.s.pool.dropIdle();
+    void ctx.s.models.refresh();
   }
   const lines = [
     t("daemon.command_reloaded"),
