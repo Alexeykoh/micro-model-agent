@@ -802,6 +802,9 @@ body.groovebox .inp-mark .mmark { box-shadow: 0 0 0 1px var(--border-2); }
   /* The footer row is baseline-aligned; an SVG has no text baseline, so pin
      the lock to the row's optical centre instead of letting it ride high. */
   align-self: center; line-height: 0;
+  /* Optical nudge: the text box is 15px tall, the glyph box 14px, and the SVG
+     still lands ~1px low next to the baseline. */
+  transform: translateY(-1px);
 }
 .ws-line .ws-lock .svg-icon { width: 14px; height: 14px; display: block; }
 .dlp-lock { cursor: help; color: var(--dim-a); }
