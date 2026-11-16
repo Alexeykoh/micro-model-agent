@@ -153,6 +153,12 @@ describe("host command catalog (W12)", () => {
     expect(enabled).toEqual([["p1", true]]);
     expect((await run("/reload")).ok).toBe(true);
 
+    state.deps.reloadSources = async () => ({ files: ["AGENTS.md"], instructions: [] });
+    state.deps.reconfigure = async () => {};
+    const soft = await run("/reload");
+    expect(soft.ok).toBe(true);
+    expect(soft.output.join("\n")).toContain("AGENTS.md");
+
     state.deps.skills = {
       getLoaded: () => [{ name: "alpha" }],
       getAvailable: () => [{ name: "alpha" }, { name: "beta" }],
