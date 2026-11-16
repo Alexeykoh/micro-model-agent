@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { tmpdir } from "os";
 import { join } from "path";
 import { buildEvidencePack, isWorkMutation } from "../src/modules/critic/evidence";
+import { renderPack } from "../src/modules/critic/client-render";
 
 function gitAvailable(): boolean {
   try {
@@ -104,6 +105,16 @@ describe("critic evidence", () => {
     it("omits the excerpt without answer text", () => {
       const pack = buildEvidencePack({ task: "fix bug", toolEvents: [] });
       expect(pack.answerExcerpt).toBeUndefined();
+    });
+
+    it("marks CONFIG DIR as valid config evidence outside workspace", () => {
+      const pack = buildEvidencePack({
+        task: "show provider config",
+        configDir: "/config",
+        toolEvents: [{ tool: "read_file", args: { path: "/config/config/provider.json" }, ok: true, output: "{}" }],
+      });
+      expect(pack.configDir).toBe("/config");
+      expect(renderPack(pack)).toContain("CONFIG DIR: /config");
     });
 
     it("caps length and redacts recognizable secrets", () => {

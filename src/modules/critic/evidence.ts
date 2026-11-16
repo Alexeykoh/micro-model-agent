@@ -26,6 +26,8 @@ export interface EvidenceToolEvent {
 export interface EvidenceInput {
   task: string;
   planSummary?: string;
+  /** Каталог конфига (вне workspace); критик не должен искать его в workspace. */
+  configDir?: string;
   /** Незакрытые шаги плана (S5) — режутся до MAX_PENDING_STEPS. */
   planPendingSteps?: string[];
   toolEvents: EvidenceToolEvent[];
@@ -93,6 +95,7 @@ export function buildEvidencePack(input: EvidenceInput): EvidencePack {
   return {
     task: input.task,
     planSummary: input.planSummary,
+    configDir: input.configDir,
     planPendingSteps: input.planPendingSteps?.slice(0, MAX_PENDING_STEPS),
     planPendingStepsTotal: input.planPendingSteps?.length,
     changedFiles: [...changedFiles],

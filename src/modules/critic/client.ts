@@ -16,6 +16,7 @@ Rules:
 - "First N lines" includes blank lines: a blank line visibly present in a code block counts; do not claim it is missing or demand numbering.
 - If the evidence is insufficient to judge, return status "ok" (prefer silence over noise).
 - A chat-delivered answer (ANSWER section) can fully satisfy the task without any files or commands; absence of changed files is NOT itself an issue when ANSWER contains the requested result.
+- CONFIG DIR is outside the workspace by design: a file read under CONFIG DIR is valid config evidence; do not report it as a missing workspace file.
 - Numeric/price/model claims presented as facts require WEB GROUNDING: verified=true (a web_fetch returned substantive content and the stated figures appear in it). If the work asserts such facts while web grounding is absent, unverified, or lists unverifiedClaims, that is a "concern" (fabricated data).
 - "critical" = the task's stated result is demonstrably not delivered. "concern" = a concrete, checkable gap. "info" = minor.
 - If PLAN PENDING STEPS is non-empty and the TOOL TRAIL shows no work that closes them, that is "critical": honestly saying "I could not do it" does not satisfy the task while the tools to do it were available.
