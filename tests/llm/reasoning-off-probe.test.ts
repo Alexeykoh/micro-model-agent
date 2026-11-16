@@ -188,6 +188,76 @@ describe("probeOpenAICompatCapabilities", () => {
     });
   });
 
+  it("reads multimodal input modalities as vision (llama.cpp /models)", async () => {
+    globalThis.fetch = (async () => ({
+      ok: true,
+      json: async () => ({
+        data: [
+          {
+            id: "qwen3.8-27b",
+            capabilities: ["completion", "multimodal"],
+            architecture: { input_modalities: ["text", "image", "video"] },
+          },
+        ],
+      }),
+    })) as unknown as typeof globalThis.fetch;
+    expect(
+      await probeOpenAICompatCapabilities("http://x/v1", "qwen3.8-27b", undefined, 3000),
+    ).toEqual({ reachable: true, capabilities: { vision: true } });
+  });
+
+  it("combines declared vision with reasoning levels", async () => {
+    globalThis.fetch = (async () => ({
+      ok: true,
+      json: async () => ({
+        data: [
+          {
+            id: "m",
+            architecture: { input_modalities: ["text", "image"] },
+            capabilities: { vision: true, reasoning: { supported: true, effort: ["low", "high"] } },
+          },
+        ],
+      }),
+    })) as unknown as typeof globalThis.fetch;
+    expect(await probeOpenAICompatCapabilities("http://x/v1", "m", undefined, 3000)).toEqual({
+      reachable: true,
+      capabilities: { vision: true, reasoningStrategy: "openai-effort", reasoningLevels: ["low", "high"] },
+    });
+  });
+
+  it("accepts top-level input_modalities and capabilities.vision", async () => {
+    globalThis.fetch = (async () => ({
+      ok: true,
+      json: async () => ({
+        data: [
+          { id: "a", input_modalities: ["text", "image"] },
+          { id: "b", capabilities: { vision: true } },
+        ],
+      }),
+    })) as unknown as typeof globalThis.fetch;
+    expect(await probeOpenAICompatCapabilities("http://x/v1", "a", undefined, 3000)).toEqual({
+      reachable: true,
+      capabilities: { vision: true },
+    });
+    expect(await probeOpenAICompatCapabilities("http://x/v1", "b", undefined, 3000)).toEqual({
+      reachable: true,
+      capabilities: { vision: true },
+    });
+  });
+
+  it("does not turn a text-only declaration into no-vision override", async () => {
+    globalThis.fetch = (async () => ({
+      ok: true,
+      json: async () => ({
+        data: [{ id: "m", architecture: { input_modalities: ["text"] }, capabilities: ["completion"] }],
+      }),
+    })) as unknown as typeof globalThis.fetch;
+    expect(await probeOpenAICompatCapabilities("http://x/v1", "m", undefined, 3000)).toEqual({
+      reachable: true,
+      capabilities: undefined,
+    });
+  });
+
   it("marks a failed list probe unreachable", async () => {
     globalThis.fetch = (async () => {
       throw new Error("offline");

@@ -125,6 +125,40 @@ export interface OpenAICompatCapabilitiesProbe {
   capabilities?: ModelCapabilities;
 }
 
+/** Строки-модальности, означающие приём изображения (llama.cpp, OpenRouter). */
+const VISION_MODALITIES: ReadonlySet<string> = new Set(["image", "vision", "multimodal"]);
+
+/**
+ * Модель объявила приём картинок? llamacpp отдаёт
+ * `architecture.input_modalities: ["text","image"]` + `capabilities:
+ * ["completion","multimodal"]`; LM Studio-совместимые — `capabilities.vision`.
+ * Отсутствие декларации — не «нет vision», просто неизвестно (слой probe не
+ * должен перебивать preset/override).
+ */
+export function declaresVision(entry: Record<string, unknown>): boolean {
+  const arch = entry.architecture;
+  const archInput =
+    arch && typeof arch === "object"
+      ? (arch as Record<string, unknown>).input_modalities ??
+        (arch as Record<string, unknown>).inputModalities
+      : undefined;
+  const topInput = entry.input_modalities ?? entry.inputModalities;
+  for (const mods of [archInput, topInput]) {
+    if (Array.isArray(mods) && mods.some((m) => typeof m === "string" && VISION_MODALITIES.has(m.toLowerCase()))) {
+      return true;
+    }
+  }
+  const caps = entry.capabilities;
+  if (Array.isArray(caps)) {
+    return caps.some((c) => typeof c === "string" && VISION_MODALITIES.has(c.toLowerCase()));
+  }
+  if (caps && typeof caps === "object") {
+    const obj = caps as Record<string, unknown>;
+    return obj.vision === true || obj.multimodal === true;
+  }
+  return false;
+}
+
 export async function probeOpenAICompatCapabilities(
   baseUrl: string,
   model: string,
@@ -138,16 +172,20 @@ export async function probeOpenAICompatCapabilities(
   if (list === null) return { reachable: true };
   const found = list.find((m) => matchesModel(m, model));
   if (!found) return { reachable: true };
-  const raw = found.capabilities;
-  if (!raw || typeof raw !== "object") return { reachable: true };
-  const reasoning = (raw as { reasoning?: unknown }).reasoning;
-  if (!reasoning || typeof reasoning !== "object") return { reachable: true };
-  const r = reasoning as { supported?: unknown; effort?: unknown };
   const capabilities: ModelCapabilities = {};
-  if (r.supported === true) capabilities.reasoningStrategy = "openai-effort";
-  if (Array.isArray(r.effort)) {
-    const levels = r.effort.filter((v): v is string => typeof v === "string");
-    if (levels.length > 0) capabilities.reasoningLevels = levels;
+  if (declaresVision(found)) capabilities.vision = true;
+  const raw = found.capabilities;
+  const reasoning =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as { reasoning?: unknown }).reasoning
+      : undefined;
+  if (reasoning && typeof reasoning === "object") {
+    const r = reasoning as { supported?: unknown; effort?: unknown };
+    if (r.supported === true) capabilities.reasoningStrategy = "openai-effort";
+    if (Array.isArray(r.effort)) {
+      const levels = r.effort.filter((v): v is string => typeof v === "string");
+      if (levels.length > 0) capabilities.reasoningLevels = levels;
+    }
   }
   return {
     reachable: true,
