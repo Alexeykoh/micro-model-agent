@@ -3441,6 +3441,19 @@ body.light .c-dim { --face-c: var(--panel); }
 }
 
 /* ---- DLP hits (U21) / provider request popup (U20) / security log (U22) ---- */
+.dlp-sec {
+  border-top: 1px solid var(--line, #ddd);
+  padding-top: 6px;
+}
+.dlp-sec:first-of-type { border-top: 0; padding-top: 0; }
+.dlp-summary {
+  cursor: pointer;
+  list-style-position: inside;
+  padding: 2px 0;
+}
+.dlp-summary:hover { color: var(--fg); }
+.dlp-summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dlp-sec[open] > .dlp-summary { margin-bottom: 4px; }
 .dlp-hits { margin: 4px 0 8px 12px; display: flex; flex-direction: column; gap: 2px; }
 .dlp-hits-title { color: var(--dim, #888); font-size: 12px; }
 .dlp-hit {

@@ -14,8 +14,9 @@ export const recallTool: ToolDefinition = {
   security: { caps: [{ mem: true }] },
   icon: "💾",
   description:
-    "Recall stored information from memory. Search across preferences, facts, conventions, decisions, errors.",
+    "Recall stored information from memory. Search across preferences, facts, conventions, decisions, errors. Call it before answering when the request may depend on an earlier session or on a known preference.",
   tags: ["memory"],
+  alwaysOn: true,
   parameters: {
     type: "object",
     properties: {
