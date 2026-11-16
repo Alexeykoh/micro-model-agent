@@ -2052,6 +2052,23 @@ body.light .toggle:not(.on) { background: var(--toggle-off); }
 .sec-add:hover { text-decoration: underline; }
 .sec-add .svg-icon { width: 13px; height: 13px; }
 .sec-body { padding-top: 8px; }
+/* Collapsible settings block (memory rules): title acts as the toggle. */
+.settings-details { margin: 0 0 16px; }
+.settings-details-summary {
+  cursor: pointer; padding: 6px 0; font-size: 11.5px; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--dim-a); list-style-position: inside;
+}
+.settings-details-summary:hover { color: var(--fg); }
+.settings-details-body { padding: 4px 0 8px; }
+/* Category/type filter chips (memory, skills). */
+.mem-filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.mem-filter {
+  font: inherit; font-size: 11.5px; cursor: pointer;
+  padding: 3px 9px; border-radius: 999px;
+  border: 1px solid var(--border-2); background: var(--surface); color: var(--muted);
+}
+.mem-filter:hover { color: var(--fg); }
+.mem-filter.on { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
 
 /* model panel: persistent active summary + focused tabs */
 .model-active { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-width: 0; }

@@ -9,6 +9,7 @@ import {
   loadMemory, loadSkills, loadPlugins, loadLsp,
 } from "./panels.js";
 import { renderModelPanel } from "./providers.js";
+import { renderAgentPanel } from "./panels-agent.js";
 import { closeSubDialog, isSubDialogOpen } from "./subdialog.js";
 import { setWriteHooks } from "./write.js";
 
@@ -16,10 +17,11 @@ export function renderSettings(): void {
   // Generic panels render straight from PANEL_SECTIONS; custom panels
   // (model/ui/memory/skills/plugins/security) append their sections themselves
   // or render bespoke widgets alongside.
-  for (const panel of ["general", "context", "reasoning", "agent", "network", "service", "browser", "sessions", "advanced"]) {
+  for (const panel of ["general", "context", "reasoning", "network", "service", "browser", "sessions", "advanced"]) {
     renderPanel(panel);
   }
   renderModelPanel();
+  renderAgentPanel();
   renderUiPanel();
   renderMemoryPanel();
   renderSkillsPanel();

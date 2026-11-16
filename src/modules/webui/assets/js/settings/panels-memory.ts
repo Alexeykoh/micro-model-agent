@@ -58,8 +58,17 @@ export function renderMemoryPanel(): void {
   const container = document.querySelector<HTMLElement>('[data-panel="memory"]');
   if (!container) return;
   container.textContent = "";
-  // Validation/retention rules live here, next to the notes they govern.
-  renderSectionsInto(container, PANEL_SECTIONS.memory || []);
+  // Validation/retention rules live here, next to the notes they govern, but
+  // collapsed: the common task is browsing notes, not retuning the gate.
+  const rules = el("details", "settings-details");
+  const rulesSum = el("summary", "settings-details-summary");
+  rulesSum.textContent = t("web.settings.sec.memory.rules");
+  rules.appendChild(rulesSum);
+  const rulesBody = el("div", "settings-details-body");
+  renderSectionsInto(rulesBody, PANEL_SECTIONS.memory || []);
+  rulesBody.querySelectorAll(".settings-section .sec-head").forEach((h) => h.remove());
+  rules.appendChild(rulesBody);
+  container.appendChild(rules);
   if (settings.memory === undefined || settings.memory === null) {
     container.appendChild(placeholderFor(settings.memory, t("web.settings.memory_unavailable")));
     return;
@@ -84,6 +93,36 @@ export function renderMemoryPanel(): void {
   search.placeholder = t("web.settings.search_memory");
   search.setAttribute("aria-label", t("web.settings.search_memory"));
   container.appendChild(search);
+
+  // Category filter chips: the list is long, and "where is that rule?" usually
+  // starts with a category, not a full-text query.
+  let selected = "all";
+  const filters = el("div", "mem-filters");
+  const categories = (data.categories || []) as Dict[];
+  const entriesOf = (c: Dict) => (c.entries || []) as Dict[];
+  const filterDefs: Array<[string, string, number | null]> = [
+    ["all", t("web.settings.memory_filter_all"), categories.reduce((n, c) => n + entriesOf(c).length, 0)],
+    ...categories.map((c: Dict): [string, string, number] => [
+      String(c.name),
+      String(c.name),
+      entriesOf(c).length,
+    ]),
+  ];
+  const filterButtons = new Map<string, HTMLElement>();
+  filterDefs.forEach(([key, label, count]) => {
+    const btn = el("button", "mem-filter", label + (count == null ? "" : ` ${count}`));
+    btn.type = "button";
+    btn.classList.toggle("on", key === selected);
+    btn.addEventListener("click", () => {
+      selected = key;
+      filterButtons.forEach((b, k) => b.classList.toggle("on", k === key));
+      draw();
+    });
+    filters.appendChild(btn);
+    filterButtons.set(key, btn);
+  });
+  container.appendChild(filters);
+
   const list = el("div", "settings-list");
   container.appendChild(list);
 
@@ -108,7 +147,8 @@ export function renderMemoryPanel(): void {
     list.textContent = "";
     const q = search.value.trim().toLowerCase();
     let any = false;
-    (data.categories || []).forEach((cat: Dict) => {
+    categories.forEach((cat: Dict) => {
+      if (selected !== "all" && String(cat.name) !== selected) return;
       const entries = (cat.entries || []).filter(
         (e: Dict) => !q || String(e.text).toLowerCase().indexOf(q) !== -1,
       );
@@ -128,7 +168,7 @@ export function renderMemoryPanel(): void {
       });
     });
     const prefs = Object.entries(data.preferences || {});
-    if (prefs.length && !q) {
+    if (prefs.length && !q && selected === "all") {
       any = true;
       list.appendChild(categoryHeader(t("web.settings.preferences"), prefs.length));
       prefs.forEach(([k, v]) => {

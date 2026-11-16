@@ -31,6 +31,18 @@ const pluginsPanel = readFileSync(
   new URL("../src/modules/webui/assets/js/settings/panels-plugins.ts", import.meta.url),
   "utf-8",
 );
+const agentPanel = readFileSync(
+  new URL("../src/modules/webui/assets/js/settings/panels-agent.ts", import.meta.url),
+  "utf-8",
+);
+const memoryPanel = readFileSync(
+  new URL("../src/modules/webui/assets/js/settings/panels-memory.ts", import.meta.url),
+  "utf-8",
+);
+const skillsPanel = readFileSync(
+  new URL("../src/modules/webui/assets/js/settings/panels-skills.ts", import.meta.url),
+  "utf-8",
+);
 
 describe("web UI layout guards", () => {
   it("makes the hidden attribute beat component display rules", () => {
@@ -107,6 +119,15 @@ describe("web UI layout guards", () => {
     expect(pluginsPanel).toContain("renderMcpSection");
     expect(pluginsPanel).not.toContain('renderSections("plugins"');
     expect(css).toMatch(/\.settings-tabs\s*,?[\s\S]*?border-bottom:/);
+  });
+
+  it("splits Agent into focused tabs and folds memory rules", () => {
+    expect(agentPanel).toContain('"settings-tabs"');
+    expect(agentPanel).toContain('"agent.hallucination"');
+    expect(agentPanel).toContain("renderSectionsInto");
+    expect(memoryPanel).toContain('"settings-details"');
+    expect(memoryPanel).toContain('"mem-filters"');
+    expect(skillsPanel).toContain("web.settings.search_skills");
   });
 
   it("keeps the setup footer reachable and the intro responsive", () => {
