@@ -9,7 +9,6 @@ import type {
   SseTransport,
   WorkspaceStore,
 } from "../state";
-import { parseMessageBody } from "../util";
 import { inWorkspace } from "./project-scope";
 
 /** Входы разбора хода: сессии, пул, workspace. */
@@ -18,7 +17,10 @@ export type PostState = SessionStore &
   ConfigStore &
   HttpTransport &
   SseTransport &
-  WorkspaceStore;
+  WorkspaceStore & {
+    /** Визард не пройден: ход не стартует (409). */
+    setupRequired?: boolean;
+  };
 
 /**
  * Достаёт `sessionId` из сырого JSON-тела (фронт шлёт вкладку-владельца).
@@ -55,14 +57,25 @@ export type ParsedPost =
   | { text: string; images: string[]; target: string; clientTz?: ClientTz }
   | { error: string; status: number };
 
+/** Вход `Host.submit`: кто, что и в какую сессию (split W10). */
+export interface PostInput {
+  text: string;
+  images: string[];
+  sessionId?: string;
+  clientTz?: ClientTz;
+}
+
 /**
- * Валидирует тело сообщения: формат, существование сессии, проект, раннер.
- * Чистая (без записи состояния) — решение о резерве/очереди принимает диспетчер.
+ * Валидирует ход независимо от транспорта: формат уже разобран, здесь —
+ * визард, пустая строка, существование сессии, граница проекта и раннер.
+ *
+ * HTTP-хендлер и `Host.submit` идут одним путём: политика хода живёт здесь,
+ * а не в адаптере (INV-S2).
  */
-export function parsePost(s: PostState, raw: string): ParsedPost {
-  const body = parseMessageBody(raw);
-  if ("error" in body) return { error: body.error, status: 400 };
-  const target = extractSessionId(raw) ?? activeSessionOf(s);
+export function validatePost(s: PostState, input: PostInput): ParsedPost {
+  if (s.setupRequired) return { error: "setup_required", status: 409 };
+  if (!input.text.trim()) return { error: "empty", status: 200 };
+  const target = input.sessionId?.trim() || activeSessionOf(s);
   if (!target) return { error: "no_session", status: 503 };
   if (s.sessionManager) {
     const meta = s.sessionManager.get(target);
@@ -76,5 +89,10 @@ export function parsePost(s: PostState, raw: string): ParsedPost {
   }
   // Web всегда через раннер: без фабрики исполнителя нет.
   if (!s.pool.hasFactory()) return { error: "no_runner", status: 503 };
-  return { text: body.text, images: body.images, target, clientTz: body.clientTz };
+  return {
+    text: input.text,
+    images: input.images,
+    target,
+    ...(input.clientTz ? { clientTz: input.clientTz } : {}),
+  };
 }

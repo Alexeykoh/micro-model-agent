@@ -10,6 +10,7 @@ import type { HostEvent } from "../src/core/host";
 
 let server: Server | undefined;
 const seen: string[] = [];
+const locales: string[] = [];
 
 function envelope(seq: number, type: string, data: unknown): string {
   return `id: ${seq}\nevent: ${type}\ndata: ${JSON.stringify({
@@ -24,8 +25,11 @@ function envelope(seq: number, type: string, data: unknown): string {
 
 async function startDaemon(opts: { streamScript?: string[] } = {}): Promise<string> {
   seen.length = 0;
+  locales.length = 0;
   server = createServer((req, res) => {
     seen.push(`${req.method} ${req.url}`);
+    const locale = req.headers["x-mma-locale"];
+    if (typeof locale === "string") locales.push(locale);
     const url = req.url ?? "";
     if (req.method === "GET" && url.startsWith("/v1/host/state")) {
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -187,5 +191,16 @@ describe("RemoteHost", () => {
       host.submit("hi", { images: ["data:image/png;base64,AA=="] }),
     ).resolves.toMatchObject({ jobId: "job_1" });
     host.dispose();
+  });
+
+  it("sends the client locale on every request (W9)", async () => {
+    const baseUrl = await startDaemon({ streamScript: [] });
+    const host = new RemoteHost({ baseUrl, sessionId: "S", locale: "ru" });
+    await host.getState();
+    await host.executeCommand("/status");
+    host.dispose();
+
+    expect(locales.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(locales)).toEqual(new Set(["ru"]));
   });
 });

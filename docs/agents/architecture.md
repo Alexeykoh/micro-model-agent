@@ -77,7 +77,24 @@ and `executeCommand(line)`.
   contract. `src/modules/daemon/remote-tasks.ts` drives one-shot jobs.
 - **Thin clients:** `mma --daemon <url>` (REPL), `mma web --daemon-url <url>`
   (browser adapter), `mma "prompt" --daemon <url>` (one-shot job). They own only
-  input/rendering; state is event-sourced from the daemon.
+  input/rendering; state is event-sourced from the daemon. Parity (W9): the
+  `meta`/`retract`/`critic` channel rides the same SSE, clipboard images are
+  read on the client and sent as data-URLs, and `X-Mma-Locale` is resolved per
+  request via `runWithLocale` without touching the process locale.
+- **One turn path (W10):** `mma web` no longer starts turns itself —
+  `POST /api/message` calls `Host.submit`, which shares `submitTurnFromHost`
+  with the local host (INV-S2). The host wire also carries `log`, `subagent`,
+  tool images, the file viewer, search, system prompt, security journal,
+  subagent snapshots and the message queue.
+- **Settings parity (W11):** providers, MCP, memory, plugins, LSP and the setup
+  wizard are served by `/v1/host/*` and proxied by the web adapter; pure
+  validation/CRUD lives in `src/runtime/` so the browser surface and the daemon
+  cannot drift. The end-to-end guard is `tests/e2e-separation.test.ts`.
+- **Command catalog (W12):** one catalog (`src/core/commands/spec.ts`) is
+  executed by the daemon registry (`modules/service/runtime/commands*.ts`).
+  Thin-REPL `/help` and web `/api/commands` read `/v1/host/commands`; commands
+  that need an interactive terminal answer `terminal-only` instead of failing
+  silently.
 - **WebUi module** (`src/modules/webui/`): statics, REST/SSE and settings; in
   daemon mode it proxies `/api/*` to `/v1/host/*` (`daemon-api.ts`) and maps
   events (`daemon-events.ts`). Unsupported panels return `501`, never an empty

@@ -32,3 +32,27 @@ export function usageLine(data: Record<string, unknown>): string | undefined {
   const total = (usage.promptTokens ?? 0) + (usage.completionTokens ?? 0);
   return total > 0 ? t("repl.tokens", { tokens: String(total) }) : undefined;
 }
+
+/**
+ * Строка отзыва черновика (split W9): терминал печатает ту же метку, что
+ * локальный REPL, — `label`, иначе причину. Пустая строка — нечего печатать.
+ */
+export function retractLine(data: Record<string, unknown>): string {
+  return text(data.label) || text(data.reason);
+}
+
+/**
+ * Строка итога критика (split W9): локальный REPL печатает `label` из
+ * `onMeta`; если сервер прислал только структуру — короткий статус.
+ */
+export function criticLine(data: Record<string, unknown>): string {
+  const label = text(data.label);
+  if (label) return label;
+  const status = text(data.status);
+  return status ? `critic · ${status}` : "";
+}
+
+/** Непустая строка из поля события. */
+function text(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}

@@ -11,12 +11,13 @@ import { createServer as createHttpServer } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { t } from "../../i18n/index";
+import { t, runWithLocale } from "../../i18n/index";
 import { defaultOutputBus } from "../../output";
 import { errMsg } from "../../utils/error";
 import { bearerOk, isLoopback, sendProblem } from "./http/respond";
 import { resolveServiceTls, tlsPolicyError } from "./http/tls";
 import { handleApi } from "./http/routes";
+import { clearDetachedTimers } from "./api/detached-turns";
 import { problem } from "./runtime/problem";
 import { apiGuard, filterResponse } from "../../runtime/egress";
 import type { AgentServiceState } from "./state";
@@ -118,6 +119,15 @@ function tenantOk(req: IncomingMessage, s: AgentServiceState): boolean {
  * `500 internal` problem+json, а не обрывом сокета и не падением процесса
  * (сервис живёт неделями, и упасть от кривого запроса нельзя).
  */
+/**
+ * Локаль запроса: `X-Mma-Locale` (split W9, спека §13). Клиент присылает её
+ * на каждый запрос; неизвестное/пустое значение остаётся процесс-дефолтом.
+ */
+function requestLocale(req: IncomingMessage): string | undefined {
+  const header = req.headers["x-mma-locale"];
+  return typeof header === "string" && header.trim() ? header.trim() : undefined;
+}
+
 async function dispatch(
   req: IncomingMessage,
   res: ServerResponse,
@@ -125,7 +135,8 @@ async function dispatch(
   s: AgentServiceState,
 ): Promise<void> {
   try {
-    await handleApi(req, res, reqUrl, s);
+    const locale = requestLocale(req);
+    await (locale ? runWithLocale(locale, () => handleApi(req, res, reqUrl, s)) : handleApi(req, res, reqUrl, s));
   } catch (err) {
     if (res.headersSent) {
       res.end();
@@ -157,4 +168,5 @@ export function stopServiceServer(s: AgentServiceState): void {
   s.readyCache = undefined;
   s.pool.clear();
   s.envelopes.clear();
+  clearDetachedTimers(s);
 }

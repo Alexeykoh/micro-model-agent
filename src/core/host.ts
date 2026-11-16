@@ -81,6 +81,8 @@ export interface HostStateSnapshot {
   contextWindow?: number;
   /** Workspace агента (каталог `-d`), абсолютный; нет, если неизвестен. */
   workspace?: string;
+  /** Id сообщений очереди этой сессии (FIFO-порядок); нет — очередь пуста. */
+  queuedIds?: string[];
   /**
    * Версия установленного пакета (`package.json`), а не `config.version` —
    * та хранит версию схемы конфига. Показывается в футере под композером.

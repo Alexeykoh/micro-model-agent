@@ -12,7 +12,7 @@
  * поток без событий дольше `sseIdleMs` закрывается сам.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { abortInteractiveTask } from "./tasks-api";
+import { attachInteractive, detachInteractive } from "./detached-turns";
 import { sendProblem } from "../http/respond";
 import { problem } from "../runtime/problem";
 import { formatFrame } from "../runtime/emit";
@@ -93,6 +93,7 @@ export function openSessionStream(
     },
   };
   s.clients.add(client);
+  attachInteractive(s, sessionId);
 
   const ping = setInterval(() => {
     if (Date.now() - client.lastEventAt > s.sseIdleMs) {
@@ -106,8 +107,9 @@ export function openSessionStream(
   req.on("close", () => {
     clearInterval(ping);
     s.clients.delete(client);
-    // Чужой подписчик не должен терять задачу из-за закрытия этой вкладки.
-    if (!hasSubscribers(s, sessionId)) abortInteractiveTask(s, sessionId);
+    // Последний подписчик ушёл: с grace-окном ход ждёт reconnect, иначе
+    // отменяется (спека §7.3); `service.detachedTurnGraceMs` решает.
+    if (!hasSubscribers(s, sessionId)) detachInteractive(s, sessionId);
   });
   return true;
 }

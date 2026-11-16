@@ -25,6 +25,12 @@ export interface ServiceConfig {
   syncWaitMs: number;
   /** Кап FIFO-очереди задач на сессию. */
   maxQueueLength: number;
+  /**
+   * Сколько держать interactive-ход после отключения последнего SSE-клиента
+   * (мс). `0` — отменять сразу (сегодняшнее поведение). Положительное значение
+   * даёт переподключиться и забрать ход/вопрос; истёк — задача отменяется.
+   */
+  detachedTurnGraceMs: number;
   /** Таймаут доставки webhook-колбэка (мс). */
   callbackTimeoutMs: number;
   /** Секрет HMAC-подписи webhook-колбэков. Не задан — подпись не выставляется. */

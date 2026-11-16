@@ -25,6 +25,7 @@ describe("daemon SSE auto-reconnect (W8)", () => {
     const stream = new RemoteEventStream({
       streamUrl: () => "http://daemon/v1/host/sessions/S1/stream",
       retryMs: 5,
+      locale: "ru",
       fetchImpl: impl,
     });
     const unsubscribe = stream.subscribe((ev) => events.push(ev.type));
@@ -32,6 +33,7 @@ describe("daemon SSE auto-reconnect (W8)", () => {
     await new Promise((r) => setTimeout(r, 40));
     expect(calls.length).toBeGreaterThanOrEqual(2);
     expect(calls[1]?.headers["Last-Event-ID"]).toBe("5");
+    expect(calls[1]?.headers["X-Mma-Locale"]).toBe("ru");
     expect(events.length).toBeGreaterThanOrEqual(2);
 
     unsubscribe();

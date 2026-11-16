@@ -52,7 +52,7 @@ export function cancelTaskRoute(res: ServerResponse, s: AgentServiceState, jobId
  * `agent.shutdown` (если ход бежит/ждёт ввод). Идемпотентна к позднему `settleTask`
  * (статус уже терминален — `startTask` это увидит и не перезапишет).
  */
-function cancelTask(s: AgentServiceState, task: TaskRecord): void {
+export function cancelTask(s: AgentServiceState, task: TaskRecord): void {
   s.tasks.finish(task.jobId, { status: "cancelled" });
   emitEvent(s, task, "task.cancelled", {});
   sendWebhook(s, task);

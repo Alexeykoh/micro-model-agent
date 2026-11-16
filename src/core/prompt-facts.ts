@@ -69,6 +69,20 @@ export interface ClientTz {
   utcOffset: string;
 }
 
+/**
+ * Валидирует часовой пояс клиента из недоверенного JSON (split W10): берём
+ * только известную форму, остальное — undefined, чтобы не портить промпт.
+ */
+export function parseClientTz(value: unknown): ClientTz | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const rec = value as Record<string, unknown>;
+  if (typeof rec.timeZone !== "string" || !rec.timeZone) return undefined;
+  if (typeof rec.utcOffset !== "string" || !/^[-+]\d{2}:\d{2}$/.test(rec.utcOffset)) {
+    return undefined;
+  }
+  return { timeZone: rec.timeZone, utcOffset: rec.utcOffset };
+}
+
 /** Вход сборки фактов: отчёт окружения уже собран фазой workspace. */
 export interface PromptFactsInput {
   config: AppConfig;

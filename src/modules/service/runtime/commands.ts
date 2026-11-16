@@ -1,31 +1,107 @@
 /**
- * Slash-команды через host wire (split W3b-3).
+ * Серверный реестр slash-команд (split W12).
  *
- * Это не весь каталог CLI: хендлеры команд живут в `src/cli/repl-commands*` и
- * требуют терминальный `CommandServices`/`CommandIO`. Здесь — серверное
- * подмножество, у которого есть однозначная семантика демона: состояние,
- * сессии, модель/конфиг, stop/pause/resume. Неизвестная команда — честная
- * ошибка, а не молчаливый no-op.
+ * Один каталог (`core/commands/spec.ts`) и одна карта хендлеров: её исполняют
+ * `mma serve`, thin-REPL и web-адаптер. Команды, которым нужен интерактивный
+ * терминал (wizard/meet/run/image/…), отвечают явной ошибкой, а не тишиной.
  */
-import { resolveConfigKey } from "../../../config/registry";
-import { applyConfigWrite } from "../../../runtime/config-write";
+import { t } from "../../../i18n/index";
+import { buildCommandCatalog } from "../../../core/commands/spec";
+import { isAvailable } from "../../../core/commands/catalog";
 import type { HostCommandResult } from "../../../core/host";
 import type { AgentServiceState } from "../state";
-import { interruptSession } from "../api/tasks-control";
-import { hostStateOf } from "./host-state";
+import {
+  configCommand,
+  contextCommand,
+  helpCommand,
+  modelCommand,
+  providerCommand,
+  reasoningCommand,
+  securityCommand,
+  statusCommand,
+  verboseCommand,
+} from "./commands-core";
+import {
+  deleteCommand,
+  exportCommand,
+  lspCommand,
+  mapCommand,
+  memoryCommand,
+  newCommand,
+  pluginsCommand,
+  reloadCommand,
+  renameCommand,
+  resumeCommand,
+  runCommand,
+  sessionsCommand,
+  skillCommand,
+  syspromptCommand,
+} from "./commands-data";
+import { diagnosticsCommand } from "./commands-diagnostics";
+import { fail, type CommandCtx, type CommandHandler } from "./commands-types";
 
-/** Что умеет wire-подмножество (показывается `/help`). */
-const SUPPORTED = [
-  "/help",
-  "/status",
-  "/sessions",
-  "/model [name]",
-  "/config get <key>",
-  "/config set <key> <value>",
-  "/stop",
-  "/pause",
-  "/resume",
-];
+/** Карта команд: ключ — каноническое имя (правило #17, без цепочки `if`). */
+const HANDLERS: Record<string, CommandHandler> = {
+  help: helpCommand,
+  status: statusCommand,
+  config: configCommand,
+  model: modelCommand,
+  provider: providerCommand,
+  context: contextCommand,
+  reasoning: reasoningCommand,
+  verbose: verboseCommand,
+  security: securityCommand,
+  export: exportCommand,
+  memory: memoryCommand,
+  sessions: sessionsCommand,
+  session: sessionsCommand,
+  new: newCommand,
+  resume: resumeCommand,
+  rename: renameCommand,
+  delete: deleteCommand,
+  sysprompt: syspromptCommand,
+  map: mapCommand,
+  lsp: lspCommand,
+  skill: skillCommand,
+  plugins: pluginsCommand,
+  reload: reloadCommand,
+  run: runCommand,
+  diagnostics: diagnosticsCommand,
+};
+
+/** Алиас → каноническое имя (берётся из каталога + web-имя `/sessions`). */
+function aliasMap(): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const spec of buildCommandCatalog()) {
+    map.set(spec.name, spec.name);
+    for (const alias of spec.aliases ?? []) map.set(alias.toLowerCase(), spec.name);
+    if (spec.webName) map.set(spec.webName, spec.name);
+  }
+  return map;
+}
+
+/** Публичный каталог для `/v1/host/commands` и `/help`. */
+export interface HostCommandInfo {
+  name: string;
+  description: string;
+  usage?: string;
+  available: boolean;
+  reason?: "terminal-only";
+}
+
+/** Все объявленные команды с признаком «исполнима на проводе». */
+export function hostCommandCatalog(): HostCommandInfo[] {
+  return buildCommandCatalog().map((spec) => {
+    const available = isAvailable(spec, "daemon") && !!HANDLERS[spec.name];
+    return {
+      name: spec.name,
+      description: spec.description,
+      ...(spec.usage ? { usage: spec.usage } : {}),
+      available,
+      ...(available ? {} : { reason: "terminal-only" as const }),
+    };
+  });
+}
 
 /** Исполняет slash-команду на рантайме демона. */
 export async function runHostCommand(
@@ -34,96 +110,21 @@ export async function runHostCommand(
   line: string,
 ): Promise<HostCommandResult> {
   const trimmed = line.trim();
-  if (!trimmed.startsWith("/")) {
-    return { ok: false, output: [], error: "command must start with /" };
+  if (!trimmed.startsWith("/")) return fail(t("daemon.command_requires_slash"));
+  const [rawName, ...args] = trimmed.slice(1).split(/\s+/);
+  const name = (rawName ?? "").toLowerCase();
+  if (!name) return fail(t("daemon.command_requires_slash"));
+  const canonical = aliasMap().get(name) ?? name;
+  const spec = buildCommandCatalog().find((item) => item.name === canonical);
+  if (!spec) return fail(t("daemon.command_unknown", { name }));
+  if (!isAvailable(spec, "daemon") || !HANDLERS[spec.name]) {
+    return fail(t("daemon.command_terminal_only", { name: canonical }));
   }
-  const tokens = trimmed.slice(1).split(/\s+/);
-  const name = tokens[0] ?? "";
-  const args = tokens.slice(1);
-
-  switch (name) {
-    case "help":
-      return { ok: true, output: ["Remote commands:", ...SUPPORTED] };
-    case "status": {
-      const state = hostStateOf(s, sessionId);
-      return {
-        ok: true,
-        output: [
-          `busy: ${state.busy}`,
-          `session: ${state.sessionId ?? "—"}`,
-          `model: ${state.model ?? "—"}`,
-          `provider: ${state.provider ?? "—"}`,
-        ],
-      };
-    }
-    case "sessions":
-      return {
-        ok: true,
-        output: (s.deps.sessionManager?.list() ?? []).map((m) => `${m.id}\t${m.name}`),
-      };
-    case "model":
-      if (!args[0]) return { ok: true, output: [`model: ${s.config.model}`] };
-      return writeKey(s, "model", args[0]);
-    case "config":
-      return configCommand(s, args);
-    case "stop":
-      return { ok: true, output: [`interrupted: ${interruptSession(s, sessionId)}`] };
-    case "pause":
-      return setPaused(s, sessionId, true);
-    case "resume":
-      return setPaused(s, sessionId, false);
-    default:
-      return {
-        ok: false,
-        output: [],
-        error: `command not supported over host wire: /${name}`,
-      };
+  const handler = HANDLERS[spec.name];
+  const ctx: CommandCtx = { s, sessionId };
+  try {
+    return await handler(ctx, args);
+  } catch (err) {
+    return fail(err instanceof Error ? err.message : String(err));
   }
-}
-
-async function configCommand(s: AgentServiceState, args: string[]): Promise<HostCommandResult> {
-  const [action, key, ...rest] = args;
-  if (action === "get" && key) {
-    const def = resolveConfigKey(key);
-    if (!def) return { ok: false, output: [], error: `unknown key: ${key}` };
-    return { ok: true, output: [`${def.key}=${format(def.get(s.config))}`] };
-  }
-  if (action === "set" && key && rest.length) {
-    return writeKey(s, key, rest.join(" "));
-  }
-  return {
-    ok: false,
-    output: [],
-    error: "usage: /config get <key> | /config set <key> <value>",
-  };
-}
-
-async function writeKey(
-  s: AgentServiceState,
-  key: string,
-  raw: string,
-): Promise<HostCommandResult> {
-  if (s.pool.anyBusy()) return { ok: false, output: [], error: "busy" };
-  const result = await applyConfigWrite(s.config, key, raw, {
-    saveConfig: s.deps.saveConfig,
-    reconfigure: s.deps.reconfigure,
-  });
-  if (!result.ok) return { ok: false, output: [], error: result.error ?? "invalid-value" };
-  if (key === "model" || key === "provider.active") void s.models.refresh();
-  return { ok: true, output: [`${key}=${result.display ?? raw}`] };
-}
-
-function setPaused(s: AgentServiceState, sessionId: string, paused: boolean): HostCommandResult {
-  const agent = s.pool.getRunner(sessionId)?.agent as
-    { pause?: () => void; resume?: () => void } | undefined;
-  if (!agent || typeof agent.pause !== "function" || typeof agent.resume !== "function") {
-    return { ok: false, output: [], error: "no active runner for session" };
-  }
-  if (paused) agent.pause();
-  else agent.resume();
-  return { ok: true, output: [paused ? "paused" : "resumed"] };
-}
-
-function format(value: unknown): string {
-  return typeof value === "string" ? value : JSON.stringify(value);
 }

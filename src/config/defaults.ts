@@ -274,6 +274,7 @@ export const DEFAULTS: AppConfig = {
     idempotencyTtlHours: 24,
     syncWaitMs: 10_000,
     maxQueueLength: 5,
+    detachedTurnGraceMs: 0,
     callbackTimeoutMs: 10_000,
     webhookSecret: undefined,
     webhookAllowHttp: false,

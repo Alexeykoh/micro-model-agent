@@ -98,7 +98,7 @@ export async function runTask(opts: RunTaskOptions): Promise<RunTaskResult> {
     runner.agent.run(
       text,
       (chunk) => forwarder.onText(chunk),
-      () => {},
+      (meta, kind, info) => forwarder.onMeta(meta, kind, info),
       (ev: ToolEvent) => {
         if (ev.type === "start") {
           forwarder.onToolStart(callFor(ev, startId(ev.tool)));

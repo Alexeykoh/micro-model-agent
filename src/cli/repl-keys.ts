@@ -73,22 +73,20 @@ export function reprintLastAction(host: ReplKeysHost): void {
 /** Вставка картинки из буфера обмена (Ctrl+V). */
 export async function pasteClipboardImage(host: ReplKeysHost): Promise<void> {
   try {
-    const { readClipboardImage, bufferToDataUrl } = await import("../llm/image-utils");
-    const clipBuf = await readClipboardImage();
-    if (clipBuf) {
-      const { dataUrl } = await bufferToDataUrl(clipBuf);
+    const { readClipboardDataUrl, dataUrlSizeKb } = await import("./clipboard-image");
+    const dataUrl = await readClipboardDataUrl();
+    if (dataUrl) {
       host.pendingClipboardImage = dataUrl;
-      const sizeKb = Math.round((dataUrl.length * 3) / 4 / 1024);
       host.output.writeLine(
-        pc.green(`\n${t("image.attached", { source: "clipboard", size: `${sizeKb} KB` })}`),
+        pc.green(
+          `\n${t("image.attached", { source: "clipboard", size: `${dataUrlSizeKb(dataUrl)} KB` })}`,
+        ),
       );
-      if (host.rl instanceof LineEditor) host.rl.reset();
-      host.rl.prompt();
     } else {
       host.output.writeLine(pc.yellow(`\n${t("image.clipboard_empty")}`));
-      if (host.rl instanceof LineEditor) host.rl.reset();
-      host.rl.prompt();
     }
+    if (host.rl instanceof LineEditor) host.rl.reset();
+    host.rl.prompt();
   } catch {
     // Чтение буфера не удалось — игнорим, пусть терминал вставит текст штатно.
   }

@@ -11,7 +11,7 @@ import { errMsg } from "../../utils/error";
 export { checkAuth, sameOrigin, SECURITY_HEADERS, setAuthCookie } from "./auth";
 export type { AuthState } from "./auth";
 import { redactContextSecrets } from "../../core/api";
-import type { ClientTz } from "../../core/prompt-facts";
+import { parseClientTz, type ClientTz } from "../../core/prompt-facts";
 import { MAX_BODY_BYTES, bodyCapFor } from "./limits";
 import { readEnv } from "../../config/env";
 import { BodyTooLargeError, readBody as readBodyRaw } from "../../runtime/http-body";
@@ -61,15 +61,6 @@ function requestPath(req: IncomingMessage): string {
 export type ParsedMessageBody =
   | { text: string; images: string[]; clientTz?: ClientTz }
   | { error: string };
-
-/** Строгая проверка пояса: объект + непустая зона + `±HH:MM` (B18). */
-function parseClientTz(value: unknown): ClientTz | undefined {
-  if (typeof value !== "object" || value === null) return undefined;
-  const rec = value as Record<string, unknown>;
-  if (typeof rec.timeZone !== "string" || !rec.timeZone) return undefined;
-  if (typeof rec.utcOffset !== "string" || !/^[-+]\d{2}:\d{2}$/.test(rec.utcOffset)) return undefined;
-  return { timeZone: rec.timeZone, utcOffset: rec.utcOffset };
-}
 
 /** Достаёт `{ text, images }` из распарсенного тела; битый JSON и пусто — разные ошибки. */
 export function parseMessageBody(raw: string): ParsedMessageBody {

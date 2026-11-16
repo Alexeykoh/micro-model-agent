@@ -7,141 +7,10 @@
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { MAX_BODY_BYTES, readJsonBody } from "../../runtime/http-body";
-import { broadcast, type WebUiState } from "./state";
+import type { WebUiState } from "./state";
 import { sendJson } from "./util";
-import { webCommandList } from "./chat/commands";
 import type { WebDaemonHost } from "./daemon-contracts";
-
-interface Ctx {
-  req: IncomingMessage;
-  res: ServerResponse;
-  reqUrl: URL;
-  s: WebUiState & { daemon?: WebDaemonHost };
-  host: WebDaemonHost;
-}
-
-type Handler = (ctx: Ctx) => Promise<void> | void;
-
-/** Точные маршруты `METHOD /api/...`. */
-const ROUTES: Record<string, Handler> = {
-  "GET /api/state": async ({ res, host }) => {
-    const state = await host.getState();
-    sendJson(res, 200, {
-      busy: state.busy,
-      runningSessionIds: state.busy && state.sessionId ? [state.sessionId] : [],
-      queueLen: 0,
-      state,
-    });
-  },
-  "GET /api/config": async ({ res, host }) => {
-    sendJson(res, 200, await host.getConfig());
-  },
-  "POST /api/config": async ({ req, res, host }) => {
-    const body = await readJsonBody(req, MAX_BODY_BYTES);
-    if (!body) return sendJson(res, 400, { ok: false, error: "invalid JSON" });
-    const result = await host.setConfig(String(body.key ?? ""), body.value);
-    sendJson(res, result.ok ? 200 : 400, result);
-  },
-  "GET /api/models": async ({ res, reqUrl, host }) => {
-    const provider = reqUrl.searchParams.get("provider") ?? undefined;
-    sendJson(res, 200, await host.listModels(provider));
-  },
-  "POST /api/update": async ({ res, host }) => {
-    sendJson(res, 200, await host.installUpdate());
-  },
-  "GET /api/plugins": async ({ res, host }) => {
-    sendJson(res, 200, await host.plugins());
-  },
-  "GET /api/setup": async ({ res, host }) => {
-    sendJson(res, 200, await host.setup());
-  },
-  "POST /api/index": async ({ res, host }) => {
-    sendJson(res, 202, await host.reindex());
-  },
-  "GET /api/lsp": async ({ res, host }) => {
-    sendJson(res, 200, await host.lspFlags());
-  },
-  "GET /api/lsp/doctor": async ({ res, host }) => {
-    sendJson(res, 200, await host.lspDoctor());
-  },
-  "GET /api/memory": async ({ res, host }) => {
-    sendJson(res, 200, await host.memory());
-  },
-  "GET /api/skills": async ({ res, host }) => {
-    sendJson(res, 200, await host.skills());
-  },
-  "GET /api/git": async ({ res, host }) => {
-    sendJson(res, 200, await host.gitSnapshot());
-  },
-  "GET /api/git/changes": async ({ res, host }) => {
-    sendJson(res, 200, await host.gitChanges());
-  },
-  "GET /api/git/diff": async ({ res, reqUrl, host }) => {
-    const path = reqUrl.searchParams.get("path") ?? "";
-    sendJson(res, 200, await host.gitDiff(path, reqUrl.searchParams.get("staged") === "1"));
-  },
-  "GET /api/files": async ({ res, reqUrl, host }) => {
-    sendJson(res, 200, await host.listFiles(reqUrl.searchParams.get("path") ?? ""));
-  },
-  "GET /api/commands": ({ res }) => {
-    sendJson(res, 200, { commands: webCommandList() });
-  },
-  "GET /api/sessions": async ({ res, host }) => {
-    sendJson(res, 200, { sessions: await host.listSessions() });
-  },
-  "POST /api/sessions": async ({ req, res, host }) => {
-    const body = await readJsonBody(req, MAX_BODY_BYTES);
-    const name = typeof body?.name === "string" && body.name.trim() ? body.name.trim() : undefined;
-    const meta = await host.createSession(name);
-    sendJson(res, 201, meta);
-  },
-  "POST /api/message": async ({ req, res, host }) => {
-    const body = await readJsonBody(req, MAX_BODY_BYTES);
-    if (!body) return sendJson(res, 400, { error: "invalid JSON" });
-    const text = typeof body.text === "string" ? body.text : "";
-    if (!text.trim()) return sendJson(res, 400, { error: "empty" });
-    if (typeof body.sessionId === "string" && body.sessionId) host.setSessionId(body.sessionId);
-    const images = Array.isArray(body.images)
-      ? body.images.filter((x): x is string => typeof x === "string")
-      : [];
-    await host.submit(text, images.length ? { images } : undefined);
-    sendJson(res, 202, { ok: true, queued: 0 });
-  },
-  "POST /api/answer": async ({ req, res, host }) => {
-    const body = await readJsonBody(req, MAX_BODY_BYTES);
-    if (!body) return sendJson(res, 400, { error: "invalid JSON" });
-    await host.answer(String(body.id ?? ""), body.answer);
-    sendJson(res, 202, { ok: true });
-  },
-  "POST /api/interrupt": ({ res, host }) => {
-    host.interrupt();
-    sendJson(res, 202, { ok: true });
-  },
-  "POST /api/pause": async ({ res, host }) => {
-    await host.pause();
-    sendJson(res, 202, { ok: true });
-  },
-  "POST /api/resume": async ({ res, host }) => {
-    await host.resume();
-    sendJson(res, 202, { ok: true });
-  },
-  "POST /api/command": async ({ req, res, s, host }) => {
-    const body = await readJsonBody(req, MAX_BODY_BYTES);
-    if (!body) return sendJson(res, 400, { error: "invalid JSON" });
-    const result = await host.executeCommand(String(body.line ?? ""));
-    broadcast(
-      {
-        type: "command",
-        ts: Date.now(),
-        lines: result.output,
-        ok: result.ok,
-        ...(result.error ? { error: result.error } : {}),
-      },
-      s,
-    );
-    sendJson(res, 200, result);
-  },
-};
+import { ROUTES, pluginRoute, type Ctx } from "./daemon-api-routes";
 
 /** `METHOD /api/sessions/:id[/history|/log]`. */
 async function sessionRoute(ctx: Ctx): Promise<boolean> {
@@ -154,7 +23,43 @@ async function sessionRoute(ctx: Ctx): Promise<boolean> {
     ctx.res.end();
     return true;
   }
+  if (parts.length === 6 && parts[3] === "subagents" && parts[5] === "interrupt") {
+    if (ctx.req.method !== "POST") return false;
+    sendJson(ctx.res, 200, await ctx.host.interruptSubagent(id, decodeURIComponent(parts[4])));
+    return true;
+  }
   if (ctx.req.method !== "GET") return false;
+  if (parts.length === 5 && parts[3] === "images") {
+    const img = await ctx.host.readImage(id, decodeURIComponent(parts[4]));
+    if (!img) {
+      sendJson(ctx.res, 404, { error: "not_found" });
+      return true;
+    }
+    ctx.res.writeHead(200, {
+      "Content-Type": img.mime,
+      "Cache-Control": "private, max-age=31536000, immutable",
+    });
+    ctx.res.end(img.bytes);
+    return true;
+  }
+  if (parts.length === 4 && parts[3] === "system-prompt") {
+    sendJson(ctx.res, 200, await ctx.host.sessionPrompt(id));
+    return true;
+  }
+  if (parts.length === 4 && parts[3] === "security") {
+    const raw = ctx.reqUrl.searchParams.get("limit");
+    const limit = raw && Number.isFinite(Number(raw)) ? Number(raw) : undefined;
+    sendJson(ctx.res, 200, await ctx.host.sessionSecurity(id, limit));
+    return true;
+  }
+  if (parts.length === 4 && parts[3] === "subagents") {
+    sendJson(
+      ctx.res,
+      200,
+      await ctx.host.subagentRuns(id, ctx.reqUrl.searchParams.get("toolCallId") ?? undefined),
+    );
+    return true;
+  }
   if (parts.length === 4 && parts[3] === "history") {
     sendJson(ctx.res, 200, { messages: await ctx.host.getHistory(id) });
     return true;
@@ -194,6 +99,59 @@ export async function handleDaemonApi(
       return;
     }
     if (await sessionRoute(ctx)) return;
+    if (reqUrl.pathname.startsWith("/api/providers/") && req.method === "DELETE") {
+      const name = decodeURIComponent(reqUrl.pathname.slice("/api/providers/".length));
+      const result = await host.deleteProvider(name);
+      sendJson(res, result.status, (result.body ?? {}) as Record<string, unknown>);
+      return;
+    }
+    if (reqUrl.pathname.startsWith("/api/mcp/")) {
+      const id = decodeURIComponent(reqUrl.pathname.slice("/api/mcp/".length));
+      const result =
+        req.method === "POST"
+          ? await host.mcpToggle(id, Boolean((await readJsonBody(req, MAX_BODY_BYTES))?.enabled))
+          : req.method === "PUT"
+            ? await host.mcpUpdate(
+                id,
+                (await readJsonBody(req, MAX_BODY_BYTES)) ?? {},
+              )
+            : req.method === "DELETE"
+              ? await host.mcpDelete(id)
+              : undefined;
+      if (!result) {
+        sendJson(res, 405, { error: "method_not_allowed" });
+        return;
+      }
+      sendJson(res, result.status, (result.body ?? {}) as Record<string, unknown>);
+      return;
+    }
+    if (reqUrl.pathname.startsWith("/api/memory/") && req.method === "DELETE") {
+      const [category, n] = reqUrl.pathname
+        .slice("/api/memory/".length)
+        .split("/")
+        .map((part) => decodeURIComponent(part));
+      const result = await host.memoryDelete(category ?? "", Number(n));
+      sendJson(res, result.status, (result.body ?? {}) as Record<string, unknown>);
+      return;
+    }
+    if (reqUrl.pathname.startsWith("/api/plugins/")) {
+      const rest = reqUrl.pathname.slice("/api/plugins/".length);
+      const result = await pluginRoute(req, host, rest);
+      if (!result) {
+        sendJson(res, 405, { error: "method_not_allowed" });
+        return;
+      }
+      sendJson(res, result.status, (result.body ?? {}) as Record<string, unknown>);
+      return;
+    }
+    if (reqUrl.pathname.startsWith("/api/lsp/") && req.method === "PUT") {
+      const lang = decodeURIComponent(reqUrl.pathname.slice("/api/lsp/".length));
+      const body = (await readJsonBody(req, MAX_BODY_BYTES)) ?? {};
+      const result = await host.lspUpdate(lang, body);
+      sendJson(res, result.status, (result.body ?? {}) as Record<string, unknown>);
+      return;
+    }
+    // Неизвестный путь: честный 501, а не пустой успех.
     sendJson(res, 501, { error: "not supported in daemon mode", path: reqUrl.pathname });
   } catch (err) {
     sendJson(res, 502, {

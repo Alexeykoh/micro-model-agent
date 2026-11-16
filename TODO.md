@@ -108,9 +108,9 @@
 > `OutputEvent` нельзя строить Enterprise поверх монолита — любой
 > «enterprise-флаг» в монолите локально пропатчится.
 
-- [x] **Разделение монолита UI / runtime (волны -1…W7).**
+- [x] **Разделение монолита UI / runtime (волны -1…W12).**
       Спека: [`2026-11-10-monolith-split-design`](./docs/specs/2026-11-10-monolith-split-design.md).
-      Статус на 2026-11-13; рабочая линия — `v0_26_0`.
+      Статус на 2026-11-16; рабочая линия — `v0_26_0`.
       - [x] **Волна -1** — wire-протокол (`feat/daemon-wire`): `mma serve`, `/v1`+SSE,
             версия протокола, токен `~/.mma/daemon.token`, `DaemonClient`.
       - [x] **W0** — общий runtime-слой (`refactor/runtime-layer-split`):
@@ -146,9 +146,33 @@
       - [x] **W7** — уборка (`docs/w7-cleanup`): доки, снятые заглушки,
             реестр долгов, синк `docs/README`.
 
-      **Паритет после волн** — `DEBT(daemon-parity-gaps)`: полный каталог
-      команд и рендер thin-REPL (plan/usage сделаны; critic/subagent — нет),
-      вставка картинок, локаль `X-Mma-Locale`/i18n, e2e «демон + thin-REPL/web».
+      **Паритет после волн** — закрыт полностью: рендер critic/subagent,
+      картинки, локаль, файлы, поиск, очередь, журнал защиты, субагенты, все
+      панели настроек и каталог команд (W9–W12). Открытых долгов разделения нет.
+
+      - [x] **W8** — паритет тонких клиентов (`feat/daemon-parity`):
+            SSE-реконнект `Last-Event-ID`, рендер plan/usage в thin-REPL.
+      - [x] **W9** — мета-канал и локаль (`feat/daemon-parity-gaps`):
+            `meta`/`retract`/`critic` по wire, Ctrl+V-картинки в thin-REPL,
+            `X-Mma-Locale` + ALS, `tests/host-parity.test.ts`,
+            `tests/daemon-integration.test.ts`.
+      - [x] **W10** — один путь хода и web-поверхность (та же ветка):
+            `POST /api/message` → `Host.submit` (INV-S2); SSE `log`/`subagent`,
+            картинки тулов, `/v1/host/{file,search}`, `system-prompt`,
+            `security`, `subagents`, `queue`, `/images`.
+      - [x] **W11** — панели настроек (та же ветка): провайдеры, MCP, память,
+            плагины (тумблер/settings/reload), LSP (таблица/правка/check/doctor
+            + SSE `lsp`), визард setup (apply/probes/scan/locale) через
+            `/v1/host/*`; e2e `tests/e2e-separation.test.ts`.
+      - [x] **W12** — каталог команд (та же ветка): серверный реестр исполняет
+            `core/commands/spec.ts` через host wire; интерактивные команды
+            отвечают `terminal-only`; `/v1/host/commands` кормит thin-REPL
+            `/help` и web `/api/commands`.
+      - [x] **W13** — полировка границ: `service.detachedTurnGraceMs` +
+            события `task.detached/attached/detached_timeout`; `surfaces:
+            ["daemon"]` вместо списка `TERMINAL_ONLY`; `/run` на демоне,
+            `/diagnostics` daemon-only; i18n-аудит с гвардом; решение по
+            терминальным командам в §9.1 спеки.
 
       **Релиз:** `CHANGELOG`/версия `0.26.0` не трогали; `v0_26_0` не влит в `dev`.
       Обычный `mma web` остаётся in-process; `--daemon-url` — адаптер к демону.

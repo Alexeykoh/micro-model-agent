@@ -133,6 +133,16 @@ export const SERVICE_DEFS: ConfigKeyDef[] = [
     },
   ),
   int(
+    "service.detachedTurnGraceMs",
+    0,
+    3_600_000,
+    0,
+    (c) => c.service.detachedTurnGraceMs ?? 0,
+    (c, v) => {
+      c.service.detachedTurnGraceMs = v as number;
+    },
+  ),
+  int(
     "service.callbackTimeoutMs",
     1000,
     120_000,

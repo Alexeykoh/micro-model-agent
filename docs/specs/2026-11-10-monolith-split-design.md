@@ -112,6 +112,10 @@ enforcement, сессии на диске, удалённый доступ. По
 `egress`, `http-body`, `scrub`, `tool-output`, `net`): `service` и `core`
 больше не импортируют `modules/webui` (гейт `tests/arch/runtime-layer.test.ts`).
 
+С 2026-11-14 (split W9) мета-канал (`meta`/`retract`/`critic`), картинки из
+клипборда и `X-Mma-Locale` доезжают до тонких клиентов; `Host`-паритет и
+сквозная интеграция «демон + два клиента» покрыты тестами.
+
 Уже готово для wire: `SessionRunner` (`src/core/bootstrap/session-runner.ts`),
 `HostStateSnapshot`/`buildHostState` (`src/core/host-state.ts`), `OutputEvent`
 (`src/output/types.ts`), `PromptIO` (`src/tools/prompt-io.ts`), командный
@@ -289,8 +293,7 @@ major и отвергает несовместимый (fail-fast, сущест�
 
 ## 9. Локальный режим
 
-- Конфиг `host.mode: local | daemon` (дефолт `local`) либо флаг `--daemon`.
-- `LocalHost` — существующее поведение: агент in-process, без сети.
+- Конфиг `host.mode: local | daemon` (дефолт `local`) либо флаг `--daemon`.- `LocalHost` — существующее поведение: агент in-process, без сети.
 - Демон стартует явно (`mma serve`). Автозапуск демона из `mma --daemon`
   не делаем: фоновый процесс должен быть явным (правило 8 AGENTS.md).
   Если демон недоступен — внятная ошибка с подсказкой `mma serve`.
@@ -299,6 +302,24 @@ major и отвергает несовместимый (fail-fast, сущест�
 - Режим можно запретить политикой: `host.allowLocal: false` (дефолт `true`)
   не поднимает `LocalHost` — клиент получает внятную ошибку «локальный
   режим запрещён политикой».
+
+### 9.1. Поверхности команд
+
+Каталог (`src/core/commands/spec.ts`) объявляет `surfaces`: `terminal`, `tui`,
+`web`, `daemon`. `daemon` не добавляется по умолчанию — команда должна явно
+разрешить headless-исполнение. Демон исполняет объявленные команды через
+`/v1/host/sessions/:id/command`; остальные получают `terminal-only`.
+
+- **Терминальными остаются:** `/wizard`, `/meet`, `/doctor`, `/image`,
+  `/exit`, `/clear` — им нужен интерактивный ввод (`CommandInput`), клипборд или
+  окружение локальной установки. `/doctor` диагностирует CLI-процесс;
+  daemon-only `/diagnostics` — состояние runtime (модули, очередь, сессии).
+- **`/run` исполняется демоном** как обычный ход (тот же `dispatchInteractive`).
+- **`/image`** в thin-клиенте заменяется Ctrl+V: клиент читает клипборд и шлёт
+  data-URL в `submit`; серверный `/image path` не вводится, чтобы не держать
+  два способа вставки.
+- Web-адаптер получает каталог из `GET /v1/host/commands` и показывает
+  `terminal-only` пометкой, а не пустотой.
 
 ## 10. Web-адаптер
 
@@ -371,11 +392,16 @@ Host-контракт для этого не нужен.
 | W1 | Контракт `Host`: `LocalHost`, async `getState`, транспорт-нейтральная подписка `subscribeEvents`. REPL переходит на `Host` (local by default). `RemoteHost` — вместе с W2: нужен wire `/v1/host/*`. **Закрыт 2026-11-13** (`feat/host-local`, `src/core/local-host.ts`, `tests/core/local-host.test.ts`). |
 | W2 | Интерактивный wire `/v1/host/*`: state, submit, stream, interrupt, pause/resume, answer. **Закрыт 2026-11-13** (`feat/host-wire`): `src/modules/service/api/host-api.ts`, `RemoteHost` (`src/modules/daemon/remote-host.ts`). `command`/history/config/sessions — с W3 (нужны CommandServices/сессии на клиенте). |
 | W3 | REPL thin-клиент: полный `RemoteHost`, терминальный рендер на клиенте, slash-команды по wire, изображения, локаль. **W3a закрыт 2026-11-13** (`feat/host-read`): сессии/history/log по wire + методы `Host`/`RemoteHost`. **W3b-1 закрыт 2026-11-13** (`feat/host-config`): `GET /v1/host/config` и `/v1/host/models`, кеш моделей в `src/runtime/model-cache.ts`, реестр конфига в `src/runtime/config-view.ts`. **W3b-2 закрыт 2026-11-13** (`feat/host-config-write`): `POST /v1/host/config` через общий `applyConfigWrite` (`src/runtime/config-write.ts`). **W3b-3 закрыт 2026-11-13** (`feat/host-command`): `POST /v1/host/sessions/:id/command` с серверным подмножеством (`help/status/sessions/model/config/stop/pause/resume`); `Host.executeCommand` возвращает `{ok, output[]}`. **W3b-4 (thin-REPL MVP) закрыт 2026-11-13** (`feat/daemon-repl`): `mma --daemon <url>` (`src/cli/daemon-repl.ts`) — клиент без `Agent`/`SessionManager`, рендер `text.delta`/`reasoning.delta`/`tool.start|end` через `Renderer`, вопросы `question` → `answer`, локальные `/help|/clear|/exit`, остальные команды по wire. Живой прогон против демона: connect → `/status` → `/config get model` → `/exit`, exit 0. **W3b-5 закрыт 2026-11-13** (`feat/host-images`): `images` в `POST /v1/host/sessions/:id/submit` (data-URL, ≤10, ≤70 МБ), `TaskRecord.images` → `contextManager.addPendingImage`, `RemoteHost.submit` передаёт картинки. Остаток W3: паритет рендера и полного каталога команд. |
-| W4 | Web-адаптер: проксирование `/api/*` в `/v1/host/*` в режиме daemon. **W4a закрыт 2026-11-13** (`feat/web-daemon`): `mma web --daemon-url <url>` (`webui/daemon-api.ts`, `webui/daemon-module.ts`), host-покрытые маршруты (state/message/answer/interrupt/pause/resume/command/sessions/history/log/config/models), SSE-маппинг событий. **W4b-1 закрыт 2026-11-13** (`feat/web-files`): `GET /v1/host/files` + прокси `/api/files`, общий джейл/игноры в `src/runtime/workspace-fs.ts`. **W4b-2a закрыт 2026-11-13** (`feat/web-git`): read-only git (`/v1/host/git`, `/git/changes`, `/git/diff`) + прокси; SSE-поток `RemoteHost` вынесен в `remote-host-events.ts`. **W4b-2b закрыт 2026-11-13** (`feat/web-memory`): `/v1/host/memory` и `/v1/host/skills` + прокси, общий `src/runtime/memory-view.ts`; модули памяти/скиллов проброшены в `mma serve`. **W4b-2c закрыт 2026-11-13** (`feat/web-misc`): `/v1/host/setup`, `/index`, `/lsp`, `/lsp/doctor` + прокси; модули индексора/LSP проброшены в `mma serve`. **W4b-3 закрыт 2026-11-13** (`feat/web-plugins`): `/v1/host/plugins` (+ MCP view в runtime) и прокси. **W4b-4 закрыт 2026-11-13** (`feat/web-update`): `/v1/host/update` + прокси, апдейтер живёт в `mma serve`, SSE-событие `update`. Остались W5…W7. |
+| W4 | Web-адаптер: проксирование `/api/*` в `/v1/host/*` в режиме daemon. **W4a закрыт 2026-11-13** (`feat/web-daemon`): `mma web --daemon-url <url>` (`webui/daemon-api.ts`, `webui/daemon-module.ts`), host-покрытые маршруты (state/message/answer/interrupt/pause/resume/command/sessions/history/log/config/models), SSE-маппинг событий. **W4b-1 закрыт 2026-11-13** (`feat/web-files`): `GET /v1/host/files` + прокси `/api/files`, общий джейл/игноры в `src/runtime/workspace-fs.ts`. **W4b-2a закрыт 2026-11-13** (`feat/web-git`): read-only git (`/v1/host/git`, `/git/changes`, `/git/diff`) + прокси; SSE-поток `RemoteHost` вынесен в `remote-host-events.ts`. **W4b-2b закрыт 2026-11-13** (`feat/web-memory`): `/v1/host/memory` и `/v1/host/skills` + прокси, общий `src/runtime/memory-view.ts`; модули памяти/скиллов проброшены в `mma serve`. **W4b-2c закрыт 2026-11-13** (`feat/web-misc`): `/v1/host/setup`, `/index`, `/lsp`, `/lsp/doctor` + прокси; модули индексора/LSP проброшены в `mma serve`. **W4b-3 закрыт 2026-11-13** (`feat/web-plugins`): `/v1/host/plugins` (+ MCP view в runtime) и прокси. **W4b-4 закрыт 2026-11-13** (`feat/web-update`): `/v1/host/update` + прокси, апдейтер живёт в `mma serve`, SSE-событие `update`. |
 | W5 | One-shot `--daemon` через job API. **Закрыт 2026-11-13** (`feat/daemon-oneshot`): `mma "prompt" --daemon <url>` → `POST /v1/sessions/:id/tasks` + poll `/v1/tasks/:jobId` (`modules/daemon/remote-tasks.ts`), общий `resolveDaemonSession`. |
 | W6 | TLS и удалённая закалка: in-app TLS, требования к нелупбэк-биндцу, ротация токена, фикс `deploy/Dockerfile.service`. **Закрыт 2026-11-13** (`feat/daemon-tls`): `service.tls.cert|key`, `terminatedByProxy`/`MMA_SERVICE_TLS_PROXY`, `--rotate-token`, `MMA_CONFIG_DIR=/data/mma` в образе. |
-| W7 | Документация, реестр долгов, удаление устаревших заглушек. **Закрыт 2026-11-13** (`docs/w7-cleanup`): docs/architecture и README синхронизированы, mcp-обёртка удалена, паритет зафиксирован в долге `DEBT(daemon-parity-gaps)`. |
-| W8 | Паритет тонких клиентов: авто-реконнект SSE и рендер plan/usage в thin-REPL. **Закрыт 2026-11-14** (`feat/daemon-parity`): `RemoteEventStream` переподключается с `Last-Event-ID`, `daemon-repl-render.ts` печатает шаги плана и usage. Остаток паритета — `DEBT(daemon-parity-gaps)`. |
+| W7 | Документация, реестр долгов, удаление устаревших заглушек. **Закрыт 2026-11-13** (`docs/w7-cleanup`): docs/architecture и README синхронизированы, mcp-обёртка удалена, паритет зафиксирован в реестре долгов. |
+| W8 | Паритет тонких клиентов: авто-реконнект SSE и рендер plan/usage в thin-REPL. **Закрыт 2026-11-14** (`feat/daemon-parity`): `RemoteEventStream` переподключается с `Last-Event-ID`, `daemon-repl-render.ts` печатает шаги плана и usage. Остаток паритета — реестр долгов. |
+| W9 | Паритет мета-канала, картинок и локали. **Закрыт 2026-11-14** (`feat/daemon-parity-gaps`): `onMeta` → SSE `meta`/`retract`/`critic` (event-bridge, `daemon-events`, thin-REPL), Ctrl+V читает клипборд и шлёт data-URL в submit, `X-Mma-Locale` на каждом запросе + `runWithLocale` (ALS) на сервере, общий набор тестов `Host` — `tests/host-parity.test.ts`, сквозная интеграция на двух клиентах/вопросе/переподключении/FIFO — `tests/daemon-integration.test.ts`. Остаток — каталог команд (закрыт в W12). |
+| W10 | Один путь хода и полнота web-поверхности. **W10a закрыт 2026-11-14**: `POST /api/message` → `Host.submit` → общий `submitTurnFromHost` (INV-S2), `HostBridgeSubmitOptions` несёт `sessionId`/`clientTz`. **W10b закрыт**: SSE `log` (мост `OutputBus`), `subagent` (живой стор вынесен в `src/runtime/subagent-runs.ts`), картинки тулов (`tool.end` + `/v1/host/sessions/:id/images/:name`). **W10c закрыт**: `/v1/host/sessions/:id/{system-prompt,security,subagents}`, `/v1/host/search`, `/v1/host/file`, `/v1/host/sessions/:id/queue[/cancel|edit|start]` + прокси адаптера; общие выборки вынесены в `src/runtime/{security-view,file-search,file-view}.ts`. |
+| W11 | Паритет панелей настроек. **Закрыт 2026-11-14**: `/v1/host/providers`, `/mcp`, `memory` (CRUD), `plugins` (тумблер/settings/reload), `lsp` (таблица/правка/check/check-changed/doctor с SSE `lsp`), `setup` (apply/probes/scan/locale) + прокси адаптера; event-словарь дополнен `lsp`, `setup_done`. Чистые операции — в runtime (`providers-*`, `mcp-write`, `lsp-settings`, `setup-input`, `setup-policy`, `persist-config`). Гварды: `tests/service/host-settings-wire.test.ts`, `tests/webui-daemon-adapter.test.ts`, e2e `tests/e2e-separation.test.ts`. |
+| W12 | Каталог команд на проводе. **Закрыт 2026-11-16**: серверный реестр (`modules/service/runtime/commands*.ts`) исполняет `core/commands/spec.ts` через `/v1/host/sessions/:id/command` — help/status/config/model/provider/context/reasoning/verbose/security, сессии/export/memory/sysprompt/map/lsp/skill/plugins/reload; интерактивные (`wizard/meet/run/image/doctor/exit/clear`) отвечают явной ошибкой `terminal-only`. `/v1/host/commands` отдаёт каталог с доступностью; thin-REPL `/help` и web `/api/commands` читают его у демона. Гвард: `tests/service/host-command-catalog.test.ts`. |
+| W13 | Полировка границ. **Закрыт 2026-11-16**: `service.detachedTurnGraceMs` (дефолт 0) — окно переподключения отвязанного interactive-хода с событиями `task.detached/attached/detached_timeout` (thin-REPL на выходе кооперативно останавливает ход); `surfaces: ["daemon"]` в каталоге вместо списка `TERMINAL_ONLY`; `/run` исполняется демоном, daemon-only `/diagnostics` (не `/doctor`); i18n-аудит: гвард `tests/arch/i18n-module-level.test.ts` + [i18n-locale.md](../agents/i18n-locale.md); решение по терминальным командам — §9.1. Гварды: `tests/service/detached-turn.test.ts`, `tests/service/host-command-catalog.test.ts`. |
 
 ## 16. Тестирование и гейты
 

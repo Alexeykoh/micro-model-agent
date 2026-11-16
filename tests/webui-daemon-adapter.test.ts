@@ -22,7 +22,11 @@ function fakeDaemon() {
       sessionId = id;
     },
     dispose: () => {},
-    getState: async (): Promise<HostStateSnapshot> => ({ busy: false, sessionId, model: "m" }),
+    getState: async (): Promise<HostStateSnapshot> => ({
+      busy: false,
+      sessionId,
+      queuedIds: ["q1"],
+    }),
     subscribeEvents: () => () => {},
     listSessions: async () => [{ id: sessionId, name: "s" } as never],
     createSession: async (name?: string) => ({ id: "S2", name: name ?? "" }) as never,
@@ -46,6 +50,63 @@ function fakeDaemon() {
     plugins: async () => ({ plugins: [], failures: [], mcp: [] }),
     installUpdate: async () => ({ ok: true, installed: "0.26.0" }),
     skills: async () => ({ skills: [] }),
+    readImage: async (sessionId: string, name: string) =>
+      name === "shot.png" ? { bytes: new Uint8Array([1, 2, 3]), mime: "image/png" } : null,
+    sessionPrompt: async () => ({ available: true, text: "system" }),
+    sessionSecurity: async () => ({ events: [{ action: "block" }], cap: 200 }),
+    subagentRuns: async (_id: string, toolCallId?: string) => ({
+      runs: [{ runId: "run-1", parentToolCallId: toolCallId ?? "t1" }],
+    }),
+    interruptSubagent: async () => ({ ok: true }),
+    search: async (q: string, namesOnly: boolean) => ({
+      results: [{ kind: "path", path: q }],
+      truncated: false,
+      ms: 1,
+      scanned: 1,
+      namesOnly,
+    }),
+    fileView: async (path: string, download: boolean) => ({
+      status: path === "exists.ts" ? 200 : 404,
+      mime: "text/plain; charset=utf-8",
+      bytes: new Uint8Array(Buffer.from(download ? "download" : "file")),
+    }),
+    queue: async () => ({ queued: 1, ids: ["q1"] }),
+    queueAction: async (_sessionId: string, action: string, id: string) => ({
+      status: id === "q1" ? 200 : 404,
+      body: { ok: true, action },
+    }),
+    providers: async () => ({ providers: [{ name: "p" }], active: "p" }),
+    saveProvider: async () => ({ status: 200, body: { ok: true, name: "p" } }),
+    deleteProvider: async () => ({ status: 200, body: { ok: true } }),
+    mcpList: async () => ({ mcp: [{ id: "m" }] }),
+    mcpCreate: async () => ({ status: 200, body: { ok: true, mcp: [] } }),
+    mcpToggle: async () => ({ status: 200, body: { ok: true } }),
+    mcpUpdate: async () => ({ status: 200, body: { ok: true } }),
+    mcpDelete: async () => ({ status: 200, body: { ok: true } }),
+    memoryAdd: async () => ({ status: 200, body: { ok: true } }),
+    memoryDelete: async () => ({ status: 200, body: { ok: true } }),
+    pluginToggle: async () => ({ status: 200, body: { ok: true, plugins: [] } }),
+    pluginSettingsGet: async () => ({ status: 200, body: { ok: true, fields: [] } }),
+    pluginSettingsPut: async () => ({ status: 200, body: { ok: true } }),
+    pluginsReload: async () => ({ status: 200, body: { ok: true, plugins: [] } }),
+    lspServers: async () => ({ servers: [{ lang: "ts" }] }),
+    lspDoctorGet: async () => ({ diagnosis: null, probing: false, flags: { enabled: true } }),
+    lspDoctorRun: async () => ({ status: 202, body: { ok: true } }),
+    lspCheck: async () => ({ status: 200, body: { ok: true } }),
+    lspCheckChanged: async () => ({ status: 200, body: { ok: true } }),
+    lspUpdate: async () => ({ status: 200, body: { ok: true } }),
+    setupApply: async () => ({ status: 200, body: { ok: true, persisted: true } }),
+    setupScan: async () => ({ servers: [] }),
+    setupModels: async () => ({ status: 200, body: { models: ["m"] } }),
+    setupTest: async () => ({ status: 200, body: { ok: true } }),
+    setupContext: async () => ({ status: 200, body: { ok: true, contextWindow: 8192 } }),
+    setupLocale: async (locale: string) => ({ status: 200, body: { ok: true, locale } }),
+    commands: async () => ({
+      commands: [
+        { name: "help", description: "Help", available: true },
+        { name: "wizard", description: "Wizard", available: false, reason: "terminal-only" },
+      ],
+    }),
     executeCommand: async (line) => {
       calls.commands.push(line);
       return { ok: true, output: ["status: ok"] };
@@ -64,8 +125,9 @@ describe("web daemon adapter (W4)", () => {
     await withServer(s, async (base) => {
       const state = await doFetch(`${base}/api/state`);
       expect(state.status).toBe(200);
-      const stateBody = (await state.json()) as { state: HostStateSnapshot };
+      const stateBody = (await state.json()) as { state: HostStateSnapshot; queueLen: number };
       expect(stateBody.state.sessionId).toBe("S1");
+      expect(stateBody.queueLen).toBe(1);
 
       const sessions = await doFetch(`${base}/api/sessions`);
       expect(sessions.status).toBe(200);
@@ -105,9 +167,9 @@ describe("web daemon adapter (W4)", () => {
       const setup = await doFetch(`${base}/api/setup`);
       expect(setup.status).toBe(200);
 
-      const lsp = await doFetch(`${base}/api/lsp`);
-      expect(lsp.status).toBe(200);
-      expect(((await lsp.json()) as { enabled: boolean }).enabled).toBe(true);
+      const lspTable = await doFetch(`${base}/api/lsp`);
+      expect(lspTable.status).toBe(200);
+      expect(((await lspTable.json()) as { servers: unknown[] }).servers).toHaveLength(1);
 
       const memory = await doFetch(`${base}/api/memory`);
       expect(memory.status).toBe(200);
@@ -123,6 +185,145 @@ describe("web daemon adapter (W4)", () => {
       expect(files.status).toBe(200);
       expect(((await files.json()) as { entries: unknown[] }).entries).toHaveLength(1);
 
+      const search = await doFetch(`${base}/api/search?q=a&names=1`);
+      expect(search.status).toBe(200);
+      expect(((await search.json()) as { results: unknown[] }).results).toHaveLength(1);
+
+      const commands = await doFetch(`${base}/api/commands`);
+      expect(commands.status).toBe(200);
+      const commandList = ((await commands.json()) as { commands: Array<{ name: string; desc: string }> })
+        .commands;
+      expect(commandList.some((c) => c.name === "help")).toBe(true);
+      expect(commandList.find((c) => c.name === "wizard")?.desc).toContain("terminal-only");
+
+      const prompt = await doFetch(`${base}/api/sessions/S1/system-prompt`);
+      expect(prompt.status).toBe(200);
+      expect(((await prompt.json()) as { text: string }).text).toBe("system");
+
+      const security = await doFetch(`${base}/api/sessions/S1/security?limit=5`);
+      expect(security.status).toBe(200);
+      expect(((await security.json()) as { events: unknown[] }).events).toHaveLength(1);
+
+      const subs = await doFetch(`${base}/api/sessions/S1/subagents?toolCallId=t9`);
+      expect(subs.status).toBe(200);
+      expect(((await subs.json()) as { runs: Array<{ parentToolCallId: string }> }).runs[0].parentToolCallId).toBe("t9");
+
+      const interrupted = await doFetch(`${base}/api/sessions/S1/subagents/run-1/interrupt`, {
+        method: "POST",
+        body: "{}",
+      });
+      expect(interrupted.status).toBe(200);
+
+      const image = await doFetch(`${base}/api/sessions/S1/images/shot.png`);
+      expect(image.status).toBe(200);
+      expect(image.headers.get("content-type")).toContain("image/png");
+      expect((await image.arrayBuffer()).byteLength).toBe(3);
+
+      const missing = await doFetch(`${base}/api/sessions/S1/images/none.png`);
+      expect(missing.status).toBe(404);
+
+      const providers = await doFetch(`${base}/api/providers`);
+      expect(providers.status).toBe(200);
+      expect(((await providers.json()) as { active: string }).active).toBe("p");
+
+      const providerSave = await doFetch(`${base}/api/providers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "openai", baseUrl: "http://x", label: "p" }),
+      });
+      expect(providerSave.status).toBe(200);
+
+      const mcp = await doFetch(`${base}/api/mcp`);
+      expect(mcp.status).toBe(200);
+      expect(((await mcp.json()) as { mcp: unknown[] }).mcp).toHaveLength(1);
+
+      const mcpToggle = await doFetch(`${base}/api/mcp/m1`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: false }),
+      });
+      expect(mcpToggle.status).toBe(200);
+
+      const memoryAdd = await doFetch(`${base}/api/memory`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category: "facts", text: "x" }),
+      });
+      expect(memoryAdd.status).toBe(200);
+
+      const memoryDelete = await doFetch(`${base}/api/memory/facts/1`, { method: "DELETE" });
+      expect(memoryDelete.status).toBe(200);
+
+      const pluginToggle = await doFetch(`${base}/api/plugins/p1`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: false }),
+      });
+      expect(pluginToggle.status).toBe(200);
+
+      const pluginSettings = await doFetch(`${base}/api/plugins/p1/settings`);
+      expect(pluginSettings.status).toBe(200);
+
+      const reload = await doFetch(`${base}/api/reload/plugins`, { method: "POST" });
+      expect(reload.status).toBe(200);
+
+      const lspSecond = await doFetch(`${base}/api/lsp`);
+      expect(lspSecond.status).toBe(200);
+      expect(((await lspSecond.json()) as { servers: unknown[] }).servers).toHaveLength(1);
+
+      const lspUpdate = await doFetch(`${base}/api/lsp/ts`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ timeout: 5000 }),
+      });
+      expect(lspUpdate.status).toBe(200);
+
+      const lspCheck = await doFetch(`${base}/api/lsp/check`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: "a.ts" }),
+      });
+      expect(lspCheck.status).toBe(200);
+
+      const setupApply = await doFetch(`${base}/api/setup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: "p" }),
+      });
+      expect(setupApply.status).toBe(200);
+
+      const scan = await doFetch(`${base}/api/setup/scan`, { method: "POST" });
+      expect(scan.status).toBe(200);
+
+      const setupLocale = await doFetch(`${base}/api/setup/locale`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locale: "ru" }),
+      });
+      expect(setupLocale.status).toBe(200);
+
+      const view = await doFetch(`${base}/api/file?path=exists.ts`);
+      expect(view.status).toBe(200);
+      expect(await view.text()).toBe("file");
+
+      const missingFile = await doFetch(`${base}/api/file?path=nope.ts`);
+      expect(missingFile.status).toBe(404);
+
+      const queueCancel = await doFetch(`${base}/api/queue/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: "S1", id: "q1" }),
+      });
+      expect(queueCancel.status).toBe(200);
+
+      const i18n = await doFetch(`${base}/api/i18n`);
+      expect(i18n.status).toBe(200);
+      expect(((await i18n.json()) as { dicts: unknown }).dicts).toBeTruthy();
+
+      const favicon = await doFetch(`${base}/api/favicon`);
+      expect(favicon.status).toBe(200);
+      expect(favicon.headers.get("content-type")).toContain("svg");
+
       const history = await doFetch(`${base}/api/sessions/S1/history`);
       expect(history.status).toBe(200);
       expect(((await history.json()) as { messages: unknown[] }).messages).toHaveLength(1);
@@ -133,13 +334,13 @@ describe("web daemon adapter (W4)", () => {
     });
   });
 
-  it("answers 501 for panels the daemon does not expose yet", async () => {
+  it("answers 501 for an unknown API path instead of pretending success", async () => {
     const { host } = fakeDaemon();
     const s = createWebUiState();
     s.daemon = host;
     s.bridge = host;
     await withServer(s, async (base) => {
-      const res = await doFetch(`${base}/api/file?path=x`);
+      const res = await doFetch(`${base}/api/nope`);
       expect(res.status).toBe(501);
       const body = (await res.json()) as { error: string };
       expect(body.error).toContain("daemon");

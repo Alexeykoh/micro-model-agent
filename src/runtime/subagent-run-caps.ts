@@ -1,7 +1,7 @@
 // Caps and text scrubbing for subagent runs (extracted from subagent-runs.ts).
-import { redactContextSecrets } from "../../../core/api";
-import { sanitizeOutputPlain } from "../../../ui/sanitize-output";
-import type { SubagentRunEvent, SubagentRunUsage } from "../../../tools/subagent-runs";
+import { redactContextSecrets } from "../core/api";
+import { sanitizeOutputPlain } from "../ui/sanitize-output";
+import type { SubagentRunEvent, SubagentRunUsage } from "../tools/subagent-runs";
 
 /** Сколько прогонов сессии держим в памяти (старые завершённые вытесняются). */
 export const SUBAGENT_RUNS_PER_SESSION = 12;

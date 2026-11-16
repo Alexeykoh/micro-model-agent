@@ -2,11 +2,9 @@
  * Host-wire поверх job API (split W2): `/v1/host/*`.
  *
  * Это не второй путь исполнения хода: submit — тот же `dispatchInteractive`,
- * что `POST /v1/sessions/:id/tasks` с `mode: interactive`; поток событий —
- * тот же `openSessionStream`. Отличие только в форме запроса/ответа.
- *
- * `executeCommand` в W2 не реализован: хендлеры команд живут в CLI и требуют
- * `CommandServices` (перенос — W3). Роут не объявлен, клиент получает 404.
+ * что `POST /v1/sessions/:id/tasks` с `mode: interactive`; поток событий — тот
+ * же `openSessionStream`. Действия сессии вынесены в `host-session-routes.ts`,
+ * read-панели — в `host-*` файлы (правило ≤300).
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { readMmaVersion } from "../../../core/version";
@@ -17,22 +15,25 @@ import { applyConfigWrite, toConfigRaw } from "../../../runtime/config-write";
 import { setLocale } from "../../../i18n/index";
 import { PROTOCOL_VERSION } from "../../daemon/protocol";
 import { readJsonBodyOrProblem, sendJson, sendProblem } from "../http/respond";
-import { resolveAnswer } from "../runtime/prompt-io";
 import { problem } from "../runtime/problem";
 import { hostStateOf } from "../runtime/host-state";
-import { runHostCommand } from "../runtime/commands";
+import { hostCommandCatalog } from "../runtime/commands";
 import type { AgentServiceState } from "../state";
-import { openSessionStream } from "./events-api";
-import { handleHostSessions } from "./host-sessions";
+import { handleHostFile } from "./host-file";
 import { handleHostFiles } from "./host-files";
 import { handleHostGit } from "./host-git";
-import { handleHostMemory, handleHostSkills } from "./host-settings";
-import { handleHostIndex, handleHostLsp, handleHostSetup } from "./host-misc";
+import { handleHostIndex, handleHostSetup } from "./host-misc";
+import { handleHostLspRoute } from "./host-lsp";
+import { handleHostSetupWrite } from "./host-setup-write";
+import { handleHostMcp } from "./host-mcp";
 import { handleHostPlugins } from "./host-plugins";
+import { handleHostProviders } from "./host-providers";
+import { handleHostSearch } from "./host-search";
+import { handleHostSessionAction } from "./host-session-routes";
+import { handleHostSessions } from "./host-sessions";
+import { handleHostMemory, handleHostSkills } from "./host-settings";
 import { handleHostUpdate } from "./host-update";
-import { interruptSession } from "./tasks-control";
-import { MAX_JSON_BYTES, tenantOf } from "./tasks-job";
-import { dispatchInteractive } from "./tasks-submit";
+import { MAX_JSON_BYTES } from "./tasks-job";
 
 /** Обработчик группы `/v1/host[...]`; `true` — запрос обработан. */
 export async function handleHostApi(
@@ -66,14 +67,28 @@ export async function handleHostApi(
     sendJson(res, 200, resolved);
     return true;
   }
+  if (parts.length === 3 && parts[2] === "commands" && req.method === "GET") {
+    sendJson(res, 200, { commands: hostCommandCatalog() });
+    return true;
+  }
   if (parts[2] === "files") return handleHostFiles(req, res, reqUrl, s, parts);
+  if (parts[2] === "file") return handleHostFile(req, res, reqUrl, s, parts);
+  if (parts[2] === "search") return handleHostSearch(req, res, reqUrl, s, parts);
   if (parts[2] === "git") return handleHostGit(req, res, reqUrl, s, parts);
   if (parts[2] === "memory") return handleHostMemory(req, res, s, parts);
   if (parts[2] === "skills") return handleHostSkills(req, res, s, parts);
-  if (parts[2] === "setup") return handleHostSetup(req, res, s, parts);
+  if (parts[2] === "setup") {
+    return req.method === "POST"
+      ? handleHostSetupWrite(req, res, s, parts)
+      : handleHostSetup(req, res, s, parts);
+  }
   if (parts[2] === "index") return handleHostIndex(req, res, s, parts);
-  if (parts[2] === "lsp") return handleHostLsp(req, res, s, parts);
-  if (parts[2] === "plugins") return handleHostPlugins(req, res, s, parts);
+  if (parts[2] === "lsp") return handleHostLspRoute(req, res, s, parts);
+  if (parts[2] === "plugins" || (parts[2] === "reload" && parts[3] === "plugins")) {
+    return handleHostPlugins(req, res, s, parts);
+  }
+  if (parts[2] === "mcp") return handleHostMcp(req, res, s, parts);
+  if (parts[2] === "providers") return handleHostProviders(req, res, s, parts);
   if (parts[2] === "update") return handleHostUpdate(req, res, s, parts);
   if (parts[2] !== "sessions") return false;
   if (
@@ -83,27 +98,7 @@ export async function handleHostApi(
   ) {
     return handleHostSessions(req, res, reqUrl, s, parts);
   }
-  if (parts.length !== 5) return false;
-
-  const sessionId = decodeURIComponent(parts[3]);
-  const action = parts[4];
-  if (!ensureSession(s, res, sessionId)) return true;
-
-  if (action === "submit" && req.method === "POST") return submit(req, res, s, sessionId);
-  if (action === "stream" && req.method === "GET") {
-    openSessionStream(req, res, reqUrl, s, sessionId);
-    return true;
-  }
-  if (action === "interrupt" && req.method === "POST") {
-    sendJson(res, 202, { sessionId, interrupted: interruptSession(s, sessionId) });
-    return true;
-  }
-  if ((action === "pause" || action === "resume") && req.method === "POST") {
-    return setPaused(res, s, sessionId, action === "pause");
-  }
-  if (action === "answer" && req.method === "POST") return answer(req, res, s, sessionId);
-  if (action === "command" && req.method === "POST") return command(req, res, s, sessionId);
-  return false;
+  return handleHostSessionAction(req, res, reqUrl, s, parts);
 }
 
 /** `GET /v1/host/state?session=` — снапшот + workspace/protocol. */
@@ -119,7 +114,11 @@ function stateRoute(res: ServerResponse, s: AgentServiceState, reqUrl: URL): boo
 }
 
 /** `POST /v1/host/config {key, value}` — валидация, персист, reconfigure. */
-async function writeConfig(req: IncomingMessage, res: ServerResponse, s: AgentServiceState): Promise<boolean> {
+async function writeConfig(
+  req: IncomingMessage,
+  res: ServerResponse,
+  s: AgentServiceState,
+): Promise<boolean> {
   const body = await readJsonBodyOrProblem(req, res, MAX_JSON_BYTES);
   if (!body) return true;
   const key = typeof body.key === "string" ? body.key : "";
@@ -147,154 +146,5 @@ async function writeConfig(req: IncomingMessage, res: ServerResponse, s: AgentSe
   if (key === "locale") setLocale(s.config.locale);
   if (key === "model" || key === "provider.active") void s.models.refresh();
   sendJson(res, 200, result);
-  return true;
-}
-
-/** Максимум картинок и размер одного data-URL (как у web). */
-const MAX_IMAGES = 10;
-const MAX_IMAGE_DATA_URL_BYTES = 70 * 1024 * 1024;
-
-/** Проверка `images`: только `data:image/...`, не больше 10 и 70 МБ каждая. */
-function parseImages(
-  raw: unknown,
-): { ok: true; images: string[] } | { ok: false; error: string } {
-  if (raw === undefined || raw === null) return { ok: true, images: [] };
-  if (!Array.isArray(raw)) return { ok: false, error: "images must be an array" };
-  if (raw.length > MAX_IMAGES) return { ok: false, error: "too many images" };
-  const images: string[] = [];
-  for (const item of raw) {
-    if (typeof item !== "string" || !item.startsWith("data:image/")) {
-      return { ok: false, error: "invalid image" };
-    }
-    if (Buffer.byteLength(item, "utf8") > MAX_IMAGE_DATA_URL_BYTES) {
-      return { ok: false, error: "image too large" };
-    }
-    images.push(item);
-  }
-  return { ok: true, images };
-}
-
-/** `POST /v1/host/sessions/:id/submit {text}` — интерактивный ход. */
-async function submit(
-  req: IncomingMessage,
-  res: ServerResponse,
-  s: AgentServiceState,
-  sessionId: string,
-): Promise<boolean> {
-  const body = await readJsonBodyOrProblem(req, res, MAX_JSON_BYTES);
-  if (!body) return true;
-  const text = typeof body.text === "string" ? body.text.trim() : "";
-  if (!text) {
-    sendProblem(res, problem({ type: "validation", title: "text required", status: 400 }));
-    return true;
-  }
-  const parsed = parseImages(body.images);
-  if (!parsed.ok) {
-    sendProblem(res, problem({ type: "validation", title: parsed.error, status: 422 }));
-    return true;
-  }
-  const created = dispatchInteractive(s, sessionId, text, tenantOf(req, s), parsed.images);
-  if (!created.ok) {
-    sendProblem(
-      res,
-      problem({
-        type: "queueFull",
-        title: "session queue is full",
-        status: 429,
-        retriable: true,
-        retryAfterMs: 1000,
-      }),
-    );
-    return true;
-  }
-  res.setHeader("Location", `/v1/tasks/${created.task.jobId}`);
-  sendJson(res, 202, {
-    sessionId,
-    turnId: created.task.jobId,
-    jobId: created.task.jobId,
-    status: created.task.status,
-  });
-  return true;
-}
-
-/** Пауза/резюме хода: durable-флаг на агенте уже поднятого раннера. */
-function setPaused(
-  res: ServerResponse,
-  s: AgentServiceState,
-  sessionId: string,
-  paused: boolean,
-): boolean {
-  const agent = s.pool.getRunner(sessionId)?.agent as
-    { pause?: () => void; resume?: () => void } | undefined;
-  if (!agent || typeof agent.pause !== "function" || typeof agent.resume !== "function") {
-    sendProblem(
-      res,
-      problem({
-        type: "validation",
-        title: "no active runner for session",
-        status: 409,
-        detail: sessionId,
-      }),
-    );
-    return true;
-  }
-  if (paused) agent.pause();
-  else agent.resume();
-  sendJson(res, 202, { sessionId, paused });
-  return true;
-}
-
-/** `POST /v1/host/sessions/:id/answer {id, answer}` — ответ на вопрос хода. */
-async function answer(req: IncomingMessage, res: ServerResponse, s: AgentServiceState, sessionId: string): Promise<boolean> {
-  const body = await readJsonBodyOrProblem(req, res, MAX_JSON_BYTES);
-  if (!body) return true;
-  const id = typeof body.id === "string" ? body.id : "";
-  if (!id) {
-    sendProblem(res, problem({ type: "validation", title: "question id required", status: 400 }));
-    return true;
-  }
-  if (!resolveAnswer(s, id, body.answer, { sessionId })) {
-    sendProblem(
-      res,
-      problem({ type: "validation", title: "unknown question id", status: 404, detail: id }),
-    );
-    return true;
-  }
-  sendJson(res, 202, { sessionId, status: "running" });
-  return true;
-}
-
-/** `POST /v1/host/sessions/:id/command {line}` — серверное подмножество. */
-async function command(
-  req: IncomingMessage,
-  res: ServerResponse,
-  s: AgentServiceState,
-  sessionId: string,
-): Promise<boolean> {
-  const body = await readJsonBodyOrProblem(req, res, MAX_JSON_BYTES);
-  if (!body) return true;
-  const line = typeof body.line === "string" ? body.line : "";
-  if (!line.trim()) {
-    sendProblem(res, problem({ type: "validation", title: "line required", status: 400 }));
-    return true;
-  }
-  sendJson(res, 200, await runHostCommand(s, sessionId, line));
-  return true;
-}
-
-/** Сессия обязана существовать; иначе 503/404 и `false`. */
-function ensureSession(s: AgentServiceState, res: ServerResponse, sessionId: string): boolean {
-  const manager = s.deps.sessionManager;
-  if (!manager) {
-    sendProblem(res, problem({ type: "internal", title: "sessions unavailable", status: 503 }));
-    return false;
-  }
-  if (!manager.get(sessionId)) {
-    sendProblem(
-      res,
-      problem({ type: "noSession", title: "session not found", status: 404, detail: sessionId }),
-    );
-    return false;
-  }
   return true;
 }

@@ -11,6 +11,8 @@ import type { HostEvent } from "../../core/host";
 export interface RemoteEventStreamOptions {
   streamUrl: () => string;
   token?: string | null;
+  /** Локаль клиента (`X-Mma-Locale`) на SSE-запрос. */
+  locale?: string;
   onEvent?: (ev: HostEvent) => void;
   /** Пауза перед переподключением (мс); дефолт 1000. */
   retryMs?: number;
@@ -70,6 +72,7 @@ export class RemoteEventStream {
   private async connect(signal: AbortSignal): Promise<void> {
     const headers: Record<string, string> = { Accept: "text/event-stream" };
     if (this.opts.token) headers.Authorization = `Bearer ${this.opts.token}`;
+    if (this.opts.locale) headers["X-Mma-Locale"] = this.opts.locale;
     if (this.lastSeq > 0) headers["Last-Event-ID"] = String(this.lastSeq);
     let res: Response;
     try {

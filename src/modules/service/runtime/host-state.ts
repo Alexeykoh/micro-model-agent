@@ -13,7 +13,7 @@ export function hostStateOf(s: AgentServiceState, sessionId?: string): HostState
   const active = sessionId ?? s.deps.sessionManager?.getActive() ?? undefined;
   const runner = active ? s.pool.getRunner(active) : undefined;
   const execModule = runner?.execModule ?? s.deps.execModule;
-  return buildHostState(
+  const state = buildHostState(
     {
       config: s.config,
       ...(s.deps.sessionManager ? { sessionManager: s.deps.sessionManager } : {}),
@@ -24,4 +24,6 @@ export function hostStateOf(s: AgentServiceState, sessionId?: string): HostState
     },
     s.pool.isBusy(active ?? null),
   );
+  const queuedIds = active ? s.pool.queuedIds(active) : [];
+  return queuedIds.length ? { ...state, queuedIds } : state;
 }

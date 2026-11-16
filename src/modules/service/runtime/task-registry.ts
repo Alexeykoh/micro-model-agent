@@ -75,6 +75,8 @@ export interface TaskRecord {
   expiresAt?: string;
   /** События задачи (для resume/наблюдаемости внутри процесса). */
   events: Envelope[];
+  /** Ход отвязан от клиента и ждёт reconnect в grace-окне (split W13). */
+  detached?: boolean;
   /** Резолверы синхронного ожидания завершения (`wait:true`). */
   waiters: Array<() => void>;
 }

@@ -23,14 +23,17 @@ export interface WebHostSessions {
   loadSessionLog(id: string, opts?: { since?: string }): SessionLogEntry[];
 }
 
-/** Зависимости веб-хоста: запуск агента, состояние, команды, картинки. */
+/** Зависимости веб-хоста: ход, состояние, команды. */
 export interface WebHostDeps {
-  runAgent: (text: string) => Promise<unknown>;
+  /**
+   * Единая точка хода (split W10): та же, что у `POST /api/message`.
+   * Хост не конструирует `Agent` — он делегирует раннеру поверхности.
+   */
+  submitTurn: (text: string, opts?: HostBridgeSubmitOptions) => Promise<unknown>;
   isBusy: () => boolean;
   interrupt: () => void;
   executeCommand: (line: string) => Promise<HostCommandResult>;
   getState: (sessionId?: string) => HostStateSnapshot;
-  addPendingImage?: (dataUrl: string) => void;
   /** Опционален: у тестового стаба сессий может не быть. */
   sessions?: WebHostSessions;
   getConfig?: () => HostConfigSnapshot;
@@ -47,9 +50,7 @@ export class WebHost implements Host {
   }
 
   async submit(text: string, o?: HostBridgeSubmitOptions): Promise<unknown> {
-    if (this.deps.isBusy()) throw new Error("agent is busy");
-    for (const url of o?.images ?? []) this.deps.addPendingImage?.(url);
-    return this.deps.runAgent(text);
+    return this.deps.submitTurn(text, o);
   }
 
   interrupt(): void {
