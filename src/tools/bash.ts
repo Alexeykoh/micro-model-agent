@@ -1,6 +1,7 @@
 /** Тул shell-команд: автофон, редирект tool-call, хинты Windows, мемо read-only. */
 import type { ToolDefinition, ToolContext } from "./types";
 import { isCommandAllowed, sanitizeCommandForLog } from "../modules/security/command-validator";
+import { sensitiveCommandReason } from "../modules/security/sensitive-paths";
 import { logBashCommand, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { assertWorkdirAllowed, echoWriteHint, posixWorkdirHint } from "./path-guards";
@@ -109,6 +110,23 @@ export const bashTool: ToolDefinition = {
     }
 
     const command = adaptCommandForWindows(originalCommand);
+
+    // Секреты конфига и исходники агента не читаются и через shell: валидатор
+    // команд проверяет имена, но не абсолютные пути. Это мягкий барьер, не
+    // sandbox; настоящая граница — отдельный пользователь/контейнер.
+    const sensitive = sensitiveCommandReason(originalCommand, ctx.baseDir);
+    if (sensitive) {
+      logSecurityBlock(
+        ctx.sessionId,
+        "bash_command",
+        `Sensitive path: ${sensitive}`,
+        sanitizeCommandForLog(originalCommand),
+      );
+      return {
+        success: false,
+        output: `[SECURITY BLOCKED] ${sensitive} is not accessible from the agent shell.`,
+      };
+    }
 
     // Discovery скрытых тулов: при сужении набора process_* невидимы модели, и
     // прогон через cmd.exe даёт лишь "is not recognized" — указать на enable_tools.
