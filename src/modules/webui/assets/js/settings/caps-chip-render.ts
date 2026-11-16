@@ -4,7 +4,8 @@
 import { t } from "../i18n.js";
 import { session } from "../store.js";
 import type { Dict } from "../core/store/types.js";
-import { icon } from "../dom.js";
+import { el, icon } from "../dom.js";
+import { openSubDialog } from "../subdialog.js";
 import { capabilityKeys, type CapabilityKey } from "./caps-chip.js";
 
 /** Lucide glyph per ability; the label lives in the per-icon tooltip. */
@@ -14,9 +15,39 @@ const CAP_ICON: Record<CapabilityKey, string> = {
   reasoning: "brain",
 };
 
+const CAP_ORDER: CapabilityKey[] = ["vision", "tools", "reasoning"];
+
+/** Popup body: what each icon means and whether this model supports it. */
+function buildCapsPopup(info: Dict | undefined, active: Set<CapabilityKey>): HTMLElement {
+  const box = el("div", "caps-pop");
+  const strategy = info?.strategy && info.strategy !== "none" ? String(info.strategy) : "";
+  const levels =
+    Array.isArray(info?.levels) && info.levels.length ? ` (${info.levels.join("/")})` : "";
+  for (const key of CAP_ORDER) {
+    const on = active.has(key);
+    const row = el("div", "caps-row" + (on ? " on" : " off"));
+    const glyph = el("span", "caps-row-ico");
+    glyph.appendChild(icon(CAP_ICON[key]));
+    const text = el("div", "caps-row-text");
+    const head = el("div", "caps-row-head");
+    head.appendChild(el("span", "caps-row-title", t("web.caps." + key)));
+    head.appendChild(el("span", "caps-row-state", t(on ? "web.caps.on" : "web.caps.off")));
+    text.appendChild(head);
+    text.appendChild(el("div", "caps-row-desc", t("web.caps." + key + ".desc")));
+    if (key === "reasoning" && on && strategy) {
+      text.appendChild(el("div", "caps-row-meta", t("web.caps.reasoningDetail", { strategy, levels })));
+    }
+    row.appendChild(glyph);
+    row.appendChild(text);
+    box.appendChild(row);
+  }
+  return box;
+}
+
 /**
  * Hidden while capabilities are unknown or the endpoint is unreachable;
- * `text-only` is shown only after the probe actually answered.
+ * `text-only` is shown only after the probe actually answered. Each icon is a
+ * button that opens a short explanation popup.
  */
 export function renderCapsChip(): void {
   const chip = document.getElementById("capsChip");
@@ -41,17 +72,22 @@ export function renderCapsChip(): void {
     return;
   }
   chip.removeAttribute("title");
+  const active = new Set(keys);
   for (const key of keys) {
     const label =
       key === "reasoning"
         ? t("web.caps.reasoningDetail", { strategy, levels })
         : t("web.caps." + key);
-    const slot = document.createElement("span");
-    slot.className = "cap-ico";
-    slot.title = label;
-    slot.setAttribute("role", "img");
-    slot.setAttribute("aria-label", label);
-    slot.appendChild(icon(CAP_ICON[key]));
-    chip.appendChild(slot);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "cap-ico";
+    btn.title = label;
+    btn.setAttribute("aria-label", label);
+    btn.appendChild(icon(CAP_ICON[key]));
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openSubDialog(t("web.caps.popTitle"), buildCapsPopup(info, active));
+    });
+    chip.appendChild(btn);
   }
 }

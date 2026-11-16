@@ -49,6 +49,8 @@ describe("model capabilities chip", () => {
     expect(CAPS_RENDER).toContain('vision: "eye"');
     expect(CAPS_RENDER).toContain('tools: "wrench"');
     expect(CAPS_RENDER).toContain('reasoning: "brain"');
-    expect(CAPS_RENDER).toContain("slot.title = label");
+    expect(CAPS_RENDER).toContain("btn.title = label");
+    expect(CAPS_RENDER).toContain("openSubDialog");
+    expect(CAPS_RENDER).toContain("web.caps.popTitle");
   });
 });
