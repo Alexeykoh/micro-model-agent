@@ -25,7 +25,6 @@ export type PackageManager = "bun" | "npm" | "pnpm" | "yarn";
 /** Факты, от которых зависит текст системного промпта. */
 export interface PromptEnvironmentFacts {
   baseDir: string;
-  /** Каталог конфига (`MMA_CONFIG_DIR`); в промпте экономит поиск. */
   configDir?: string;
   platform: PromptPlatform;
   shell: PromptShell;
@@ -89,7 +88,6 @@ export function parseClientTz(value: unknown): ClientTz | undefined {
 export interface PromptFactsInput {
   config: AppConfig;
   baseDir: string;
-  /** Каталог конфига (MMA_CONFIG_DIR). */
   configDir?: string;
   envReport: EnvironmentReport;
   activeToolTags?: string[];
