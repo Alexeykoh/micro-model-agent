@@ -1860,6 +1860,18 @@ body.light .kv .wn { color: var(--yellow); }
   gap: 6px 14px; min-width: 0;
 }
 .row:last-child { border-bottom: none; }
+/* Master switches (security.enabled) gate everything below them: bigger label,
+   accent outline and a larger toggle so they read as the section's status. */
+.row-master {
+  margin: 2px 0 14px; padding: 12px 14px;
+  border: 1px solid var(--accent); border-left-width: 4px; border-radius: 8px;
+  background: var(--accent-bg);
+}
+.row-master .row-name { font-size: 15px; font-weight: 600; color: var(--accent); }
+.row-master .row-desc { color: var(--muted); font-size: 12px; }
+.row-master .toggle { width: 44px; height: 24px; border-radius: 12px; }
+.row-master .toggle::after { width: 18px; height: 18px; top: 3px; left: 3px; }
+.row-master .toggle.on::after { left: 23px; }
 .row > .row-label { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .row-label .row-name { overflow-wrap: anywhere; }
 .row-label .row-desc { color: var(--dim-a); font-size: 11.5px; line-height: 1.35; overflow-wrap: anywhere; max-width: 60ch; }

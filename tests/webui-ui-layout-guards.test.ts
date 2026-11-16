@@ -19,6 +19,10 @@ const tableEditor = readFileSync(
   new URL("../src/modules/webui/assets/js/settings/table-editor.ts", import.meta.url),
   "utf-8",
 );
+const panelsShared = readFileSync(
+  new URL("../src/modules/webui/assets/js/settings/panels-shared.ts", import.meta.url),
+  "utf-8",
+);
 
 describe("web UI layout guards", () => {
   it("makes the hidden attribute beat component display rules", () => {
@@ -64,6 +68,17 @@ describe("web UI layout guards", () => {
     expect(css).toMatch(/\.setup-modal\s*\{[^}]*max-width:\s*640px/i);
     const input = css.match(/\.setup-input\s*\{([^}]*)\}/)?.[1] ?? "";
     expect(input).toMatch(/width:\s*100%/i);
+  });
+
+  it("makes the security master switch visually dominant", () => {
+    expect(panelsShared).toContain('key === "security.enabled"');
+    expect(panelsShared).toContain('"row-master"');
+    const rule = css.match(/\.row-master\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(rule).toMatch(/border:\s*1px solid var\(--accent\)/i);
+    expect(rule).toMatch(/background:\s*var\(--accent-bg\)/i);
+    const name = css.match(/\.row-master \.row-name\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(name).toMatch(/font-size:\s*15px/i);
+    expect(name).toMatch(/color:\s*var\(--accent\)/i);
   });
 
   it("keeps the setup footer reachable and the intro responsive", () => {
