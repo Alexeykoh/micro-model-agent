@@ -50,7 +50,7 @@ export function paintGitChips(h: Dict): void {
       // of a readable "hidden by data policy" string.
       workspace: typeof h.workspace === "string" && !isHiddenText(h.workspace) ? h.workspace : "",
       workspaceHidden: typeof h.workspace === "string" && isHiddenText(h.workspace),
-      workspaceTitle: t("web.egress.hidden"),
+      workspaceTitle: t("web.egress.hidden_tip"),
       version: h.version,
       updateAvailable: h.updateAvailable || undefined,
       dev: h.dev === true,

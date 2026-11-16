@@ -49,6 +49,32 @@ export interface FooterInput {
   gitLabels?: { changes: string; detached: string };
 }
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/** Lucide lock (same table as the rest of the chrome), built without dom.js. */
+function lockIcon(): SVGElement {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "2");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  svg.setAttribute("class", "svg-icon");
+  const parts: Array<[string, Record<string, string | number>]> = [
+    ["rect", { width: 18, height: 11, x: 3, y: 11, rx: 2, ry: 2 }],
+    ["path", { d: "M7 11V7a5 5 0 0 1 10 0v4" }],
+  ];
+  parts.forEach(([tag, attrs]) => {
+    const child = document.createElementNS(SVG_NS, tag);
+    Object.keys(attrs).forEach((k) => child.setAttribute(k, String(attrs[k])));
+    svg.appendChild(child);
+  });
+  return svg;
+}
+
 /**
  * Собирает футер: `dir <path> ⎇ branch ●N … mma <version>` (+ чип апдейта).
  *
@@ -89,8 +115,9 @@ export function renderFooter(
     el.appendChild(make("span", "ws-k", dirLabel));
     if (workspaceHidden) {
       // DLP: the path itself must not leak, but the footer still has to say
-      // "there is a workspace" — a lock glyph plus the explanation on hover.
-      const lock = make("span", "ws-lock dlp-lock", "🔒");
+      // "there is a workspace" — a gray lock icon plus the explanation on hover.
+      const lock = make("span", "ws-lock dlp-lock", "");
+      lock.appendChild(lockIcon());
       lock.title = workspaceTitle;
       lock.setAttribute("aria-label", workspaceTitle);
       el.appendChild(lock);

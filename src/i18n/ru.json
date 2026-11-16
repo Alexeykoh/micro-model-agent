@@ -1564,6 +1564,7 @@
   "web.env.dir": "директория",
   "web.env.dev_title": "локальная dev-сборка (запуск из src/)",
   "web.egress.hidden": "скрыто политикой данных",
+  "web.egress.hidden_tip": "Путь скрыт политикой данных (DLP): он не передаётся внешним клиентам.",
   "web.env.agents": "AGENTS.md",
   "web.env.map": "карта",
   "web.env.agents_disabled": "отключён",

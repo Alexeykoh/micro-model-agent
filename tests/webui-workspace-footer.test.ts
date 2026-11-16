@@ -48,7 +48,9 @@ describe("workspace footer line", () => {
     expect(line.querySelector(".ws-k")?.textContent).toBe("dir");
     expect(line.querySelector(".ws-v")).toBeNull();
     const lock = line.querySelector(".ws-lock");
-    expect(lock?.textContent).toBe("🔒");
+    // Lucide lock SVG, not an emoji glyph; the explanation is the tooltip.
+    expect(lock?.querySelector("svg")).not.toBeNull();
+    expect(lock?.textContent).toBe("");
     expect(lock?.getAttribute("title")).toBe("hidden by data policy");
   });
 
