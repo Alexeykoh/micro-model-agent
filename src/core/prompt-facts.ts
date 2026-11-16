@@ -25,6 +25,8 @@ export type PackageManager = "bun" | "npm" | "pnpm" | "yarn";
 /** Факты, от которых зависит текст системного промпта. */
 export interface PromptEnvironmentFacts {
   baseDir: string;
+  /** Каталог конфига (`MMA_CONFIG_DIR`); в промпте экономит поиск. */
+  configDir?: string;
   platform: PromptPlatform;
   shell: PromptShell;
   runtime: "bun" | "node" | "unknown";
@@ -87,6 +89,8 @@ export function parseClientTz(value: unknown): ClientTz | undefined {
 export interface PromptFactsInput {
   config: AppConfig;
   baseDir: string;
+  /** Каталог конфига (MMA_CONFIG_DIR). */
+  configDir?: string;
   envReport: EnvironmentReport;
   activeToolTags?: string[];
   /** Часовой пояс клиента (веб); нет — серверное время с меткой (B18). */
@@ -224,6 +228,7 @@ export function collectPromptFacts(input: PromptFactsInput): PromptEnvironmentFa
 
   return {
     baseDir,
+    configDir: input.configDir,
     platform,
     shell,
     runtime: envReport.runtime.runtime,

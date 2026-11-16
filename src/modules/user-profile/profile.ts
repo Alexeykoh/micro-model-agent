@@ -32,7 +32,9 @@ export class UserProfile {
       platform: platform(),
       os: `${type()} ${hostname()}`,
       hostname: hostname(),
-      shell: env.SHELL || env.ComSpec || "unknown",
+      // `SHELL` в Docker/веб часто пуст; это не «unknown», а фактический shell
+      // bash-тула: cmd на Windows, sh на POSIX.
+      shell: env.SHELL || (platform() === "win32" ? "cmd" : "sh"),
       home: homedir(),
       nodeVersion: process.version,
       preferences: { ...this.preferences },
@@ -58,6 +60,15 @@ export class UserProfile {
     if (!existsSync(path)) return null;
     try {
       const data = JSON.parse(readFileSync(path, "utf-8"));
+      this.preferences = data.preferences || {};
+      // Контейнер пересоздаётся с новым hostname; старый профиль не должен
+      // врать в промпте (`OS: Linux <old-id>, Shell: unknown`).
+      const stale =
+        data.platform !== platform() ||
+        data.hostname !== hostname() ||
+        !data.shell ||
+        data.shell === "unknown";
+      if (stale) return this.collect();
       this.info = {
         platform: data.platform,
         os: data.os,
@@ -67,7 +78,6 @@ export class UserProfile {
         nodeVersion: data.nodeVersion,
         preferences: data.preferences || {},
       };
-      this.preferences = data.preferences || {};
       return this.info;
     } catch {
       return null;

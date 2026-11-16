@@ -195,6 +195,7 @@ export async function setupWorkspacePhase(
     collectPromptFacts({
       config,
       baseDir,
+      configDir: dir,
       envReport,
       activeToolTags: config.tools?.defaultTags,
       languages,

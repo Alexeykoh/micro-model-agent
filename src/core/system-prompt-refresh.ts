@@ -43,6 +43,7 @@ export function refreshSystemInfoBlock(deps: AgentDeps): boolean {
     ? collectPromptFacts({
         config: deps.config,
         baseDir: deps.baseDir,
+        configDir: deps.configDir,
         envReport: deps.envReport,
         activeToolTags: deps.toolTags,
         clientTz: deps.clientTz,
