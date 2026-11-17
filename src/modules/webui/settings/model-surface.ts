@@ -19,6 +19,7 @@ export function installModelSurface(
   const modelCache = explicitKnownModels ? null : makeModelCache(agent, config);
   state.knownModels = explicitKnownModels ?? modelCache!.get;
   state.knownModelsState = modelCache?.getActiveState;
+  state.knownModelsRefresh = modelCache ? () => modelCache.refresh() : undefined;
   state.knownModelsFor = modelCache?.getFor;
   if (modelCache) {
     // Boot: конфиг мог пережить ребут с моделью, которую провайдер уже не

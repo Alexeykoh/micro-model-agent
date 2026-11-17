@@ -44,7 +44,6 @@ export function makeModelCache(
     try {
       const provider = agent.getProviderFor(name);
       if (!provider) {
-        if (!byProvider.has(name)) byProvider.set(name, []);
         failed.add(name);
         return;
       }
@@ -52,8 +51,8 @@ export function makeModelCache(
       byProvider.set(name, models.slice().sort());
       failed.delete(name);
     } catch {
-      // Офлайн-провайдер: прежний список, а если его не было — пустой.
-      if (!byProvider.has(name)) byProvider.set(name, []);
+      // Офлайн-провайдер: держим прежний список, если он был; иначе списка нет
+      // (пустой массив означал бы «провайдер ответил, моделей ноль»).
       failed.add(name);
     } finally {
       loading.delete(name);
@@ -66,9 +65,12 @@ export function makeModelCache(
 
   const stateFor = (name: string): ProviderModels => {
     const models = byProvider.get(name) ?? [];
-    // До первого ответа состояние — «грузится», а не «провайдер молчит».
-    const isLoading = loading.has(name) || (!byProvider.has(name) && !failed.has(name));
-    return failed.has(name)
+    // `loading` means "no usable list yet", not "a refresh is running": if we
+    // already have a list, a background refresh must not repaint the panel as
+    // «загрузка моделей…» (observed live: 32 models + loading:true).
+    const hasList = byProvider.has(name);
+    const isLoading = !hasList && (loading.has(name) || !failed.has(name));
+    return !hasList && failed.has(name)
       ? { models, loading: isLoading, error: true }
       : { models, loading: isLoading };
   };
@@ -79,9 +81,7 @@ export function makeModelCache(
     getFor(name: string): ProviderModels {
       const key = name.trim();
       if (!key) return stateFor(activeName());
-      if (byProvider.has(key)) {
-        return { ...stateFor(key), loading: loading.has(key) };
-      }
+      if (byProvider.has(key) || failed.has(key)) return stateFor(key);
       void refreshName(key);
       return { models: [], loading: true };
     },

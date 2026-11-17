@@ -176,6 +176,15 @@ describe("active model card: an unconfirmed model is marked as such", () => {
     expect(cardText()).not.toContain("web.settings.model_not_in_provider");
   });
 
+  it("marks the model as unverified when the provider reports no models", () => {
+    mount();
+    store.settings.models = [];
+    store.settings.modelsStatus = "ready";
+    store.settings.modelsReady = true;
+    renderModelPanel();
+    expect(cardText()).toContain("web.settings.model_unverified_empty");
+  });
+
   it("adds no caveat once the list confirms the model", () => {
     mount();
     expect(cardText()).not.toContain("web.settings.model_checking");

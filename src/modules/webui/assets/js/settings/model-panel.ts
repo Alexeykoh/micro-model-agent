@@ -92,6 +92,9 @@ function activeCard(cfg: Dict, entries: Dict[], activeName: string, select: (k: 
     caveat = t("web.settings.model_checking");
   } else if (hasModel && settings.modelsStatus === "error") {
     caveat = t("web.settings.model_unverified");
+  } else if (hasModel && settings.modelsStatus === "ready" && known.length === 0) {
+    // Провайдер ответил, но списка нет: подтвердить модель нечем.
+    caveat = t("web.settings.model_unverified_empty");
   } else if (
     hasModel &&
     settings.modelsStatus === "ready" &&

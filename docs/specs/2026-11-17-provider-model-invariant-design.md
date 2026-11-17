@@ -51,10 +51,14 @@
 { "models": [], "loading": false, "error": true }
 ```
 
-- `loading: true` — список ещё собирается (первый запрос/фоновый refresh);
-  клиент опрашивает до готовности и по SSE `models`.
-- `error: true` — провайдер не построился или `listModels()` упал; пустой
-  `models` нельзя трактовать как «моделей нет».
+- `loading: true` — списка ещё нет (первый запрос/фоновый refresh); клиент
+  опрашивает до готовности и по SSE `models`. Если список уже получен, фоновый
+  refresh его не прячет: `loading` не подменяет готовые данные (живой баг:
+  32 модели и `loading:true` одновременно).
+- `error: true` — списка нет, провайдер не построился или `listModels()` упал;
+  пустой `models` нельзя трактовать как «моделей нет». Следующий `GET
+  /api/models` после ошибки запускает повторную попытку (кнопка «повторить»).
+  Прежний успешный список при неудачном refresh сохраняется.
 - `loading/error` отсутствуют у легаси-стабов и per-provider запросов
   (`?provider=`) — там контракт не меняется.
 
@@ -70,7 +74,8 @@
 - `tests/core/provider-setprovider.test.ts` — `setProvider` очищает модель и не
   запоминает пустую.
 - `tests/webui-models-per-provider.test.ts` — `getActiveState`: loading → ready,
-  офлайн → error; провод `loading/error` в `/api/models`.
+  офлайн → error; провод `loading/error` в `/api/models`; готовый список не
+  уходит в loading при фоновом refresh; повтор после ошибки.
 - `tests/webui-model-panel-dom.test.ts` — loading / error / пустой список
   различимы, подпись провайдера, предупреждение о чужой модели, маркеры
   «проверяем»/«не проверена».

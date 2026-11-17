@@ -163,6 +163,8 @@ export interface WebUiWiring {
   knownModels?: () => string[];
   /** Активный провайдер: список + `loading`/`error` (честные состояния UI). */
   knownModelsState?: () => { models: string[]; loading: boolean; error?: boolean };
+  /** Повторить загрузку списка активного провайдера (кнопка «повторить»). */
+  knownModelsRefresh?: () => Promise<void>;
   /** Стратегия reasoning и возможности активного эндпоинта (честность UI). */
   providerReasoning?: () => {
     strategy?: string;

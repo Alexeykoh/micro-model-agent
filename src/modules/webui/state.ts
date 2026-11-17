@@ -183,6 +183,7 @@ export type ConfigStore = Pick<
   | "reconfigure"
   | "knownModels"
   | "knownModelsState"
+  | "knownModelsRefresh"
   | "knownModelsFor"
   | "providerReachable"
   | "providerReasoning"

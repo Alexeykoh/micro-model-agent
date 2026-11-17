@@ -1905,6 +1905,7 @@
   "web.settings.model_not_in_provider": "not in the provider's list",
   "web.settings.model_checking": "checking against the provider's list…",
   "web.settings.model_unverified": "unverified: provider did not report its list",
+  "web.settings.model_unverified_empty": "unverified: provider reported no models",
   "web.settings.inherit_model": "same as agent",
   "web.settings.no_matches": "no matches",
   "web.settings.active_provider": "active provider",

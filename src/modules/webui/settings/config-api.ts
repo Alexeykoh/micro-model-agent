@@ -237,14 +237,20 @@ export function handleModelsGet(
   // селекторов всегда отражает активных провайдера+модель без reconfigure-обвязки.
   // Без wired конфига опускается (легаси-стабы).
   const activeState = s.knownModelsState?.();
+  // «Повторить» после ошибки: GET сам запускает новую попытку (иначе кнопка
+  // возвращала бы тот же error из кеша) и отвечает `loading`, чтобы клиент
+  // продолжил опрос.
+  const retrying =
+    activeState?.error === true && !activeState.loading && !!s.knownModelsRefresh;
+  if (retrying) void s.knownModelsRefresh!();
   const body: Record<string, unknown> = {
     models: activeState?.models ?? s.knownModels(),
   };
   if (activeState) {
     // Честные состояния: «грузится» и «не ответил» не маскируются под пустой
     // список (UI иначе говорит «провайдер не сообщил моделей» во всех случаях).
-    body.loading = activeState.loading;
-    body.error = activeState.error === true;
+    body.loading = retrying ? true : activeState.loading;
+    body.error = retrying ? false : activeState.error === true;
   }
   if (s.config) {
     const probe = s.providerReasoning?.();
