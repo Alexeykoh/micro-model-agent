@@ -8,6 +8,7 @@
  */
 import { ModelLoader, probeProviderContext } from "../../llm/model-loader";
 import { discoverCapabilities, publishContextProbe } from "../agent/provider-probes";
+import type { DiscoveredCapabilities } from "../agent/provider-probes";
 import { join as joinDir } from "path";
 import type { ContextProbeResult } from "../../llm/model-loader";
 import { buildActiveProvider } from "../../modules/providers/factory";
@@ -112,13 +113,19 @@ export async function setupProviderPhase(
   // через reconfigure видна тулам без пересборки контекста.
   const capabilitiesRef: ProviderProbesBox = {};
   const contextProbeRef: ContextProbeBox = {};
+  // Нет выбранной модели — нет идентичности для проб: запрос с пустым model
+  // возвращает максимум каталога (наблюдалось 1M) и выдаёт его за окно
+  // несуществующей модели.
+  const hasModel = config.model.trim().length > 0;
   // Native discovery ДО сборки: механизм reasoning нужен экземпляру сразу (INV-R2/R6).
   // Тот же путь, что `refreshCapabilitiesProbe` при свитче: native/декларативные
   // capabilities + эмпирический выключатель reasoning (хостед-шлюзы его не
   // декларируют, а строгие серверы на неизвестный effort отвечают 400).
-  const nativeProbe = await discoverCapabilities(probeEndpoint, config.model, {
-    probeOffSwitch: config.reasoning?.mode !== "none",
-  });
+  const nativeProbe: DiscoveredCapabilities = hasModel
+    ? await discoverCapabilities(probeEndpoint, config.model, {
+        probeOffSwitch: config.reasoning?.mode !== "none",
+      })
+    : { reachable: false };
   if (nativeProbe.capabilities) capabilitiesRef.probe = nativeProbe.capabilities;
   capabilitiesRef.reachable = nativeProbe.reachable === true;
 
@@ -128,6 +135,10 @@ export async function setupProviderPhase(
   const probeConfiguredAtStart = config.contextWindow;
 
   const contextProbePromise: Promise<ContextProbeResult | null> = (async () => {
+    if (!hasModel) {
+      publishContextProbe(contextProbeRef, null);
+      return null;
+    }
     try {
       const lmContext =
         nativeProbe.contextLength !== undefined && nativeProbe.model
@@ -223,7 +234,12 @@ export async function setupProviderPhase(
   // механизм считается НЕ прошедшим. 24h TTL диск-кэша в probe.ts и так
   // бережёт стабильный бэкенд от перепроверок.
   let reasoningProbePromise: Promise<boolean> = Promise.resolve(false);
-  if (config.reasoning && config.reasoning.mode !== "none" && reasoningStrategy !== "none") {
+  if (
+    config.model.trim() &&
+    config.reasoning &&
+    config.reasoning.mode !== "none" &&
+    reasoningStrategy !== "none"
+  ) {
     reasoningProbePromise = (async () => {
       try {
         const { probeReasoningSupportCached } = await import("../../modules/reasoning/probe");

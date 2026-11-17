@@ -115,8 +115,8 @@ describe("enforceActiveModel", () => {
     expect(saveConfig).toHaveBeenCalledWith(config, "contextWindow");
   });
 
-  it("leaves an auto context window untouched", async () => {
-    const config = cfg();
+  it("leaves an auto context window untouched for a supported model", async () => {
+    const config = cfg({ model: "iceman-contributor-free" });
     config.contextAuto = true;
     config.contextWindow = 131_072;
     const saveConfig = vi.fn();
@@ -139,5 +139,21 @@ describe("enforceActiveModel", () => {
     // Модель уже пуста — домен `model` зря не пишем.
     expect(saveConfig).not.toHaveBeenCalledWith(config, "model");
     expect(reconfigure).toHaveBeenCalledWith(config, { probe: false });
+  });
+
+  it("resets an auto-probed window left on an empty model", async () => {
+    const config = cfg({ model: "" });
+    config.contextAuto = true;
+    config.contextWindow = 1_000_000;
+    const saveConfig = vi.fn();
+    const changed = await enforceActiveModel(
+      { saveConfig },
+      { reconfigure: vi.fn() },
+      config,
+      READY,
+    );
+    expect(changed).toBe(true);
+    expect(config.contextWindow).toBe(DEFAULTS.contextWindow);
+    expect(saveConfig).toHaveBeenCalledWith(config, "contextWindow");
   });
 });

@@ -56,10 +56,13 @@ export async function enforceActiveModel(
   view: ProviderModels | undefined,
 ): Promise<boolean> {
   const unsupported = activeModelUnsupported(config, view);
-  // Пустая модель + ручное окно — тоже невалидное состояние: окно принадлежало
-  // удалённой модели. Чиним и на boot, когда модель уже была очищена раньше.
+  // Нет модели (уже пусто или сейчас очистим) — окно контекста тоже не имеет
+  // владельца. Ручное значение сбрасываем в auto, авто-значение — в дефолт:
+  // иначе проба прошлой модели (напр. 1M) висит на несуществующем выборе.
+  const emptyModel = unsupported || !String(config.model || "").trim();
   const staleContext =
-    config.contextAuto === false && (unsupported || !String(config.model || "").trim());
+    emptyModel &&
+    (config.contextAuto === false || config.contextWindow !== DEFAULTS.contextWindow);
   if (!unsupported && !staleContext) return false;
 
   if (unsupported) {

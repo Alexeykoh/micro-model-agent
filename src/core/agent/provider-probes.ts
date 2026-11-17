@@ -142,6 +142,13 @@ export async function refreshCapabilitiesProbe(
 ): Promise<void> {
   const ref = host.deps.capabilitiesProbeRef;
   if (!ref) return;
+  // Без модели нечего пробовать: пустой id даёт каталог/максимум, а не
+  // возможности выбранной модели.
+  if (!config.model.trim()) {
+    ref.probe = undefined;
+    ref.reachable = false;
+    return;
+  }
   try {
     const endpoint = activeProviderEndpoint(config.provider);
     const discovered = await discoverCapabilities(endpoint, config.model, {
