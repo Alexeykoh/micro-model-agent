@@ -15,12 +15,11 @@ import { WebHost } from "../../core/web-host";
 import { makeHostConfigWiring } from "./settings/host-wiring";
 import { createAssetSource } from "./asset-cache";
 import { makeWebCommands } from "./chat/commands";
-import { makeReconfigure } from "./settings/reconfigure";
+import { installModelSurface } from "./settings/model-surface";
 import { installWebForwarding } from "./event-forward";
 import { installSkillsEvents } from "./skills-events";
 import { installWebPromptIO } from "./session/prompt-io";
 import { startServer, stopServer } from "./server";
-import { makeModelCache } from "./settings/model-cache";
 import { buildHostState } from "./host-state";
 import { attachIndexWatcher } from "./index-watcher";
 import { createGitCache, gitPeek } from "./git/snapshot-cache";
@@ -190,18 +189,9 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   }
 
   // Список моделей: явный источник побеждает; иначе фоновый кеш (рефреш на reconfigure).
-  const modelCache = deps.knownModels ? null : makeModelCache(deps.agent, deps.config);
-  state.knownModels = deps.knownModels ?? modelCache!.get;
-  state.knownModelsState = modelCache?.getActiveState;
-  state.knownModelsFor = modelCache?.getFor;
+  installModelSurface(state, deps.agent, deps.config, deps.knownModels);
   state.providerReachable = () => deps.agent.providerReachableSnapshot?.();
   state.providerReasoning = () => deps.agent.providerReasoningSnapshot?.();
-  if (modelCache) void modelCache.refresh();
-  state.reconfigure = makeReconfigure(
-    state,
-    deps.agent,
-    modelCache ? () => modelCache.refresh() : undefined,
-  );
 
   // Глобальные шины → SSE: лог/предупреждения, снимок запроса (U20), журнал
   // защиты (U22). Ходы идут раннерами (см. turns.ts), main-агент их не ведёт.

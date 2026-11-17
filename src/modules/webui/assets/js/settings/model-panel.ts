@@ -77,14 +77,29 @@ function activeCard(cfg: Dict, entries: Dict[], activeName: string, select: (k: 
   const meta = [activeName || t("web.settings.no_active_provider"), ctx].filter(Boolean).join(" · ");
   main.appendChild(el("span", "m-meta", meta));
   // Инвариант: не выдаём чужую модель за рабочую. Список нового провайдера
-  // получен и модели в нём нет — карточка обязана это сказать.
+  // получен и модели в нём нет — карточка обязана это сказать. Пока список
+  // грузится или провайдер не ответил, модель тоже не подтверждена: помечаем
+  // это, а не показываем её как проверенно рабочую.
   const known = settings.models.map(String);
-  const foreign =
-    !!cfg.model &&
+  const hasModel = !!cfg.model;
+  let caveat: string | null = null;
+  if (hasModel && (settings.modelsStatus === "loading" || settings.modelsStatus === "idle")) {
+    caveat = t("web.settings.model_checking");
+  } else if (hasModel && settings.modelsStatus === "error") {
+    caveat = t("web.settings.model_unverified");
+  } else if (
+    hasModel &&
     settings.modelsStatus === "ready" &&
     known.length > 0 &&
-    known.indexOf(String(cfg.model)) === -1;
-  if (foreign) main.appendChild(el("span", "m-meta dim", t("web.settings.model_not_in_provider")));
+    known.indexOf(String(cfg.model)) === -1
+  ) {
+    caveat = t("web.settings.model_not_in_provider");
+  }
+  if (caveat) {
+    // Неподтверждённое имя не должно выглядеть как рабочая модель: гасим его.
+    name.classList.add("dim");
+    main.appendChild(el("span", "m-meta dim", caveat));
+  }
   row.appendChild(main);
 
   const actions = el("div", "model-active-actions");

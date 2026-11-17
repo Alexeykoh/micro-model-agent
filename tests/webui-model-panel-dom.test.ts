@@ -142,3 +142,32 @@ describe("models tab: honest loading/error/empty states", () => {
     expect(card?.textContent).toContain("web.settings.model_not_in_provider");
   });
 });
+
+describe("active model card: an unconfirmed model is marked as such", () => {
+  const cardText = () => document.querySelector<HTMLElement>(".model-active")?.textContent || "";
+
+  it("marks the model as unchecked while the list is loading", () => {
+    mount();
+    store.settings.modelsStatus = "loading";
+    store.settings.modelsReady = false;
+    renderModelPanel();
+    expect(cardText()).toContain("web.settings.model_checking");
+    expect(cardText()).not.toContain("web.settings.model_not_in_provider");
+  });
+
+  it("marks the model as unverified when the provider did not answer", () => {
+    mount();
+    store.settings.modelsStatus = "error";
+    store.settings.modelsReady = true;
+    renderModelPanel();
+    expect(cardText()).toContain("web.settings.model_unverified");
+    expect(cardText()).not.toContain("web.settings.model_not_in_provider");
+  });
+
+  it("adds no caveat once the list confirms the model", () => {
+    mount();
+    expect(cardText()).not.toContain("web.settings.model_checking");
+    expect(cardText()).not.toContain("web.settings.model_unverified");
+    expect(cardText()).not.toContain("web.settings.model_not_in_provider");
+  });
+});

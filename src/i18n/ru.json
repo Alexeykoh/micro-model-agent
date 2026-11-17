@@ -1875,6 +1875,8 @@
   "web.settings.models_error": "не удалось получить список моделей провайдера",
   "web.settings.models_of_provider": "модели провайдера {provider}",
   "web.settings.model_not_in_provider": "нет в списке провайдера",
+  "web.settings.model_checking": "проверяем по списку провайдера…",
+  "web.settings.model_unverified": "не проверена: провайдер не отдал список",
   "web.settings.inherit_model": "как у агента",
   "web.settings.no_matches": "нет совпадений",
   "web.settings.active_provider": "активный провайдер",

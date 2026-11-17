@@ -22,6 +22,7 @@ export function makeReconfigure(
   state: RuntimeState & SessionStore & SseTransport,
   agent: WebReconfigurableAgent,
   after?: () => Promise<void> | void,
+  enforceModel?: () => Promise<boolean>,
 ): (config: AppConfig) => Promise<void> {
   return async (config) => {
     const windowBefore = config.contextWindow;
@@ -49,7 +50,7 @@ export function makeReconfigure(
     // сеть не входит в путь ответа `POST /api/config`), а его результат клиент
     // получает событиями `models` (и `config`, если проба подправила окно).
     pushState(state);
-    if (after) void refreshModelsInBackground(state, after, probeChanged);
+    if (after) void refreshModelsInBackground(state, after, probeChanged, enforceModel);
   };
 }
 
@@ -61,12 +62,23 @@ async function refreshModelsInBackground(
   state: SseTransport,
   after: () => Promise<void> | void,
   probeChanged: boolean,
+  enforceModel?: () => Promise<boolean>,
 ): Promise<void> {
   try {
     await after();
   } catch {
     /* результат reconfigure сохраняем, даже если рефреш моделей упал */
   }
+  // INV-P1: список получен — если активной модели в нём нет, сбрасываем её
+  // и сообщаем клиентам об изменении конфига, а не только списка.
+  let modelCleared = false;
+  if (enforceModel) {
+    try {
+      modelCleared = await enforceModel();
+    } catch {
+      /* сбой проверки не отменяет уже применённый reconfigure */
+    }
+  }
   broadcast({ type: "models", ts: Date.now() }, state);
-  if (probeChanged) broadcast({ type: "config", ts: Date.now() }, state);
+  if (probeChanged || modelCleared) broadcast({ type: "config", ts: Date.now() }, state);
 }
