@@ -10,7 +10,7 @@ import type { Dict } from "../core/store/types.js";
 import { contextLabel } from "../format.js";
 import { PANEL_SECTIONS } from "./controls.js";
 import { chip, renderSectionsInto, settingsSection } from "./panels.js";
-import { postConfig, loadModels } from "./write.js";
+import { postConfig, loadModels, ensureModelsLoaded } from "./write.js";
 
 export interface ModelPanelDeps {
   /** Provider entries in display order (live config wins over the snapshot). */
@@ -179,6 +179,9 @@ function modelsEmptyText(): string {
 }
 
 function modelsPane(cfg: Dict, activeName: string): HTMLElement {
+  // Opening the panel is a natural retry point: boot/SSE may have been missed
+  // (e.g. the server restarted while this page stayed open).
+  ensureModelsLoaded();
   const box = pane("models");
   const search = el("input", "searchbox");
   search.placeholder = t("web.settings.search_models");

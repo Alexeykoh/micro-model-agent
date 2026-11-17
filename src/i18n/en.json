@@ -1945,6 +1945,7 @@
   "web.settings.provider_rpm": "requests / min",
   "web.settings.provider_parallel": "max parallel",
   "web.settings.provider_max_tokens": "max completion tokens",
+  "web.settings.provider_unlisted_models": "unlisted models/aliases (comma-separated)",
   "web.settings.provider_cache_mechanism": "cache mechanism",
   "web.settings.provider_cache_report": "cache report format",
   "web.settings.provider_cache_flags": "cache flags",

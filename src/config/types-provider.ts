@@ -74,6 +74,12 @@ export interface ProviderEntry {
   priority?: number;
   /** Переопределения кеша для записи, накладываются на пресет провайдера. */
   cache?: Partial<CacheCapability>;
+  /**
+   * Модели/алиасы, которые провайдер принимает, но не отдаёт в `/models`.
+   * INV-P1 не очищает их: без списка отличить алиас от удалённой модели
+   * невозможно, поэтому разрешение задаётся явно.
+   */
+  unlistedModels?: string[];
 }
 
 export interface ProviderConfig {

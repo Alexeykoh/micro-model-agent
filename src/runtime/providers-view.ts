@@ -18,6 +18,8 @@ export interface ProviderView {
   maxCompletionTokens?: number;
   cache?: Partial<CacheCapability>;
   retry?: { maxRetries?: number; baseDelay?: number; maxDelay?: number };
+  /** Алиасы, которых нет в `/models`, но провайдер их принимает. */
+  unlistedModels?: string[];
   hasApiKey: boolean;
 }
 
@@ -93,6 +95,7 @@ export function buildProviderViews(config: AppConfig): {
     if (e.maxCompletionTokens !== undefined) view.maxCompletionTokens = e.maxCompletionTokens;
     if (e.cache !== undefined) view.cache = { ...e.cache };
     if (e.retry !== undefined) view.retry = { ...e.retry };
+    if (e.unlistedModels?.length) view.unlistedModels = [...e.unlistedModels];
     if (e.rateLimits) {
       view.rpm = e.rateLimits.maxRequestsPerMinute;
       view.parallel = e.rateLimits.maxParallelTasks;

@@ -1,9 +1,9 @@
 // Инвариант INV-P1: активная модель обязана быть в списке активного
 // провайдера. Список приходит асинхронно, поэтому проверка живёт рядом с
 // фоновым refresh'ем, а не в синхронной записи конфига.
-import type { AppConfig } from "../../../config/types";
-import type { ProviderModels } from "../../../runtime/model-cache";
 import { DEFAULTS } from "../../../config/defaults";
+import type { AppConfig, ProviderEntry } from "../../../config/types";
+import type { ProviderModels } from "../../../runtime/model-cache";
 
 /** Коллабораторы, нужные для очистки недоказанной модели. */
 export interface ModelInvariantState {
@@ -12,6 +12,21 @@ export interface ModelInvariantState {
 
 export interface ModelInvariantAgent {
   reconfigure(config: AppConfig, opts?: { probe?: boolean }): void | Promise<void>;
+}
+
+/** Активная запись провайдера (легаси-конфиг без `entries` — нет записи). */
+function activeEntry(config: AppConfig): ProviderEntry | undefined {
+  const name = config.provider.active || config.provider.type;
+  return (config.provider.entries ?? []).find((e) => e.label === name || e.type === name);
+}
+
+/**
+ * true — модель явно разрешена для записи, хотя её нет в `/models` (алиас).
+ * Провайдеры принимают такие id, но не перечисляют их; стирать их нельзя.
+ */
+export function modelAllowlisted(config: AppConfig, model: string): boolean {
+  const allowed = activeEntry(config)?.unlistedModels;
+  return Array.isArray(allowed) && allowed.includes(model);
 }
 
 /**
@@ -25,7 +40,8 @@ export function activeModelUnsupported(
 ): boolean {
   if (!view || view.loading || view.error || !view.models.length) return false;
   const model = String(config.model || "").trim();
-  return model.length > 0 && view.models.indexOf(model) === -1;
+  if (!model.length) return false;
+  return view.models.indexOf(model) === -1 && !modelAllowlisted(config, model);
 }
 
 /**
@@ -39,25 +55,34 @@ export async function enforceActiveModel(
   config: AppConfig,
   view: ProviderModels | undefined,
 ): Promise<boolean> {
-  if (!activeModelUnsupported(config, view)) return false;
-  const name = config.provider.active || config.provider.type;
-  config.model = "";
-  // Память провайдера не должна восстановить отозванный id при следующем
-  // свитче — иначе инвариант снова нарушится на ровном месте.
-  if (name && config.provider.models) delete config.provider.models[name];
+  const unsupported = activeModelUnsupported(config, view);
+  // Пустая модель + ручное окно — тоже невалидное состояние: окно принадлежало
+  // удалённой модели. Чиним и на boot, когда модель уже была очищена раньше.
+  const staleContext =
+    config.contextAuto === false && (unsupported || !String(config.model || "").trim());
+  if (!unsupported && !staleContext) return false;
+
+  if (unsupported) {
+    const name = config.provider.active || config.provider.type;
+    config.model = "";
+    // Память провайдера не должна восстановить отозванный id при следующем
+    // свитче — иначе инвариант снова нарушится на ровном месте.
+    if (name && config.provider.models) delete config.provider.models[name];
+  }
   // Ручное окно контекста принадлежало удалённой модели. Оставить его — значит
   // применить 1M к следующей модели, у которой окно меньше. Возвращаем auto:
   // окно новой модели определит проба, а не память о старой.
-  const resetContext = config.contextAuto === false;
-  if (resetContext) {
+  if (staleContext) {
     config.contextAuto = true;
     config.contextWindow = DEFAULTS.contextWindow;
   }
   try {
-    // `model` и `provider.models` живут в разных доменах файла конфига.
-    state.saveConfig?.(config, "model");
-    if (resetContext) state.saveConfig?.(config, "contextWindow");
-    state.saveConfig?.(config, "provider.active");
+    // `model`/память и окно контекста живут в разных доменах файла конфига.
+    if (unsupported) {
+      state.saveConfig?.(config, "model");
+      state.saveConfig?.(config, "provider.active");
+    }
+    if (staleContext) state.saveConfig?.(config, "contextWindow");
   } catch {
     /* провал персиста не отменяет очистку в памяти */
   }

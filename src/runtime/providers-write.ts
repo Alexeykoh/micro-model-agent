@@ -82,6 +82,9 @@ export function upsertProvider(config: AppConfig, input: ProviderInput): UpsertP
   if (input.priority !== undefined) entry.priority = input.priority;
   if (input.maxCompletionTokens !== undefined) entry.maxCompletionTokens = input.maxCompletionTokens;
   if (input.cache !== undefined) entry.cache = { ...(entry.cache ?? {}), ...input.cache };
+  if (input.unlistedModels !== undefined) {
+    entry.unlistedModels = input.unlistedModels.length ? input.unlistedModels : undefined;
+  }
   if (input.retry !== undefined) {
     const prev: { maxRetries?: number; baseDelay?: number; maxDelay?: number } = entry.retry ?? {};
     entry.retry = {

@@ -15,6 +15,8 @@ export interface ProviderInput {
   maxCompletionTokens?: number;
   cache?: Partial<CacheCapability>;
   retry?: { maxRetries?: number; baseDelay?: number; maxDelay?: number };
+  /** Модели/алиасы, которые провайдер принимает, но не отдаёт в `/models`. */
+  unlistedModels?: string[];
   /** Текущее имя правимой записи; при создании отсутствует. */
   originalName?: string;
 }
@@ -103,6 +105,20 @@ function parseRetry(
   return out;
 }
 
+/** Парсит список непустых строк (алиасы моделей). `null` — мусор (400). */
+function parseStringList(v: unknown): string[] | null | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (!Array.isArray(v)) return null;
+  const out: string[] = [];
+  for (const item of v) {
+    if (typeof item !== "string") return null;
+    const s = item.trim();
+    if (!s) continue;
+    if (!out.includes(s)) out.push(s);
+  }
+  return out.slice(0, 200);
+}
+
 /** Парсит и валидирует тело POST. `null` — реджект с 400. */
 export function parseProviderInput(rec: Record<string, unknown>): ProviderInput | null {
   const type = typeof rec.type === "string" ? rec.type.trim() : "";
@@ -126,6 +142,8 @@ export function parseProviderInput(rec: Record<string, unknown>): ProviderInput 
   if (cache === null) return null;
   const retry = parseRetry(rec.retry);
   if (retry === null) return null;
+  const unlistedModels = parseStringList(rec.unlistedModels);
+  if (unlistedModels === null) return null;
 
   const input: ProviderInput = { type, baseUrl };
   if (typeof rec.label === "string" && rec.label.trim()) input.label = rec.label.trim();
@@ -140,5 +158,6 @@ export function parseProviderInput(rec: Record<string, unknown>): ProviderInput 
   if (maxCompletionTokens !== undefined) input.maxCompletionTokens = maxCompletionTokens;
   if (cache !== undefined) input.cache = cache;
   if (retry !== undefined) input.retry = retry;
+  if (unlistedModels !== undefined) input.unlistedModels = unlistedModels;
   return input;
 }

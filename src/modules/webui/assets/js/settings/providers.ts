@@ -35,6 +35,7 @@ function providerEntries(): Dict[] {
       hasApiKey: !!e.apiKey,
       contextWindow: e.contextWindow,
       priority: e.priority,
+      unlistedModels: e.unlistedModels,
     }));
   }
   return [
@@ -114,6 +115,10 @@ async function submitProviderForm(f: Dict, mode: string, editing: Dict): Promise
     if (box.checked !== (prevCache[key] === true)) cache[key] = box.checked;
   });
   if (Object.keys(cache).length) body.cache = cache;
+  body.unlistedModels = String(f.unlisted.value || "")
+    .split(",")
+    .map((s: string) => s.trim())
+    .filter(Boolean);
   const r = await api<Dict>("/api/providers", { method: "POST", body });
   if (r.ok && r.data && r.data.ok) {
     const persisted = r.data.persisted !== false;

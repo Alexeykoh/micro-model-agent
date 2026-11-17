@@ -45,6 +45,19 @@ describe("activeModelUnsupported", () => {
   it("ignores the empty model (nothing to revoke)", () => {
     expect(activeModelUnsupported(cfg({ model: "" }), READY)).toBe(false);
   });
+
+  it("keeps a model explicitly allowed as an unlisted alias", () => {
+    const config = cfg();
+    config.provider.entries = [
+      {
+        type: "opencode-go",
+        label: "opencode-go",
+        baseUrl: "http://x/v1",
+        unlistedModels: ["qwen3.8-27b"],
+      },
+    ];
+    expect(activeModelUnsupported(config, READY)).toBe(false);
+  });
 });
 
 describe("enforceActiveModel", () => {
@@ -110,5 +123,21 @@ describe("enforceActiveModel", () => {
     await enforceActiveModel({ saveConfig }, { reconfigure: vi.fn() }, config, READY);
     expect(config.contextWindow).toBe(131_072);
     expect(saveConfig).not.toHaveBeenCalledWith(config, "contextWindow");
+  });
+
+  it("resets a manual window even when the model was already cleared earlier", async () => {
+    const config = cfg({ model: "" });
+    config.contextAuto = false;
+    config.contextWindow = 1_000_000;
+    const saveConfig = vi.fn();
+    const reconfigure = vi.fn();
+    const changed = await enforceActiveModel({ saveConfig }, { reconfigure }, config, READY);
+    expect(changed).toBe(true);
+    expect(config.contextAuto).toBe(true);
+    expect(config.contextWindow).toBe(DEFAULTS.contextWindow);
+    expect(saveConfig).toHaveBeenCalledWith(config, "contextWindow");
+    // Модель уже пуста — домен `model` зря не пишем.
+    expect(saveConfig).not.toHaveBeenCalledWith(config, "model");
+    expect(reconfigure).toHaveBeenCalledWith(config, { probe: false });
   });
 });

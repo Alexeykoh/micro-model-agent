@@ -245,6 +245,23 @@ describe("webui providers REST", () => {
     expect(last.cache?.mechanism).toBe("local");
   });
 
+  it("round-trips the unlisted-model allowlist", async () => {
+    const { parseProviderInput } = await import("../src/runtime/providers-input");
+    const input = parseProviderInput({
+      type: "openai-compat",
+      baseUrl: "http://x/v1",
+      unlistedModels: [" alias-a ", "alias-a", "alias-b"],
+    });
+    expect(input?.unlistedModels).toEqual(["alias-a", "alias-b"]);
+    // Строка вместо массива — мусор (400), а не молчаливое поле.
+    expect(parseProviderInput({ type: "x", baseUrl: "y", unlistedModels: "alias" })).toBeNull();
+
+    const { upsertProvider } = await import("../src/modules/webui/settings/providers-api");
+    const cfg = structuredClone(DEFAULTS);
+    expect(upsertProvider(cfg, input!).ok).toBe(true);
+    expect(cfg.provider.entries?.at(-1)?.unlistedModels).toEqual(["alias-a", "alias-b"]);
+  });
+
   it("lone legacy-seeded entry + colliding create-POST updates in place (no duplicate, no 409)", async () => {
     const { upsertProvider } = await import("../src/modules/webui/settings/providers-api");
     const { DEFAULTS } = await import("../src/config/defaults");

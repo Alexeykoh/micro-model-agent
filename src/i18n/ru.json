@@ -1918,6 +1918,7 @@
   "web.settings.provider_rpm": "запросов / мин",
   "web.settings.provider_parallel": "макс. параллельно",
   "web.settings.provider_max_tokens": "макс. токенов ответа",
+  "web.settings.provider_unlisted_models": "модели/алиасы вне списка (через запятую)",
   "web.settings.provider_cache_mechanism": "механизм кеша",
   "web.settings.provider_cache_report": "формат отчёта кеша",
   "web.settings.provider_cache_flags": "флаги кеша",

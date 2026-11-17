@@ -204,6 +204,16 @@ interface ModelsPayload {
 const MODELS_POLL_MS = 400;
 const MODELS_POLL_TRIES = 15;
 
+/**
+ * Loads the list when the settings panel is opened before the first request
+ * (boot/SSE missed). `loading` is left to the running poll, `error` to the
+ * explicit retry button — auto-retrying those would hammer a dead provider.
+ */
+export function ensureModelsLoaded(): void {
+  if (settings.modelsStatus !== "idle") return;
+  void loadModels();
+}
+
 export async function loadModels(): Promise<void> {
   const seq = ++modelsSeq;
   settings.modelsStatus = "loading";
