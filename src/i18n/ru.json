@@ -3054,5 +3054,11 @@
   "web.setup.review.smoking": "Проверяю модель…",
   "web.setup.review.smoke_ok": "Модель ответила за {ms} мс.",
   "web.setup.review.smoke_fail": "Модель не ответила. Проверьте провайдера, ключ и имя модели.",
-  "web.setup.review.smoke_skip": "Провайдер или модель не настроены — проверять нечего."
+  "web.setup.review.smoke_skip": "Провайдер или модель не настроены — проверять нечего.",
+  "web.setup.appearance.sounds_less": "Тише",
+  "web.setup.appearance.sounds_more": "Громче",
+  "web.setup.key.required": "Укажите API-ключ для этого провайдера.",
+  "web.setup.key.required_hint": "Этот провайдер не работает без API-ключа.",
+  "web.setup.model.test_fail_detail": "Не удалось связаться с моделью: {error}",
+  "web.setup.review.smoke_fail_detail": "Модель не ответила: {error}"
 }

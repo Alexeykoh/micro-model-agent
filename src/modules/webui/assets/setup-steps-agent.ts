@@ -2,6 +2,7 @@
 import type { SetupContext } from "./setup-context.js";
 import { h, stepBody } from "./setup-dom.js";
 import { tr } from "./setup-i18n.js";
+import { toggleRow } from "./setup-switch.js";
 
 /** 3.0 — короткий разделитель перед настройками агента. */
 export function renderAgentIntro(_ctx: SetupContext): HTMLElement {
@@ -20,39 +21,31 @@ export function renderAgentIntro(_ctx: SetupContext): HTMLElement {
 /** 3.1 — критик: вкл/выкл с объяснением. */
 export function renderCritic(ctx: SetupContext): HTMLElement {
   const box = stepBody("critic");
-  box.appendChild(toggleRow(ctx, "criticEnabled", "critic"));
+  box.appendChild(
+    toggleRow(
+      ctx.state.answers.criticEnabled,
+      tr("web.setup.critic.toggle"),
+      tr("web.setup.critic.toggle_desc"),
+      (next) => {
+        ctx.state.answers.criticEnabled = next;
+      },
+    ),
+  );
   return box;
 }
 
 /** 3.2 — веб-поиск: вкл/выкл с объяснением. */
 export function renderWebSearch(ctx: SetupContext): HTMLElement {
   const box = stepBody("websearch");
-  box.appendChild(toggleRow(ctx, "webSearchEnabled", "websearch"));
+  box.appendChild(
+    toggleRow(
+      ctx.state.answers.webSearchEnabled,
+      tr("web.setup.websearch.toggle"),
+      tr("web.setup.websearch.toggle_desc"),
+      (next) => {
+        ctx.state.answers.webSearchEnabled = next;
+      },
+    ),
+  );
   return box;
-}
-
-/** Строка-тумблер «название + пояснение». */
-function toggleRow(
-  ctx: SetupContext,
-  answerKey: "criticEnabled" | "webSearchEnabled",
-  i18nKey: string,
-): HTMLElement {
-  const row = h("div", "setup-sec-row setup-toggle-card");
-  const label = h("label", "setup-toggle");
-  const cb = h("input");
-  cb.type = "checkbox";
-  cb.checked = Boolean(ctx.state.answers[answerKey]);
-  cb.addEventListener("change", () => {
-    ctx.state.answers[answerKey] = cb.checked;
-  });
-  label.appendChild(cb);
-  const texts = h("span", "setup-toggle-texts");
-  texts.appendChild(h("span", "t", tr(`web.setup.${i18nKey}.toggle`)));
-  const desc = tr(`web.setup.${i18nKey}.toggle_desc`);
-  if (desc !== `web.setup.${i18nKey}.toggle_desc`) {
-    texts.appendChild(h("span", "d", desc));
-  }
-  label.appendChild(texts);
-  row.appendChild(label);
-  return row;
 }

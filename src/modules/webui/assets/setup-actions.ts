@@ -5,11 +5,15 @@ import { clearMsg, h, setMsg } from "./setup-dom.js";
 import { tr } from "./setup-i18n.js";
 import { STEPS, stepIndex } from "./setup-state.js";
 import { clearDraft, saveDraft } from "./setup-draft.js";
+import { providerRequiresKey } from "./setup-steps-provider.js";
 
 export function validate(ctx: SetupContext): string | null {
   const name = STEPS[ctx.state.step];
   if (name === "provider" && ctx.state.answers.configureProvider) {
     if (!ctx.state.answers.apiBase) return tr("web.setup.provider.required");
+  }
+  if (name === "key" && providerRequiresKey(ctx) && !ctx.state.answers.apiKey.trim()) {
+    return tr("web.setup.key.required");
   }
   if (name === "model" && ctx.state.answers.configureProvider) {
     if (!ctx.state.answers.model) return tr("web.setup.model.required");

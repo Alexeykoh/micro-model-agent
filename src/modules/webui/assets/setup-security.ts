@@ -2,6 +2,7 @@
 import type { SetupContext } from "./setup-context.js";
 import { h, stepBody } from "./setup-dom.js";
 import { tr } from "./setup-i18n.js";
+import { toggleRow } from "./setup-switch.js";
 import { GROUP_KEYS, SECURITY_POPUPS, popupField, setPath } from "./setup-security-fields.js";
 import type { Dict } from "./setup-state.js";
 
@@ -15,21 +16,18 @@ export function renderSecurity(ctx: SetupContext): HTMLElement {
   ];
   toggles.forEach(([key, labelKey, descKey, group]) => {
     const row = h("div", "setup-sec-row");
-    const label = h("label", "setup-toggle");
-    const cb = h("input");
-    cb.type = "checkbox";
-    cb.checked = Boolean(ctx.state.answers[key]);
-    cb.addEventListener("change", () => {
-      ctx.state.answers[key] = cb.checked;
-      ctx.render();
-    });
-    label.appendChild(cb);
-    const texts = h("span", "setup-toggle-texts");
-    texts.appendChild(h("span", "t", tr(labelKey)));
     const desc = tr(descKey);
-    if (desc !== descKey) texts.appendChild(h("span", "d", desc));
-    label.appendChild(texts);
-    row.appendChild(label);
+    row.appendChild(
+      toggleRow(
+        Boolean(ctx.state.answers[key]),
+        tr(labelKey),
+        desc !== descKey ? desc : "",
+        (next) => {
+          ctx.state.answers[key] = next;
+          ctx.render();
+        },
+      ),
+    );
     row.appendChild(detailButton(ctx, group, tr(labelKey)));
     box.appendChild(row);
   });
@@ -90,7 +88,6 @@ function presetOf(ctx: SetupContext): string {
 function detailButton(ctx: SetupContext, group: string, title: string): HTMLButtonElement {
   const btn = h("button", "setup-detail-btn");
   btn.type = "button";
-  btn.appendChild(h("span", "g", "⚙"));
   btn.appendChild(h("span", "t", tr("web.setup.security.configure")));
   btn.title = title;
   btn.addEventListener("click", (e) => {

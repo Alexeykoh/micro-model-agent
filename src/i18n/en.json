@@ -3054,5 +3054,11 @@
   "web.setup.review.smoking": "Testing the model…",
   "web.setup.review.smoke_ok": "Model answered in {ms} ms.",
   "web.setup.review.smoke_fail": "The model did not answer. Check the provider, key and model name.",
-  "web.setup.review.smoke_skip": "Provider or model is not configured, nothing to test."
+  "web.setup.review.smoke_skip": "Provider or model is not configured, nothing to test.",
+  "web.setup.appearance.sounds_less": "Lower volume",
+  "web.setup.appearance.sounds_more": "Raise volume",
+  "web.setup.key.required": "Enter an API key for this provider.",
+  "web.setup.key.required_hint": "This provider does not work without an API key.",
+  "web.setup.model.test_fail_detail": "Could not reach the model: {error}",
+  "web.setup.review.smoke_fail_detail": "The model did not answer: {error}"
 }

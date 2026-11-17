@@ -84,7 +84,12 @@ export function handleSetupTest(req: IncomingMessage, res: ServerResponse, s: Pr
         return;
       }
       if (!(await guardProbe(req, res, baseUrl, "test"))) return;
-      const result = await testProviderChatResult(baseUrl, str(rec, "apiKey"), model);
+      const result = await testProviderChatResult(
+        baseUrl,
+        str(rec, "apiKey"),
+        model,
+        str(rec, "providerType") || undefined,
+      );
       sendJson(res, 200, result);
     })
     .catch((err: unknown) => {

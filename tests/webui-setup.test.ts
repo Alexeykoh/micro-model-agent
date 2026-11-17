@@ -221,6 +221,11 @@ describe("webui setup REST", () => {
       expect(body.providers.find((p) => p.type === "openrouter")?.baseUrl).toContain(
         "openrouter.ai",
       );
+      expect(
+        (body.providers as Array<{ type: string; requiresKey?: boolean }>).find(
+          (p) => p.type === "opencode-go",
+        )?.requiresKey,
+      ).toBe(true);
       expect(body.defaults.contextWindow).toBe(32768);
       expect(body.defaults.maxToolIterations).toBe(200);
       expect(body.defaults.contextAuto).toBe(true);

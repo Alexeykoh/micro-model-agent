@@ -108,12 +108,13 @@ function smokeTest(ctx: SetupContext): HTMLElement {
     }
     btn.disabled = true;
     setMsg(ctx.gate.querySelector(".setup-step"), "", tr("web.setup.review.smoking"));
-    const r = await api<{ ok?: boolean; latencyMs?: number }>("/api/setup/test", {
+    const r = await api<{ ok?: boolean; latencyMs?: number; error?: string }>("/api/setup/test", {
       method: "POST",
       body: {
         baseUrl: ctx.state.answers.apiBase,
         apiKey: ctx.state.answers.apiKey,
         model: ctx.state.answers.model,
+        providerType: ctx.state.answers.provider,
       },
     });
     btn.disabled = false;
@@ -124,7 +125,14 @@ function smokeTest(ctx: SetupContext): HTMLElement {
         tr("web.setup.review.smoke_ok", { ms: r.data.latencyMs || 0 }),
       );
     } else {
-      setMsg(ctx.gate.querySelector(".setup-step"), "warn", tr("web.setup.review.smoke_fail"));
+      const detail = r.ok && r.data && r.data.error;
+      setMsg(
+        ctx.gate.querySelector(".setup-step"),
+        "warn",
+        detail
+          ? tr("web.setup.review.smoke_fail_detail", { error: detail })
+          : tr("web.setup.review.smoke_fail"),
+      );
     }
   });
   block.appendChild(btn);

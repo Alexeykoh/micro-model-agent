@@ -2789,7 +2789,8 @@ body.setup-active .layout { display: none; }
 
 .setup-toggle { display: flex; align-items: flex-start; gap: 9px; padding: 7px 0; font-size: 13px; cursor: pointer; }
 .setup-toggle input { accent-color: var(--green-fill); width: 15px; height: 15px; margin-top: 2px; flex: 0 0 auto; }
-.setup-toggle-texts { display: flex; flex-direction: column; gap: 2px; }
+.setup-toggle .toggle { margin-top: 1px; }
+.setup-toggle-texts { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .setup-toggle-texts .t { font-weight: 500; }
 .setup-toggle-texts .d { color: var(--dim-a); font-size: 12px; line-height: 1.5; }
 
@@ -3798,15 +3799,15 @@ body.light .c-dim { --face-c: var(--panel); }
 }
 .setup-theme-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.setup-sounds-details { margin: 4px 0 0 24px; transition: opacity .15s; }
+.setup-sounds-details { margin: 4px 0 0 43px; transition: opacity .15s; }
 .setup-sounds-details.off { opacity: .45; pointer-events: none; }
 .setup-volume { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
 .setup-volume .setup-label { margin: 0; }
-.setup-range { flex: 1 1 120px; min-width: 100px; accent-color: var(--accent); }
-.setup-volume-val { color: var(--dim-a); font-size: 12px; min-width: 38px; text-align: right; }
 
-.setup-presets { margin: 0 0 14px; }
-.setup-presets .setup-block-title { margin-bottom: 6px; }
+.setup-presets {
+  margin: 0 0 12px; padding-bottom: 14px; border-bottom: 1px solid var(--rule);
+}
+.setup-presets .setup-block-title { margin-bottom: 8px; }
 .setup-presets .setup-seg { margin-bottom: 0; }
 
 .setup-smoke {

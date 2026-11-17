@@ -14,6 +14,7 @@ g.location = win.location;
 const { I18N } = await import("../src/modules/webui/assets/setup-i18n.js");
 const { render } = await import("../src/modules/webui/assets/setup-render.js");
 const { createSetupState, stepIndex } = await import("../src/modules/webui/assets/setup-state.js");
+const { validate } = await import("../src/modules/webui/assets/setup-actions.js");
 import type { SetupContext } from "../src/modules/webui/assets/setup-context.js";
 
 function dict(name: string): Record<string, string> {
@@ -76,6 +77,19 @@ describe("provider choice (2.0)", () => {
   });
 });
 
+describe("provider key (2.2)", () => {
+  it("requires a key for providers that cannot work without one", () => {
+    const c = ctx(3);
+    c.state.answers.provider = "opencode-go";
+    c.state.display!.providers = [{ type: "opencode-go", label: "OpenCode Go", requiresKey: true }];
+    render(c);
+    expect(c.gate.querySelector(".setup-key-required")).not.toBeNull();
+    expect(validate(c)).toBe("Enter an API key for this provider.");
+    c.state.answers.apiKey = "sk-test";
+    expect(validate(c)).toBeNull();
+  });
+});
+
 describe("context auto (2.4)", () => {
   it("offers Auto/Manual and switches to manual", () => {
     const c = ctx(5);
@@ -89,18 +103,18 @@ describe("context auto (2.4)", () => {
 });
 
 describe("agent settings (3.x)", () => {
-  it("critic and web search render an on/off toggle", () => {
+  it("critic and web search render an on/off switch", () => {
     const critic = ctx(7);
     render(critic);
-    const cb = critic.gate.querySelector<HTMLInputElement>(".setup-toggle input");
-    expect(cb?.checked).toBe(true);
-    cb!.checked = false;
-    cb!.dispatchEvent(new win.Event("change"));
+    const sw = critic.gate.querySelector<HTMLButtonElement>(".setup-toggle .toggle");
+    expect(sw?.getAttribute("aria-checked")).toBe("true");
+    sw?.click();
     expect(critic.state.answers.criticEnabled).toBe(false);
 
     const search = ctx(8);
     render(search);
     expect(search.gate.textContent).toContain("Enable web search");
+    expect(search.gate.querySelector(".setup-toggle .toggle")).not.toBeNull();
   });
 
   it("appearance renders all themes, modes and sound controls", () => {
@@ -109,7 +123,9 @@ describe("agent settings (3.x)", () => {
     expect(c.gate.querySelectorAll(".setup-theme").length).toBeGreaterThanOrEqual(12);
     expect(c.gate.querySelectorAll(".setup-seg .setup-seg-opt")).toHaveLength(3);
     expect(c.gate.textContent).toContain("Notification sounds");
-    expect(c.gate.querySelector(".setup-range")).not.toBeNull();
+    expect(c.gate.querySelector(".volume-ctl")).not.toBeNull();
+    expect(c.gate.querySelector(".volume-ctl input")?.getAttribute("readonly")).not.toBeNull();
+    expect(c.gate.querySelector(".setup-range")).toBeNull();
   });
 
   it("security keeps the toggles, adds presets and drops the sounds row", () => {

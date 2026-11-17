@@ -5,11 +5,7 @@ import { Spinner } from "../ui/spinner";
 import { BUILTIN_PROVIDERS, HOSTED_BASE_URLS } from "../modules/providers/presets";
 import { box } from "../ui/box";
 import { getDefaultChannel } from "../output";
-import {
-  SETUP_DEFAULTS,
-  SETUP_LANGUAGES,
-  type SetupAnswers,
-} from "../modules/setup/answers";
+import { SETUP_DEFAULTS, SETUP_LANGUAGES, type SetupAnswers } from "../modules/setup/answers";
 import {
   fetchProviderModels,
   scanLocalServers,
@@ -144,7 +140,7 @@ export async function runSetup(externalRl?: PromptInput): Promise<SetupAnswers> 
   }
 
   const connected = await withSpinner(t("setup.testing_spinner", { model }), () =>
-    testProviderChat(apiBase, apiKey, model),
+    testProviderChat(apiBase, apiKey, model, provider),
   );
   if (connected) {
     getDefaultChannel().writeLine(pc.green(t("setup.ok")));

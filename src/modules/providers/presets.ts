@@ -88,7 +88,8 @@ const LMSTUDIO: ProviderSpec = {
   create: openaiCompat,
 };
 
-const OPENROUTER: ProviderSpec = {  type: "openrouter",
+const OPENROUTER: ProviderSpec = {
+  type: "openrouter",
   label: "OpenRouter (openrouter.ai)",
   baseUrl: "https://openrouter.ai/api/v1",
   capabilities: {
@@ -184,7 +185,7 @@ const OPENCODE_ZEN: ProviderSpec = {
     vision: false,
     reasoningStrategy: "openai-effort",
     listModels: true,
-    requiresKey: false,
+    requiresKey: true,
     auth: "bearer",
     // Серверный кеш с ценой Cached Read; для sticky-маршрутизации нужен
     // заголовок сессии (`x-opencode-session`).
@@ -212,7 +213,7 @@ const OPENCODE_GO: ProviderSpec = {
     vision: false,
     reasoningStrategy: "openai-effort",
     listModels: true,
-    requiresKey: false,
+    requiresKey: true,
     auth: "bearer",
     cache: {
       mechanism: "auto",

@@ -4,6 +4,7 @@ import { playCue } from "./js/sounds.js";
 import type { SetupContext } from "./setup-context.js";
 import { h, stepBody } from "./setup-dom.js";
 import { tr } from "./setup-i18n.js";
+import { toggleRow } from "./setup-switch.js";
 
 const BODY_THEMES = UI_THEMES.map((t) => t.id).filter((id) => id !== "flat");
 
@@ -85,20 +86,16 @@ function modeBlock(ctx: SetupContext): HTMLElement {
 
 function effectsBlock(ctx: SetupContext): HTMLElement {
   const block = h("div", "setup-block");
-  const label = h("label", "setup-toggle");
-  const cb = h("input");
-  cb.type = "checkbox";
-  cb.checked = Boolean(ctx.state.answers.themeEffects);
-  cb.addEventListener("change", () => {
-    ctx.state.answers.themeEffects = cb.checked;
-    ctx.render();
-  });
-  label.appendChild(cb);
-  const texts = h("span", "setup-toggle-texts");
-  texts.appendChild(h("span", "t", tr("web.setup.appearance.effects")));
-  texts.appendChild(h("span", "d", tr("web.setup.appearance.effects_desc")));
-  label.appendChild(texts);
-  block.appendChild(label);
+  block.appendChild(
+    toggleRow(
+      ctx.state.answers.themeEffects,
+      tr("web.setup.appearance.effects"),
+      tr("web.setup.appearance.effects_desc"),
+      (next) => {
+        ctx.state.answers.themeEffects = next;
+      },
+    ),
+  );
   return block;
 }
 
@@ -106,61 +103,72 @@ function soundsBlock(ctx: SetupContext): HTMLElement {
   const sounds = ctx.state.answers.sounds;
   const block = h("div", "setup-block");
   block.appendChild(h("div", "setup-block-title", tr("web.setup.appearance.sounds")));
-  block.appendChild(soundsToggle(ctx, "enabled", "web.setup.appearance.sounds_master", ""));
 
   const details = h("div", "setup-sounds-details");
-  details.appendChild(soundsToggle(ctx, "done", "web.setup.appearance.sounds_done", ""));
-  details.appendChild(soundsToggle(ctx, "question", "web.setup.appearance.sounds_question", ""));
-  details.appendChild(soundsToggle(ctx, "failed", "web.setup.appearance.sounds_failed", ""));
+  details.appendChild(
+    toggleRow(sounds.done, tr("web.setup.appearance.sounds_done"), "", (next) => {
+      ctx.state.answers.sounds.done = next;
+    }),
+  );
+  details.appendChild(
+    toggleRow(sounds.question, tr("web.setup.appearance.sounds_question"), "", (next) => {
+      ctx.state.answers.sounds.question = next;
+    }),
+  );
+  details.appendChild(
+    toggleRow(sounds.failed, tr("web.setup.appearance.sounds_failed"), "", (next) => {
+      ctx.state.answers.sounds.failed = next;
+    }),
+  );
   details.appendChild(volumeRow(ctx));
   details.classList.toggle("off", !sounds.enabled);
+
+  block.appendChild(
+    toggleRow(sounds.enabled, tr("web.setup.appearance.sounds_master"), "", (next) => {
+      ctx.state.answers.sounds.enabled = next;
+      details.classList.toggle("off", !next);
+    }),
+  );
   block.appendChild(details);
   return block;
 }
 
-function soundsToggle(
-  ctx: SetupContext,
-  key: "enabled" | "done" | "question" | "failed",
-  labelKey: string,
-  descKey: string,
-): HTMLElement {
-  const label = h("label", "setup-toggle");
-  const cb = h("input");
-  cb.type = "checkbox";
-  cb.checked = Boolean(ctx.state.answers.sounds[key]);
-  cb.addEventListener("change", () => {
-    ctx.state.answers.sounds[key] = cb.checked;
-    ctx.render();
-  });
-  label.appendChild(cb);
-  const texts = h("span", "setup-toggle-texts");
-  texts.appendChild(h("span", "t", tr(labelKey)));
-  if (descKey) texts.appendChild(h("span", "d", tr(descKey)));
-  label.appendChild(texts);
-  return label;
-}
-
+/** Громкость как в настройках: − значение +, без range-ползунка. */
 function volumeRow(ctx: SetupContext): HTMLElement {
   const row = h("div", "setup-volume");
-  const input = h("input", "setup-range");
-  input.type = "range";
-  input.min = "0";
-  input.max = "100";
-  input.step = "5";
-  input.value = String(ctx.state.answers.sounds.volume);
-  const value = h("span", "setup-volume-val", ctx.state.answers.sounds.volume + "%");
-  input.addEventListener("input", () => {
-    ctx.state.answers.sounds.volume = parseInt(input.value, 10) || 0;
-    value.textContent = ctx.state.answers.sounds.volume + "%";
-  });
+  row.appendChild(h("span", "setup-label", tr("web.setup.appearance.sounds_volume")));
+
+  const ctl = h("div", "volume-ctl");
+  const minus = h("button", "volume-btn", "−");
+  minus.type = "button";
+  minus.setAttribute("aria-label", tr("web.setup.appearance.sounds_less"));
+  const value = h("input");
+  value.type = "text";
+  value.readOnly = true;
+  value.value = ctx.state.answers.sounds.volume + "%";
+  value.setAttribute("aria-label", tr("web.setup.appearance.sounds_volume"));
+  const plus = h("button", "volume-btn", "+");
+  plus.type = "button";
+  plus.setAttribute("aria-label", tr("web.setup.appearance.sounds_more"));
+
+  const apply = (n: number): void => {
+    const clamped = Math.max(0, Math.min(100, Math.round(n / 10) * 10));
+    ctx.state.answers.sounds.volume = clamped;
+    value.value = clamped + "%";
+    playCue("done", clamped);
+  };
+  minus.addEventListener("click", () => apply(ctx.state.answers.sounds.volume - 10));
+  plus.addEventListener("click", () => apply(ctx.state.answers.sounds.volume + 10));
+  ctl.appendChild(minus);
+  ctl.appendChild(value);
+  ctl.appendChild(plus);
+  row.appendChild(ctl);
+
   const test = h("button", "setup-btn", tr("web.setup.appearance.sounds_test"));
   test.type = "button";
   test.addEventListener("click", () => {
     playCue("done", ctx.state.answers.sounds.volume);
   });
-  row.appendChild(h("span", "setup-label", tr("web.setup.appearance.sounds_volume")));
-  row.appendChild(input);
-  row.appendChild(value);
   row.appendChild(test);
   return row;
 }

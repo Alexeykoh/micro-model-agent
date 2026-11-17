@@ -205,14 +205,29 @@ export function renderProvider(ctx: SetupContext): HTMLElement {
   return box;
 }
 
-/** 2.2 — ключ: локальным серверам не нужен. */
+/** 2.2 — ключ: локальным серверам не нужен, hosted без него не работает. */
 export function renderKey(ctx: SetupContext): HTMLElement {
   const box = stepBody("key");
+  const required = Boolean(providerRequiresKey(ctx));
+  if (required) {
+    box.appendChild(
+      h("p", "setup-hint-line setup-key-required", tr("web.setup.key.required_hint")),
+    );
+  }
   const input = inputEl(ctx.state.answers.apiKey, "password", tr("web.setup.key.placeholder"));
+  input.setAttribute("aria-required", String(required));
   input.addEventListener("input", () => {
     ctx.state.answers.apiKey = input.value;
   });
   box.appendChild(field(tr("web.setup.key.label"), input));
   box.appendChild(messageEl());
   return box;
+}
+
+/** Выбранный провайдер требует ключ? */
+export function providerRequiresKey(ctx: SetupContext): boolean {
+  return Boolean(
+    (ctx.state.display?.providers || []).find((p: Dict) => p.type === ctx.state.answers.provider)
+      ?.requiresKey,
+  );
 }

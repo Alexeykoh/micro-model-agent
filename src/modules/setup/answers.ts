@@ -153,6 +153,8 @@ export interface SetupProviderOption {
   type: string;
   label: string;
   baseUrl?: string;
+  /** Провайдер не работает без API-ключа (OpenCode Zen/Go, hosted). */
+  requiresKey?: boolean;
 }
 
 /** Display-пейлоад `GET /api/setup` для браузерного визарда. */
@@ -165,7 +167,11 @@ export interface SetupDisplay {
 /** Статические display-данные, общие для веб-визарда и его тестов. */
 export function buildSetupDisplay(): SetupDisplay {
   const providers: SetupProviderOption[] = BUILTIN_PROVIDERS.map((spec) => {
-    const option: SetupProviderOption = { type: spec.type, label: spec.label };
+    const option: SetupProviderOption = {
+      type: spec.type,
+      label: spec.label,
+      requiresKey: spec.capabilities.requiresKey,
+    };
     if (spec.baseUrl) option.baseUrl = spec.baseUrl;
     return option;
   });

@@ -6,6 +6,7 @@
  * ни терминала, ни output-канала.
  */
 import { probeChat } from "../providers/preflight";
+import { errMsg } from "../../utils";
 import {
   SETUP_SCAN_TIMEOUT_MS as SCAN_TIMEOUT_MS,
   SETUP_MODELS_TIMEOUT_MS as MODELS_TIMEOUT_MS,
@@ -73,6 +74,8 @@ export interface ChatProbeResult {
   ok: boolean;
   latencyMs: number;
   replyChars: number;
+  /** Причина отказа (HTTP-статус и тело), если провайдер не ответил. */
+  error?: string;
 }
 
 /** Дешёвая chat-проба с метриками. Не бросает. */
@@ -80,17 +83,26 @@ export async function testProviderChatResult(
   apiBase: string,
   apiKey: string,
   model: string,
+  providerType?: string,
 ): Promise<ChatProbeResult> {
   const started = Date.now();
   try {
-    const reply = await probeChat({ baseUrl: apiBase, apiKey, model }, CHAT_TIMEOUT_MS);
+    const reply = await probeChat(
+      { baseUrl: apiBase, apiKey, model, providerType },
+      CHAT_TIMEOUT_MS,
+    );
     return {
       ok: reply !== "",
       latencyMs: Date.now() - started,
       replyChars: reply.length,
     };
-  } catch {
-    return { ok: false, latencyMs: Date.now() - started, replyChars: 0 };
+  } catch (err) {
+    return {
+      ok: false,
+      latencyMs: Date.now() - started,
+      replyChars: 0,
+      error: errMsg(err),
+    };
   }
 }
 
@@ -99,6 +111,7 @@ export async function testProviderChat(
   apiBase: string,
   apiKey: string,
   model: string,
+  providerType?: string,
 ): Promise<boolean> {
-  return (await testProviderChatResult(apiBase, apiKey, model)).ok;
+  return (await testProviderChatResult(apiBase, apiKey, model, providerType)).ok;
 }

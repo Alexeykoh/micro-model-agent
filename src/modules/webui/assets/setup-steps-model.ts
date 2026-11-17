@@ -55,17 +55,27 @@ export function renderModel(ctx: SetupContext): HTMLElement {
     }
     test.disabled = true;
     setMsg(box, "", tr("web.setup.model.testing"));
-    const r = await api<{ ok?: boolean }>("/api/setup/test", {
+    const r = await api<{ ok?: boolean; error?: string }>("/api/setup/test", {
       method: "POST",
       body: {
         baseUrl: ctx.state.answers.apiBase,
         apiKey: ctx.state.answers.apiKey,
         model: ctx.state.answers.model,
+        providerType: ctx.state.answers.provider,
       },
     });
     test.disabled = false;
     if (r.ok && r.data && r.data.ok) setMsg(box, "ok", tr("web.setup.model.test_ok"));
-    else setMsg(box, "warn", tr("web.setup.model.test_fail"));
+    else {
+      const detail = r.ok && r.data && r.data.error;
+      setMsg(
+        box,
+        "warn",
+        detail
+          ? tr("web.setup.model.test_fail_detail", { error: detail })
+          : tr("web.setup.model.test_fail"),
+      );
+    }
   });
 
   row.appendChild(load);
