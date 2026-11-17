@@ -154,9 +154,9 @@ describe("config registry", () => {
     expect(setConfigValue(cfg, "model", "model-a").ok).toBe(true);
     expect(cfg.provider.models).toEqual({ a: "model-a" });
 
-    // `b` has no memory yet → the current model is kept.
+    // `b` has no memory yet → the model is cleared, not inherited from `a`.
     expect(setConfigValue(cfg, "provider.active", "b").ok).toBe(true);
-    expect(cfg.model).toBe("model-a");
+    expect(cfg.model).toBe("");
 
     expect(setConfigValue(cfg, "model", "model-b").ok).toBe(true);
     expect(cfg.provider.models).toEqual({ a: "model-a", b: "model-b" });

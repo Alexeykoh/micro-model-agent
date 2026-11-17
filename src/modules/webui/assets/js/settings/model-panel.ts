@@ -76,6 +76,15 @@ function activeCard(cfg: Dict, entries: Dict[], activeName: string, select: (k: 
     : contextLabel();
   const meta = [activeName || t("web.settings.no_active_provider"), ctx].filter(Boolean).join(" · ");
   main.appendChild(el("span", "m-meta", meta));
+  // Инвариант: не выдаём чужую модель за рабочую. Список нового провайдера
+  // получен и модели в нём нет — карточка обязана это сказать.
+  const known = settings.models.map(String);
+  const foreign =
+    !!cfg.model &&
+    settings.modelsStatus === "ready" &&
+    known.length > 0 &&
+    known.indexOf(String(cfg.model)) === -1;
+  if (foreign) main.appendChild(el("span", "m-meta dim", t("web.settings.model_not_in_provider")));
   row.appendChild(main);
 
   const actions = el("div", "model-active-actions");
@@ -137,12 +146,24 @@ function providersPane(entries: Dict[], activeName: string, sections: Dict[]): H
   return box;
 }
 
-function modelsPane(cfg: Dict): HTMLElement {
+/** Empty-state text: loading, provider failure and a truly empty list differ. */
+function modelsEmptyText(): string {
+  if (settings.modelsStatus === "loading" || settings.modelsStatus === "idle") {
+    return t("web.settings.models_loading");
+  }
+  if (settings.modelsStatus === "error") return t("web.settings.models_error");
+  return settings.models.length ? t("web.settings.no_matches") : t("web.settings.no_models");
+}
+
+function modelsPane(cfg: Dict, activeName: string): HTMLElement {
   const box = pane("models");
   const search = el("input", "searchbox");
   search.placeholder = t("web.settings.search_models");
   search.setAttribute("aria-label", t("web.settings.search_models"));
   box.appendChild(search);
+  if (activeName) {
+    box.appendChild(el("div", "p-meta", t("web.settings.models_of_provider", { provider: activeName })));
+  }
   const list = el("div", "model-list");
   box.appendChild(list);
   const draw = () => {
@@ -152,13 +173,7 @@ function modelsPane(cfg: Dict): HTMLElement {
     // The active model is the answer to "what am I running?" — keep it on top.
     models.sort((a, b) => Number(b === cfg.model) - Number(a === cfg.model));
     if (!models.length) {
-      list.appendChild(
-        el(
-          "div",
-          "placeholder",
-          settings.models.length ? t("web.settings.no_matches") : t("web.settings.no_models"),
-        ),
-      );
+      list.appendChild(el("div", "placeholder", modelsEmptyText()));
       return;
     }
     models.forEach((m) => {
@@ -203,7 +218,7 @@ export function renderModelPanel(): void {
   const fallbackSections = sections.filter((s) => s.id === "model.fallback");
   const panes: Record<string, HTMLElement> = {
     providers: providersPane(entries, activeName, fallbackSections),
-    models: modelsPane(cfg),
+    models: modelsPane(cfg, activeName),
     performance: pane("performance"),
     capabilities: pane("capabilities"),
   };

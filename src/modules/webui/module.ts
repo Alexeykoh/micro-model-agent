@@ -192,6 +192,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   // Список моделей: явный источник побеждает; иначе фоновый кеш (рефреш на reconfigure).
   const modelCache = deps.knownModels ? null : makeModelCache(deps.agent, deps.config);
   state.knownModels = deps.knownModels ?? modelCache!.get;
+  state.knownModelsState = modelCache?.getActiveState;
   state.knownModelsFor = modelCache?.getFor;
   state.providerReachable = () => deps.agent.providerReachableSnapshot?.();
   state.providerReasoning = () => deps.agent.providerReasoningSnapshot?.();

@@ -109,7 +109,10 @@ export function handleConfigPost(
       }
 
       // Предыдущее значение — для отката, если ход начнётся, пока мы ждём.
+      // Свитч провайдера меняет и `model` (память INV-19 + INV-P1), поэтому
+      // откат обязан вернуть обе части, иначе 409 оставит пустую модель.
       const previousRaw = previousConfigRaw(config, key);
+      const previousModel = config.model;
 
       const result = setConfigValue(config, key, rawValue);
       if (!result.ok) {
@@ -139,8 +142,9 @@ export function handleConfigPost(
       // молчащем бэкенде окно прежнее.
       const autoContextSwitch = key === "model" || key === "provider.active";
       const wantsAutoProbe =
-        (key === "contextAuto" && result.value === true) ||
-        (autoContextSwitch && config.contextAuto !== false);
+        config.model.trim().length > 0 &&
+        ((key === "contextAuto" && result.value === true) ||
+          (autoContextSwitch && config.contextAuto !== false));
       let autoProbe: AutoContextResult | undefined;
       if (wantsAutoProbe) {
         autoProbe = await applyAutoContext(config);
@@ -148,6 +152,7 @@ export function handleConfigPost(
         // раннера опасен — откатываем значение и отвечаем 409 (аудит §7.9).
         if (s.busy) {
           restoreConfigValue(config, key, previousRaw);
+          if (key === "provider.active") config.model = previousModel;
           sendJson(res, 409, { ok: false, error: "busy" });
           return;
         }
@@ -156,10 +161,23 @@ export function handleConfigPost(
       // Сначала персист, затем reconfigure — но только когда реестр требует
       // реконфига для ключа; иначе shared шаг зря дёргал бы провайдеров/модели
       // на каждое нажатие.
+      // `model` живёт в домене agent, `provider.active` — в provider: без
+      // отдельной записи очистка модели при свитче не переживёт рестарт.
+      const modelChanged = key === "provider.active" && config.model !== previousModel;
       let persisted = true;
       let warning: string | undefined;
+      if (modelChanged) {
+        try {
+          s.saveConfig?.(config, "model");
+        } catch {
+          persisted = false;
+          warning = "config not persisted";
+        }
+      }
       if (needsRebuild(result.effects)) {
-        ({ persisted, warning } = await persistAndReconfigure(s, config, key));
+        const next = await persistAndReconfigure(s, config, key);
+        persisted = persisted && next.persisted;
+        warning = warning ?? next.warning;
       } else {
         try {
           s.saveConfig?.(config, key);
@@ -218,7 +236,16 @@ export function handleModelsGet(
   // `reasoning` аддитивен и выводится на запрос из живого конфига, так что ряд
   // селекторов всегда отражает активных провайдера+модель без reconfigure-обвязки.
   // Без wired конфига опускается (легаси-стабы).
-  const body: Record<string, unknown> = { models: s.knownModels() };
+  const activeState = s.knownModelsState?.();
+  const body: Record<string, unknown> = {
+    models: activeState?.models ?? s.knownModels(),
+  };
+  if (activeState) {
+    // Честные состояния: «грузится» и «не ответил» не маскируются под пустой
+    // список (UI иначе говорит «провайдер не сообщил моделей» во всех случаях).
+    body.loading = activeState.loading;
+    body.error = activeState.error === true;
+  }
   if (s.config) {
     const probe = s.providerReasoning?.();
     body.reasoning = buildReasoningView(s.config, {

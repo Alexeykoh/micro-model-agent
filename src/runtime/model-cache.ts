@@ -10,12 +10,16 @@ export interface ProviderModels {
   models: string[];
   /** true — список ещё грузится (первый запрос к записи); клиент перезапросит. */
   loading: boolean;
+  /** true — провайдер не ответил (офлайн/ошибка), а не «моделей нет». */
+  error?: boolean;
 }
 
 /** Кеш списка моделей: чтение и обновление от активного провайдера. */
 export interface ModelCache {
   /** Живые id моделей активного провайдера (сорт). */
   get: () => string[];
+  /** Активный провайдер: список + честный статус загрузки/ошибки. */
+  getActiveState: () => ProviderModels;
   /** Модели именованной записи (ленивая загрузка). */
   getFor: (name: string) => ProviderModels;
   /** Обновить активного провайдера; вешается хуком reconfigure. */
@@ -29,6 +33,8 @@ export function makeModelCache(
 ): ModelCache {
   const byProvider = new Map<string, string[]>();
   const loading = new Set<string>();
+  /** Провайдер ответил ошибкой: пустой список — «не смогли», не «нет моделей». */
+  const failed = new Set<string>();
   const activeName = (): string =>
     config.provider.active || config.provider.entries?.[0]?.label || config.provider.type || "";
 
@@ -39,13 +45,16 @@ export function makeModelCache(
       const provider = agent.getProviderFor(name);
       if (!provider) {
         if (!byProvider.has(name)) byProvider.set(name, []);
+        failed.add(name);
         return;
       }
       const models = await provider.listModels();
       byProvider.set(name, models.slice().sort());
+      failed.delete(name);
     } catch {
       // Офлайн-провайдер: прежний список, а если его не было — пустой.
       if (!byProvider.has(name)) byProvider.set(name, []);
+      failed.add(name);
     } finally {
       loading.delete(name);
     }
@@ -55,12 +64,24 @@ export function makeModelCache(
     await refreshName(activeName());
   };
 
+  const stateFor = (name: string): ProviderModels => {
+    const models = byProvider.get(name) ?? [];
+    // До первого ответа состояние — «грузится», а не «провайдер молчит».
+    const isLoading = loading.has(name) || (!byProvider.has(name) && !failed.has(name));
+    return failed.has(name)
+      ? { models, loading: isLoading, error: true }
+      : { models, loading: isLoading };
+  };
+
   return {
     get: () => byProvider.get(activeName()) ?? [],
+    getActiveState: () => stateFor(activeName()),
     getFor(name: string): ProviderModels {
       const key = name.trim();
-      if (!key) return { models: byProvider.get(activeName()) ?? [], loading: false };
-      if (byProvider.has(key)) return { models: byProvider.get(key) ?? [], loading: false };
+      if (!key) return stateFor(activeName());
+      if (byProvider.has(key)) {
+        return { ...stateFor(key), loading: loading.has(key) };
+      }
       void refreshName(key);
       return { models: [], loading: true };
     },

@@ -82,7 +82,32 @@ describe("model cache per provider", () => {
     );
     expect(cache.getFor("remote").loading).toBe(true);
     await flush();
-    expect(cache.getFor("remote")).toEqual({ models: [], loading: false });
+    expect(cache.getFor("remote")).toEqual({ models: [], loading: false, error: true });
+  });
+
+  it("reports the active provider's loading/error state", async () => {
+    const cache = makeModelCache(agentStub(), config());
+    expect(cache.getActiveState()).toEqual({ models: [], loading: true });
+    await cache.refresh();
+    expect(cache.getActiveState()).toEqual({
+      models: ["local-a", "local-b"],
+      loading: false,
+    });
+  });
+
+  it("marks an offline active provider as an error, not as an empty list", async () => {
+    const cache = makeModelCache(
+      {
+        getProviderFor: () => ({
+          listModels: async () => {
+            throw new Error("offline");
+          },
+        }),
+      } as never,
+      config(),
+    );
+    await cache.refresh();
+    expect(cache.getActiveState()).toEqual({ models: [], loading: false, error: true });
   });
 });
 
@@ -110,5 +135,17 @@ describe("GET /api/models?provider=", () => {
       clients: new Set(),
     } as never);
     expect(body()).toMatchObject({ models: ["active-a"] });
+  });
+
+  it("passes the active loading/error status through the wire", () => {
+    const { res, body } = resStub();
+    const req = { url: "/api/models" } as IncomingMessage;
+    handleModelsGet(req, res, {
+      knownModels: () => [],
+      knownModelsState: () => ({ models: [], loading: false, error: true }),
+      config: config(),
+      clients: new Set(),
+    } as never);
+    expect(body()).toMatchObject({ models: [], loading: false, error: true });
   });
 });

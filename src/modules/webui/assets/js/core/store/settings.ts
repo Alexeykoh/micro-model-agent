@@ -11,6 +11,13 @@ export interface SettingsSlice {
   /** Список моделей активного провайдера уже запрошен (даже если пуст). */
   modelsReady: boolean;
   /**
+   * Честный статус списка активного провайдера: `idle` до первого запроса,
+   * `loading` — сервер собирает список, `ready` — ответ получен (возможно,
+   * пустой), `error` — провайдер не ответил. Не даёт UI путать «грузится»,
+   * «офлайн» и «моделей нет».
+   */
+  modelsStatus: "idle" | "loading" | "ready" | "error";
+  /**
    * Модели записей провайдеров для страницы экспертов (`GET /api/models?provider=`).
    * `loading: true` — сервер ещё собирает список, страница перезапросит.
    */
@@ -35,6 +42,7 @@ export const settings: SettingsSlice = {
   webToken: null,
   models: [],
   modelsReady: false,
+  modelsStatus: "idle",
   modelsByProvider: {},
   memory: undefined,
   skills: undefined,

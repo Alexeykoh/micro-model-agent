@@ -161,6 +161,8 @@ export interface WebUiWiring {
   saveConfig?: (config: AppConfig, key?: string) => void;
   reconfigure?: (config: AppConfig) => void | Promise<void>;
   knownModels?: () => string[];
+  /** Активный провайдер: список + `loading`/`error` (честные состояния UI). */
+  knownModelsState?: () => { models: string[]; loading: boolean; error?: boolean };
   /** Стратегия reasoning и возможности активного эндпоинта (честность UI). */
   providerReasoning?: () => {
     strategy?: string;

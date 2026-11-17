@@ -22,6 +22,8 @@ function mount(): void {
   } as never;
   store.settings.registry = [];
   store.settings.models = ["qwen3.5-9b", "deepseek-v4.1-flash"];
+  store.settings.modelsStatus = "ready";
+  store.settings.modelsReady = true;
   store.settings.providers = {
     active: "lmstudio",
     entries: [
@@ -85,5 +87,58 @@ describe("model & provider panel", () => {
     const list = document.querySelector<HTMLElement>('.model-pane[data-pane="models"] .model-list');
     const first = list?.querySelector<HTMLElement>(".model-item .m-name");
     expect(first?.textContent).toBe("deepseek-v4.1-flash");
+  });
+});
+
+describe("models tab: honest loading/error/empty states", () => {
+  const listText = () =>
+    document.querySelector<HTMLElement>('.model-pane[data-pane="models"] .model-list')
+      ?.textContent || "";
+
+  it("names the provider whose list is shown", () => {
+    i18n.I18N.dicts = { en: { "web.settings.models_of_provider": "models of {provider}" } };
+    try {
+      mount();
+      const pane = document.querySelector<HTMLElement>('.model-pane[data-pane="models"]');
+      expect(pane?.textContent).toContain("models of lmstudio");
+    } finally {
+      i18n.I18N.dicts = { en: {} };
+    }
+  });
+
+  it("says the list is loading instead of 'no models'", () => {
+    mount();
+    store.settings.models = [];
+    store.settings.modelsStatus = "loading";
+    store.settings.modelsReady = false;
+    renderModelPanel();
+    expect(listText()).toContain("web.settings.models_loading");
+  });
+
+  it("distinguishes a provider failure from an empty list", () => {
+    mount();
+    store.settings.models = [];
+    store.settings.modelsStatus = "error";
+    store.settings.modelsReady = true;
+    renderModelPanel();
+    expect(listText()).toContain("web.settings.models_error");
+  });
+
+  it("says the provider reported no models only after a successful reply", () => {
+    mount();
+    store.settings.models = [];
+    store.settings.modelsStatus = "ready";
+    store.settings.modelsReady = true;
+    renderModelPanel();
+    expect(listText()).toContain("web.settings.no_models");
+  });
+
+  it("flags a model that is not in the provider's list", () => {
+    mount();
+    store.settings.models = ["another-model"];
+    store.settings.modelsStatus = "ready";
+    renderModelPanel();
+    const card = document.querySelector<HTMLElement>(".model-active");
+    expect(card?.textContent).toContain("web.settings.model_not_in_provider");
   });
 });

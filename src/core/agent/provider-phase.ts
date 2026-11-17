@@ -155,17 +155,17 @@ export async function setProvider(
   // Модель провайдера (память INV-19): без явного аргумента восстанавливаем
   // запомненную для записи — иначе в новый бэкенд уехала бы модель прошлого
   // (наблюалось: llama.cpp-модель в opencode-go). Ничего не запомнено —
-  // сохраняем текущую, перепроба/контекст под неё и так честнее чужой.
-  const target = model ?? manager.modelFor(name) ?? deps.config.model;
+  // активная модель пустая (INV-P1): пользователь выбирает её из списка
+  // нового провайдера, а не получает чужой id.
+  const target = model ?? manager.modelFor(name) ?? "";
   manager.switch(name, target);
   deps.config.provider = manager.toConfig();
   deps.config.model = target;
   // Память — последняя использованная модель новой активной записи (зеркало
   // записи через реестр: `syncProviderModelMemory` при ключе `model`).
-  deps.config.provider.models = {
-    ...(deps.config.provider.models ?? {}),
-    [name]: target,
-  };
+  // Пустую модель не запоминаем: иначе обратный свитч восстановит «ничего».
+  deps.config.provider.models = { ...(deps.config.provider.models ?? {}) };
+  if (target) deps.config.provider.models[name] = target;
   await reconfigure(host, deps.config);
 }
 

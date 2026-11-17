@@ -57,14 +57,14 @@ describe("setProvider restores the provider's remembered model (INV-19)", () => 
     });
   });
 
-  it("keeps the current model when nothing is remembered for the new provider", async () => {
+  it("clears the model when nothing is remembered for the new provider", async () => {
     const config = stubConfig();
     delete config.provider.models;
     const agent = new Agent(stubDeps(config) as never);
     await agent.setProvider("opencode-go");
-    expect(config.model).toBe("qwen3.8-27b");
-    // Факт использования запоминается — обратный свитч вернёт его.
-    expect(config.provider.models).toEqual({ "opencode-go": "qwen3.8-27b" });
+    expect(config.model).toBe("");
+    // Чужой id не запоминается под новым провайдером.
+    expect(config.provider.models).toEqual({});
   });
 
   it("explicit model argument wins over the memory", async () => {

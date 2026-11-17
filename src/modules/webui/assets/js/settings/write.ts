@@ -126,6 +126,15 @@ export async function postConfig(
       );
     }
     if (settings.config && r.data.value !== undefined) setPath(settings.config, key, r.data.value);
+    // Смена провайдера инвалидирует список моделей: старый список принадлежит
+    // прошлому бэкенду и не должен мелькать под новым. Свежий придёт SSE
+    // `models` после фонового refresh; до него честно показываем «грузится».
+    if (key === "provider.active") {
+      settings.models = [];
+      settings.modelsByProvider = {};
+      settings.modelsStatus = "loading";
+      settings.modelsReady = false;
+    }
     // Итог пробы едет в ответе — подложим в локальную копию сразу, не дожидаясь
     // GET (сбой реконфига не должен оставить меню с устаревшим окном). В auto
     // это бывает и на смене модели/провайдера, а не только на contextAuto.
@@ -146,6 +155,10 @@ export async function postConfig(
     if (isSelector) {
       await loadConfig();
     }
+    // Список моделей нового провайдера: SSE `models` придёт после фонового
+    // refresh, но не полагаемся только на него — поллинг `loading` в
+    // `loadModels` дорисует панель, если событие потерялось.
+    if (key === "provider.active") void loadModels();
     // Stale reply (a newer switch started while this one was in flight):
     // leave the paint and the final render to the newer operation.
     if (isSelector && seq !== switchSeq) return true;
@@ -176,27 +189,65 @@ export async function loadConfig(): Promise<void> {
   writeHooks.renderSettings?.();
 }
 
+/** Monotonic guard: a slow boot reply must not repaint over a newer switch. */
+let modelsSeq = 0;
+
+interface ModelsPayload {
+  models?: Dict[];
+  reasoning?: Dict;
+  capabilities?: Dict;
+  loading?: boolean;
+  error?: boolean;
+}
+
+/** Clamp for the loading poll: the server kicks `listModels()` in the background. */
+const MODELS_POLL_MS = 400;
+const MODELS_POLL_TRIES = 15;
+
 export async function loadModels(): Promise<void> {
-  const r = await api<{ models?: Dict[]; reasoning?: Dict; capabilities?: Dict }>("/api/models");
-  if (!r.ok || !r.data) {
-    // Попытка была: иначе редактор экспертов будет ретраить список на каждый
-    // рендер (офлайн-провайдер неотличим от «ещё не загружено»).
+  const seq = ++modelsSeq;
+  settings.modelsStatus = "loading";
+  settings.modelsReady = false;
+  writeHooks.renderSettings?.();
+  for (let attempt = 0; attempt < MODELS_POLL_TRIES; attempt++) {
+    const r = await api<ModelsPayload>("/api/models");
+    if (seq !== modelsSeq) return;
+    if (!r.ok || !r.data) {
+      // Попытка была: иначе редактор экспертов будет ретраить список на каждый
+      // рендер (офлайн-провайдер неотличим от «ещё не загружено»).
+      settings.modelsReady = true;
+      settings.modelsStatus = "error";
+      writeHooks.renderSettings?.();
+      return;
+    }
+    // Reasoning support rides along with the model list (one round-trip):
+    // the 4th selector row renders from this, never from a separate GET.
+    if (r.data.reasoning && typeof r.data.reasoning === "object")
+      session.reasoning = r.data.reasoning;
+    // Capabilities ride along too: the model chip renders from this, so a switch
+    // never needs a second request.
+    session.capabilities =
+      r.data.capabilities && typeof r.data.capabilities === "object"
+        ? (r.data.capabilities as { vision?: boolean; tools?: boolean })
+        : null;
+    // While the server is still collecting the list, keep the spinner instead
+    // of showing an empty provider as "no models" (INV-P1 honesty).
+    if (r.data.loading === true) {
+      await new Promise((res) => setTimeout(res, MODELS_POLL_MS));
+      if (seq !== modelsSeq) return;
+      continue;
+    }
+    settings.models = Array.isArray(r.data.models) ? r.data.models : [];
     settings.modelsReady = true;
+    settings.modelsStatus = r.data.error === true ? "error" : "ready";
+    renderSelectors();
+    writeHooks.renderSettings?.();
     return;
   }
-  settings.models = Array.isArray(r.data.models) ? r.data.models : [];
-  settings.modelsReady = true;
-  // Reasoning support rides along with the model list (one round-trip):
-  // the 4th selector row renders from this, never from a separate GET.
-  if (r.data.reasoning && typeof r.data.reasoning === "object")
-    session.reasoning = r.data.reasoning;
-  // Capabilities ride along too: the model chip renders from this, so a switch
-  // never needs a second request.
-  session.capabilities =
-    r.data.capabilities && typeof r.data.capabilities === "object"
-      ? (r.data.capabilities as { vision?: boolean; tools?: boolean })
-      : null;
+  // Poll exhausted: stay in loading so the next SSE `models` event retries.
+  settings.modelsStatus = "loading";
   renderSelectors();
+  writeHooks.renderSettings?.();
 }
 
 // Web chat font size (`ui.fontSize`). Like the theme (`ui.theme`, see
