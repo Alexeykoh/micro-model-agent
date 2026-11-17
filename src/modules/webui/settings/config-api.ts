@@ -16,6 +16,7 @@ import { persistAndReconfigure } from "../http/persist";
 import { applyAutoContext, type AutoContextResult } from "./context-auto";
 import { rawFromValue } from "../../../cli/config-mutations";
 import { buildReasoningView } from "./reasoning-view";
+import { capabilitiesBody } from "./capabilities-body";
 import type {
   ConfigStore,
   RuntimeState,
@@ -135,16 +136,18 @@ export function handleConfigPost(
         s.lspDoctor = undefined;
       }
 
-      // Окно контекста в режиме auto принадлежит провайдеру, поэтому его надо
-      // перепробить не только при включении auto, но и при смене модели или
-      // провайдера: иначе после свитча остаётся окно прошлой модели (или 32K
-      // дефолт), пока не случится следующий reconfigure. Fail-open — при
-      // молчащем бэкенде окно прежнее.
+      // Окно контекста в режиме auto принадлежит провайдеру. При свитче модели/
+      // провайдера его перепробует сам reconfigure (`reprobeActiveProvider`) —
+      // один сетевой вызов на операцию (INV-W6). Здесь — только явное
+      // включение auto, где UI ждёт `probed`, чтобы честно сказать «провайдер
+      // не сообщил окно». Fail-open: молчащий бэкенд оставляет окно прежним.
       const autoContextSwitch = key === "model" || key === "provider.active";
+      // Свитч модели/провайдера НЕ пробует окно здесь: reconfigure сделает это
+      // сам (`reprobeActiveProvider`), иначе провайдер опрашивался бы дважды за
+      // один свитч. Здесь проба нужна только для явного включения auto — там
+      // UI ждёт результат, чтобы честно показать «провайдер не сообщил окно».
       const wantsAutoProbe =
-        config.model.trim().length > 0 &&
-        ((key === "contextAuto" && result.value === true) ||
-          (autoContextSwitch && config.contextAuto !== false));
+        config.model.trim().length > 0 && key === "contextAuto" && result.value === true;
       let autoProbe: AutoContextResult | undefined;
       if (wantsAutoProbe) {
         autoProbe = await applyAutoContext(config);
@@ -152,7 +155,6 @@ export function handleConfigPost(
         // раннера опасен — откатываем значение и отвечаем 409 (аудит §7.9).
         if (s.busy) {
           restoreConfigValue(config, key, previousRaw);
-          if (key === "provider.active") config.model = previousModel;
           sendJson(res, 409, { ok: false, error: "busy" });
           return;
         }
@@ -193,11 +195,23 @@ export function handleConfigPost(
         persisted,
       };
       if (warning) body.warning = warning;
+      // Смена модели/провайдера: reconfigure уже перепробовал capabilities.
+      // Отдаём их в ответе, чтобы чип не держал набор прошлой модели до
+      // прихода SSE `models` (старые иконки при новом бэкенде — ложь).
+      if (key === "model" || key === "provider.active") {
+        const capabilities = capabilitiesBody(s.providerReasoning?.());
+        if (capabilities) body.capabilities = capabilities;
+      }
       // Итог пробы — чтобы UI честно сказал «провайдер не сообщил окно»,
       // когда auto включён, но бэкенд промолчал (fail-open).
       if (autoProbe) {
         body.contextWindow = autoProbe.contextWindow;
         body.probed = autoProbe.probed;
+      } else if (autoContextSwitch && config.contextAuto !== false) {
+        // Окно свитча измерил reconfigure — отдаём итог, но без `probed`:
+        // HTTP-пробы в этом хендлере не было, врать про «провайдер сообщил»
+        // нельзя.
+        body.contextWindow = config.contextWindow;
       }
       // Все вкладки/окна держат собственную копию конфига; после записи шлём
       // событие, чтобы клиенты перечитали `/api/config` и настроечные панели
@@ -262,9 +276,8 @@ export function handleModelsGet(
     });
     // Capabilities активной модели для чипа композера. Отдельного запроса нет:
     // композер и так перечитывает список моделей после смены пары.
-    if (probe) {
-      body.capabilities = { vision: probe.vision === true, tools: probe.tools === true };
-    }
+    const capabilities = capabilitiesBody(probe);
+    if (capabilities) body.capabilities = capabilities;
   }
   sendJson(res, 200, body);
 }

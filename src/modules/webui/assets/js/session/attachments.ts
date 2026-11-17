@@ -5,6 +5,7 @@ import { inp, imgPicker, attachStrip, attachErr, el, icon } from "../dom.js";
 import { t } from "../i18n.js";
 import { tabs as tabState, MAX_IMAGES, MAX_IMAGE_BYTES } from "../store.js";
 import type { Dict } from "../core/store/types.js";
+import { isSwitching } from "./switch-state.js";
 
 let activeTabFn: () => Dict | null = () => null;
 let insertPathFn: (text: string) => void = () => {};
@@ -101,18 +102,29 @@ async function addFiles(files: File[]): Promise<void> {
 // --- input wiring: picker, paste and the drop zone -----------------------
 if (imgPicker) {
   imgPicker.addEventListener("change", () => {
+    if (isSwitching()) {
+      imgPicker.value = "";
+      return;
+    }
     addFiles(Array.from(imgPicker.files || []));
     imgPicker.value = "";
   });
 }
 const attachBtn = document.getElementById("attachBtn");
 if (attachBtn && imgPicker) {
-  attachBtn.addEventListener("click", () => imgPicker.click());
+  attachBtn.addEventListener("click", () => {
+    if (isSwitching()) return;
+    imgPicker.click();
+  });
 }
 // Guard по конвенции файла (imgPicker/attachBtn выше): без #inp (чужой
 // тестовый DOM) модуль обязан импортироваться, а не падать на top-level.
 if (inp) {
   inp.addEventListener("paste", (e) => {
+    if (isSwitching()) {
+      e.preventDefault();
+      return;
+    }
     const items = e.clipboardData && e.clipboardData.items;
     if (!items) return;
     const files: File[] = [];
@@ -145,6 +157,7 @@ if (inputArea) {
   inputArea.addEventListener("drop", (e) => {
     e.preventDefault();
     inputArea.classList.remove("dragover");
+    if (isSwitching()) return;
     const de = e as DragEvent;
     const dt = de.dataTransfer;
     if (!dt) return;

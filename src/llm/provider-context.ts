@@ -14,7 +14,9 @@
 import type { ModelCapabilities } from "../config/types";
 import {
   probeOllama,
+  probeOllamaCapabilities,
   probeLlamaCpp,
+  probeLlamaCppModalities,
   probeLlamaCppReasoning,
   probeOpenAICompatCapabilities,
   probeOpenAICompatModels,
@@ -142,11 +144,12 @@ export interface NativeProbeResult {
 
 /**
  * Единая native-проба возможностей ДО сборки провайдера (INV-R2/R6): LM Studio
- * (`/api/v1/models`), llama.cpp (`/props.chat_template_caps`) и декларативные
- * `/models`-capabilities OpenAI-compat шлюзов (`capabilities.reasoning` —
- * OpenCode Zen/Go) опрашиваются параллельно. Механизм reasoning нужен
- * экземпляру провайдера сразу, поэтому эта проба, в отличие от context-probe,
- * не фоновая.
+ * (`/api/v1/models`), Ollama (`/api/show.capabilities`), llama.cpp (`/props`
+ * modality-флаги и `chat_template_caps`) и декларативные `/models`-capabilities
+ * OpenAI-compat шлюзов (`modalities.input`, `architecture.input_modalities`,
+ * `capabilities.reasoning` — OpenRouter / OpenCode Zen/Go) опрашиваются
+ * параллельно. Медиамодальности и механизм reasoning нужны экземпляру
+ * провайдера сразу, поэтому эта проба, в отличие от context-probe, не фоновая.
  */
 export async function probeNativeCapabilities(
   baseUrl: string,
@@ -156,17 +159,25 @@ export async function probeNativeCapabilities(
   apiKey?: string,
 ): Promise<NativeProbeResult | null> {
   const origin = baseUrl.replace(/\/$/, "").replace(/\/v1\/?$/, "");
-  // `/props` — локальный llama.cpp; хостед-типы не опрашиваем синхронно, иначе
-  // старт платит лишний сетевой round-trip к публичному эндпоинту.
-  const llamaEligible =
+  // `/props` и Ollama `/api/show` — локальные бэкенды; хостед-типы не опрашиваем
+  // синхронно, иначе старт платит лишний сетевой round-trip к публичному
+  // эндпоинту.
+  const localEligible =
     providerType === undefined || providerType === "openai-compat" || providerType === "lmstudio";
-  const [lm, llama, compatProbe] = await Promise.all([
+  const [lm, llama, llamaModalities, ollamaCaps, compatProbe] = await Promise.all([
     probeModel(baseUrl, model, timeoutMs),
-    llamaEligible ? probeLlamaCppReasoning(origin, timeoutMs) : Promise.resolve(null),
+    localEligible ? probeLlamaCppReasoning(origin, timeoutMs) : Promise.resolve(null),
+    localEligible ? probeLlamaCppModalities(origin, timeoutMs) : Promise.resolve(null),
+    localEligible ? probeOllamaCapabilities(origin, model, timeoutMs) : Promise.resolve(null),
     probeOpenAICompatCapabilities(baseUrl, model, apiKey, timeoutMs),
   ]);
-  if (!lm && !llama && !compatProbe.reachable) return null;
-  const capabilities: ModelCapabilities = { ...(lm?.capabilities ?? {}), ...(compatProbe.capabilities ?? {}) };
+  if (!lm && !llama && !llamaModalities && !ollamaCaps && !compatProbe.reachable) return null;
+  const capabilities: ModelCapabilities = {
+    ...(lm?.capabilities ?? {}),
+    ...(ollamaCaps ?? {}),
+    ...(llamaModalities ?? {}),
+    ...(compatProbe.capabilities ?? {}),
+  };
   if (llama) {
     capabilities.reasoningStrategy = llama.strategy;
     capabilities.reasoningOff = llama.reasoningOff;

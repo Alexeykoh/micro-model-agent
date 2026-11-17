@@ -37,12 +37,18 @@ export const CAPABILITY_DEFS: ConfigKeyDef[] = [
     (v) => isRecord(v) && Object.values(v).every((e) =>
       isRecord(e) &&
       (e.vision === undefined || typeof e.vision === "boolean") &&
+      (e.video === undefined || typeof e.video === "boolean") &&
+      (e.audio === undefined || typeof e.audio === "boolean") &&
+      (e.pdf === undefined || typeof e.pdf === "boolean") &&
       (e.tools === undefined || typeof e.tools === "boolean")),
     {
       kind: "table",
       columns: [
         { key: "name" },
         { key: "vision", type: "bool", optional: true },
+        { key: "video", type: "bool", optional: true },
+        { key: "audio", type: "bool", optional: true },
+        { key: "pdf", type: "bool", optional: true },
         { key: "tools", type: "bool", optional: true },
       ],
     }),

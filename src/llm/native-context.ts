@@ -1,8 +1,8 @@
 // Нативные пробы контекста бэкендов (Ollama / llama.cpp / OpenAI-compat
 // /models / models.dev) — вынесено из `provider-context.ts` (правило ≤300).
 import { lookupModelsDevContext } from "./models-dev";
-import { asPositiveInt, matchesModel, pickContextField } from "./openai-compat-models";
-import type { ReasoningStrategy } from "../config/types";
+import { asPositiveInt, declaredMediaCapabilities, matchesModel, pickContextField } from "./openai-compat-models";
+import type { ModelCapabilities, ReasoningStrategy } from "../config/types";
 
 // `/models`-часть (context-поля, декларативные capabilities, достижимость)
 // живёт в `openai-compat-models.ts`; реэкспорт — публичный API прежнего места.
@@ -52,16 +52,12 @@ function contextFromModelInfo(bag: Record<string, unknown>): number | null {
   return pickContextField(bag);
 }
 
-/** Ollama `/api/show`: детали модели, пробуем полное и короткое имя. */
-async function probeOllamaShow(
-  origin: string,
-  model: string,
-  timeoutMs: number,
-): Promise<number | null> {
+/** Ответы Ollama `/api/show` для полного и короткого имени (приоритет — полное). */
+function fetchOllamaShows(origin: string, model: string, timeoutMs: number): Promise<unknown[]> {
   const short = model.split(":")[0];
   // Оба имени — параллельно: порядок имён задаёт приоритет ответа.
   const names = short === model || short === "" ? [model] : [model, short];
-  const shows = await Promise.all(
+  return Promise.all(
     names.map((name) =>
       fetchJson(`${origin}/api/show`, timeoutMs, {
         method: "POST",
@@ -70,6 +66,15 @@ async function probeOllamaShow(
       }),
     ),
   );
+}
+
+/** Ollama `/api/show`: детали модели, пробуем полное и короткое имя. */
+async function probeOllamaShow(
+  origin: string,
+  model: string,
+  timeoutMs: number,
+): Promise<number | null> {
+  const shows = await fetchOllamaShows(origin, model, timeoutMs);
   for (const show of shows) {
     const info = show as {
       model_info?: Record<string, unknown>;
@@ -80,6 +85,26 @@ async function probeOllamaShow(
       const n = contextFromModelInfo(bag as Record<string, unknown>);
       if (n !== null) return n;
     }
+  }
+  return null;
+}
+
+/**
+ * Ollama `/api/show.capabilities` — декларация вида `["completion","tools",
+ * "vision","thinking"]`. Положительные флаги только: молчание эндпоинта не
+ * должно затирать preset/override.
+ */
+export async function probeOllamaCapabilities(
+  origin: string,
+  model: string,
+  timeoutMs: number,
+): Promise<ModelCapabilities | null> {
+  const shows = await fetchOllamaShows(origin, model, timeoutMs);
+  for (const show of shows) {
+    const caps = (show as { capabilities?: unknown } | null)?.capabilities;
+    if (!Array.isArray(caps)) continue;
+    const declared = declaredMediaCapabilities({ capabilities: caps });
+    if (Object.keys(declared).length > 0) return declared;
   }
   return null;
 }
@@ -113,6 +138,31 @@ export async function probeLlamaCpp(origin: string, timeoutMs: number): Promise<
     return pickContextField(gen as Record<string, unknown>);
   }
   return null;
+}
+
+/** Media-возможности, объявленные llama.cpp в `/props.modalities`. */
+export type LlamaCppModalities = Pick<ModelCapabilities, "vision" | "video" | "audio">;
+
+/**
+ * llama.cpp `/props.modalities: {vision, video, audio}` — булевы флаги
+ * загруженного mmproj. `true` — принимает; `false` здесь не возвращаем, чтобы
+ * не затирать preset/override при отсутствии проектора (модель может уметь
+ * vision сама). Null — сервер не декларирует.
+ */
+export async function probeLlamaCppModalities(
+  origin: string,
+  timeoutMs: number,
+): Promise<LlamaCppModalities | null> {
+  const props = await fetchJson(`${origin}/props`, timeoutMs);
+  if (!props || typeof props !== "object") return null;
+  const mods = (props as Record<string, unknown>).modalities;
+  if (!mods || typeof mods !== "object" || Array.isArray(mods)) return null;
+  const bag = mods as Record<string, unknown>;
+  const out: LlamaCppModalities = {};
+  for (const key of ["vision", "video", "audio"] as const) {
+    if (bag[key] === true) out[key] = true;
+  }
+  return Object.keys(out).length > 0 ? out : null;
 }
 
 /** Механизм reasoning, объявленный llama.cpp в `/props` (INV-R6). */

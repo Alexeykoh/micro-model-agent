@@ -23,7 +23,9 @@ export interface SessionSlice {
    * `null` — ещё не загружены/не поддерживаются сервером: чип скрыт, а не
    * показывает ложное `text-only`.
    */
-  capabilities: { vision?: boolean; tools?: boolean } | null;
+  capabilities:
+    | { vision?: boolean; video?: boolean; audio?: boolean; pdf?: boolean; tools?: boolean }
+    | null;
 }
 
 export const session: SessionSlice = {

@@ -180,10 +180,29 @@ export const ICONS: Record<string, IconSpec> = {
   wrench: [
     ["path",{d:"M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"}],
   ],
-  // Model capability chip (composer): vision / tools / reasoning.
+  // Model capability chip (composer): vision / video / audio / pdf / tools / reasoning.
   eye: [
     ["path", { d: "M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" }],
     ["circle", { cx: "12", cy: "12", r: "3" }],
+  ],
+  video: [
+    ["path", { d: "m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5" }],
+    ["rect", { x: 2, y: 6, width: 14, height: 12, rx: 2 }],
+  ],
+  "audio-lines": [
+    ["path", { d: "M2 10v3" }],
+    ["path", { d: "M6 6v11" }],
+    ["path", { d: "M10 3v18" }],
+    ["path", { d: "M14 8v7" }],
+    ["path", { d: "M18 5v13" }],
+    ["path", { d: "M22 10v3" }],
+  ],
+  "file-text": [
+    ["path", { d: "M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" }],
+    ["path", { d: "M14 2v5a1 1 0 0 0 1 1h5" }],
+    ["path", { d: "M10 9H8" }],
+    ["path", { d: "M16 13H8" }],
+    ["path", { d: "M16 17H8" }],
   ],
   brain: [
     ["path", { d: "M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" }],

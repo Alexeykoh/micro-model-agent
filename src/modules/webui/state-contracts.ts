@@ -172,6 +172,9 @@ export interface WebUiWiring {
     reasoningOff?: boolean;
     reachable?: boolean;
     vision?: boolean;
+    video?: boolean;
+    audio?: boolean;
+    pdf?: boolean;
     tools?: boolean;
   };
   /** Доступен ли активный эндпоинт по последней probe (для честного reasoning view). */

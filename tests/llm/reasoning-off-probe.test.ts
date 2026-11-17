@@ -203,7 +203,7 @@ describe("probeOpenAICompatCapabilities", () => {
     })) as unknown as typeof globalThis.fetch;
     expect(
       await probeOpenAICompatCapabilities("http://x/v1", "qwen3.8-27b", undefined, 3000),
-    ).toEqual({ reachable: true, capabilities: { vision: true } });
+    ).toEqual({ reachable: true, capabilities: { vision: true, video: true } });
   });
 
   it("combines declared vision with reasoning levels", async () => {

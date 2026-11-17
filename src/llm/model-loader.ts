@@ -32,7 +32,10 @@ export {
   type ProviderContextOpts,
 } from "./provider-context";
 export {
+  probeLlamaCppModalities,
+  probeOllamaCapabilities,
   probeLlamaCppReasoning,
+  type LlamaCppModalities,
   type LlamaCppReasoningCaps,
 } from "./native-context";
 

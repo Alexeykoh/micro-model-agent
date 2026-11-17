@@ -80,6 +80,7 @@ initMentions({ autogrow });
 initComposerDraft({ activeTab: deps.activeTab, submit: () => void send() });
 
 async function send(): Promise<void> {
+  if (inp.readOnly) return; // свитч пары в полёте: ход ушёл бы в старую
   // В модель и в ленту — исходный текст композера (контракт `draftForModel`).
   const text = draftForModel(inp.value);
   const trimmed = text.trim();

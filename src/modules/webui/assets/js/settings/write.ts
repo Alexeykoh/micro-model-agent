@@ -13,6 +13,12 @@ import { setIndicator } from "../dialog.js";
 import { saveErrorText } from "./save-error.js";
 import { setLayout } from "../rail.js";
 import { syncThemeFromConfig, loadOsTheme } from "./theme.js";
+import { setSwitching } from "../session/switch-state.js";
+import { loadModels, setModelsLoadHooks } from "./models-load.js";
+
+// Re-export the loader from its new home so existing importers of `write.js`
+// (SSE, selectors, panels) keep working unchanged.
+export { loadModels, ensureModelsLoaded } from "./models-load.js";
 
 // The composer selector chips/menus live in `selectors-write.ts`. It imports
 // this funnel (and `paintSelectorPending`), so the edge back must be a
@@ -27,6 +33,13 @@ export function setSelectorRenderer(fn: () => void): void {
 function renderSelectors(): void {
   renderSelectorChips?.();
 }
+
+// `loadModels` живёт в `models-load.ts`; отрисовка остаётся здесь и передаётся
+// хуками, чтобы не тянуть импорт обратно в загрузчик (цикл).
+setModelsLoadHooks({
+  renderSelectors,
+  renderSettings: () => writeHooks.renderSettings?.(),
+});
 
 // Selector keys (`provider/model/context/contextAuto/reasoning`) share the switch treatment:
 // pending paint + single-flight + parallel re-reads. Settings-panel writes
@@ -105,6 +118,16 @@ export async function postConfig(
     pendingKey = key;
     closeAllMenus();
     paintSelectorPending();
+    // Возможности принадлежат сменяемой паре: старый чип нельзя показывать
+    // новому бэкенду. Прячем его сразу, не дожидаясь асинхронной пробы.
+    if (key === "model" || key === "provider.active") {
+      session.capabilities = null;
+      renderSelectors();
+    }
+    // Пока идёт свитч (пробы контекста/capabilities + пересборка провайдера),
+    // ввод и отправка заблокированы: сообщение, ушедшее в старую пару, — это
+    // ход не на той модели. Снимается в `finally` после применения конфига.
+    setSwitching(true);
   }
   try {
     const r = await api<Dict>("/api/config", { method: "POST", body: { key, value } });
@@ -141,6 +164,20 @@ export async function postConfig(
     if (settings.config && typeof r.data.contextWindow === "number") {
       setPath(settings.config, "contextWindow", r.data.contextWindow);
     }
+    // Capabilities новой пары: сервер отдаёт их прямо в ответе свитча.
+    // Если ключа нет (старый сервер) — подстрахуемся обычным GET.
+    const switchedIdentity = key === "model" || key === "provider.active";
+    if (r.data.capabilities && typeof r.data.capabilities === "object") {
+      session.capabilities = r.data.capabilities as {
+        vision?: boolean;
+        video?: boolean;
+        audio?: boolean;
+        pdf?: boolean;
+        tools?: boolean;
+      };
+    } else if (switchedIdentity) {
+      void loadModels();
+    }
     if (key === "ui.activityRail") setLayout(String(r.data.value));
     if (key === "ui.fontSize") applyFontSize(String(r.data.value));
     if (key === "locale") {
@@ -169,6 +206,7 @@ export async function postConfig(
     if (isSelector && seq === switchSeq) {
       pendingKey = null;
       paintSelectorPending();
+      setSwitching(false);
     }
   }
 }
@@ -191,76 +229,6 @@ export async function loadConfig(): Promise<void> {
 
 /** Monotonic guard: a slow boot reply must not repaint over a newer switch. */
 let modelsSeq = 0;
-
-interface ModelsPayload {
-  models?: Dict[];
-  reasoning?: Dict;
-  capabilities?: Dict;
-  loading?: boolean;
-  error?: boolean;
-}
-
-/** Clamp for the loading poll: the server kicks `listModels()` in the background. */
-const MODELS_POLL_MS = 400;
-const MODELS_POLL_TRIES = 15;
-
-/**
- * Loads the list when the settings panel is opened before the first request
- * (boot/SSE missed). `loading` is left to the running poll, `error` to the
- * explicit retry button — auto-retrying those would hammer a dead provider.
- */
-export function ensureModelsLoaded(): void {
-  if (settings.modelsStatus !== "idle") return;
-  void loadModels();
-}
-
-export async function loadModels(): Promise<void> {
-  const seq = ++modelsSeq;
-  settings.modelsStatus = "loading";
-  settings.modelsReady = false;
-  writeHooks.renderSettings?.();
-  for (let attempt = 0; attempt < MODELS_POLL_TRIES; attempt++) {
-    const r = await api<ModelsPayload>("/api/models");
-    if (seq !== modelsSeq) return;
-    if (!r.ok || !r.data) {
-      // Попытка была: иначе редактор экспертов будет ретраить список на каждый
-      // рендер (офлайн-провайдер неотличим от «ещё не загружено»).
-      settings.modelsReady = true;
-      settings.modelsStatus = "error";
-      writeHooks.renderSettings?.();
-      return;
-    }
-    // Reasoning support rides along with the model list (one round-trip):
-    // the 4th selector row renders from this, never from a separate GET.
-    if (r.data.reasoning && typeof r.data.reasoning === "object")
-      session.reasoning = r.data.reasoning;
-    // Capabilities ride along too: the model chip renders from this, so a switch
-    // never needs a second request.
-    session.capabilities =
-      r.data.capabilities && typeof r.data.capabilities === "object"
-        ? (r.data.capabilities as { vision?: boolean; tools?: boolean })
-        : null;
-    // While the server is still collecting the list, keep the spinner instead
-    // of showing an empty provider as "no models" (INV-P1 honesty).
-    if (r.data.loading === true) {
-      await new Promise((res) => setTimeout(res, MODELS_POLL_MS));
-      if (seq !== modelsSeq) return;
-      continue;
-    }
-    settings.models = Array.isArray(r.data.models) ? r.data.models : [];
-    settings.modelsReady = true;
-    settings.modelsStatus = r.data.error === true ? "error" : "ready";
-    renderSelectors();
-    writeHooks.renderSettings?.();
-    return;
-  }
-  // Poll exhausted: the provider did not answer within the window. Don't leave
-  // a permanent "loading" (the old bug: a panel opened earlier never retried) —
-  // say the fetch failed; the next `models` event or the retry button recovers.
-  settings.modelsStatus = "error";
-  renderSelectors();
-  writeHooks.renderSettings?.();
-}
 
 // Web chat font size (`ui.fontSize`). Like the theme (`ui.theme`, see
 // `theme.ts`), it is a server config key. Applied as `body[data-font]` so the

@@ -125,38 +125,112 @@ export interface OpenAICompatCapabilitiesProbe {
   capabilities?: ModelCapabilities;
 }
 
-/** Строки-модальности, означающие приём изображения (llama.cpp, OpenRouter). */
-const VISION_MODALITIES: ReadonlySet<string> = new Set(["image", "vision", "multimodal"]);
+/** Тип входа, который модель принимает помимо текста. */
+export type MediaModality = "image" | "video" | "audio" | "pdf";
+
+/**
+ * Строковая модальность → флаг возможностей. Покрывает и MIME (`image/png`),
+ * и короткие имена (`image`, `vision`, `multimodal`) — разные бэкенды пишут
+ * по-разному: OpenRouter/llama.cpp — `input_modalities`, OpenCode Zen/Go —
+ * `modalities.input` с MIME, Ollama — `capabilities: ["vision"]`.
+ */
+const MODALITY_FLAGS: ReadonlyArray<[MediaModality, RegExp]> = [
+  ["image", /^(image(\/.*)?|vision|multimodal)$/],
+  ["video", /^video(\/.*)?$/],
+  ["audio", /^audio(\/.*)?$/],
+  ["pdf", /^(application\/pdf|pdf)$/],
+];
+
+/** Массивы строк-модальностей из всех известных форм записи `/models`. */
+function modalityBags(entry: Record<string, unknown>): unknown[] {
+  const arch = entry.architecture;
+  const archObj = arch && typeof arch === "object" ? (arch as Record<string, unknown>) : undefined;
+  const modalities = entry.modalities;
+  const modalitiesObj =
+    modalities && typeof modalities === "object" && !Array.isArray(modalities)
+      ? (modalities as Record<string, unknown>)
+      : undefined;
+  return [
+    modalities,
+    modalitiesObj?.input,
+    modalitiesObj?.input_modalities,
+    archObj?.input_modalities,
+    archObj?.inputModalities,
+    entry.input_modalities,
+    entry.inputModalities,
+  ];
+}
+
+/** Строковая модальность → канонический тип; null — не media-токен. */
+function modalityOf(token: string): MediaModality | null {
+  const normalized = token.trim().toLowerCase();
+  for (const [flag, re] of MODALITY_FLAGS) if (re.test(normalized)) return flag;
+  return null;
+}
+
+/** Объявленные модальности входа; пустой набор — «неизвестно», не «нет». */
+export function declaredMediaModalities(entry: Record<string, unknown>): Set<MediaModality> {
+  const out = new Set<MediaModality>();
+  for (const bag of modalityBags(entry)) {
+    if (!Array.isArray(bag)) continue;
+    for (const raw of bag) {
+      if (typeof raw !== "string") continue;
+      const flag = modalityOf(raw);
+      if (flag) out.add(flag);
+    }
+  }
+  return out;
+}
+
+/** Media-модальность → ключ `ModelCapabilities` (`image` исторически = `vision`). */
+function capabilityKey(flag: MediaModality): "vision" | "video" | "audio" | "pdf" {
+  return flag === "image" ? "vision" : flag;
+}
+
+/**
+ * Декларативные media-возможности записи `/models`: только `true`, ни одного
+ * `false` (probe не должен затирать preset/override при молчании бэкенда).
+ * Плюс legacy-формы `capabilities`: массив строк (llama.cpp) и объект
+ * (`vision`, `multimodal`, `tools.supported`).
+ */
+export function declaredMediaCapabilities(entry: Record<string, unknown>): ModelCapabilities {
+  const out: ModelCapabilities = {};
+  for (const flag of declaredMediaModalities(entry)) out[capabilityKey(flag)] = true;
+
+  const caps = entry.capabilities;
+  if (Array.isArray(caps)) {
+    const words = caps.filter((c): c is string => typeof c === "string");
+    for (const word of words) {
+      const flag = modalityOf(word);
+      if (flag) out[capabilityKey(flag)] = true;
+    }
+    const lower = words.map((w) => w.toLowerCase());
+    if (lower.includes("tools") || lower.includes("tool_call")) out.tools = true;
+  } else if (caps && typeof caps === "object") {
+    const obj = caps as Record<string, unknown>;
+    if (obj.vision === true || obj.multimodal === true) out.vision = true;
+    const tools = obj.tools;
+    const toolsSupported =
+      tools === true ||
+      (tools !== null &&
+        typeof tools === "object" &&
+        (tools as { supported?: unknown }).supported === true);
+    if (toolsSupported) out.tools = true;
+  }
+  if (entry.tool_call === true) out.tools = true;
+  return out;
+}
 
 /**
  * Модель объявила приём картинок? llamacpp отдаёт
  * `architecture.input_modalities: ["text","image"]` + `capabilities:
- * ["completion","multimodal"]`; LM Studio-совместимые — `capabilities.vision`.
+ * ["completion","multimodal"]`; LM Studio-совместимые — `capabilities.vision`;
+ * OpenCode Zen/Go — `modalities.input: ["text","image/png",…]`.
  * Отсутствие декларации — не «нет vision», просто неизвестно (слой probe не
  * должен перебивать preset/override).
  */
 export function declaresVision(entry: Record<string, unknown>): boolean {
-  const arch = entry.architecture;
-  const archInput =
-    arch && typeof arch === "object"
-      ? (arch as Record<string, unknown>).input_modalities ??
-        (arch as Record<string, unknown>).inputModalities
-      : undefined;
-  const topInput = entry.input_modalities ?? entry.inputModalities;
-  for (const mods of [archInput, topInput]) {
-    if (Array.isArray(mods) && mods.some((m) => typeof m === "string" && VISION_MODALITIES.has(m.toLowerCase()))) {
-      return true;
-    }
-  }
-  const caps = entry.capabilities;
-  if (Array.isArray(caps)) {
-    return caps.some((c) => typeof c === "string" && VISION_MODALITIES.has(c.toLowerCase()));
-  }
-  if (caps && typeof caps === "object") {
-    const obj = caps as Record<string, unknown>;
-    return obj.vision === true || obj.multimodal === true;
-  }
-  return false;
+  return declaredMediaCapabilities(entry).vision === true;
 }
 
 export async function probeOpenAICompatCapabilities(
@@ -172,8 +246,7 @@ export async function probeOpenAICompatCapabilities(
   if (list === null) return { reachable: true };
   const found = list.find((m) => matchesModel(m, model));
   if (!found) return { reachable: true };
-  const capabilities: ModelCapabilities = {};
-  if (declaresVision(found)) capabilities.vision = true;
+  const capabilities: ModelCapabilities = declaredMediaCapabilities(found);
   const raw = found.capabilities;
   const reasoning =
     raw && typeof raw === "object" && !Array.isArray(raw)

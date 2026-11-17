@@ -2,10 +2,13 @@
 // Kept as a pure function so the mapping is testable without a DOM and the
 // selector renderer stays a thin painter.
 
-export type CapabilityKey = "vision" | "tools" | "reasoning";
+export type CapabilityKey = "vision" | "video" | "audio" | "pdf" | "tools" | "reasoning";
 
 export interface ModelCapabilitiesView {
   vision?: boolean;
+  video?: boolean;
+  audio?: boolean;
+  pdf?: boolean;
   tools?: boolean;
 }
 
@@ -16,7 +19,7 @@ export interface ReasoningViewLike {
 }
 
 /**
- * Positive abilities only: vision/tools from the resolved server view, reasoning
+ * Positive abilities only: media/tools from the resolved server view, reasoning
  * when the endpoint declared a real strategy. Unknown capabilities → `[]`
  * (the chip is hidden, never a wrong `text-only`).
  */
@@ -26,8 +29,9 @@ export function capabilityKeys(
 ): CapabilityKey[] {
   if (!caps) return [];
   const keys: CapabilityKey[] = [];
-  if (caps.vision === true) keys.push("vision");
-  if (caps.tools === true) keys.push("tools");
+  for (const key of ["vision", "video", "audio", "pdf", "tools"] as const) {
+    if (caps[key] === true) keys.push(key);
+  }
   if (reasoning?.strategy && reasoning.strategy !== "none") keys.push("reasoning");
   return keys;
 }

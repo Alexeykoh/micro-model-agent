@@ -11,11 +11,14 @@ import { capabilityKeys, type CapabilityKey } from "./caps-chip.js";
 /** Lucide glyph per ability; the label lives in the per-icon tooltip. */
 const CAP_ICON: Record<CapabilityKey, string> = {
   vision: "eye",
+  video: "video",
+  audio: "audio-lines",
+  pdf: "file-text",
   tools: "wrench",
   reasoning: "brain",
 };
 
-const CAP_ORDER: CapabilityKey[] = ["vision", "tools", "reasoning"];
+const CAP_ORDER: CapabilityKey[] = ["vision", "video", "audio", "pdf", "tools", "reasoning"];
 
 /** Popup body: what each icon means and whether this model supports it. */
 function buildCapsPopup(info: Dict | undefined, active: Set<CapabilityKey>): HTMLElement {
