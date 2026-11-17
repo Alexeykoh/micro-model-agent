@@ -1229,6 +1229,7 @@
   "image.no_context": "No context manager available. Image can only be attached during an active session.",
   "image.attached": "Image attached from {source} ({size}). It will be included in the next message.",
   "image.error": "Failed to load image: {message}",
+  "image.unsupported": "The model does not accept \"{format}\" images: send PNG, JPEG, WebP, GIF or BMP. Convert the image (for example to PNG) and attach it again.",
   "tool.friendly.attach_image": "Attach image",
   "repl.image": "Attach image",
   "repl.image_usage": "/image <path|url|clipboard> — attach an image to the next message",

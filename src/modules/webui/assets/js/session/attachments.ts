@@ -65,10 +65,13 @@ function readAsDataUrl(file: File): Promise<string> {
   });
 }
 
+/** Только растр: SVG и прочее векторное модель не декодирует — отсекаем до отправки. */
+const BITMAP_MIME_RE = /^image\/(png|jpe?g|webp|gif|bmp)$/i;
+
 async function addFiles(files: File[]): Promise<void> {
   let err = "";
   for (const file of files) {
-    if (!file || typeof file.type !== "string" || file.type.indexOf("image/") !== 0) {
+    if (!file || typeof file.type !== "string" || !BITMAP_MIME_RE.test(file.type)) {
       err = t("web.attach.only_images");
       continue;
     }
@@ -129,7 +132,7 @@ if (inp) {
     if (!items) return;
     const files: File[] = [];
     for (const it of items) {
-      if (it.kind === "file" && it.type && it.type.indexOf("image/") === 0) {
+      if (it.kind === "file" && it.type && BITMAP_MIME_RE.test(it.type)) {
         const f = it.getAsFile();
         if (f) files.push(f);
       }

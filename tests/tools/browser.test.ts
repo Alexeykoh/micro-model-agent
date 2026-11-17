@@ -9,6 +9,12 @@ import {
   setBrowserSessionFactoryForTest,
 } from "../../src/tools/browser";
 
+/** Реальный PNG 16×16: буфер скриншота больше не «любые байты» — MIME по магии. */
+const PNG_SHOT = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAKUlEQVR42u3NMQEAAAgDoC251a3gLwqgOXF3VwEBAQEBAQEBAQEBAQEBAQGwF2J8AAG3H2jHAAAAAElFTkSuQmCC",
+  "base64",
+);
+
 describe("createBrowserTool", () => {
   it("has correct tool definition", () => {
     const tool = createBrowserTool();
@@ -48,7 +54,7 @@ describe("formatScreenshotForTextModel", () => {
 
 describe("screenshotToImagePart", () => {
   it("wraps the screenshot as an image_url content part", async () => {
-    const part = await screenshotToImagePart(Buffer.from("fake-png-data"));
+    const part = await screenshotToImagePart(PNG_SHOT);
     expect(part.type).toBe("image_url");
     expect(part.image_url.url.startsWith("data:image/")).toBe(true);
   });
@@ -64,7 +70,7 @@ describe("browser screenshot delivery by capability", () => {
       execute: async () => ({
         success: true,
         output: 'Page: "Test"',
-        screenshot: Buffer.from("fake-png-data"),
+        screenshot: PNG_SHOT,
       }),
       close: async () => {},
     };
@@ -107,7 +113,7 @@ describe("browser screenshot delivery by capability", () => {
     await withSession({ vision: false }, (result) => {
       expect(result.imageFiles).toHaveLength(1);
       expect(result.imageFiles[0].mime).toBe("image/png");
-      expect(result.imageFiles[0].bytes.length).toBe(Buffer.from("fake-png-data").length);
+      expect(result.imageFiles[0].bytes.length).toBe(PNG_SHOT.length);
     });
     await withSession({ vision: true }, (result) => {
       // Модель получает ресайзнутый data URL, веб — полноразмерные байты.

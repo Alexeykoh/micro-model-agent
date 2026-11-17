@@ -31,6 +31,13 @@ export const MAX_IMAGES = 10;
 /** Максимум размера одного `data:image/...` URL: файл до 50 МБ после base64 (≈4/3) + заголовок. */
 export const MAX_IMAGE_DATA_URL_BYTES = 70 * 1024 * 1024;
 
+/**
+ * Разрешённые форматы: только растр, который декодирует модель. SVG и прочее
+ * векторное отсекаем здесь — иначе провайдер отвечает
+ * `400 Failed to load image or audio file`, и картинка застревает в истории.
+ */
+const IMAGE_DATA_URL_RE = /^data:image\/(png|jpe?g|webp|gif|bmp);base64,/i;
+
 /** JSON-ответ: статус + тело (единственный способ отдать JSON в webui). */
 export function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
@@ -77,7 +84,7 @@ export function parseMessageBody(raw: string): ParsedMessageBody {
   if (rawImages.length > MAX_IMAGES) return { error: "too many images" };
   const images: string[] = [];
   for (const img of rawImages) {
-    if (typeof img !== "string" || !img.startsWith("data:image/")) {
+    if (typeof img !== "string" || !IMAGE_DATA_URL_RE.test(img)) {
       return { error: "invalid image" };
     }
     if (Buffer.byteLength(img, "utf8") > MAX_IMAGE_DATA_URL_BYTES) {
