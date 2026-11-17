@@ -1,5 +1,5 @@
 // Runtime palette for the `omarchy` theme. The backend reads the active
-// Omarchy Linux theme (`~/.config/omarchy/current/theme/colors.toml`) and this
+// Omarchy Linux theme (`~/.local/state/omarchy/current/theme/colors.toml`) and this
 // module turns its ANSI/semantic colours into the web UI token set. The static
 // `omarchy.css` only covers the pre-fetch flash; once `/api/os-theme` answers,
 // the derived values are set inline on `<body>` (highest specificity).

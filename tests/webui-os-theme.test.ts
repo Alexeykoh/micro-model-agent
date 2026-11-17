@@ -1,11 +1,14 @@
 // Guards for the Linux-only Omarchy theme source: `GET /api/os-theme` reads the
-// active Omarchy theme from `~/.config/omarchy/current/theme/colors.toml`.
+// active Omarchy theme from `$XDG_STATE_HOME/omarchy/current/theme/colors.toml`
+// (new layout) or the legacy `~/.config/omarchy/current/theme/colors.toml`.
 import { describe, expect, it, afterEach } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  defaultOmarchyDir,
   getOsThemeInfo,
+  omarchyDirs,
   parseOmarchyColors,
   readOmarchyTheme,
 } from "../src/modules/webui/settings/os-theme.js";
@@ -86,6 +89,37 @@ describe("Omarchy OS theme", () => {
   it("returns null when colors.toml is missing", () => {
     const dir = fixture({ "theme.name": "tokyo-night\n" });
     expect(readOmarchyTheme(dir)).toBeNull();
+  });
+
+  it("prefers the XDG state layout and falls back to legacy config", () => {
+    const home = mkdtempSync(join(tmpdir(), "mma-omarchy-home-"));
+    dirs.push(home);
+    const stateRoot = join(home, ".local", "state");
+    const configRoot = join(home, ".config");
+    expect(defaultOmarchyDir(home, {})).toBe(join(stateRoot, "omarchy", "current"));
+    expect(omarchyDirs(home, {})).toEqual([
+      join(stateRoot, "omarchy", "current"),
+      join(configRoot, "omarchy", "current"),
+    ]);
+
+    // Новый формат: текущая тема в ~/.local/state/omarchy/current.
+    mkdirSync(join(stateRoot, "omarchy", "current", "theme"), { recursive: true });
+    writeFileSync(join(stateRoot, "omarchy", "current", "theme", "colors.toml"), SEMANTIC);
+    expect(defaultOmarchyDir(home, {})).toBe(join(stateRoot, "omarchy", "current"));
+
+    // Только legacy: ~/.config/omarchy/current без state-каталога.
+    const legacyHome = mkdtempSync(join(tmpdir(), "mma-omarchy-legacy-"));
+    dirs.push(legacyHome);
+    const legacyCurrent = join(legacyHome, ".config", "omarchy", "current");
+    mkdirSync(join(legacyCurrent, "theme"), { recursive: true });
+    writeFileSync(join(legacyCurrent, "theme", "colors.toml"), SEMANTIC);
+    expect(defaultOmarchyDir(legacyHome, {})).toBe(legacyCurrent);
+
+    // XDG_STATE_HOME важнее умолчания.
+    const xdgCurrent = join(home, "xdg-state", "omarchy", "current");
+    mkdirSync(join(xdgCurrent, "theme"), { recursive: true });
+    writeFileSync(join(xdgCurrent, "theme", "colors.toml"), SEMANTIC);
+    expect(defaultOmarchyDir(home, { XDG_STATE_HOME: join(home, "xdg-state") })).toBe(xdgCurrent);
   });
 
   it("exposes Omarchy only on Linux", () => {

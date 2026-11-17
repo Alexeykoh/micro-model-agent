@@ -1,10 +1,12 @@
 /**
  * Тема из операционной системы: активная тема Omarchy Linux.
  *
- * Omarchy хранит текущую тему в `~/.config/omarchy/current/theme/colors.toml`
- * (плоский TOML: `accent = "#..."`, `background = "#..."`, …) и её имя в
- * `~/.config/omarchy/current/theme.name`. Читаем только Linux: на Windows/macOS
- * такого файла нет по определению, поэтому `omarchy: null`.
+ * Omarchy хранит текущую тему в `$XDG_STATE_HOME/omarchy/current/theme/colors.toml`
+ * (обычно `~/.local/state/omarchy/current`; плоский TOML: `accent = "#..."`,
+ * `background = "#..."`, …) и её имя в `…/current/theme.name`. Старые версии
+ * писали это в `~/.config/omarchy/current` — поддерживаем оба каталога, чтобы
+ * тема не пропадала после обновления Omarchy. Читаем только Linux: на
+ * Windows/macOS такого файла нет по определению, поэтому `omarchy: null`.
  *
  * Модуль сознательно не тянет TOML-парсер: файл плоский, значения — hex-цвета.
  */
@@ -41,10 +43,30 @@ export interface OsThemeInfo {
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
-/** Каталог текущей темы Omarchy (`XDG_CONFIG_HOME` учитывается). */
-export function defaultOmarchyDir(): string {
-  const configHome = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
-  return join(configHome, "omarchy", "current");
+/**
+ * Кандидаты каталога `current/` в порядке предпочтения: XDG state (новые версии
+ * Omarchy) → legacy config. `XDG_STATE_HOME`/`XDG_CONFIG_HOME` учитываются.
+ */
+export function omarchyDirs(
+  home: string = homedir(),
+  env: NodeJS.ProcessEnv = process.env,
+): string[] {
+  const roots = [
+    env.XDG_STATE_HOME,
+    join(home, ".local", "state"),
+    env.XDG_CONFIG_HOME,
+    join(home, ".config"),
+  ].filter((v): v is string => !!v);
+  return [...new Set(roots.map((root) => join(root, "omarchy", "current")))];
+}
+
+/** Каталог текущей темы Omarchy: первый кандидат, где реально лежат цвета. */
+export function defaultOmarchyDir(
+  home: string = homedir(),
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const dirs = omarchyDirs(home, env);
+  return dirs.find((dir) => existsSync(join(dir, "theme", "colors.toml"))) ?? dirs[0];
 }
 
 /**
@@ -78,7 +100,7 @@ function readText(path: string): string | null {
 }
 
 /**
- * Читает активную тему из `currentDir` (по умолчанию — `~/.config/omarchy/current`).
+ * Читает активную тему из `currentDir` (по умолчанию — `defaultOmarchyDir()`).
  * @returns `null`, если файла цветов нет или он пуст.
  */
 export function readOmarchyTheme(currentDir = defaultOmarchyDir()): OmarchyTheme | null {
