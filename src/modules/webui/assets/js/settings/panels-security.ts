@@ -8,7 +8,7 @@ import { PANEL_SECTIONS } from "./controls.js";
 import { renderSectionsInto, row } from "./panels-shared.js";
 
 const TABS: Array<[string, string, string[]]> = [
-  ["overview", "web.settings.tab_security_overview", ["security.switches", "security.limits"]],
+  ["overview", "web.settings.tab_security_overview", ["security.master", "security.switches", "security.limits"]],
   ["shell", "web.settings.tab_security_shell", ["security.bash", "security.paths"]],
   ["network", "web.settings.tab_security_network", ["security.network"]],
   [

@@ -1969,6 +1969,13 @@ body.light .kv .wn { color: var(--yellow); }
 .master-card .sec-head { border-bottom-color: var(--accent); }
 .master-card .sec-title { color: var(--accent); font-size: 14px; letter-spacing: .04em; }
 .master-card .sec-body { padding-top: 10px; }
+/* Master switches grouped inside the accent card keep the emphasis on the
+   label + toggle; the card itself is the frame, so no nested boxes. */
+.master-card .row-master {
+  margin: 0; padding: 8px 0; border: none; border-bottom: 1px solid var(--border-3);
+  border-radius: 0; background: none;
+}
+.master-card .row-master:last-child { border-bottom: none; }
 /* The card's own subject, not just its section title, carries the accent:
    app name/version in About, the running model in Model & Provider. */
 .master-card .upd-row .row-name { font-size: 15px; font-weight: 600; color: var(--accent); }

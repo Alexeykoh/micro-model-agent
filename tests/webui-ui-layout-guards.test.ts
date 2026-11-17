@@ -47,6 +47,10 @@ const securityPanel = readFileSync(
   new URL("../src/modules/webui/assets/js/settings/panels-security.ts", import.meta.url),
   "utf-8",
 );
+const omarchyCss = readFileSync(
+  new URL("../src/modules/webui/assets/omarchy.css", import.meta.url),
+  "utf-8",
+);
 
 describe("web UI layout guards", () => {
   it("makes the hidden attribute beat component display rules", () => {
@@ -106,6 +110,11 @@ describe("web UI layout guards", () => {
     expect(name).toMatch(/font-size:\s*15px/i);
     expect(name).toMatch(/color:\s*var\(--accent\)/i);
     expect(panelsShared).toContain('section.master ? " master-card"');
+    // Omarchy squares every corner; the nested master-toggle rule must not
+    // reintroduce a pill or a round knob.
+    expect(omarchyCss).toMatch(
+      /body\.omarchy \.row-master \.toggle,[\s\S]*?\.toggle::after\s*\{[^}]*border-radius:\s*0/i,
+    );
   });
 
   it("stacks wide record tables vertically", () => {

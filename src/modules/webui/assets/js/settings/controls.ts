@@ -248,7 +248,8 @@ export const PANEL_SECTIONS: Record<string, Dict[]> = {
     { id: "ui.images", titleKey: "web.settings.sec.ui.images", descKey: "web.settings.sec.ui.images.desc", keys: ["images.maxCount", "images.maxBytes"] },
   ],
   security: [
-    { id: "security.switches", titleKey: "web.settings.sec.security.switches", descKey: "web.settings.sec.security.switches.desc", keys: ["security.enabled", "security.bash.enabled", "security.bash.blockDangerousFlags", "security.paths.enabled", "security.contentScan.enabled", "security.network.enabled", "security.sessionEncryption.enabled"] },
+    { id: "security.master", titleKey: "web.settings.sec.security.master", descKey: "web.settings.sec.security.master.desc", master: true, keys: ["security.enabled", "security.bash.enabled", "security.network.enabled"] },
+    { id: "security.switches", titleKey: "web.settings.sec.security.switches", descKey: "web.settings.sec.security.switches.desc", keys: ["security.bash.blockDangerousFlags", "security.paths.enabled", "security.contentScan.enabled", "security.sessionEncryption.enabled"] },
     { id: "security.limits", titleKey: "web.settings.sec.security.limits", descKey: "web.settings.sec.security.limits.desc", keys: ["security.maxRecursionDepth", "security.maxFileOperations", "security.rateLimits.maxRequestsPerMinute", "security.rateLimits.maxParallelTasks", "security.network.requestTimeout", "security.network.maxResponseSize"] },
     { id: "security.bash", titleKey: "web.settings.sec.security.bash", descKey: "web.settings.sec.security.bash.desc", keys: ["security.bash.blacklist", "security.bash.whitelist", "security.bash.dangerousFlags", "security.bash.dangerousOperators"] },
     { id: "security.paths", titleKey: "web.settings.sec.security.paths", descKey: "web.settings.sec.security.paths.desc", keys: ["security.paths.denied", "security.paths.allowed"] },

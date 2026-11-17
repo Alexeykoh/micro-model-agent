@@ -170,6 +170,12 @@ body.omarchy .mdl.xs {
 body.omarchy .upd-dot {
   border-radius: 50%;
 }
+/* The master switch's `.row-master .toggle` (two classes) outranks the `*`
+ * reset, so it stayed a pill among square toggles. Square it and its knob too. */
+body.omarchy .row-master .toggle,
+body.omarchy .row-master .toggle::after {
+  border-radius: 0;
+}
 /* Scrollbar pseudo-elements are not matched by `*`; square them explicitly. */
 body.omarchy ::-webkit-scrollbar-thumb {
   border-radius: 0;

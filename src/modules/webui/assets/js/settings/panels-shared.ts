@@ -101,9 +101,15 @@ function sectionCard(section: Dict): HTMLElement {
     const def = defFor(key);
     if (!def) return;
     const r = row(configLabel(def), configControl(def, key), descFor(def.key));
-    // The security master switch disables everything below it — give it a
+    // The security master switches disable everything below them — give each a
     // visually distinct "master" treatment instead of a normal list row.
-    if (key === "security.enabled") r.classList.add("row-master");
+    if (
+      key === "security.enabled" ||
+      key === "security.bash.enabled" ||
+      key === "security.network.enabled"
+    ) {
+      r.classList.add("row-master");
+    }
     body.appendChild(r);
   });
   card.appendChild(body);
