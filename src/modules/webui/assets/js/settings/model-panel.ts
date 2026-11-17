@@ -71,9 +71,14 @@ function activeCard(cfg: Dict, entries: Dict[], activeName: string, select: (k: 
   const name = el("span", "m-name", model);
   name.title = model;
   main.appendChild(name);
-  const ctx = entry && entry.contextWindow
-    ? Math.round(Number(entry.contextWindow) / 1024) + "K"
-    : contextLabel();
+  // Контекстное окно — свойство активной модели (его даёт проба под неё), а не
+  // провайдера «вообще». Модель не выбрана — контекста нет: показывать число от
+  // прошлой модели значит выдавать память за факт.
+  const ctx = !cfg.model
+    ? ""
+    : entry && entry.contextWindow
+      ? Math.round(Number(entry.contextWindow) / 1024) + "K"
+      : contextLabel();
   const meta = [activeName || t("web.settings.no_active_provider"), ctx].filter(Boolean).join(" · ");
   main.appendChild(el("span", "m-meta", meta));
   // Инвариант: не выдаём чужую модель за рабочую. Список нового провайдера

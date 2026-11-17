@@ -170,4 +170,20 @@ describe("active model card: an unconfirmed model is marked as such", () => {
     expect(cardText()).not.toContain("web.settings.model_unverified");
     expect(cardText()).not.toContain("web.settings.model_not_in_provider");
   });
+
+  it("shows no context window when no model is selected", () => {
+    mount();
+    // Контекст принадлежит активной модели: без неё любое число — память о
+    // прошлой модели (entry.contextWindow и config.contextWindow оба не в счёт).
+    (store.settings.config as { model: string }).model = "";
+    renderModelPanel();
+    expect(cardText()).toContain("web.settings.no_active_model");
+    expect(cardText()).not.toContain("32K");
+    expect(cardText()).not.toContain("64K");
+  });
+
+  it("shows the context window once a model is selected", () => {
+    mount();
+    expect(cardText()).toContain("32K");
+  });
 });
