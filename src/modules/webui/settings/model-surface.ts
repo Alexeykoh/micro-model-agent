@@ -6,7 +6,7 @@ import type { Agent } from "../../../core/api";
 import { broadcast, type ConfigStore, type RuntimeState, type SessionStore, type SseTransport } from "../state";
 import { makeModelCache } from "./model-cache";
 import { enforceActiveModel } from "./model-invariant";
-import { makeReconfigure, type WebReconfigurableAgent } from "./reconfigure";
+import { makeReconfigure, reconfigureRunners, type WebReconfigurableAgent } from "./reconfigure";
 
 /** Ставит `knownModels*`, reconfigure-хук и проверку модели на первом списке. */
 export function installModelSurface(
@@ -19,30 +19,34 @@ export function installModelSurface(
   const modelCache = explicitKnownModels ? null : makeModelCache(agent, config);
   state.knownModels = explicitKnownModels ?? modelCache!.get;
   state.knownModelsState = modelCache?.getActiveState;
-  state.knownModelsRefresh = modelCache ? () => modelCache.refresh() : undefined;
   state.knownModelsFor = modelCache?.getFor;
-  if (modelCache) {
-    // Boot: конфиг мог пережить ребут с моделью, которую провайдер уже не
-    // отдаёт. Проверяем после первого списка (INV-P1) и сообщаем клиентам:
-    // `models` обязателен — иначе открытая панель так и останется на
-    // «загрузке», ведь другого повода перезапросить список после boot нет.
-    void modelCache.refresh().then(async () => {
-      let cleared = false;
-      try {
-        cleared = await enforceActiveModel(state, agent, config, modelCache.getActiveState());
-      } catch {
-        /* сбой проверки не отменяет публикацию списка */
-      }
-      broadcast({ type: "models", ts: Date.now() }, state);
-      if (cleared) broadcast({ type: "config", ts: Date.now() }, state);
-    });
+  if (!modelCache) {
+    state.reconfigure = makeReconfigure(state, agent);
+    return;
   }
-  state.reconfigure = makeReconfigure(
-    state,
-    agent,
-    modelCache ? () => modelCache.refresh() : undefined,
-    modelCache
-      ? () => enforceActiveModel(state, agent, config, modelCache.getActiveState())
-      : undefined,
-  );
+
+  // Очистка неактуальной модели (INV-P1) применяется и к живым раннерам:
+  // иначе сессия, уже получившая раннер, продолжила бы со старым id.
+  const enforceNow = async (): Promise<boolean> => {
+    const cleared = await enforceActiveModel(state, agent, config, modelCache.getActiveState());
+    if (cleared) await reconfigureRunners(state, config);
+    return cleared;
+  };
+  // Рефреш + проверка + публикация: один путь для boot и кнопки «повторить».
+  // `models` обязателен — иначе открытая панель так и останется на «загрузке»,
+  // ведь другого повода перезапросить список после boot нет.
+  const refreshAndPublish = async (): Promise<void> => {
+    await modelCache.refresh();
+    let cleared = false;
+    try {
+      cleared = await enforceNow();
+    } catch {
+      /* сбой проверки не отменяет публикацию списка */
+    }
+    broadcast({ type: "models", ts: Date.now() }, state);
+    if (cleared) broadcast({ type: "config", ts: Date.now() }, state);
+  };
+  void refreshAndPublish();
+  state.knownModelsRefresh = refreshAndPublish;
+  state.reconfigure = makeReconfigure(state, agent, () => modelCache.refresh(), enforceNow);
 }

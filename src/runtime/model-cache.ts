@@ -26,6 +26,9 @@ export interface ModelCache {
   refresh: () => Promise<void>;
 }
 
+/** Пауза перед повторной попыткой после ошибки (на провайдера). */
+export const PROVIDER_MODELS_RETRY_MS = 5_000;
+
 /** Строит кеш на агенте и конфиге (активный провайдер резолвится при refresh). */
 export function makeModelCache(
   agent: Pick<Agent, "getProviderFor">,
@@ -35,6 +38,8 @@ export function makeModelCache(
   const loading = new Set<string>();
   /** Провайдер ответил ошибкой: пустой список — «не смогли», не «нет моделей». */
   const failed = new Set<string>();
+  /** Когда провайдер упал — чтобы страница экспертов не долбила его каждым рендером. */
+  const failedAt = new Map<string, number>();
   const activeName = (): string =>
     config.provider.active || config.provider.entries?.[0]?.label || config.provider.type || "";
 
@@ -45,15 +50,18 @@ export function makeModelCache(
       const provider = agent.getProviderFor(name);
       if (!provider) {
         failed.add(name);
+        failedAt.set(name, Date.now());
         return;
       }
       const models = await provider.listModels();
       byProvider.set(name, models.slice().sort());
       failed.delete(name);
+      failedAt.delete(name);
     } catch {
       // Офлайн-провайдер: держим прежний список, если он был; иначе списка нет
       // (пустой массив означал бы «провайдер ответил, моделей ноль»).
       failed.add(name);
+      failedAt.set(name, Date.now());
     } finally {
       loading.delete(name);
     }
@@ -81,7 +89,15 @@ export function makeModelCache(
     getFor(name: string): ProviderModels {
       const key = name.trim();
       if (!key) return stateFor(activeName());
-      if (byProvider.has(key) || failed.has(key)) return stateFor(key);
+      if (byProvider.has(key)) return stateFor(key);
+      if (failed.has(key)) {
+        // Без данных после ошибки повторяем не чаще раза в RETRY_MS: страница
+        // экспертов не должна запускать мёртвого провайдера на каждый рендер.
+        if (Date.now() - (failedAt.get(key) ?? 0) < PROVIDER_MODELS_RETRY_MS) {
+          return stateFor(key);
+        }
+        failed.delete(key);
+      }
       void refreshName(key);
       return { models: [], loading: true };
     },

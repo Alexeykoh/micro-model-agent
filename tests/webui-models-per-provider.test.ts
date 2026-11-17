@@ -7,7 +7,7 @@
  */
 import { describe, it, expect, vi } from "vitest";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { makeModelCache } from "../src/modules/webui/settings/model-cache";
+import { makeModelCache, PROVIDER_MODELS_RETRY_MS } from "../src/modules/webui/settings/model-cache";
 import { handleModelsGet } from "../src/modules/webui/settings/config-api";
 import { DEFAULTS } from "../src/config/defaults";
 import type { AppConfig } from "../src/config/types";
@@ -83,6 +83,38 @@ describe("model cache per provider", () => {
     expect(cache.getFor("remote").loading).toBe(true);
     await flush();
     expect(cache.getFor("remote")).toEqual({ models: [], loading: false, error: true });
+  });
+
+  it("retries a failed provider only after the cooldown", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+    try {
+      let calls = 0;
+      const cache = makeModelCache(
+        {
+          getProviderFor: () => ({
+            listModels: async () => {
+              calls++;
+              throw new Error("offline");
+            },
+          }),
+        } as never,
+        config(),
+      );
+      expect(cache.getFor("remote").loading).toBe(true);
+      await flush();
+      expect(cache.getFor("remote")).toEqual({ models: [], loading: false, error: true });
+      expect(calls).toBe(1);
+      // Пауза: страница экспертов не должна запускать мёртвый провайдер на
+      // каждый рендер.
+      expect(cache.getFor("remote")).toEqual({ models: [], loading: false, error: true });
+      expect(calls).toBe(1);
+      now.mockReturnValue(1_000 + PROVIDER_MODELS_RETRY_MS + 1);
+      expect(cache.getFor("remote").loading).toBe(true);
+      await flush();
+      expect(calls).toBe(2);
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it("reports the active provider's loading/error state", async () => {

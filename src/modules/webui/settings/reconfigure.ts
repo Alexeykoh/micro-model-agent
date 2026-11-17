@@ -13,6 +13,24 @@ export interface WebReconfigurableAgent {
 }
 
 /**
+ * Догоняет конфиг все закешированные раннеры (best-effort). Экспортируется,
+ * чтобы очистка неактуальной модели (INV-P1) применялась и к живым сессиям, а
+ * не только к основному агенту.
+ */
+export async function reconfigureRunners(
+  state: Pick<RuntimeState, "pool">,
+  config: AppConfig,
+): Promise<void> {
+  for (const id of state.pool.runnerIds()) {
+    try {
+      await state.pool.getRunner(id)?.agent.reconfigure(config, { probe: false });
+    } catch {
+      /* результат reconfigure сохраняем, даже если раннер упал */
+    }
+  }
+}
+
+/**
  * Строит вебовый хук `reconfigure`. Он может менять окно/бюджет контекста,
  * и кешнутый лимит сайдбара (история прошлого хода, `budget.history`) протухает.
  * Перечитываем живой бюджет и пушим событие `state`, чтобы браузер обновился
@@ -32,13 +50,7 @@ export function makeReconfigure(
     // всех закешированных раннеров (best-effort, по одному — редкая операция).
     // Проба — один раз на операцию (INV-W6): раннеры применяют конфиг с
     // `{ probe: false }`, сетевую context-probe делает только основной агент.
-    for (const id of state.pool.runnerIds()) {
-      try {
-        await state.pool.getRunner(id)?.agent.reconfigure(config, { probe: false });
-      } catch {
-        /* результат reconfigure сохраняем, даже если раннер упал */
-      }
-    }
+    await reconfigureRunners(state, config);
     const limit = agent.contextManager.getBudget().history;
     state.usage = { ...state.usage, contextLimit: limit };
     // Тот же лимит — во все per-session снимки, иначе чужой таб покажет

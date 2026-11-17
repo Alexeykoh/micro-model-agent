@@ -3,6 +3,7 @@
 // фоновым refresh'ем, а не в синхронной записи конфига.
 import type { AppConfig } from "../../../config/types";
 import type { ProviderModels } from "../../../runtime/model-cache";
+import { DEFAULTS } from "../../../config/defaults";
 
 /** Коллабораторы, нужные для очистки недоказанной модели. */
 export interface ModelInvariantState {
@@ -44,9 +45,18 @@ export async function enforceActiveModel(
   // Память провайдера не должна восстановить отозванный id при следующем
   // свитче — иначе инвариант снова нарушится на ровном месте.
   if (name && config.provider.models) delete config.provider.models[name];
+  // Ручное окно контекста принадлежало удалённой модели. Оставить его — значит
+  // применить 1M к следующей модели, у которой окно меньше. Возвращаем auto:
+  // окно новой модели определит проба, а не память о старой.
+  const resetContext = config.contextAuto === false;
+  if (resetContext) {
+    config.contextAuto = true;
+    config.contextWindow = DEFAULTS.contextWindow;
+  }
   try {
     // `model` и `provider.models` живут в разных доменах файла конфига.
     state.saveConfig?.(config, "model");
+    if (resetContext) state.saveConfig?.(config, "contextWindow");
     state.saveConfig?.(config, "provider.active");
   } catch {
     /* провал персиста не отменяет очистку в памяти */

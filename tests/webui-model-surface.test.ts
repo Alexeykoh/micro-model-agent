@@ -10,7 +10,7 @@ function cfg(model: string): AppConfig {
   return { ...structuredClone(DEFAULTS), model } as AppConfig;
 }
 
-function stateStub() {
+function stateStub(runner?: { agent: { reconfigure: ReturnType<typeof vi.fn> } }) {
   const events: string[] = [];
   const clients = new Set([
     {
@@ -28,7 +28,10 @@ function stateStub() {
       saveConfig: vi.fn(),
       usage: {},
       sessionUsage: {},
-      pool: { runnerIds: () => [] },
+      pool: {
+        runnerIds: () => (runner ? ["r1"] : []),
+        getRunner: () => runner ?? null,
+      },
     } as never,
   };
 }
@@ -72,5 +75,28 @@ describe("installModelSurface (boot)", () => {
     installModelSurface(state, agentStub(["a"]), cfg("a"), known);
     await flush();
     expect(events).toEqual([]);
+  });
+
+  it("reconfigures live runners when the model is cleared", async () => {
+    const reconfigure = vi.fn();
+    const { state } = stateStub({ agent: { reconfigure } });
+    const config = cfg("gone");
+    installModelSurface(state, agentStub(["a"]), config);
+    await flush();
+    expect(reconfigure).toHaveBeenCalledWith(config, { probe: false });
+  });
+
+  it("re-validates on an explicit refresh (retry path)", async () => {
+    const { state, events } = stateStub();
+    const config = cfg("a");
+    installModelSurface(state, agentStub(["a"]), config);
+    await flush();
+    events.length = 0;
+    // Модель изменилась мимо reconfigure — следующий refresh обязан её проверить.
+    config.model = "gone";
+    await (state as unknown as { knownModelsRefresh: () => Promise<void> }).knownModelsRefresh();
+    expect(config.model).toBe("");
+    expect(events.some((e) => e.includes("event: models"))).toBe(true);
+    expect(events.some((e) => e.includes("event: config"))).toBe(true);
   });
 });

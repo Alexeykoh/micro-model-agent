@@ -90,4 +90,25 @@ describe("enforceActiveModel", () => {
     expect(config.model).toBe("");
     expect(reconfigure).toHaveBeenCalled();
   });
+
+  it("resets a manual context window that belonged to the removed model", async () => {
+    const config = cfg();
+    config.contextAuto = false;
+    config.contextWindow = 1_000_000;
+    const saveConfig = vi.fn();
+    await enforceActiveModel({ saveConfig }, { reconfigure: vi.fn() }, config, READY);
+    expect(config.contextAuto).toBe(true);
+    expect(config.contextWindow).toBe(DEFAULTS.contextWindow);
+    expect(saveConfig).toHaveBeenCalledWith(config, "contextWindow");
+  });
+
+  it("leaves an auto context window untouched", async () => {
+    const config = cfg();
+    config.contextAuto = true;
+    config.contextWindow = 131_072;
+    const saveConfig = vi.fn();
+    await enforceActiveModel({ saveConfig }, { reconfigure: vi.fn() }, config, READY);
+    expect(config.contextWindow).toBe(131_072);
+    expect(saveConfig).not.toHaveBeenCalledWith(config, "contextWindow");
+  });
 });
