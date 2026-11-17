@@ -1900,6 +1900,7 @@
   "web.settings.no_models": "no models reported by provider",
   "web.settings.models_loading": "loading models…",
   "web.settings.models_error": "could not fetch the provider's model list",
+  "web.settings.models_retry": "retry",
   "web.settings.models_of_provider": "models of provider {provider}",
   "web.settings.model_not_in_provider": "not in the provider's list",
   "web.settings.model_checking": "checking against the provider's list…",

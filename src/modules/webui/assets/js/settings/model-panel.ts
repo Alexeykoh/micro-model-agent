@@ -10,7 +10,7 @@ import type { Dict } from "../core/store/types.js";
 import { contextLabel } from "../format.js";
 import { PANEL_SECTIONS } from "./controls.js";
 import { chip, renderSectionsInto, settingsSection } from "./panels.js";
-import { postConfig } from "./write.js";
+import { postConfig, loadModels } from "./write.js";
 
 export interface ModelPanelDeps {
   /** Provider entries in display order (live config wins over the snapshot). */
@@ -193,7 +193,17 @@ function modelsPane(cfg: Dict, activeName: string): HTMLElement {
     // The active model is the answer to "what am I running?" — keep it on top.
     models.sort((a, b) => Number(b === cfg.model) - Number(a === cfg.model));
     if (!models.length) {
-      list.appendChild(el("div", "placeholder", modelsEmptyText()));
+      const empty = el("div", "placeholder", modelsEmptyText());
+      // A failed fetch is retryable without reopening settings; the button also
+      // makes the state actionable instead of a dead end.
+      if (settings.modelsStatus === "error") {
+        empty.appendChild(
+          chip(t("web.settings.models_retry"), "", () => {
+            void loadModels();
+          }),
+        );
+      }
+      list.appendChild(empty);
       return;
     }
     models.forEach((m) => {

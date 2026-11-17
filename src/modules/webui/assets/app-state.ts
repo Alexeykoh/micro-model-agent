@@ -14,7 +14,7 @@ import {
   openTab, updateTabName, renderSessionsDropdown, reflectBusy, loadSessions,
   reconcileTabStatuses,
 } from "./js/session/tabs.js";
-import { renderSelectors, renderSettings, setStaleBar } from "./js/settings.js";
+import { renderSelectors, renderSettings, setStaleBar, loadConfig, loadModels } from "./js/settings.js";
 import { setPlan as railPlan } from "./js/rail.js";
 import {
   sidebarSessionChanged, sidebarMapState, sidebarMapIndicator, setSessionLoading,
@@ -152,6 +152,10 @@ export async function refresh(): Promise<void> {
 // SSE reconnect: drop every cached snapshot so the next render is fresh, then
 // refetch the active tab, the session list and an empty transcript.
 export function resyncAfterReconnect(): void {
+  // A restarted server (or a dropped stream) may have changed config and model
+  // lists while we were away; re-read both instead of trusting the old cache.
+  void loadConfig();
+  void loadModels();
   for (const tab of tabState.tabs) {
     if (tab.kind !== "session") continue;
     tab.state = null;

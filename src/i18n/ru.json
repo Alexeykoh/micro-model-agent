@@ -1873,6 +1873,7 @@
   "web.settings.no_models": "провайдер не сообщил моделей",
   "web.settings.models_loading": "загрузка моделей…",
   "web.settings.models_error": "не удалось получить список моделей провайдера",
+  "web.settings.models_retry": "повторить",
   "web.settings.models_of_provider": "модели провайдера {provider}",
   "web.settings.model_not_in_provider": "нет в списке провайдера",
   "web.settings.model_checking": "проверяем по списку провайдера…",

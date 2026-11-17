@@ -124,6 +124,18 @@ describe("models tab: honest loading/error/empty states", () => {
     expect(listText()).toContain("web.settings.models_error");
   });
 
+  it("offers a retry instead of a dead end when the fetch failed", () => {
+    mount();
+    store.settings.models = [];
+    store.settings.modelsStatus = "error";
+    store.settings.modelsReady = true;
+    renderModelPanel();
+    const retry = document.querySelector<HTMLElement>(
+      '.model-pane[data-pane="models"] .placeholder button',
+    );
+    expect(retry?.textContent).toBe("web.settings.models_retry");
+  });
+
   it("says the provider reported no models only after a successful reply", () => {
     mount();
     store.settings.models = [];

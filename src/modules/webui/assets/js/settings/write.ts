@@ -244,8 +244,10 @@ export async function loadModels(): Promise<void> {
     writeHooks.renderSettings?.();
     return;
   }
-  // Poll exhausted: stay in loading so the next SSE `models` event retries.
-  settings.modelsStatus = "loading";
+  // Poll exhausted: the provider did not answer within the window. Don't leave
+  // a permanent "loading" (the old bug: a panel opened earlier never retried) —
+  // say the fetch failed; the next `models` event or the retry button recovers.
+  settings.modelsStatus = "error";
   renderSelectors();
   writeHooks.renderSettings?.();
 }
