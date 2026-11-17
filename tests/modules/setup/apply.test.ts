@@ -44,9 +44,7 @@ describe("setup: применение ответов визарда", () => {
 
   it("refuses to overwrite a different provider entry when active is stale", () => {
     const cfg = config();
-    cfg.provider.entries = [
-      { type: "openai-compat", label: "work", baseUrl: "https://work/v1" },
-    ];
+    cfg.provider.entries = [{ type: "openai-compat", label: "work", baseUrl: "https://work/v1" }];
     cfg.provider.active = "deleted-one";
     const r = applyAnswersToConfigWithWarnings(
       cfg,
@@ -70,5 +68,62 @@ describe("setup: применение ответов визарда", () => {
     expect(detail.bash.blacklist).toEqual([]);
     expect(detail.network.requestTimeout).toBe(0);
     expect(detail.advanced.auditNotifierMinSeverity).toBe("medium");
+  });
+
+  it("keeps contextAuto on when the wizard chose the auto mode", () => {
+    const cfg = config();
+    cfg.contextAuto = false;
+    applyAnswersToConfigWithWarnings(cfg, answers({ contextAuto: true, contextWindow: 8192 }));
+    expect(cfg.contextWindow).toBe(8192);
+    expect(cfg.contextAuto).toBe(true);
+  });
+
+  it("leaves provider, model and context alone when 2.0 is skipped", () => {
+    const cfg = config();
+    cfg.provider.type = "lmstudio";
+    cfg.provider.baseUrl = "http://localhost:1234/v1";
+    cfg.model = "keep/me";
+    cfg.contextWindow = 16384;
+    cfg.contextAuto = false;
+    cfg.maxToolIterations = 42;
+    applyAnswersToConfigWithWarnings(
+      cfg,
+      answers({
+        configureProvider: false,
+        provider: "",
+        model: "",
+        contextWindow: 0,
+        maxToolIterations: 0,
+      }),
+    );
+    expect(cfg.provider.type).toBe("lmstudio");
+    expect(cfg.model).toBe("keep/me");
+    expect(cfg.contextWindow).toBe(16384);
+    expect(cfg.contextAuto).toBe(false);
+    expect(cfg.maxToolIterations).toBe(42);
+  });
+
+  it("applies critic, web search and web-UI appearance", () => {
+    const cfg = config();
+    applyAnswersToConfigWithWarnings(
+      cfg,
+      answers({
+        criticEnabled: false,
+        webSearchEnabled: false,
+        theme: "neon",
+        themeMode: "light",
+        themeEffects: false,
+        sounds: { enabled: false, done: false, volume: 20 },
+      }),
+    );
+    expect(cfg.critic?.enabled).toBe(false);
+    expect(cfg.webSearch?.enabled).toBe(false);
+    expect(cfg.ui.theme).toBe("neon");
+    expect(cfg.ui.themeMode).toBe("light");
+    expect(cfg.ui.themeEffects).toBe(false);
+    expect(cfg.ui.sounds?.enabled).toBe(false);
+    expect(cfg.ui.sounds?.done).toBe(false);
+    expect(cfg.ui.sounds?.question).toBe(true);
+    expect(cfg.ui.sounds?.volume).toBe(20);
   });
 });

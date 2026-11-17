@@ -6,6 +6,7 @@
  * зависимостей — безопасно импортить с веб-сервера.
  */
 import type { SecurityConfig } from "../../config/types";
+import type { ThemeMode, UiThemeId } from "../../config/theme-ids";
 import { BUILTIN_PROVIDERS } from "../providers/presets";
 
 /** Тонкая настройка безопасности из поп-апов шага «Безопасность» (JSON-safe). */
@@ -45,6 +46,15 @@ export interface SetupSecurityDetail {
   };
 }
 
+/** Частичные звуковые настройки визарда (`ui.sounds.*`). */
+export interface SetupSoundAnswers {
+  enabled?: boolean;
+  done?: boolean;
+  question?: boolean;
+  failed?: boolean;
+  volume?: number;
+}
+
 /** Все, что собирает first-run визард и пишет `applyAnswersToConfig`. */
 export interface SetupAnswers {
   provider: string;
@@ -59,6 +69,22 @@ export interface SetupAnswers {
   securityPathsRestrict: boolean;
   /** Звуки уведомлений веб-UI по умолчанию (`ui.sounds.enabled`). */
   soundsEnabled?: boolean;
+  /** Частичные звуковые настройки шага «Тема и уведомления». */
+  sounds?: SetupSoundAnswers;
+  /** `false` — не трогать провайдера, модель, контекст и итерации. */
+  configureProvider?: boolean;
+  /** `true` — окно контекста определяется провайдером автоматически. */
+  contextAuto?: boolean;
+  /** Мастер-выключатель критика (`critic.enabled`). */
+  criticEnabled?: boolean;
+  /** Мастер-выключатель веб-поиска (`webSearch.enabled`). */
+  webSearchEnabled?: boolean;
+  /** Скин веб-UI (`ui.theme`). */
+  theme?: UiThemeId;
+  /** Режим оформления (`ui.themeMode`). */
+  themeMode?: ThemeMode;
+  /** Сезонные эффекты темы (`ui.themeEffects`). */
+  themeEffects?: boolean;
   /** Опционально: детали из поп-апов (только браузерный визард). */
   securityDetail?: SetupSecurityDetail;
 }
@@ -119,6 +145,7 @@ export const SETUP_LANGUAGES = [
 export const SETUP_DEFAULTS = {
   contextWindow: 32768,
   maxToolIterations: 200,
+  contextAuto: true,
 } as const;
 
 /** Провайдер на выбор в визарде (у хостед-пресетов фиксированный URL). */
@@ -132,7 +159,7 @@ export interface SetupProviderOption {
 export interface SetupDisplay {
   languages: Array<{ value: string; label: string }>;
   providers: SetupProviderOption[];
-  defaults: { contextWindow: number; maxToolIterations: number };
+  defaults: { contextWindow: number; maxToolIterations: number; contextAuto?: boolean };
 }
 
 /** Статические display-данные, общие для веб-визарда и его тестов. */
@@ -148,6 +175,7 @@ export function buildSetupDisplay(): SetupDisplay {
     defaults: {
       contextWindow: SETUP_DEFAULTS.contextWindow,
       maxToolIterations: SETUP_DEFAULTS.maxToolIterations,
+      contextAuto: SETUP_DEFAULTS.contextAuto,
     },
   };
 }

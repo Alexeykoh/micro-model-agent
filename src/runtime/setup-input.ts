@@ -3,10 +3,12 @@
  * браузерного визарда и демона. Чистые функции без I/O.
  */
 import { AUDIT_EVENT_TYPES } from "../config/registry-extra";
+import { THEME_MODES, UI_THEME_IDS, type ThemeMode, type UiThemeId } from "../config/theme-ids";
 import {
   SETUP_LANGUAGES,
   type SetupAnswers,
   type SetupSecurityDetail,
+  type SetupSoundAnswers,
 } from "../modules/setup/answers";
 
 function str(rec: Record<string, unknown>, key: string): string {
@@ -19,6 +21,25 @@ function positiveInt(rec: Record<string, unknown>, key: string): number | null {
   const v = rec[key];
   const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
   return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/** Громкость звука: 0–100, дробные и мусор отбрасываются. */
+function optVolume(v: unknown): number | undefined {
+  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
+  return Number.isInteger(n) && n >= 0 && n <= 100 ? n : undefined;
+}
+
+/** Частичные звуковые ответы: валидные поля, мусор отбрасывается по одному. */
+function parseSounds(v: unknown): SetupSoundAnswers | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const rec = v as Record<string, unknown>;
+  const out: SetupSoundAnswers = {};
+  for (const key of ["enabled", "done", "question", "failed"] as const) {
+    if (typeof rec[key] === "boolean") out[key] = rec[key] as boolean;
+  }
+  const volume = optVolume(rec.volume);
+  if (volume !== undefined) out.volume = volume;
+  return Object.keys(out).length ? out : undefined;
 }
 
 const SEVERITIES = ["low", "medium", "high", "critical"] as const;
@@ -110,14 +131,26 @@ export function parseSecurityDetail(v: unknown): SetupSecurityDetail | undefined
 
 /** Валидирует тело `POST /api/setup`; `null` — реджект с 400. */
 export function parseSetupAnswers(rec: Record<string, unknown>): SetupAnswers | null {
-  const provider = str(rec, "provider");
-  const apiBase = str(rec, "apiBase");
-  const model = str(rec, "model");
-  if (!provider || !apiBase || !model) return null;
+  // Шаг 2.0 «Пропустить»: провайдер, модель и контекст не заданы — остаются
+  // текущие значения конфига (на virgin-конфиге это DEFAULTS).
+  const configureProvider = rec.configureProvider !== false;
+  let provider = "";
+  let apiBase = "";
+  let model = "";
+  let contextWindow = 0;
+  let maxToolIterations = 0;
+  if (configureProvider) {
+    provider = str(rec, "provider");
+    apiBase = str(rec, "apiBase");
+    model = str(rec, "model");
+    if (!provider || !apiBase || !model) return null;
 
-  const contextWindow = positiveInt(rec, "contextWindow");
-  const maxToolIterations = positiveInt(rec, "maxToolIterations");
-  if (contextWindow === null || maxToolIterations === null) return null;
+    const cw = positiveInt(rec, "contextWindow");
+    const it = positiveInt(rec, "maxToolIterations");
+    if (cw === null || it === null) return null;
+    contextWindow = cw;
+    maxToolIterations = it;
+  }
 
   const locale = str(rec, "locale");
   if (!SETUP_LANGUAGES.some((l) => l.value === locale)) return null;
@@ -129,6 +162,17 @@ export function parseSetupAnswers(rec: Record<string, unknown>): SetupAnswers | 
 
   const apiKey =
     typeof rec.apiKey === "string" && rec.apiKey.trim() ? rec.apiKey.trim() : "not-needed";
+  const rawTheme = rec.theme;
+  const theme =
+    typeof rawTheme === "string" && (UI_THEME_IDS as readonly string[]).includes(rawTheme)
+      ? (rawTheme as UiThemeId)
+      : undefined;
+  const rawMode = rec.themeMode;
+  const themeMode =
+    typeof rawMode === "string" && (THEME_MODES as readonly string[]).includes(rawMode)
+      ? (rawMode as ThemeMode)
+      : undefined;
+
   const out: SetupAnswers = {
     provider,
     apiBase,
@@ -141,6 +185,14 @@ export function parseSetupAnswers(rec: Record<string, unknown>): SetupAnswers | 
     securityFlagsBlock: rec.securityFlagsBlock as boolean,
     securityPathsRestrict: rec.securityPathsRestrict as boolean,
     securityDetail: parseSecurityDetail(rec.securityDetail),
+    configureProvider,
+    contextAuto: optBool(rec.contextAuto),
+    criticEnabled: optBool(rec.criticEnabled),
+    webSearchEnabled: optBool(rec.webSearchEnabled),
+    theme,
+    themeMode,
+    themeEffects: optBool(rec.themeEffects),
+    sounds: parseSounds(rec.sounds),
   };
   if (typeof rec.soundsEnabled === "boolean") out.soundsEnabled = rec.soundsEnabled;
   return out;

@@ -68,15 +68,37 @@ export async function fetchProviderModels(apiBase: string, apiKey: string): Prom
   }
 }
 
+/** Результат chat-пробы: доступность, задержка и длина ответа. */
+export interface ChatProbeResult {
+  ok: boolean;
+  latencyMs: number;
+  replyChars: number;
+}
+
+/** Дешёвая chat-проба с метриками. Не бросает. */
+export async function testProviderChatResult(
+  apiBase: string,
+  apiKey: string,
+  model: string,
+): Promise<ChatProbeResult> {
+  const started = Date.now();
+  try {
+    const reply = await probeChat({ baseUrl: apiBase, apiKey, model }, CHAT_TIMEOUT_MS);
+    return {
+      ok: reply !== "",
+      latencyMs: Date.now() - started,
+      replyChars: reply.length,
+    };
+  } catch {
+    return { ok: false, latencyMs: Date.now() - started, replyChars: 0 };
+  }
+}
+
 /** Дешёвая chat-проба: `true`, если модель отвечает. Не бросает. */
 export async function testProviderChat(
   apiBase: string,
   apiKey: string,
   model: string,
 ): Promise<boolean> {
-  try {
-    return (await probeChat({ baseUrl: apiBase, apiKey, model }, CHAT_TIMEOUT_MS)) !== "";
-  } catch {
-    return false;
-  }
+  return (await testProviderChatResult(apiBase, apiKey, model)).ok;
 }

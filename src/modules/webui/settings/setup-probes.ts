@@ -3,7 +3,7 @@
 // Вынесено из `setup-api.ts`: у проб своя политика (rate-limit + SSRF-проверка
 // baseUrl), и держать её рядом с финальным `POST /api/setup` незачем.
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { fetchProviderModels, testProviderChat } from "../../setup/discovery";
+import { fetchProviderModels, testProviderChatResult } from "../../setup/discovery";
 import { probeProviderContext } from "../../../llm/provider-context";
 import { requestError, sendJson } from "../util";
 import { readJsonBody } from "../http/body";
@@ -84,8 +84,8 @@ export function handleSetupTest(req: IncomingMessage, res: ServerResponse, s: Pr
         return;
       }
       if (!(await guardProbe(req, res, baseUrl, "test"))) return;
-      const ok = await testProviderChat(baseUrl, str(rec, "apiKey"), model);
-      sendJson(res, 200, { ok });
+      const result = await testProviderChatResult(baseUrl, str(rec, "apiKey"), model);
+      sendJson(res, 200, result);
     })
     .catch((err: unknown) => {
       requestError(req, res, err);

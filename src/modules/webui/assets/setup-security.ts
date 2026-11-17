@@ -2,16 +2,12 @@
 import type { SetupContext } from "./setup-context.js";
 import { h, stepBody } from "./setup-dom.js";
 import { tr } from "./setup-i18n.js";
-import {
-  GROUP_KEYS,
-  SECURITY_POPUPS,
-  popupField,
-  setPath,
-} from "./setup-security-fields.js";
+import { GROUP_KEYS, SECURITY_POPUPS, popupField, setPath } from "./setup-security-fields.js";
 import type { Dict } from "./setup-state.js";
 
 export function renderSecurity(ctx: SetupContext): HTMLElement {
   const box = stepBody("security");
+  box.appendChild(presetRow(ctx));
   const toggles: Array<[string, string, string, string]> = [
     ["securityPathsRestrict", "web.setup.security.paths", "web.setup.security.paths_desc", "paths"],
     ["securityBashBlock", "web.setup.security.bash", "web.setup.security.bash_desc", "bash"],
@@ -25,6 +21,7 @@ export function renderSecurity(ctx: SetupContext): HTMLElement {
     cb.checked = Boolean(ctx.state.answers[key]);
     cb.addEventListener("change", () => {
       ctx.state.answers[key] = cb.checked;
+      ctx.render();
     });
     label.appendChild(cb);
     const texts = h("span", "setup-toggle-texts");
@@ -37,23 +34,6 @@ export function renderSecurity(ctx: SetupContext): HTMLElement {
     box.appendChild(row);
   });
 
-  // Звуки уведомлений веб-UI: отдельный тумблер без тонкой настройки.
-  const soundRow = h("div", "setup-sec-row");
-  const soundLabel = h("label", "setup-toggle");
-  const soundCb = h("input");
-  soundCb.type = "checkbox";
-  soundCb.checked = Boolean(ctx.state.answers.soundsEnabled);
-  soundCb.addEventListener("change", () => {
-    ctx.state.answers.soundsEnabled = soundCb.checked;
-  });
-  soundLabel.appendChild(soundCb);
-  const soundTexts = h("span", "setup-toggle-texts");
-  soundTexts.appendChild(h("span", "t", tr("web.setup.security.sounds")));
-  soundTexts.appendChild(h("span", "d", tr("web.setup.security.sounds_desc")));
-  soundLabel.appendChild(soundTexts);
-  soundRow.appendChild(soundLabel);
-  box.appendChild(soundRow);
-
   const advRow = h("div", "setup-sec-row");
   const advTexts = h("span", "setup-toggle setup-adv-label");
   advTexts.appendChild(h("span", "t", tr("web.setup.security.advanced")));
@@ -61,6 +41,50 @@ export function renderSecurity(ctx: SetupContext): HTMLElement {
   advRow.appendChild(detailButton(ctx, "advanced", tr("web.setup.security.advanced")));
   box.appendChild(advRow);
   return box;
+}
+
+/** Пресеты только выставляют три существующих флага; отдельного ключа нет. */
+function presetRow(ctx: SetupContext): HTMLElement {
+  const row = h("div", "setup-presets");
+  row.appendChild(h("span", "setup-block-title", tr("web.setup.security.preset")));
+  const seg = h("div", "setup-seg");
+  const current = presetOf(ctx);
+  const presets: Array<["normal" | "strict" | "trusted", boolean, boolean, boolean]> = [
+    ["normal", true, false, false],
+    ["strict", true, true, true],
+    ["trusted", false, false, false],
+  ];
+  presets.forEach(([id, paths, bash, flags]) => {
+    const on = current === id;
+    const btn = h(
+      "button",
+      "setup-seg-opt" + (on ? " on" : ""),
+      tr("web.setup.security.preset_" + id),
+    );
+    btn.type = "button";
+    btn.setAttribute("aria-pressed", String(on));
+    btn.addEventListener("click", () => {
+      ctx.state.answers.securityPathsRestrict = paths;
+      ctx.state.answers.securityBashBlock = bash;
+      ctx.state.answers.securityFlagsBlock = flags;
+      ctx.render();
+    });
+    seg.appendChild(btn);
+  });
+  row.appendChild(seg);
+  return row;
+}
+
+function presetOf(ctx: SetupContext): string {
+  const {
+    securityPathsRestrict: p,
+    securityBashBlock: b,
+    securityFlagsBlock: f,
+  } = ctx.state.answers;
+  if (p && b && f) return "strict";
+  if (p && !b && !f) return "normal";
+  if (!p && !b && !f) return "trusted";
+  return "custom";
 }
 
 function detailButton(ctx: SetupContext, group: string, title: string): HTMLButtonElement {
@@ -95,6 +119,7 @@ function openSecurityPopup(ctx: SetupContext, group: string, title: string): voi
   head.appendChild(h("span", "setup-modal-title", title));
   const close = h("button", "setup-modal-x", "✕");
   close.type = "button";
+  close.setAttribute("aria-label", tr("web.setup.security.close"));
   close.addEventListener("click", closePopup);
   head.appendChild(close);
   modal.appendChild(head);
@@ -102,9 +127,7 @@ function openSecurityPopup(ctx: SetupContext, group: string, title: string): voi
   const body = h("div", "setup-modal-body");
   body.appendChild(h("p", "setup-hint", tr("web.setup.security.popup_hint")));
   SECURITY_POPUPS[group].forEach(([path, type, labelKey]) => {
-    body.appendChild(
-      popupField(ctx.state.answers.securityDetail, path, type, tr(labelKey)),
-    );
+    body.appendChild(popupField(ctx.state.answers.securityDetail, path, type, tr(labelKey)));
   });
   modal.appendChild(body);
 
@@ -136,6 +159,13 @@ function openSecurityPopup(ctx: SetupContext, group: string, title: string): voi
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) closePopup();
   });
+  overlay.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closePopup();
+    }
+  });
   popup = overlay;
   ctx.gate.appendChild(overlay);
+  close.focus();
 }

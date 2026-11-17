@@ -31,20 +31,53 @@ export { parseSecurityDetail, parseSetupAnswers } from "../../../runtime/setup-i
 export { handleSetupContext, handleSetupModels, handleSetupTest };
 
 /** `GET /api/setup` — нужен ли сетап, плюс статика визарда. */
-export function handleSetupGet(res: ServerResponse, s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport): void {
+export function handleSetupGet(
+  res: ServerResponse,
+  s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport,
+): void {
+  const cfg = s.config;
   const defaults = s.setup?.defaults ?? { contextWindow: 0, maxToolIterations: 0 };
+  const sounds = cfg?.ui?.sounds ?? {};
   sendJson(res, 200, {
     required: s.setupRequired,
     languages: s.setup?.languages ?? [],
     providers: s.setup?.providers ?? [],
-    defaults: s.config?.security
-      ? { ...defaults, security: securityDetailFromConfig(s.config.security) }
-      : defaults,
+    workspace: s.workspace,
+    defaults: {
+      ...defaults,
+      contextAuto: cfg?.contextAuto !== false,
+      ...(cfg?.security ? { security: securityDetailFromConfig(cfg.security) } : {}),
+    },
+    current: {
+      provider: cfg?.provider?.type ?? "",
+      apiBase: cfg?.provider?.baseUrl ?? "",
+      model: cfg?.model ?? "",
+      contextWindow: cfg?.contextWindow ?? defaults.contextWindow,
+      contextAuto: cfg?.contextAuto !== false,
+      criticEnabled: cfg?.critic?.enabled !== false,
+      webSearchEnabled: cfg?.webSearch?.enabled !== false,
+      ui: {
+        theme: cfg?.ui?.theme ?? "console",
+        themeMode: cfg?.ui?.themeMode ?? "auto",
+        themeEffects: cfg?.ui?.themeEffects !== false,
+        sounds: {
+          enabled: sounds.enabled !== false,
+          done: sounds.done !== false,
+          question: sounds.question !== false,
+          failed: sounds.failed !== false,
+          volume: typeof sounds.volume === "number" ? sounds.volume : 50,
+        },
+      },
+    },
   });
 }
 
 /** `POST /api/setup/scan` — проб известных локальных OpenAI-совместимых серверов. */
-export function handleSetupScan(req: IncomingMessage, res: ServerResponse, s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport): void {
+export function handleSetupScan(
+  req: IncomingMessage,
+  res: ServerResponse,
+  s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport,
+): void {
   readBody(req, s.maxBodyBytes)
     .then(async () => {
       const servers = await scanLocalServers();
@@ -54,7 +87,6 @@ export function handleSetupScan(req: IncomingMessage, res: ServerResponse, s: Co
       requestError(req, res, err);
     });
 }
-
 
 /** Строковое поле тела (trim); не строка — пустая. */
 function str(rec: Record<string, unknown>, key: string): string {
@@ -67,7 +99,11 @@ function str(rec: Record<string, unknown>, key: string): string {
  * следующие шаги визарда локализовались. Не персистится (финал `POST /api/setup`
  * пишет выбранную локаль в конфиг).
  */
-export function handleSetupLocale(req: IncomingMessage, res: ServerResponse, s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport): void {
+export function handleSetupLocale(
+  req: IncomingMessage,
+  res: ServerResponse,
+  s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport,
+): void {
   readJsonBody(req, s.maxBodyBytes)
     .then((rec) => {
       if (!rec) {
@@ -88,7 +124,11 @@ export function handleSetupLocale(req: IncomingMessage, res: ServerResponse, s: 
 }
 
 /** `POST /api/setup` — валидация, применение, персист, reconfigure, снятие гейта. */
-export function handleSetupPost(req: IncomingMessage, res: ServerResponse, s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport): void {
+export function handleSetupPost(
+  req: IncomingMessage,
+  res: ServerResponse,
+  s: ConfigStore & WorkspaceStore & HttpTransport & SseTransport,
+): void {
   if (!s.config) {
     sendJson(res, 503, { error: "config_unavailable" });
     return;
