@@ -7,6 +7,12 @@ import type { ToolContext } from "../src/tools/types";
 
 const TEST_DIR = join(import.meta.dirname || process.cwd(), "_test_attach_image");
 
+/** Валидный PNG 16×16: проходит любой декодер (Bun.Image / провайдер). */
+const PNG_1X1 = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAKUlEQVR42u3NMQEAAAgDoC251a3gLwqgOXF3VwEBAQEBAQEBAQEBAQEBAQGwF2J8AAG3H2jHAAAAAElFTkSuQmCC",
+  "base64",
+);
+
 function makeCtx(overrides?: Partial<ToolContext>): ToolContext {
   const cm = new ContextManager(128000);
   return {
@@ -146,12 +152,30 @@ describe("attach_image tool", () => {
 
   it("should return error when no context manager", async () => {
     const filePath = join(TEST_DIR, "test.png");
-    writeFileSync(filePath, Buffer.from("fake"));
+    writeFileSync(filePath, PNG_1X1);
 
     const ctx = makeCtx({ contextManager: undefined });
     const result = await attachImageTool.handler(ctx, { source: "test.png" });
     expect(result.success).toBe(false);
     expect(result.output).toContain("context");
+  });
+
+  it("rejects an SVG instead of sending it to the model", async () => {
+    const filePath = join(TEST_DIR, "meme.svg");
+    writeFileSync(
+      filePath,
+      Buffer.from(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8"/></svg>',
+      ),
+    );
+
+    const ctx = makeCtx();
+    const result = await attachImageTool.handler(ctx, { source: "meme.svg" });
+    expect(result.success).toBe(false);
+    expect(result.output).toContain("PNG");
+    expect(result.images).toBeUndefined();
+    expect(ctx.contextManager!.hasPendingImages()).toBe(false);
+    expect(result.errorMeta?.code).toBe("unsupported_image");
   });
 
   it("should return error for invalid URL", async () => {

@@ -678,6 +678,12 @@ describe("webui message body validation", () => {
     expect(body).toEqual({ error: "invalid image" });
   });
 
+  it("rejects an SVG data URL (the model cannot decode it)", () => {
+    const svg = `data:image/svg+xml;base64,${"A".repeat(16)}`;
+    const body = parseMessageBody(JSON.stringify({ text: "hi", images: [svg] }));
+    expect(body).toEqual({ error: "invalid image" });
+  });
+
   it("rejects an oversized image", () => {
     const big = `data:image/png;base64,${"A".repeat(MAX_IMAGE_DATA_URL_BYTES)}`;
     const body = parseMessageBody(JSON.stringify({ text: "hi", images: [big] }));
