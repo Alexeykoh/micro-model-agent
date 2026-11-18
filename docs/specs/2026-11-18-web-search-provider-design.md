@@ -1,0 +1,173 @@
+# Выбор провайдера веб-поиска (`webSearch.provider`)
+
+> **Дата:** 2026-11-18. **Статус:** черновик (не реализовано).
+> **Область:** `src/tools/web-search.ts`, `src/config/`, веб-настройки.
+> **Класс изменения:** публичный контракт конфига → спека обязательна (AGENTS.md §2). MINOR.
+
+## Проблема
+
+Тул `web_search` и автопоиск ошибок (`errorWebSearch`) используют единственный,
+жёстко зашитый источник — HTML-скрапинг выдачи DuckDuckGo
+(`https://html.duckduckgo.com/html/?q=…`, `src/tools/web-search.ts:77`):
+
+1. **Единственная точка отказа.** Любая смена вёрстки DDG, CAPTCHA или
+   региональная блокировка ломает весь поиск — fallback нет, модель видит
+   честную ошибку и застревает.
+2. **Нет выхода для корпоративных сценариев.** Пользователи с явным
+   поисковым API (Tavily) или собственным инстансом SearXNG вынуждены
+   обходить тул через MCP-сервер — это отдельный тул с другой семантикой
+   (не попадает в `research`-тег, grounding критика и автопоиск ошибок его
+   не видят).
+3. **Скрапинг — не контракт.** DDG HTML — неофициальный интерфейс; API-путь
+   надёжнее и этичнее (ключ, rate-limit по договору).
+
+Конфигурация сегодня — только мастер-выключатель `webSearch.enabled`
+(`src/config/types-runtime.ts:178`), выбора источника нет.
+
+## Решение
+
+Конфигурационный выбор провайдера внутри существующего тула `web_search`.
+Тул, его параметры (`query`, `numResults`), DLP-проекция запроса и
+security-декларация не меняются — меняется только «движок» за
+`performWebSearch`.
+
+### Контракт конфига
+
+Домен конфига — существующий `search` (`webSearch.*`, `src/config/domains.ts:47`).
+Все ключи без `reconfigure` (чтение в момент вызова, пересборок не требуется).
+
+| Ключ | Тип | Default | Смысл |
+| --- | --- | --- | --- |
+| `webSearch.provider` | `enum` | `duckduckgo` | `duckduckgo \| tavily \| searxng` |
+| `webSearch.apiKey` | `string` | `""` | Ключ провайдера (обязателен для `tavily`) |
+| `webSearch.baseUrl` | `string` | `""` | База SearXNG (`https://searx.example.org`), обязателен для `searxng` |
+
+- `webSearch.enabled` сохраняет смысл: при `false` тул отвечает
+  `tool.web_search_disabled`, провайдер не вызывается вообще.
+- Реестр: `enumOf("webSearch.provider", "research", …)` /
+  `strOpt` для остальных (`src/config/registry-extra-features.ts`, рядом с
+  текущими ключами `webSearch.*`). Значения — в `DEFAULTS.webSearch`
+  (`src/config/defaults.ts`) — гвард `tests/arch/default-single-source.test.ts`.
+- Секреты: имя поля `apiKey` уже покрывается и шифрованием на диске
+  (`encryptSensitiveFields`, `src/modules/security/encryption.ts:159`), и
+  маскированием при показе (`SECRET_KEYS`, `src/config/redact.ts:3`). Новый
+  санитизации не требуется.
+- i18n: `config.key.webSearch.provider` / `config.desc.webSearch.provider` и
+  аналоги для `apiKey`/`baseUrl` в обоих словарях (общий гвард
+  «каждый ключ реестра подписан»).
+
+### Провайдеры
+
+Интерфейс не вводится новым типом: `performWebSearch` получает внутренний
+диспатч по `provider` (shared-функция используется и тулом, и автопоиском
+ошибок — `src/modules/execution/error-search.ts`). Общий контур (проверка
+`isUrlAllowed`, таймаут `requestTimeoutMs ?? networkConfig?.requestTimeout ?? 10000`,
+`SearchResult { title, url, snippet }`, ретрай 429/503 через 800 мс)
+провайдер-независим.
+
+**`duckduckgo` (default)** — текущая реализация без изменений: HTML-скрапинг,
+`unwrapDdgUrl`, один ретрай на 429/503. Существующие тесты не переезжают.
+
+**`tavily`** — официальный API:
+
+- `POST https://api.tavily.com/search`, заголовок `Authorization: Bearer <apiKey>`
+  (не в query — ключ не попадает в URL и в логи);
+- тело: `{ query, max_results: numResults, search_depth: "basic" }`;
+- ответ: `results[].{title, url, content}` → `content` мапится в `snippet`;
+- без `apiKey` — честная ошибка `search_failed` с сообщением «провайдеру
+  нужен ключ» (не «пустая выдача»), retryable=false.
+
+**`searxng`** — self-hosted инстанс:
+
+- `GET <baseUrl>/search?q=<query>&format=json` (инстанс должен разрешить
+  формат `json`);
+- ответ: `results[].{title, url, content}` → тот же маппинг;
+- без `baseUrl` — ошибка «не задан адрес инстанса»; непустой `apiKey`
+  игнорируется с warn-записью в лог (fail-open, запись обязательна — INV-13).
+
+Расширение списка (`brave`, `serper`, …) — добавление значения enum и ветки
+диспатча; контракт конфига не меняется.
+
+### Поведение при ошибке
+
+Провайдер-нейтрально, существующий путь:
+
+- HTTP-ошибки → `error.search_failed` + `errorMeta` (`http_<code>`,
+  `retryable` для 429/5xx) — как сейчас;
+- DLP-проекция запроса (`projectSearchQuery`) выполняется **до** диспатча и не
+  зависит от провайдера (INV-D4: «не смогли проверить» ≠ «можно отправлять»);
+- провайдер, недоступный/заблокированный политикой, не понижается до другого
+  провайдера автоматически: fallback не вводим в v1 (модель получает честную
+  ошибку; молчаливое переключение источника скрывает причину от пользователя).
+
+### Security (не меняется, но перечислено явно)
+
+- Финальный URL провайдера проходит `isUrlAllowed` с session-сетевой
+  конфигурацией — тот же путь, что у DDG сегодня (`src/tools/web-search.ts:78`).
+- SSRF-гарды действуют: self-hosted SearXNG в приватной сети требует
+  `allowPrivateOutbound` (или `allowLoopback` для localhost) — сознательно,
+  как для любого приватного хоста.
+- Аудит: `logNetworkRequest` / `logSecurityBlock` с `sanitizeUrl` — как сейчас.
+  Ключ Tavily в заголовке — в URL не попадает.
+- Выдача любого провайдера — недоверенный текст: обёртка `wrapUntrusted`
+  сохраняется (сниппеты — тоже недоверенный контент, аудит §2.14).
+- `security: { caps: [{ net: true }] }` тула не меняется (INV-9/10 не затронуты).
+
+## UI
+
+Веб-панель, секция research (`PANEL_SECTIONS`, домен `search`):
+
+- `provider` — select из enum-значений;
+- `apiKey` — строка с маскированием (значение приходит уже замаскированным из
+  `GET /api/config`);
+- `baseUrl` — строка, видима/релевантна для `searxng`;
+- setup-мастер (шаг `websearch`, `src/modules/webui/assets/setup-steps-agent.ts`)
+  получает select провайдера после toggle — необязательный шаг, значения
+  по умолчанию не спрашиваются.
+
+## Тесты
+
+- `tests/tools/web-search-provider.test.ts` (новый):
+  - `tavily`: happy-path через `fetchImpl`-мок (Bearer-заголовок, маппинг
+    `content`→`snippet`); без ключа — ошибка «нужен ключ», сеть не дёргается;
+  - `searxng`: happy-path (`<baseUrl>/search?...&format=json`); без `baseUrl` —
+    ошибка; непустой `apiKey` — warn в лог, поиск выполняется;
+  - `duckduckgo`: один прогон-регресс (существующие тесты не трогаем);
+  - URL провайдера, запрещённый `isUrlAllowed` → `blocked`-исход, запроса нет.
+- `tests/config/registry.test.ts`: enum-ключ читается/пишется, недопустимое
+  значение отклоняется, эффектов нет; `apiKey` замаскирован при показе.
+- `tests/i18n.test.ts`: новые ключи подписаны в `en`/`ru` (общий гвард).
+- Тест «падал бы без правки»: изменение `provider` в конфиге меняет форму
+  исходящего запроса (мок фиксирует URL/заголовки).
+
+## Этапы (одна ветка, волны по откату)
+
+1. **Ядро+конфиг:** `web-search.ts` (диспатч + провайдеры), `types-runtime.ts`,
+   `defaults.ts`, `registry-extra-features.ts`, i18n-ключи. Зелёные
+   `bun test` + `bun run quality` — точка отката.
+2. **UI:** `PANEL_SECTIONS`, setup-шаг, строка веб-i18n (`app-i18n.ts`).
+
+Файл `web-search.ts` близок к потолку 300 строк — провайдеры вынести в
+`src/tools/search-providers.ts` сразу, а не «дописать» (правило 6).
+
+## Остаточные риски
+
+1. **HTML-скрапинг DDG остаётся default.** Хрупкость сохраняется, пока
+   пользователь не сменил провайдера; но теперь есть явный API-путь.
+2. **SearXNG `format=json` не у всех включён.** Ошибка отдаётся как есть
+   (HTTP/тело) — пользователь настраивает инстанс; в валидации кода
+   ничего добавить нельзя.
+3. **Нет fallback между провайдерами.** Отказ выбранного провайдера =
+   ошибка хода. Осознанно: авто-переключение маскирует причину и создаёт
+   непредсказуемый egress; пересмотр — отдельной спекой, если повторится
+   на практике.
+4. **`answer`-поле Tavily игнорируется** в v1 (короткий ответ API не
+   добавляем в выдачу — меняет поведение тула для модели и контракт
+   `SearchResult`).
+5. **Ключ шифруется, но в памяти лежит открыто** — как все `apiKey`
+   конфига (существующий уровень угрозы).
+
+## Долг
+
+Планируемый: нет. Если UI-волна отложится — запись в `docs/agents/debt.md`
+(ключи конфига без панели = настраиваются только через `/api/config`).
