@@ -1862,6 +1862,15 @@ body.light .kv .wn { color: var(--yellow); }
 .qtip { display: flex; flex-direction: column; gap: 3px; }
 .qtip-row { display: flex; align-items: baseline; gap: 8px; }
 .qtip-row .ctip-label { flex: 1 1 auto; }
+/* Loaded skills: names are the payload, so they carry the foreground colour and
+   mono metrics; the source kind stays a quiet right-aligned hint. */
+.qtip-note { padding-bottom: 4px; border-bottom: 1px solid var(--border-3); margin-bottom: 2px; }
+.qtip-note .ctip-label { color: var(--dim-b); font-size: 11px; }
+.qtip-skill .ctip-skill-name {
+  flex: 1 1 auto; min-width: 0;
+  color: var(--fg); font-family: var(--mono, ui-monospace, monospace); font-size: 12px;
+}
+.qtip-skill .ctip-skill-kind { color: var(--dim-b); font-size: 10.5px; white-space: nowrap; }
 
 /* ---- settings modal + nested dialogs (provider, confirm) ---- */
 .overlay {

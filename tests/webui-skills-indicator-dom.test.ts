@@ -51,6 +51,11 @@ describe("skills indicator", () => {
     expect(tip.textContent).toContain("proj");
     expect(tip.textContent).toContain("built-in");
     expect(tip.textContent).toContain("project");
+    // Имена скиллов — отдельный акцентный класс, иначе их не отличить от подписей.
+    const names = Array.from(tip.querySelectorAll(".qtip-skill .ctip-skill-name")).map((n) => n.textContent);
+    expect(names).toEqual(["git", "proj"]);
+    const kinds = Array.from(tip.querySelectorAll(".qtip-skill .ctip-skill-kind")).map((n) => n.textContent);
+    expect(kinds).toEqual(["built-in", "project"]);
   });
 
   it("empty list hides the indicator", () => {
