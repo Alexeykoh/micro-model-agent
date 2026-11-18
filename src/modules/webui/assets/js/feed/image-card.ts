@@ -5,11 +5,11 @@ import { el } from "../dom.js";
 import { t } from "../i18n.js";
 import { openLightbox } from "../lightbox.js";
 
-/** Подпись под миниатюрой: вложение или область просмотра браузера. */
+/** Подпись под миниатюрой: вложение, область просмотра или результат поиска. */
 function captionOf(toolName: string): string {
-  return toolName === "attach_image"
-    ? t("web.card.attached_image")
-    : t("web.card.browser_viewport");
+  if (toolName === "attach_image") return t("web.card.attached_image");
+  if (toolName === "web_search") return t("web.card.search_image");
+  return t("web.card.browser_viewport");
 }
 
 /** Содержимое карточки при отсутствии файла (bitwise-совместимо с `<img>`). */

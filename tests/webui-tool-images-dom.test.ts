@@ -19,6 +19,7 @@ i18n.I18N.dicts = {
   en: {
     "web.card.attached_image": "attached image",
     "web.card.browser_viewport": "browser · viewport",
+    "web.card.search_image": "search result image",
     "web.card.image_removed": "image removed (rotation)",
     "web.lightbox.close": "Close",
     "web.lightbox.open_tab": "Open in a new tab",
@@ -112,6 +113,11 @@ describe("tool image cards in the live feed", () => {
     const card = imageCard("attach_image", URL1)!;
     expect(card.querySelector(".cap")?.textContent).toContain("attached image");
     expect(imageCard("browser", "")).toBeNull();
+  });
+
+  it("labels web_search cards as search result images", () => {
+    const card = imageCard("web_search", URL1)!;
+    expect(card.querySelector(".cap")?.textContent).toContain("search result image");
   });
 });
 

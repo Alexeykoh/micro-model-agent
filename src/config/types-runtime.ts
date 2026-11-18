@@ -173,6 +173,10 @@ export interface WebSearchConfig {
   apiKey?: string;
   /** База self-hosted SearXNG (`https://searx.example.org`). */
   baseUrl?: string;
+  /** Скачивать картинки выдачи и показывать их в веб-ленте (default off). */
+  images?: boolean;
+  /** Потолок картинок на один запрос (2). */
+  maxImages?: number;
 }
 
 export interface ErrorWebSearchConfig {

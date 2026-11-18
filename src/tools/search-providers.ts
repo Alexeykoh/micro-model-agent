@@ -22,6 +22,8 @@ export interface WebSearchProviderOptions {
   provider?: string;
   apiKey?: string;
   baseUrl?: string;
+  /** Запросить URL картинок выдачи (webSearch.images). */
+  images?: boolean;
 }
 
 /** Готовый запрос: URL (для allowlist/SSRF), init и парсер тела. */
@@ -29,7 +31,13 @@ export interface SearchRequestPlan {
   ok: true;
   url: string;
   init: RequestInit;
-  parse(body: string, numResults: number): SearchResult[];
+  parse(body: string, numResults: number): SearchParsed;
+}
+
+/** Разобранная выдача: результаты + URL картинок (если провайдер их дал). */
+export interface SearchParsed {
+  results: SearchResult[];
+  images: string[];
 }
 
 /** Провайдер не сконфигурирован: сеть не трогаем, пользователю — причина. */
@@ -102,29 +110,35 @@ function field(row: Record<string, unknown>, name: string): string {
 }
 
 /**
- * Разбор JSON-выдачи `{results: [{title, url, content}]}` (Tavily и SearXNG
+ * Разбор JSON-конверта `{results: [...], images?: [...]}` (Tavily и SearXNG
  * делят форму). Битый JSON — ошибка, а не «пустая выдача».
  */
-function parseJsonResults(
-  body: string,
-  numResults: number,
-  provider: WebSearchProvider,
-): SearchResult[] {
+function parseJsonEnvelope(body: string, provider: WebSearchProvider): {
+  results: Record<string, unknown>[];
+  images: string[];
+} {
   let data: unknown;
   try {
     data = JSON.parse(body);
   } catch {
     throw new Error(t("error.search_bad_response", { provider }));
   }
-  const rows =
-    data && typeof data === "object" && Array.isArray((data as { results?: unknown }).results)
-      ? ((data as { results: unknown[] }).results as unknown[])
-      : [];
+  const obj = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+  const rows = Array.isArray(obj.results) ? (obj.results as unknown[]) : [];
+  const imgUrls = Array.isArray(obj.images)
+    ? (obj.images as unknown[]).filter((v): v is string => typeof v === "string" && v.trim() !== "")
+    : [];
+  return {
+    results: rows.filter((r): r is Record<string, unknown> => !!r && typeof r === "object"),
+    images: imgUrls.map((v) => v.trim()),
+  };
+}
+
+/** `{title, url, content}` → элементы выдачи (до `numResults`). */
+function mapRows(rows: Record<string, unknown>[], numResults: number): SearchResult[] {
   const results: SearchResult[] = [];
-  for (const raw of rows) {
+  for (const row of rows) {
     if (results.length >= numResults) break;
-    if (!raw || typeof raw !== "object") continue;
-    const row = raw as Record<string, unknown>;
     const url = field(row, "url");
     if (!url) continue;
     results.push({
@@ -134,6 +148,27 @@ function parseJsonResults(
     });
   }
   return results;
+}
+
+/** Строки без дублей и пустых значений. */
+function dedupeStrings(values: string[]): string[] {
+  return [...new Set(values.map((v) => v.trim()).filter(Boolean))];
+}
+
+/** Tavily: выдача + `images` (при `include_images`). */
+function parseTavily(body: string, numResults: number): SearchParsed {
+  const env = parseJsonEnvelope(body, "tavily");
+  return { results: mapRows(env.results, numResults), images: dedupeStrings(env.images) };
+}
+
+/** SearXNG: выдача + `img_src`/`thumbnail_src` строк. */
+function parseSearxng(body: string, numResults: number): SearchParsed {
+  const env = parseJsonEnvelope(body, "searxng");
+  const images = env.results.flatMap((row) => {
+    const src = field(row, "img_src") || field(row, "thumbnail_src");
+    return src ? [src] : [];
+  });
+  return { results: mapRows(env.results, numResults), images: dedupeStrings(images) };
 }
 
 /** База SearXNG: только абсолютный http(s) URL, без хвостового слэша. */
@@ -174,9 +209,14 @@ export function planSearchRequest(
           authorization: `Bearer ${apiKey}`,
           "user-agent": userAgent(),
         },
-        body: JSON.stringify({ query, max_results: count, search_depth: "basic" }),
+        body: JSON.stringify({
+          query,
+          max_results: count,
+          search_depth: "basic",
+          ...(options?.images ? { include_images: true } : {}),
+        }),
       },
-      parse: (body, n) => parseJsonResults(body, n, provider),
+      parse: parseTavily,
     };
   }
   if (provider === "searxng") {
@@ -186,13 +226,13 @@ export function planSearchRequest(
       ok: true,
       url: `${base}/search?q=${encodeURIComponent(query)}&format=json`,
       init: { headers: { "user-agent": userAgent() } },
-      parse: (body, n) => parseJsonResults(body, n, provider),
+      parse: parseSearxng,
     };
   }
   return {
     ok: true,
     url: `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
     init: { headers: { "user-agent": userAgent() } },
-    parse: (body, n) => parseDdg(body, n),
+    parse: (body, n) => ({ results: parseDdg(body, n), images: [] }),
   };
 }

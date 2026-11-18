@@ -113,6 +113,18 @@ export const FEATURE_DEFS: ConfigKeyDef[] = [
       const s = String(v ?? "").trim();
       c.webSearch.baseUrl = s === "" ? undefined : s;
     }),
+  bool("webSearch.images", "research", false,
+    (c) => c.webSearch?.images ?? DEFAULTS.webSearch!.images,
+    (c, v) => {
+      c.webSearch ??= structuredClone(DEFAULTS.webSearch!);
+      c.webSearch.images = v as boolean;
+    }),
+  int("webSearch.maxImages", "research", 1, 5, 1, false,
+    (c) => c.webSearch?.maxImages ?? DEFAULTS.webSearch!.maxImages,
+    (c, v) => {
+      c.webSearch ??= structuredClone(DEFAULTS.webSearch!);
+      c.webSearch.maxImages = v as number;
+    }),
 
   bool("errorWebSearch.enabled", "research", false,
     (c) => c.errorWebSearch?.enabled ?? DEFAULTS.errorWebSearch!.enabled,

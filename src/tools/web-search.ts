@@ -8,6 +8,9 @@ import { getSessionSecurityConfig } from "../modules/security/session-isolation"
 import { machinePolicyContext } from "../modules/security/data-policy/context";
 import { projectOutboundText } from "../modules/security/data-policy/outbound";
 import { wrapUntrusted } from "./web-content";
+import { DEFAULTS } from "../config/defaults";
+import { downloadSearchImages } from "./search-images";
+import type { ToolImageAsset } from "../modules/session/image-store";
 import {
   clampResultCount,
   planSearchRequest,
@@ -28,6 +31,8 @@ export interface WebSearchOutcome {
   blocked?: boolean;
   /** URL реально запрошенного провайдера (аудит, provenance выдачи). */
   url?: string;
+  /** URL картинок выдачи (Tavily `images`, SearXNG `img_src`), если провайдер дал. */
+  imageUrls?: string[];
 }
 
 /** Задержка перед единственным ретраем на 429/503. */
@@ -93,10 +98,12 @@ export async function performWebSearch(
       };
     }
     const body = await response.text();
+    const parsed = plan.parse(body, clampResultCount(numResults));
     return {
       success: true,
-      results: plan.parse(body, clampResultCount(numResults)),
+      results: parsed.results,
       url: plan.url,
+      ...(parsed.images.length ? { imageUrls: parsed.images } : {}),
     };
   } catch (err: unknown) {
     return {
@@ -168,6 +175,7 @@ export const webSearchTool: ToolDefinition = {
       provider: ws?.provider,
       apiKey: ws?.apiKey,
       baseUrl: ws?.baseUrl,
+      images: ws?.images === true,
     };
 
     const securityConfig = ctx.sessionContext
@@ -228,20 +236,33 @@ export const webSearchTool: ToolDefinition = {
     if (outcome.results.length === 0) {
       return { success: true, output: t("tool.no_results", { query }) };
     }
-    return {
-      success: true,
-      // Сниппеты — тоже недоверенный текст (аудит §2.14).
-      output: wrapUntrusted(
-        url,
-        t("tool.search_results", {
+    // Картинки выдачи (webSearch.images): скачиваем серверно и отдаём в
+    // пайплайн ToolResult.imageFiles — модель получает только текст, веб
+    // рисует same-origin карточки. Неудача — тихий пропуск, не ошибка поиска.
+    const success: { success: true; output: string; display?: string; imageFiles?: ToolImageAsset[] } =
+      {
+        success: true,
+        // Сниппеты — тоже недоверенный текст (аудит §2.14).
+        output: wrapUntrusted(
+          url,
+          t("tool.search_results", {
+            query,
+            results: formatResults(outcome.results),
+          }),
+        ),
+        display: t("tool.web_search_result", {
           query,
-          results: formatResults(outcome.results),
+          count: String(outcome.results.length),
         }),
-      ),
-      display: t("tool.web_search_result", {
-        query,
-        count: String(outcome.results.length),
-      }),
-    };
+      };
+    if (ws?.images === true && outcome.imageUrls?.length) {
+      const assets = await downloadSearchImages(
+        outcome.imageUrls,
+        ws.maxImages ?? DEFAULTS.webSearch?.maxImages ?? 2,
+        securityConfig,
+      );
+      if (assets.length) success.imageFiles = assets;
+    }
+    return success;
   },
 };

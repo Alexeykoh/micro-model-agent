@@ -195,6 +195,8 @@ export const DEFAULTS: AppConfig = {
   webSearch: {
     enabled: true,
     provider: "duckduckgo",
+    images: false,
+    maxImages: 2,
   },
   errorWebSearch: {
     enabled: true,

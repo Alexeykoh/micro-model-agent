@@ -238,4 +238,18 @@ describe("web search provider config", () => {
     expect(setConfigValue(cfg, "webSearch.baseUrl", "").ok).toBe(true);
     expect(getConfigValue(cfg, "webSearch.baseUrl").value).toBe("");
   });
+
+  it("keeps result images opt-in with a capped count", () => {
+    const cfg = freshConfig();
+    expect(DEFAULTS.webSearch?.images).toBe(false);
+    expect(getConfigValue(cfg, "webSearch.images").value).toBe(false);
+    expect(getConfigValue(cfg, "webSearch.maxImages").value).toBe(2);
+
+    expect(setConfigValue(cfg, "webSearch.images", "true").ok).toBe(true);
+    expect(cfg.webSearch?.images).toBe(true);
+    expect(setConfigValue(cfg, "webSearch.maxImages", "5").ok).toBe(true);
+    expect(cfg.webSearch?.maxImages).toBe(5);
+    expect(setConfigValue(cfg, "webSearch.maxImages", "9").ok).toBe(false);
+    expect(cfg.webSearch?.maxImages).toBe(5);
+  });
 });

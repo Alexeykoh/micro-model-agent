@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- web_search: картинки из выдачи - webSearch.images плюс webSearch.maxImages; скачиваются сервером через сетевой гвард и показываются в веб-чате карточками, модель получает только текст.
+- web_search: выбор провайдера поиска - webSearch.provider duckduckgo/tavily/searxng, ключ webSearch.apiKey шифруется, адрес инстанса webSearch.baseUrl; автопоиск ошибок использует тот же провайдер.
 - **Web UI: индикатор загруженных скиллов в композере.** Иконка `biceps-flexed` (Lucide) рядом с кнопками ввода — скрыта при 0 скиллов, появляется акцентным цветом со счётчиком при ≥1. Hover → тултип «загруженные скилы» со списком «имя · источник» (builtin/global/project). Live-обновляется по SSE-событию `skills` от модуля скиллов; состояние синглтонное (процессный набор, который реально попал в системный промпт). Спека: `docs/specs/2026-11-11-webui-skills-indicator-design.md`.
 - **Web UI: акцентное подчёркивание у `@`-упоминаний в поле ввода.** К существующей заливке `--accent-bg` добавлено акцентное подчёркивание (text-decoration в слое зеркала, выровненное с текстом textarea).
 
