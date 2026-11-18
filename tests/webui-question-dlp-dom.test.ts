@@ -7,7 +7,12 @@ const win = setupHappyDom(`<div id="msgs" class="msgs"></div>`);
 
 const i18n = await import("../src/modules/webui/assets/js/i18n.js");
 i18n.I18N.locale = "en";
-i18n.I18N.dicts = { en: { "web.egress.hidden": "hidden by data policy" } };
+i18n.I18N.dicts = {
+  en: {
+    "web.egress.hidden": "hidden by data policy",
+    "web.egress.hidden_short": "‹{kind}›",
+  },
+};
 
 const store = await import("../src/modules/webui/assets/js/store.js");
 const { onQuestion } = await import("../src/modules/webui/assets/js/feed/question.js");
@@ -39,8 +44,8 @@ describe("question block masks DLP tokens", () => {
 
     const text = feed.textContent || "";
     expect(text).not.toContain("<PATH:");
-    expect(text).toContain("hidden by data policy/core/");
-    expect(text).toContain("Yes, hidden by data policy/core/");
-    expect(text).toContain("At the root hidden by data policy");
+    expect(text).toContain("‹PATH›/core/");
+    expect(text).toContain("Yes, ‹PATH›/core/");
+    expect(text).toContain("At the root ‹PATH›");
   });
 });

@@ -75,16 +75,26 @@ export function labelOf(name: string): string {
 }
 
 // DLP-псевдонимы вида `<PATH:abc>` приходят только внешнему API-клиенту.
-const HIDDEN_TOKEN = /<(?:PATH|HOST|ENV|PII|SECRET|FILE):[^>]+>/;
+// `DP` — фолбэк-метка неизвестного класса из data-policy/tokens.ts.
+const HIDDEN_LABEL = "PATH|HOST|ENV|PII|SECRET|FILE|DP";
+const HIDDEN_TOKEN = new RegExp(`<\\s*(?:${HIDDEN_LABEL})\\s*:[^>]*>`, "i");
+const HIDDEN_TOKEN_G = new RegExp(`<\\s*(${HIDDEN_LABEL})\\s*:[^>]*>`, "gi");
 
 /** True, если строка содержит DLP-псевдоним (внешний клиент). */
 export function isHiddenText(text: unknown): boolean {
   return typeof text === "string" && HIDDEN_TOKEN.test(text);
 }
 
-/** Заменяет псевдонимы на локализованный маркер — токен не читается как ошибка. */
+/**
+ * Заменяет псевдоним короткой меткой класса (`‹PII›`), сохраняя окружающий
+ * контекст. Длинная фраза «скрыто политикой данных» в середине identifier'а
+ * (`proc_<PII:…>10_45`) делала строку нечитаемой; объяснение живёт в тултипе
+ * DLP-бейджа и в `web.egress.hidden_tip`.
+ */
 export function hiddenText(text: string): string {
-  return text.replace(new RegExp(HIDDEN_TOKEN.source, "g"), t("web.egress.hidden"));
+  return text.replace(HIDDEN_TOKEN_G, (_all: string, label: string) =>
+    t("web.egress.hidden_short", { kind: label.toUpperCase() }),
+  );
 }
 
 export function argText(args: unknown): string {
