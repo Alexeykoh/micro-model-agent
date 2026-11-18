@@ -224,7 +224,7 @@ export const PANEL_SECTIONS: Record<string, Dict[]> = {
     { id: "agent.hallucination", titleKey: "web.settings.sec.agent.hallucination", descKey: "web.settings.sec.agent.hallucination.desc", keys: ["hallucination.judge.enabled"] },
   ],
   network: [
-    { id: "network.web", titleKey: "web.settings.sec.network.web", descKey: "web.settings.sec.network.web.desc", keys: ["webSearch.enabled"] },
+    { id: "network.web", titleKey: "web.settings.sec.network.web", descKey: "web.settings.sec.network.web.desc", keys: ["webSearch.enabled", "webSearch.provider", "webSearch.apiKey", "webSearch.baseUrl"] },
     { id: "network.error", titleKey: "web.settings.sec.network.error", descKey: "web.settings.sec.network.error.desc", keys: ["errorWebSearch.enabled", "errorWebSearch.threshold", "errorWebSearch.maxResults", "errorWebSearch.maxQueryChars", "errorWebSearch.maxSearchesPerSession", "errorWebSearch.requestTimeoutMs"] },
     { id: "network.service", titleKey: "web.settings.sec.network.service", descKey: "web.settings.sec.network.service.desc", keys: ["service.port", "service.host", "service.token", "service.tenant", "service.resultRetentionDays", "service.idempotencyTtlHours", "service.syncWaitMs", "service.maxQueueLength", "service.callbackTimeoutMs", "service.webhookSecret", "service.webhookAllowHttp"] },
   ],

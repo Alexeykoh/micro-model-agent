@@ -194,6 +194,7 @@ export const DEFAULTS: AppConfig = {
   },
   webSearch: {
     enabled: true,
+    provider: "duckduckgo",
   },
   errorWebSearch: {
     enabled: true,

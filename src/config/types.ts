@@ -81,6 +81,9 @@ export type {
 
 export type { ContextBudget };
 
+export type { WebSearchProvider } from "./web-search-provider";
+export { WEB_SEARCH_PROVIDERS } from "./web-search-provider";
+
 export type { ExpertConfig };
 
 export type { ServiceConfig } from "./types-service";

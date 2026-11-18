@@ -1,6 +1,7 @@
 // Типы рантайма: инструкции, сессии, тулы, MCP, UI, браузер, субагент, критик, плагины.
 import type { ProviderConfig } from "./types-provider";
 import type { ThemeMode, UiThemeId } from "./theme-ids";
+import type { WebSearchProvider } from "./web-search-provider";
 
 /**
  * Обработка промпт-блоков (AGENTS.md, карта проекта), превышающих бюджет
@@ -166,6 +167,12 @@ export interface UiConfig {
 /** Мастер-выключатель веб-поиска: при false web_search отвечает "disabled". */
 export interface WebSearchConfig {
   enabled: boolean;
+  /** Источник выдачи: DuckDuckGo HTML (default), Tavily API, SearXNG. */
+  provider: WebSearchProvider;
+  /** Ключ провайдера (Tavily). Шифруется на диске, маскируется при показе. */
+  apiKey?: string;
+  /** База self-hosted SearXNG (`https://searx.example.org`). */
+  baseUrl?: string;
 }
 
 export interface ErrorWebSearchConfig {

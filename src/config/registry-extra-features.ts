@@ -2,8 +2,19 @@
 // браузера. Вынесены из `registry-extra.ts` (правило 6); порядок внутри
 // группы — порядок `EXTRA_DEFS`.
 import type { ConfigKeyDef } from "./registry";
+import type { AppConfig } from "./types";
 import { DEFAULTS } from "./defaults";
-import { bool, enumOf, int } from "./registry-extra-factories";
+import { bool, enumOf, int, strOpt } from "./registry-extra-factories";
+import { WEB_SEARCH_PROVIDERS, type WebSearchProvider } from "./web-search-provider";
+
+/** Необязательная строка домена `research`: пустое значение допустимо. */
+function optionalStr(
+  key: string,
+  get: (c: AppConfig) => unknown,
+  set: (c: AppConfig, v: unknown) => void,
+): ConfigKeyDef {
+  return { ...strOpt(key, "research", get, set), allowEmpty: true };
+}
 
 export const FEATURE_DEFS: ConfigKeyDef[] = [
   bool("hallucination.judge.enabled", "agent", true,
@@ -81,6 +92,26 @@ export const FEATURE_DEFS: ConfigKeyDef[] = [
     (c, v) => {
       c.webSearch ??= structuredClone(DEFAULTS.webSearch!);
       c.webSearch.enabled = v as boolean;
+    }),
+  enumOf("webSearch.provider", "research", WEB_SEARCH_PROVIDERS, false,
+    (c) => c.webSearch?.provider ?? DEFAULTS.webSearch!.provider,
+    (c, v) => {
+      c.webSearch ??= structuredClone(DEFAULTS.webSearch!);
+      c.webSearch.provider = v as WebSearchProvider;
+    }),
+  optionalStr("webSearch.apiKey",
+    (c) => c.webSearch?.apiKey ?? "",
+    (c, v) => {
+      c.webSearch ??= structuredClone(DEFAULTS.webSearch!);
+      const s = String(v ?? "").trim();
+      c.webSearch.apiKey = s === "" ? undefined : s;
+    }),
+  optionalStr("webSearch.baseUrl",
+    (c) => c.webSearch?.baseUrl ?? "",
+    (c, v) => {
+      c.webSearch ??= structuredClone(DEFAULTS.webSearch!);
+      const s = String(v ?? "").trim();
+      c.webSearch.baseUrl = s === "" ? undefined : s;
     }),
 
   bool("errorWebSearch.enabled", "research", false,
