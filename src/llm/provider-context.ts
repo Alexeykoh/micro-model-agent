@@ -166,8 +166,8 @@ export async function probeNativeCapabilities(
     providerType === undefined || providerType === "openai-compat" || providerType === "lmstudio";
   const [lm, llama, llamaModalities, ollamaCaps, compatProbe] = await Promise.all([
     probeModel(baseUrl, model, timeoutMs),
-    localEligible ? probeLlamaCppReasoning(origin, timeoutMs) : Promise.resolve(null),
-    localEligible ? probeLlamaCppModalities(origin, timeoutMs) : Promise.resolve(null),
+    localEligible ? probeLlamaCppReasoning(origin, timeoutMs, model) : Promise.resolve(null),
+    localEligible ? probeLlamaCppModalities(origin, timeoutMs, model) : Promise.resolve(null),
     localEligible ? probeOllamaCapabilities(origin, model, timeoutMs) : Promise.resolve(null),
     probeOpenAICompatCapabilities(baseUrl, model, apiKey, timeoutMs),
   ]);
@@ -248,7 +248,7 @@ export async function probeProviderContext(
     const [lm, ollama, llama, compat, catalog] = await Promise.all([
       probeModel(baseUrl, model, timeoutMs),
       probeOllama(origin, model, timeoutMs),
-      probeLlamaCpp(origin, timeoutMs),
+      probeLlamaCpp(origin, timeoutMs, model),
       probeOpenAICompatModels(baseUrl, model, opts.apiKey, timeoutMs),
       // Каталог ловится отдельно: его сбой не должен отменять уже измеренные
       // локальные источники (раньше это была последняя проба цепочки).

@@ -126,11 +126,40 @@ export async function probeOllama(
   return ps ?? show;
 }
 
+/**
+ * `/props` локального бэкенда. Голый путь понимает llama-server, но llama-swap
+ * (один порт на несколько моделей) отвечает на него 404 «no model id could be
+ * identified»: id модели приходит query-параметром. Второй адрес —
+ * `/props?model=…&autoload=false`: llama-swap проксирует props загруженного
+ * инстанса, но не имеет права поднимать холодную модель ради пробы
+ * (на незагруженную он вернёт 409, и мы честно остаёмся без данных).
+ */
+async function fetchLlamaProps(
+  origin: string,
+  timeoutMs: number,
+  model?: string,
+): Promise<Record<string, unknown> | null> {
+  const urls = [`${origin}/props`];
+  if (model) {
+    urls.push(`${origin}/props?model=${encodeURIComponent(model)}&autoload=false`);
+  }
+  for (const url of urls) {
+    const props = await fetchJson(url, timeoutMs);
+    if (props && typeof props === "object" && !Array.isArray(props)) {
+      return props as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
 /** Сервер llama.cpp: одномодельный `/props` несёт загруженный `n_ctx`. */
-export async function probeLlamaCpp(origin: string, timeoutMs: number): Promise<number | null> {
-  const props = await fetchJson(`${origin}/props`, timeoutMs);
-  if (!props || typeof props !== "object") return null;
-  const bag = props as Record<string, unknown>;
+export async function probeLlamaCpp(
+  origin: string,
+  timeoutMs: number,
+  model?: string,
+): Promise<number | null> {
+  const bag = await fetchLlamaProps(origin, timeoutMs, model);
+  if (!bag) return null;
   const direct = pickContextField(bag);
   if (direct !== null) return direct;
   const gen = bag.default_generation_settings;
@@ -152,10 +181,11 @@ export type LlamaCppModalities = Pick<ModelCapabilities, "vision" | "video" | "a
 export async function probeLlamaCppModalities(
   origin: string,
   timeoutMs: number,
+  model?: string,
 ): Promise<LlamaCppModalities | null> {
-  const props = await fetchJson(`${origin}/props`, timeoutMs);
-  if (!props || typeof props !== "object") return null;
-  const mods = (props as Record<string, unknown>).modalities;
+  const props = await fetchLlamaProps(origin, timeoutMs, model);
+  if (!props) return null;
+  const mods = props.modalities;
   if (!mods || typeof mods !== "object" || Array.isArray(mods)) return null;
   const bag = mods as Record<string, unknown>;
   const out: LlamaCppModalities = {};
@@ -181,10 +211,10 @@ export interface LlamaCppReasoningCaps {
 export async function probeLlamaCppReasoning(
   origin: string,
   timeoutMs: number,
+  model?: string,
 ): Promise<LlamaCppReasoningCaps | null> {
-  const props = await fetchJson(`${origin}/props`, timeoutMs);
-  if (!props || typeof props !== "object") return null;
-  const bag = props as Record<string, unknown>;
+  const bag = await fetchLlamaProps(origin, timeoutMs, model);
+  if (!bag) return null;
   const caps = bag.chat_template_caps;
   if (caps && typeof caps === "object") {
     const c = caps as Record<string, unknown>;
