@@ -1,6 +1,11 @@
 # Test/self-host image for `mma web` (NOT the sandbox runner image).
 # Build from the repository root:
 #   docker build -f deploy/Dockerfile.web -t mma-web-test:0.26.0 .
+# LSP servers auto-install via `npx --yes --package …`; oven/bun ships bun/bunx,
+# not npm/npx. Take real Node from the official image (glibc-compatible with
+# the bun image's Debian base) and copy it into the runtime image below.
+FROM node:22-bookworm-slim AS node-toolchain
+
 FROM oven/bun:1.3.14
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -16,6 +21,13 @@ RUN bun install --frozen-lockfile --ignore-scripts
 # Browser tool: Chromium + system libraries. Kept in its own layer so source
 # edits don't redownload ~150 MB. `ms-playwright` lands in /root/.cache.
 RUN bunx playwright install --with-deps chromium
+
+# Real Node for LSP: `npx` must exist on PATH for auto-install. /usr/local/bin
+# precedes Bun's node fallback dir in PATH, so these take precedence.
+COPY --from=node-toolchain /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-toolchain /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
 COPY . .
 RUN chmod +x /app/deploy/docker-test/entrypoint.sh \
