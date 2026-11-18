@@ -58,6 +58,8 @@ export const OUTBOUND_FETCH_ALLOWLIST: Record<string, string> = {
   "src/modules/setup/discovery.ts":
     "local setup probe: localhost ports and provider URLs from config",
   "src/tools/web-search.ts": "search API URL from config; ToolExecutor validates urlArgs (INV-10)",
+  "src/tools/search-images.ts":
+    "search result image URL from provider response; isUrlAllowed (SSRF) checked before fetch",
   "src/modules/security/network-validator.ts":
     "the policy itself: fetchValidated revalidates every hop",
   "src/modules/webui/assets/js/api.ts": "same-origin relative path in the browser",

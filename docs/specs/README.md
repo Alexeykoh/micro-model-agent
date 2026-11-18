@@ -84,3 +84,4 @@
 - [webui activity phase](./2026-11-05-webui-activity-phase-design.md)
 - [critic transparency and fixes](./2026-11-05-critic-transparency-and-fixes-design.md)
 - [monolith split](./2026-11-10-monolith-split-design.md) — полное разделение UI / runtime
+- [web search provider](./2026-11-18-web-search-provider-design.md) — выбор источника `web_search`: duckduckgo / tavily / searxng

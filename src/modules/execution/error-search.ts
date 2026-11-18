@@ -9,19 +9,24 @@ import { isSearchableError, buildSearchQuery } from "./stuck-detector";
 import type { PlanTracker } from "./tracker";
 import type { NetworkSecurityConfig } from "../../config/types";
 import type { SearchResult } from "../../tools/web-search";
+import type { WebSearchProviderOptions } from "../../tools/search-providers";
 import { getSessionSecurityConfig } from "../security/session-isolation";
 import { t } from "../../i18n/index";
 
 /**
  * Инжектированный раннер поиска. По умолчанию performWebSearch (общий с тулом
  * web_search), чтобы тесты подменяли моком. `requestTimeoutMs` переопределяет
- * сетевой таймаут (errorWebSearch.requestTimeoutMs).
+ * сетевой таймаут (errorWebSearch.requestTimeoutMs), `providerOptions` —
+ * выбранный источник (`webSearch.provider`), чтобы автопоиск не жил по
+ * отдельному движку.
  */
 export type WebSearchRunner = (
   query: string,
   numResults: number,
   networkConfig: NetworkSecurityConfig | undefined,
   requestTimeoutMs?: number,
+  fetchImpl?: typeof fetch,
+  providerOptions?: WebSearchProviderOptions,
 ) => Promise<{ success: boolean; results: SearchResult[]; error?: string; blocked?: boolean }>;
 
 /** Мутабельный вид `ExecutionModule`, которым владеет автопоиск ошибок. */
@@ -67,8 +72,16 @@ export function maybeSearchError(host: ErrorSearchHost, ctx: ToolContext, call: 
   host.setSearchesThisSession(host.searchesThisSession + 1);
   host.setLastErrorSearchAt(now);
   const networkConfig = getSessionSecurityConfig(ctx.config, ctx.sessionContext).network;
+  const ws = ctx.config?.webSearch;
   host
-    .searchRunner(query, cfg.maxResults ?? 5, networkConfig, cfg.requestTimeoutMs ?? 10000)
+    .searchRunner(
+      query,
+      cfg.maxResults ?? 5,
+      networkConfig,
+      cfg.requestTimeoutMs ?? 10000,
+      undefined,
+      { provider: ws?.provider, apiKey: ws?.apiKey, baseUrl: ws?.baseUrl },
+    )
     .then((res) => {
       if (!res.success || res.results.length === 0) {
         if (!host.retrySignatures.has(sig)) {

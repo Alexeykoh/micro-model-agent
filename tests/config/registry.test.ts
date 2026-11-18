@@ -209,3 +209,47 @@ describe("config registry", () => {
     expect(cfg.provider.baseUrl).toBe("https://go/v1");
   });
 });
+
+describe("web search provider config", () => {
+  it("defaults to DuckDuckGo and rejects an unknown provider", () => {
+    const cfg = freshConfig();
+    expect(getConfigValue(cfg, "webSearch.provider").value).toBe("duckduckgo");
+    expect(setConfigValue(cfg, "webSearch.provider", "tavily").ok).toBe(true);
+    expect(cfg.webSearch?.provider).toBe("tavily");
+
+    const bad = setConfigValue(cfg, "webSearch.provider", "google");
+    expect(bad.ok).toBe(false);
+    expect(cfg.webSearch?.provider).toBe("tavily");
+  });
+
+  it("stores the API key trimmed and clears it on an empty value", () => {
+    const cfg = freshConfig();
+    expect(setConfigValue(cfg, "webSearch.apiKey", "  secret-key  ").ok).toBe(true);
+    expect(cfg.webSearch?.apiKey).toBe("secret-key");
+
+    expect(setConfigValue(cfg, "webSearch.apiKey", "").ok).toBe(true);
+    expect(cfg.webSearch?.apiKey).toBeUndefined();
+  });
+
+  it("round-trips the SearXNG base URL", () => {
+    const cfg = freshConfig();
+    expect(setConfigValue(cfg, "webSearch.baseUrl", "https://searx.example.org").ok).toBe(true);
+    expect(getConfigValue(cfg, "webSearch.baseUrl").value).toBe("https://searx.example.org");
+    expect(setConfigValue(cfg, "webSearch.baseUrl", "").ok).toBe(true);
+    expect(getConfigValue(cfg, "webSearch.baseUrl").value).toBe("");
+  });
+
+  it("keeps result images opt-in with a capped count", () => {
+    const cfg = freshConfig();
+    expect(DEFAULTS.webSearch?.images).toBe(false);
+    expect(getConfigValue(cfg, "webSearch.images").value).toBe(false);
+    expect(getConfigValue(cfg, "webSearch.maxImages").value).toBe(2);
+
+    expect(setConfigValue(cfg, "webSearch.images", "true").ok).toBe(true);
+    expect(cfg.webSearch?.images).toBe(true);
+    expect(setConfigValue(cfg, "webSearch.maxImages", "5").ok).toBe(true);
+    expect(cfg.webSearch?.maxImages).toBe(5);
+    expect(setConfigValue(cfg, "webSearch.maxImages", "9").ok).toBe(false);
+    expect(cfg.webSearch?.maxImages).toBe(5);
+  });
+});
