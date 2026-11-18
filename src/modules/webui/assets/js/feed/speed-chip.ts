@@ -1,51 +1,10 @@
 // Generation-speed chip above the composer: the single place tok/s is shown.
 // While a turn streams it reads the live estimate (`speedView`); when the turn is
-// over it switches to the exact per-turn `llmSpeed` snapshot, with a per-call
-// breakdown in the tooltip.
-import { attachTooltip, el } from "../dom.js";
+// over it switches to the exact per-turn `llmSpeed` snapshot.
 import { t } from "../i18n.js";
-import { fmtTokens } from "../format.js";
 import { speedText, speedView } from "../speed.js";
 import { session } from "../store.js";
 import type { Dict } from "../core/store/types.js";
-
-let tipBound = false;
-let snapshot: Dict | null = null;
-
-function speedTip(s: Dict): Node {
-  const box = el("div", "speed-tip");
-  box.appendChild(
-    el(
-      "div",
-      "speed-tip-h",
-      t("web.speed.total", {
-        tokens: fmtTokens(Number(s.completionTokens) || 0),
-        sec: ((Number(s.decodeMs) || 0) / 1000).toFixed(1),
-      }),
-    ),
-  );
-  const calls = Array.isArray(s.calls) ? s.calls : [];
-  calls.forEach((c, i: number) => {
-    if (!c || !(c.decodeMs > 0)) return;
-    const rate = Math.round((Number(c.completionTokens) || 0) / (c.decodeMs / 1000));
-    box.appendChild(
-      el(
-        "div",
-        "speed-tip-row",
-        t("web.speed.call", {
-          n: i + 1,
-          tokens: String(c.completionTokens),
-          sec: (c.decodeMs / 1000).toFixed(1),
-          rate,
-        }),
-      ),
-    );
-  });
-  if (calls.some((c) => c && c.source === "estimate")) {
-    box.appendChild(el("div", "speed-tip-note", t("web.speed.estimate_note")));
-  }
-  return box;
-}
 
 function chipEl(): HTMLElement | null {
   return document.getElementById("speedChip");
@@ -96,7 +55,6 @@ export function renderSpeed(h: Dict): void {
   const tokens = s && typeof s.completionTokens === "number" ? s.completionTokens : 0;
   const ms = s && typeof s.decodeMs === "number" ? s.decodeMs : 0;
   if (!s || !(tokens > 0) || !(ms > 0)) {
-    snapshot = null;
     hideChip(chip);
     return;
   }
@@ -105,16 +63,10 @@ export function renderSpeed(h: Dict): void {
   chip.hidden = false;
   chip.textContent = speedText(tokens / (ms / 1000), estimated);
   chip.title = t("web.speed.title");
-  snapshot = s;
-  if (!tipBound) {
-    tipBound = true;
-    attachTooltip(chip, () => speedTip(snapshot || {}));
-  }
 }
 
 /** Clears the chip when the tab changes: speed belongs to one turn/session. */
 export function resetSpeedChip(): void {
   const chip = chipEl();
   if (chip) hideChip(chip);
-  snapshot = null;
 }

@@ -10,9 +10,6 @@ i18n.I18N.dicts = {
     "web.speed.tps": "{n} tok/s",
     "web.speed.estimated": "≈ {n} tok/s",
     "web.speed.title": "generation speed",
-    "web.speed.total": "{tokens} tokens in {sec}s",
-    "web.speed.call": "#{n} · {tokens} tokens · {sec}s · {rate} tok/s",
-    "web.speed.estimate_note": "≈ estimated from streamed characters",
   },
 };
 const { resetSpeed, noteChunk, speedView, speedText } = await import(
@@ -75,6 +72,20 @@ describe("generation speed", () => {
     renderSpeed({});
     expect(chip.hidden).toBe(true);
     expect(chip.textContent).toBe("");
+  });
+
+  it("has no per-call tooltip on the speed chip", () => {
+    document.body.innerHTML = '<span id="speedChip" hidden></span>';
+    renderSpeed({
+      llmSpeed: {
+        completionTokens: 100,
+        decodeMs: 2000,
+        calls: [{ completionTokens: 100, decodeMs: 2000, source: "api" }],
+      },
+    });
+    const chip = document.getElementById("speedChip") as HTMLElement;
+    chip.dispatchEvent(new Event("mouseenter"));
+    expect(document.querySelector(".ctip.show")).toBeNull();
   });
 
   it("renders the live estimate in the same footer chip", () => {
