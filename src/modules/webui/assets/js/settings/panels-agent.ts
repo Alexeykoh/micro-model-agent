@@ -1,5 +1,8 @@
-// Agent settings panel: experts / critic / sub-agents / tools as focused tabs.
-// The registry table (PANEL_SECTIONS.agent) stays the single source of truth.
+// Agent settings panel: verifier (critic) / experts / sub-agents / tools as
+// focused tabs. Critic goes first and is the tab the panel opens on: it is the
+// one switch every operator checks on entering Agent, so it must be visible
+// without a click (the card itself is `agent.critic` in PANEL_SECTIONS.agent).
+// The registry table stays the single source of truth.
 import { el } from "../dom.js";
 import { t } from "../i18n.js";
 import type { Dict } from "../core/store/types.js";
@@ -7,13 +10,13 @@ import { PANEL_SECTIONS } from "./controls.js";
 import { renderSectionsInto } from "./panels-shared.js";
 
 const TABS: Array<[string, string, string[]]> = [
+  ["critic", "web.settings.tab_agent_critic", ["agent.critic", "agent.critic.tuning", "agent.hallucination"]],
   ["experts", "web.settings.tab_agent_experts", ["agent.experts"]],
-  ["critic", "web.settings.tab_agent_critic", ["agent.critic", "agent.hallucination"]],
   ["subagents", "web.settings.tab_agent_subagents", ["agent.subagent"]],
   ["tools", "web.settings.tab_agent_tools", ["agent.tools"]],
 ];
 
-let activeTab = "experts";
+let activeTab = "critic";
 
 export function renderAgentPanel(): void {
   const container = document.querySelector<HTMLElement>('[data-panel="agent"]');

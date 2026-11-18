@@ -81,4 +81,15 @@ describe("settings IA", () => {
       expect(t(key)).not.toBe(key);
     }
   });
+
+  it("frames the verifier (critic) card like the other master switches", () => {
+    const agent = PANEL_SECTIONS.agent as Array<{ id: string; master?: boolean; keys: string[] }>;
+    const critic = agent.find((s) => s.id === "agent.critic");
+    // The accent frame holds only the on/off switch + its one-line explanation;
+    // model/provider/limits stay in the plain "Verifier settings" card below.
+    expect(critic?.master).toBe(true);
+    expect(critic?.keys).toEqual(["critic.enabled"]);
+    expect(agent.find((s) => s.id === "agent.critic.tuning")?.keys).toContain("critic.model");
+    expect(keysOf("agent")).toContain("critic.enabled");
+  });
 });

@@ -142,6 +142,15 @@ describe("web UI layout guards", () => {
     expect(agentPanel).toContain('"settings-tabs"');
     expect(agentPanel).toContain('"agent.hallucination"');
     expect(agentPanel).toContain("renderSectionsInto");
+    // The verifier (critic) is the first card and the tab the panel opens on:
+    // entering Agent must already show it, without a click.
+    const tabs = agentPanel.slice(
+      agentPanel.indexOf("const TABS"),
+      agentPanel.indexOf("let activeTab"),
+    );
+    expect(tabs.indexOf('"critic"')).toBeGreaterThan(-1);
+    expect(tabs.indexOf('"critic"')).toBeLessThan(tabs.indexOf('"experts"'));
+    expect(agentPanel).toContain('let activeTab = "critic"');
     expect(memoryPanel).toContain('"settings-details"');
     expect(memoryPanel).toContain('"mem-filters"');
     expect(skillsPanel).toContain("web.settings.search_skills");
