@@ -16,6 +16,10 @@ import type { LLMProvider } from "../../llm/provider";
 import type { ContextProbeResult } from "../../llm/provider-context";
 import { activeProviderEndpoint } from "../../modules/providers/manager";
 import { BUILTIN_PROVIDERS } from "../../modules/providers/presets";
+import {
+  readCachedCapabilities,
+  writeCachedCapabilities,
+} from "../../modules/providers/capabilities-cache";
 import { t } from "../../i18n/index";
 import { errMsg } from "../../utils";
 
@@ -154,7 +158,14 @@ export async function refreshCapabilitiesProbe(
     const discovered = await discoverCapabilities(endpoint, config.model, {
       probeOffSwitch: config.reasoning?.mode !== "none",
     });
-    ref.probe = discovered.capabilities;
+    ref.probe =
+      discovered.capabilities ??
+      (discovered.reachable === true
+        ? readCachedCapabilities(endpoint.baseUrl, config.model)
+        : undefined);
+    if (discovered.capabilities) {
+      writeCachedCapabilities(endpoint.baseUrl, config.model, discovered.capabilities);
+    }
     ref.reachable = discovered.reachable === true;
   } catch (err) {
     ref.probe = undefined;

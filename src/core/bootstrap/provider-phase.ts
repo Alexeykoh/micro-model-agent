@@ -7,8 +7,8 @@
  * reasoning-probe. Тяжёлые пробы — фоном, старт не блокируют.
  */
 import { ModelLoader, probeProviderContext } from "../../llm/model-loader";
-import { discoverCapabilities, publishContextProbe } from "../agent/provider-probes";
-import type { DiscoveredCapabilities } from "../agent/provider-probes";
+import { publishContextProbe } from "../agent/provider-probes";
+import { probeStartupCapabilities } from "./provider-capabilities";
 import { join as joinDir } from "path";
 import type { ContextProbeResult } from "../../llm/model-loader";
 import { buildActiveProvider } from "../../modules/providers/factory";
@@ -121,8 +121,8 @@ export async function setupProviderPhase(
   // Тот же путь, что `refreshCapabilitiesProbe` при свитче: native/декларативные
   // capabilities + эмпирический выключатель reasoning (хостед-шлюзы его не
   // декларируют, а строгие серверы на неизвестный effort отвечают 400).
-  const nativeProbe: DiscoveredCapabilities = hasModel
-    ? await discoverCapabilities(probeEndpoint, config.model, {
+  const nativeProbe = hasModel
+    ? await probeStartupCapabilities(probeEndpoint, config.model, {
         probeOffSwitch: config.reasoning?.mode !== "none",
       })
     : { reachable: false };
