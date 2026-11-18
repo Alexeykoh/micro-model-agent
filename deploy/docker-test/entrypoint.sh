@@ -13,5 +13,10 @@ fi
 if [ ! -f /config/config/security.json ]; then
   cp /app/deploy/docker-test/seed/security.json /config/config/security.json
 fi
+# Песочница: агент читает AGENTS.md из рабочей директории. Не затираем файл,
+# если пользователь уже положил свой.
+if [ ! -f /workspace/AGENTS.md ]; then
+  cp /app/deploy/docker-test/seed/AGENTS.md /workspace/AGENTS.md
+fi
 
 exec bun /app/src/cli/main.ts web --host 0.0.0.0 --port 7333 --no-open
