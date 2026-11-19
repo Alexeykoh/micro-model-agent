@@ -1,0 +1,192 @@
+/**
+ * Пролог итерации одиночного цикла (`TurnCoordinator`, INV-23): пересчёт
+ * видимого набора тулов и их токен-бюджета, хук `onBeforeThink`, компакция,
+ * рефреш системного промпта и нормализация истории, монитор префикса,
+ * context-log, лог тулов/контекста. Возвращает значения, нужные телу итерации.
+ *
+ * Вынесено из `core/agent.ts`. Управляющего потока (continue/break) внутри нет.
+ */
+import type { AgentDeps } from "../agent";
+import type { OnMeta } from "../types";
+import type { ToolExecutor } from "../../tools/executor";
+import type { SessionLogger } from "../session-logger";
+import type { LoopState } from "./loop-state";
+import type { CompactionService } from "./compaction";
+import type { SystemPromptBuild } from "./prompt-phase";
+import { filterDisabledTools } from "./tool-visibility";
+import { repairToolCallPairing } from "./tool-pairing";
+import { buildPromptSnapshot, diffPrompt } from "./prefix-monitor";
+import { estimateTokens } from "../../llm/token-counter";
+import { contextLogGuard } from "./context-egress";
+
+/** Мутабельный вид `Agent`, которым владеет пролог. */
+export interface IterationPrologueHost {
+  deps: AgentDeps;
+  buildSystemPrompt(): SystemPromptBuild;
+  logContextStat(
+    kind: "start" | "iteration",
+    iteration: number,
+    slog: SessionLogger,
+    blocks?: Array<{ label: string; priority: string; tokens: number; included: boolean }>,
+  ): void;
+  refreshSystemPrompt(): void;
+}
+
+/** Входные данные пролога одной итерации. */
+export interface IterationPrologueInput {
+  state: LoopState;
+  slog: SessionLogger;
+  input: string;
+  onMeta?: OnMeta;
+  compactionService: CompactionService;
+}
+
+/** Результат пролога: видимые тулы и нормализованная история. */
+export interface IterationPrologueResult {
+  allToolsForBudget: ReturnType<ToolExecutor["getToolDefinitions"]>;
+  boundedToolNames: Set<string>;
+  toolTokenEstimate: number;
+  history: ReturnType<typeof repairToolCallPairing>;
+}
+
+/**
+ * Контекст хука `onBeforeThink` для плагинов. Экспортируется ради гварда:
+ * `sessionLog.directive` обязан существовать — иначе плагин `execution` падает
+ * на stuck-предупреждении (`ctx.sessionLog?.directive is not a function`), и в
+ * лог сессии не попадает запись о застревании.
+ */
+export function buildThinkCtx(args: {
+  iteration: number;
+  turnSeq: number;
+  logger: AgentDeps["logger"];
+  lastUserMessage: string;
+  contextManager: AgentDeps["contextManager"];
+  onMeta?: OnMeta;
+  slog: SessionLogger;
+}) {
+  return {
+    iteration: args.iteration,
+    turnSeq: args.turnSeq,
+    logger: args.logger,
+    lastUserMessage: args.lastUserMessage,
+    contextManager: args.contextManager,
+    onMeta: args.onMeta,
+    sessionLog: {
+      plan: (event: string, detail: string, iter?: number) =>
+        args.slog.logPlan(event, detail, iter),
+      directive: (event: string, detail: string, iter?: number) =>
+        args.slog.logDirective(event, detail, iter),
+    },
+  };
+}
+
+/** Выполняет подготовительные шаги итерации до вызова LLM. */
+export async function runIterationPrologue(
+  host: IterationPrologueHost,
+  inp: IterationPrologueInput,
+): Promise<IterationPrologueResult> {
+  const { deps } = host;
+  const { state, slog, input, onMeta, compactionService } = inp;
+  const { contextManager, pluginManager, logger, toolExecutor, config } = deps;
+
+  // Перечитываем мутабельный набор тегов — вдруг вызывали enable_tools.
+  // Отключённые за ход тулы исключаются из видимого набора.
+  const allToolsForBudget = filterDisabledTools(
+    toolExecutor.getToolDefinitions(deps.toolTags),
+    state.disabledTools,
+  );
+  const boundedToolNames = new Set(
+    allToolsForBudget.filter((t) => t.boundedOutput).map((t) => t.name),
+  );
+  const toolTokenEstimate = allToolsForBudget.reduce(
+    (sum, t) => sum + estimateTokens(t.description + JSON.stringify(t.parameters)),
+    0,
+  );
+  contextManager.setToolTokens(toolTokenEstimate);
+
+  pluginManager.runOnBeforeThink(
+    buildThinkCtx({
+      iteration: state.iteration,
+      // Идентификатор хода: монотонный маркер из `ContextManager.beginTurn()`.
+      // Нужен модулям, чтобы сбрасывать per-turn состояние и кулдауны (§1.2/§1.11).
+      turnSeq: state.criticHistoryMark,
+      logger,
+      lastUserMessage: input,
+      contextManager,
+      onMeta,
+      slog,
+    }),
+  );
+
+  // Единая точка компакции: интервал → качество (с cooldown) → переполнение.
+  await compactionService.compactIfNeeded(state);
+
+  host.refreshSystemPrompt();
+  // Taint (T2/T3): доверие текущей цели решает, наследует ли ответ taint, а
+  // на внешней цели tainted-записи маскируются до `repairToolCallPairing`.
+  const egressGuard = contextLogGuard(config);
+  const egressTrusted = egressGuard?.target.trusted ?? false;
+  // Моки контекста в тестах могут не знать про taint — деградируем безопасно.
+  if (typeof contextManager.setEgressTrusted === "function") {
+    contextManager.setEgressTrusted(egressTrusted);
+  }
+  const egressHistory =
+    typeof contextManager.getHistoryForEgress === "function"
+      ? contextManager.getHistoryForEgress(egressTrusted)
+      : contextManager.getActiveHistory();
+  // Позиционная нормализация истории перед отправкой: вклинившийся user или
+  // осиротевший tool ломает контракт OpenAI и даёт 400 у строгих провайдеров.
+  const history = repairToolCallPairing(egressHistory);
+
+  // Монитор стабильности префикса: считаем до запроса, пишем в llm_usage после.
+  const promptSnapshot = buildPromptSnapshot(history, allToolsForBudget);
+  state.prefixDelta = diffPrompt(state.prevPrompt, promptSnapshot, estimateTokens);
+  state.prevPrompt = promptSnapshot;
+
+  // Opt-in git-style context log: snapshot отправляемого контекста.
+  if (deps.contextLogger) {
+    try {
+      // DLP (E1): снимок показывает то, что уйдёт провайдеру (токены вместо
+      // путей/PII). Карта токенов общая с провайдером (INV-D11).
+      const guard = contextLogGuard(config);
+      const projected = guard?.sanitizeChat(history, allToolsForBudget);      deps.contextLogger.record(
+        (projected?.messages ?? history) as typeof history,
+        (projected?.tools ?? allToolsForBudget) as typeof allToolsForBudget,
+        {
+          iteration: state.iteration,
+          ts: new Date().toISOString(),
+          systemTokens: estimateTokens(promptSnapshot.system),
+          toolTokens: estimateTokens(promptSnapshot.tools),
+          historyTokens: estimateTokens(promptSnapshot.history),
+          totalTokens: contextManager.getEstimatedTokens(),
+          contextWindow: config.contextWindow,
+        },
+      );
+    } catch {
+      // Логирование контекста не должно ронять агент.
+    }
+  }
+  if (
+    state.prefixDelta.cause === "system" ||
+    state.prefixDelta.cause === "tools" ||
+    state.prefixDelta.cause === "history" ||
+    state.prefixDelta.cause === "volatile"
+  ) {
+    state.lastPrefixBreak = state.prefixDelta;
+  }
+
+  slog.logToolDefs(
+    allToolsForBudget.length,
+    allToolsForBudget.map((t) => t.name),
+    state.iteration,
+  );
+
+  if (state.iteration === 1) {
+    const { blocks } = host.buildSystemPrompt();
+    host.logContextStat("start", state.iteration, slog, blocks);
+  } else {
+    host.logContextStat("iteration", state.iteration, slog);
+  }
+
+  return { allToolsForBudget, boundedToolNames, toolTokenEstimate, history };
+}

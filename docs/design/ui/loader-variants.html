@@ -1,0 +1,1029 @@
+<!doctype html>
+<html lang="ru" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MMA web — варианты индикатора «агент работает»</title>
+<style>
+  :root {
+    --bg: #12161d; --fg: #e6edf3; --panel: #171b22; --surface: #1a1f27;
+    --border: #252b34; --muted: #b1bac4; --dim-a: #9198a1; --dim-b: #6e7681;
+    --accent: #58a6ff; --think: #8b7bb8; --green: #3fb950; --red: #ff7b72;
+    --yellow: #d29922; --cyan: #39c5cf; --magenta: #d2a8ff; --blue: #58a6ff;
+    --meta: #9198a1;
+  }
+  html[data-theme="light"] {
+    --bg: #f6f8fa; --fg: #1f2328; --panel: #ffffff; --surface: #f6f8fa;
+    --border: #d0d7de; --muted: #57606a; --dim-a: #57606a; --dim-b: #6e7781;
+    --accent: #0969da; --think: #6e7781; --green: #1a7f37; --red: #cf222e;
+    --yellow: #9a6700; --cyan: #116329; --magenta: #8250df; --blue: #0969da;
+    --meta: #57606a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 14px/1.5 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+    padding: 32px 24px 80px;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 6px; }
+  .sub { color: var(--dim-a); margin: 0 0 22px; max-width: 72ch; }
+  .sub code { color: var(--muted); }
+
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 18px; align-items: center;
+    padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--panel); margin-bottom: 28px;
+  }
+  .ctl { display: flex; gap: 8px; align-items: center; }
+  .ctl > span { color: var(--dim-a); font-size: 12.5px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .seg button {
+    background: transparent; color: var(--muted); border: 0; padding: 5px 11px;
+    font: inherit; font-size: 12.5px; cursor: pointer;
+  }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--accent-bg, rgba(88,166,255,.14)); color: var(--accent); }
+  html[data-theme="light"] .seg button[aria-pressed="true"] { background: #ddf4ff; }
+
+  h2 {
+    font-size: 13px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--dim-a); margin: 34px 0 12px;
+    border-bottom: 1px solid var(--border); padding-bottom: 6px;
+  }
+  h2 .cnt { color: var(--dim-b); font-weight: 400; text-transform: none; letter-spacing: 0; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+  .card {
+    border: 1px solid var(--border); border-radius: 8px; background: var(--panel);
+    padding: 14px 14px 12px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .card.sel { outline: 1.5px solid var(--accent); }
+  .card-h { display: flex; align-items: baseline; gap: 8px; }
+  .card-h b { font-size: 14px; font-weight: 600; }
+  .num {
+    color: var(--dim-b); font: 12px/1 ui-monospace, Consolas, monospace;
+    border: 1px solid var(--border); border-radius: 4px; padding: 3px 5px;
+  }
+  .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+  .tag {
+    font-size: 10.5px; color: var(--dim-a); border: 1px solid var(--border);
+    border-radius: 999px; padding: 1.5px 7px;
+  }
+  .tag.cost { color: var(--green); }
+  .tag.cost.mid { color: var(--yellow); }
+  .tag.cost.high { color: var(--magenta); }
+  .desc { color: var(--dim-a); font-size: 12.5px; margin: 0; }
+  .desc em { color: var(--muted); font-style: normal; }
+
+  /* ---------- chat preview line (canonical STYLE.md shape) ---------- */
+  .chatline {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 9px 12px; font-size: 13px; color: var(--think);
+    display: flex; align-items: center; gap: 8px; min-height: 38px;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  .chatline .lab { color: var(--think); }
+  .chatline .sep, .chatline .t, .chatline .hint { color: var(--dim-a); }
+  .chatline .hint { margin-left: auto; }
+  .chatline .slot { display: inline-flex; align-items: center; }
+
+  /* ================= loaders: simple ================= */
+  /* 1 · dots wave */
+  .l-dots { display: inline-flex; gap: 3px; align-items: center; height: 12px; }
+  .l-dots i {
+    width: 4px; height: 4px; border-radius: 50%; background: currentColor;
+    animation: dotwave 1.1s ease-in-out infinite;
+  }
+  .l-dots i:nth-child(2) { animation-delay: .15s; }
+  .l-dots i:nth-child(3) { animation-delay: .3s; }
+  @keyframes dotwave {
+    0%, 60%, 100% { transform: translateY(0); opacity: .35; }
+    30% { transform: translateY(-4px); opacity: 1; }
+  }
+
+  /* 2 · pulse glyph */
+  .l-pulse { display: inline-flex; }
+  .l-pulse i {
+    font-style: normal; animation: pulse 1.6s ease-in-out infinite;
+    text-shadow: 0 0 0 transparent;
+  }
+  @keyframes pulse {
+    0%, 100% { transform: scale(.86); opacity: .4; text-shadow: 0 0 0 transparent; }
+    50% { transform: scale(1.12); opacity: 1; text-shadow: 0 0 10px currentColor; }
+  }
+
+  /* 3 · braille spinner */
+  .l-braille {
+    font-family: ui-monospace, Consolas, monospace; width: 1.1em;
+    display: inline-block; text-align: center;
+  }
+
+  /* 4 · shimmer label */
+  .l-shimmer {
+    background: linear-gradient(100deg, var(--dim-a) 20%, #fff 42%, var(--fg) 50%, var(--dim-a) 70%);
+    background-size: 220% 100%;
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    animation: shimmer 1.8s linear infinite;
+  }
+  html[data-theme="light"] .l-shimmer {
+    background: linear-gradient(100deg, var(--dim-a) 20%, var(--accent) 42%, var(--fg) 50%, var(--dim-a) 70%);
+    background-size: 220% 100%;
+    -webkit-background-clip: text; background-clip: text;
+  }
+  @keyframes shimmer { to { background-position: -220% 0; } }
+
+  /* ================= loaders: medium ================= */
+  /* 5 · equalizer bars */
+  .l-bars { display: inline-flex; gap: 2.5px; align-items: flex-end; height: 13px; }
+  .l-bars i {
+    width: 3px; background: currentColor; border-radius: 1px; height: 4px;
+    animation: bars 1s ease-in-out infinite;
+  }
+  .l-bars i:nth-child(2) { animation-delay: .12s; }
+  .l-bars i:nth-child(3) { animation-delay: .24s; }
+  .l-bars i:nth-child(4) { animation-delay: .36s; }
+  .l-bars i:nth-child(5) { animation-delay: .48s; }
+  @keyframes bars {
+    0%, 100% { height: 3px; opacity: .45; }
+    50% { height: 13px; opacity: 1; }
+  }
+  body[data-state="tool"] .l-bars i { animation-duration: .5s; }
+  body[data-state="composing"] .l-bars i { animation-duration: .7s; animation-name: bars-compose; }
+  @keyframes bars-compose {
+    0%, 100% { height: 12px; opacity: .5; }
+    50% { height: 5px; opacity: 1; }
+  }
+
+  /* 6 · segmented ring + plan progress */
+  .l-ring { display: inline-flex; width: 14px; height: 14px; position: relative; }
+  .l-ring svg { width: 14px; height: 14px; animation: spin 1.4s linear infinite; }
+  .l-ring circle.seg {
+    fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round;
+    stroke-dasharray: 6 30; stroke-dashoffset: 0;
+  }
+  .l-ring .prog {
+    position: absolute; inset: 4px; border-radius: 50%;
+    background: conic-gradient(currentColor calc(var(--p, 0) * 1%), transparent 0);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+    opacity: .85;
+  }
+
+  /* 7 · elastic ellipsis */
+  .l-ell { display: inline-flex; gap: 2px; align-items: center; }
+  .l-ell i {
+    font-style: normal; width: 4px; height: 4px; border-radius: 50%;
+    background: currentColor; animation: ell 1.4s cubic-bezier(.68,-0.55,.27,1.55) infinite;
+  }
+  .l-ell i:nth-child(2) { animation-delay: .16s; }
+  .l-ell i:nth-child(3) { animation-delay: .32s; }
+  @keyframes ell {
+    0%, 70%, 100% { transform: scale(.5) translateY(0); opacity: .3; }
+    35% { transform: scale(1.35) translateY(-3px); opacity: 1; }
+  }
+
+  /* ================= loaders: complex ================= */
+  /* 8 · orb (canvas) */
+  canvas.orb { display: block; }
+
+  /* 9 · constellation (canvas) */
+  canvas.con { display: block; }
+
+  /* 10 · text scrambler */
+  .l-scramble {
+    font-family: ui-monospace, Consolas, monospace; letter-spacing: .02em;
+    min-width: 12ch; display: inline-block;
+  }
+
+  /* 11 · aurora wave (canvas) */
+  canvas.aur { display: block; }
+
+  /* ================= in-context feed ================= */
+  .feed {
+    border: 1px solid var(--border); border-radius: 8px; background: var(--panel);
+    padding: 16px 18px; display: flex; flex-direction: column; gap: 9px;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13px;
+  }
+  .feed .u { color: var(--muted); }
+  .feed .a { color: var(--fg); padding-left: 0; }
+  .feed .act { color: var(--dim-a); display: flex; gap: 8px; }
+  .feed .act .g { color: var(--cyan); }
+  .feed .act.done .g { color: var(--green); }
+  .feed .busy { color: var(--think); display: flex; gap: 8px; align-items: center; font-size: 12.5px; }
+  .feed .busy .sep, .feed .busy .t, .feed .busy .hint { color: var(--dim-a); }
+  .feed .busy .hint { margin-left: auto; }
+
+  .legend { color: var(--dim-a); font-size: 12.5px; margin-top: 10px; }
+  .legend b { color: var(--muted); font-weight: 600; }
+
+  .verdict {
+    margin-top: 34px; padding: 14px 16px; border: 1px dashed var(--border);
+    border-radius: 8px; color: var(--dim-a); font-size: 13px;
+  }
+  .verdict b { color: var(--fg); }
+  ol.v { margin: 8px 0 0; padding-left: 20px; }
+  ol.v li { margin: 4px 0; }
+
+  /* ================= big indicator above composer ================= */
+  .stage {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 16px; display: flex; flex-direction: column; gap: 14px;
+  }
+  .bigind { display: flex; flex-direction: column; gap: 9px; }
+  body.idle .bigind { display: none; }
+  .idle-note { display: none; color: var(--dim-b); font-size: 13px; text-align: center; padding: 6px 0; }
+  body.idle .idle-note { display: block; }
+
+  .mock-composer {
+    border: 1.5px solid var(--border); border-radius: 10px; background: var(--surface);
+    padding: 13px 15px; display: flex; align-items: center; gap: 12px;
+    color: var(--dim-b); font-size: 14px;
+  }
+  .mock-composer .grow { flex: 1; }
+  .mock-composer .plus { color: var(--dim-a); font-size: 17px; }
+  .mock-composer .send {
+    width: 26px; height: 26px; border-radius: 50%; background: var(--accent);
+    flex: none;
+  }
+
+  .bi-l1 { display: flex; gap: 9px; align-items: baseline; font-size: 15.5px; color: var(--think); flex-wrap: wrap; }
+  .bi-l1 .sep, .bi-l1 .t { color: var(--dim-a); }
+  .bi-l2 {
+    display: flex; gap: 9px; align-items: baseline; font-size: 12.5px;
+    color: var(--dim-a); flex-wrap: wrap;
+  }
+  .bi-l2 .right { margin-left: auto; }
+
+  /* 12 · orb + occupancy block */
+  .ob-row { display: flex; gap: 16px; align-items: center; }
+  .ob-orb { position: relative; width: 64px; height: 64px; flex: none; }
+  .ob-orb .ring {
+    position: absolute; inset: 0; border-radius: 50%;
+    background: conic-gradient(var(--think) calc(var(--occ, 0) * 1%), rgba(127,127,127,.18) 0);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 5px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 5px));
+  }
+  .ob-orb canvas { position: absolute; left: 8px; top: 8px; width: 48px; height: 48px; }
+  .ob-txt { flex: 1; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+
+  /* 13 · activity rail */
+  .rl-track {
+    position: relative; height: 12px; border-radius: 6px;
+    background: var(--border); overflow: hidden;
+  }
+  .rl-fill {
+    position: absolute; left: 0; top: 0; bottom: 0;
+    width: calc(var(--occ, 0) * 1%);
+    background: linear-gradient(90deg, var(--think), var(--accent));
+    transition: width .18s linear;
+  }
+  .rl-fill::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.45), transparent);
+    transform: translateX(-100%); animation: sweep 1.5s linear infinite;
+  }
+  @keyframes sweep { to { transform: translateX(100%); } }
+  .rl-track::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(90deg,
+      transparent 0, transparent calc(20% - 1.5px),
+      var(--bg) calc(20% - 1.5px), var(--bg) 20%);
+  }
+  /* indeterminate mode: no plan → no %, scanner runs the whole rail */
+  .rl-track[data-mode="scan"]::after { display: none; }
+  .rl-track[data-mode="scan"] .rl-fill { display: none; }
+  .rl-scan {
+    display: none; position: absolute; top: 0; bottom: 0; width: 30%; left: -30%;
+    background: linear-gradient(90deg, transparent, var(--think) 40%, var(--accent) 72%, transparent);
+  }
+  .rl-track[data-mode="scan"] .rl-scan {
+    display: block; animation: railscan 1.7s cubic-bezier(.4, .1, .6, .9) infinite;
+  }
+  @keyframes railscan { to { left: 100%; } }
+  body[data-state="tool"] .rl-track[data-mode="scan"] .rl-scan { animation-duration: 1s; }
+  body[data-state="composing"] .rl-track[data-mode="scan"] .rl-scan { animation-duration: 1.3s; }
+  /* activity flash: one pulse per real SSE event (tool_start / text / plan) */
+  .rl-track.flash {
+    box-shadow: 0 0 0 1px var(--accent), 0 0 14px rgba(88, 166, 255, .45);
+    animation: railflash .45s ease-out;
+  }
+  @keyframes railflash { 0% { filter: brightness(1.9); } 100% { filter: brightness(1); } }
+
+  /* 14 · waveform strip */
+  .bwave { width: 100%; height: 56px; display: block; }
+
+  .hint-big { color: var(--dim-a); font-size: 12.5px; margin-top: 8px; }
+  .hint-big b { color: var(--muted); font-weight: 600; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+  body.no-motion * { animation: none !important; transition: none !important; }
+</style>
+</head>
+<body data-state="thinking">
+<div class="wrap">
+
+  <h1>Индикатор «агент работает» — 11 вариантов</h1>
+  <p class="sub">
+    Каждый вариант живёт в каноничной строке статуса из <code>STYLE.md</code>:
+    <code>глиф · размышляю · 3.2s · Esc</code> — обновление на месте, без скролл-спама.
+    Переключатель <b>фазы</b> меняет метку и поведение анимации (реальные сигналы клиента:
+    <code>phase: thinking</code>, <code>tool_start/end</code>, поток <code>text</code>).
+  </p>
+
+  <div class="controls">
+    <div class="ctl"><span>Фаза</span>
+      <div class="seg" id="segState">
+        <button data-v="thinking" aria-pressed="true">thinking</button>
+        <button data-v="tool" aria-pressed="false">tool running</button>
+        <button data-v="composing" aria-pressed="false">composing</button>
+      </div>
+    </div>
+    <div class="ctl"><span>Тема</span>
+      <div class="seg" id="segTheme">
+        <button data-v="dark" aria-pressed="true">dark</button>
+        <button data-v="light" aria-pressed="false">light</button>
+      </div>
+    </div>
+    <div class="ctl"><span>Движение</span>
+      <div class="seg" id="segMotion">
+        <button data-v="on" aria-pressed="true">on</button>
+        <button data-v="off" aria-pressed="false">reduced</button>
+      </div>
+    </div>
+    <div class="ctl"><span>Занятость</span>
+      <div class="seg" id="segBusy">
+        <button data-v="busy" aria-pressed="true">busy</button>
+        <button data-v="idle" aria-pressed="false">idle</button>
+      </div>
+    </div>
+    <div class="ctl"><span>План</span>
+      <div class="seg" id="segPlan">
+        <button data-v="none" aria-pressed="true">нет (indeterminate)</button>
+        <button data-v="plan" aria-pressed="false">есть (MoE)</button>
+      </div>
+    </div>
+    <div class="ctl"><span id="pickHint">клик по карточке — выбор кандидата</span></div>
+  </div>
+
+  <!-- ================= SIMPLE ================= -->
+  <h2>Простые <span class="cnt">— только CSS, < 20 строк, ноль ресурсов</span></h2>
+  <div class="grid" id="gSimple">
+
+    <div class="card" data-name="dots-wave">
+      <div class="card-h"><span class="num">01</span><b>Dots wave</b>
+        <div class="tags"><span class="tag cost">CSS</span><span class="tag">3 элемента</span></div></div>
+      <p class="desc">Три точки волной: подпрыгивают со сдвигом 150ms. Самый нейтральный и «дешёвый» вариант — <em>де-факто стандарт чатов</em> (ChatGPT/Copilot).</p>
+      <div class="chatline"><span class="slot"><span class="l-dots"><i></i><i></i><i></i></span></span><span class="lab js-lab">размышляю</span><span class="sep">·</span><span class="t js-t">0.0s</span><span class="hint">Esc — стоп</span></div>
+    </div>
+
+    <div class="card" data-name="pulse-glyph">
+      <div class="card-h"><span class="num">02</span><b>Pulse glyph ✦</b>
+        <div class="tags"><span class="tag cost">CSS</span><span class="tag">1 элемент</span></div></div>
+      <p class="desc">Тот же <em>✦</em>, что уже крутится сейчас, но дышит (scale + glow) вместо вращения. Минимальная смена текущего поведения, остаётся в словаре глифов STYLE.md.</p>
+      <div class="chatline"><span class="slot"><span class="l-pulse"><i>✦</i></span></span><span class="lab js-lab">размышляю</span><span class="sep">·</span><span class="t js-t">0.0s</span><span class="hint">Esc — стоп</span></div>
+    </div>
+
+    <div class="card" data-name="braille">
+      <div class="card-h"><span class="num">03</span><b>Braille spinner</b>
+        <div class="tags"><span class="tag cost">JS 80ms</span><span class="tag">моноширинный</span></div></div>
+      <p class="desc">Классика терминала: <em>⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏</em> — смена кадров каждые 80ms. Прямой паритет с терминальным <code>src/ui/spinner.ts</code>; хорош для «кодовой» эстетики.</p>
+      <div class="chatline"><span class="slot"><span class="l-braille js-braille">⠋</span></span><span class="lab js-lab">размышляю</span><span class="sep">·</span><span class="t js-t">0.0s</span><span class="hint">Esc — стоп</span></div>
+    </div>
+
+    <div class="card" data-name="shimmer">
+      <div class="card-h"><span class="num">04</span><b>Shimmer label</b>
+        <div class="tags"><span class="tag cost">CSS</span><span class="tag">без элементов</span></div></div>
+      <p class="desc">Бегущий блик прямо по тексту метки (<em>background-clip: text</em>). Ноль лишних глифов — оживляет слово, а не добавляет объект рядом.</p>
+      <div class="chatline"><span class="slot"><span class="l-shimmer js-lab">размышляю</span></span><span class="sep">·</span><span class="t js-t">0.0s</span><span class="hint">Esc — стоп</span></div>
+    </div>
+
+  </div>
+
+  <!-- ================= MEDIUM ================= -->
+  <h2>Средние <span class="cnt">— фазо-зависимые, читают состояние агента</span></h2>
+  <div class="grid" id="gMedium">
+
+    <div class="card" data-name="eq-bars">
+      <div class="card-h"><span class="num">05</span><b>Equalizer bars</b>
+        <div class="tags"><span class="tag cost">CSS</span><span class="tag">фазо-зависимый</span></div></div>
+      <p class="desc">5 полос-эквалайзер. Скорость и паттерн меняются фазой: <em>thinking</em> — медленно, <em>tool</em> — быстро, <em>composing</em> — инверсная волна (модель «печатает»).</p>
+      <div class="chatline"><span class="slot"><span class="l-bars"><i></i><i></i><i></i><i></i><i></i></span></span><span class="lab js-lab">размышляю</span><span class="sep">·</span><span class="t js-t">0.0s</span><span class="hint">Esc — стоп</span></div>
+    </div>
+
+    <div class="card" data-name="ring-progress">
+      <div class="card-h"><span class="num">06</span><b>Ring + plan progress</b>
+        <div class="tags"><span class="tag cost">SVG/CSS</span><span class="tag">данные: plan</span></div></div>
+      <p class="desc">Сегментное кольцо крутится, а внутренний бордюр-пирог заполняется по <em>plan progress</em> (steps done/total из SSE <code>plan</code>). Единственный вариант, показывающий <em>сколько</em> осталось.</p>
+      <div class="chatline"><span class="slot"><span class="l-ring"><svg viewBox="0 0 16 16"><circle class="seg" cx="8" cy="8" r="6"></circle></svg><span class="prog"></span></span></span><span class="lab js-lab">размышляю</span><span class="sep">·</span><span class="t js-t">0.0s</span><span class="hint">Esc — стоп</span></div>
+    </div>
+
+    <div class="card" data-name="elastic-ellipsis">
+      <div class="card-h"><span class="num">07</span><b>Elastic ellipsis</b>
+        <div class="tags"><span class="tag cost">CSS</span><span class="tag">пружина</span></div></div>
+      <p class="desc">Три точки с пружинным overshoot (<em>cubic-bezier с отскоком</em>) — «физичнее» волны из №01, выглядит живым, но остаётся дешёвым.</p>
+      <div class="chatline"><span class="slot"><span class="l-ell"><i></i><i></i><i></i></span></span><span class="lab js-lab">размышляю</span><span class="sep">·</span><span class="t js-t">0.0s</span><span class="hint">Esc — стоп</span></div>
+    </div>
+
+  </div>
+
+  <!-- ================= COMPLEX ================= -->
+  <h2>Сложные <span class="cnt">— canvas/текст, «интересные», дороже, но сильно живее</span></h2>
+  <div class="grid" id="gComplex">
+
+    <div class="card" data-name="orb">
+      <div class="card-h"><span class="num">08</span><b>Thought-orb</b>
+        <div class="tags"><span class="tag cost high">canvas rAF</span><span class="tag">по мотивам thinking-orbs</span></div></div>
+      <p class="desc">Пунктирный шар: частицы на наклонных орбитах (<em>working</em>), сканирующая меридиан-линия (<em>searching/tool</em>), «щелчок» решённых полос (<em>solving</em>). Прямо вдохновлено библиотекой <em>thinking-orbs</em> (MIT), но нарисовано вручную.</p>
+      <div class="chatline"><span class="slot"><canvas class="orb" width="56" height="56" style="width:18px;height:18px"></canvas></span><span class="lab js-lab">размышляю</span><span class="sep">·</span><span class="t js-t">0.0s</span><span class="hint">Esc — стоп</span></div>
+    </div>
+
+    <div class="card" data-name="constellation">
+      <div class="card-h"><span class="num">09</span><b>Constellation</b>
+        <div class="tags"><span class="tag cost high">canvas rAF</span><span class="tag">пиксель-арт</span></div></div>
+      <p class="desc">5 узлов самособираются в созвездие: рёбра дорисовываются, по ним бежит пульс-звезда, затем конфигурация перестраивается. Метафора «агент что-то связывает воедино».</p>
+      <div class="chatline"><span class="slot"><canvas class="con" width="56" height="56" style="width:18px;height:18px"></canvas></span><span class="lab js-lab">размышляю</span><span class="sep">·</span><span class="t js-t">0.0s</span><span class="hint">Esc — стоп</span></div>
+    </div>
+
+    <div class="card" data-name="scramble">
+      <div class="card-h"><span class="num">10</span><b>Text scrambler</b>
+        <div class="tags"><span class="tag cost mid">JS interval</span><span class="tag">matrix/crush</span></div></div>
+      <p class="desc">Метка «растворяется» в случайных глифах и заново собирается — при каждой смене фазы перескремблируется. Из пакета <em>pi-animations</em> (стиль crush/scramble); цепляет взгляд сильнее всего.</p>
+      <div class="chatline"><span class="slot"><span class="l-scramble js-scramble">размышляю</span></span><span class="sep">·</span><span class="t js-t">0.0s</span><span class="hint">Esc — стоп</span></div>
+    </div>
+
+    <div class="card" data-name="aurora">
+      <div class="card-h"><span class="num">11</span><b>Aurora wave</b>
+        <div class="tags"><span class="tag cost high">canvas rAF</span><span class="tag">градиент</span></div></div>
+      <p class="desc">Две синусоиды с градиентом плывут под строкой статуса; амплитуда и частота зависят от фазы (thinking — спокойно, tool — рывками). Мягко, «дышит», не отвлекает от текста.</p>
+      <div class="chatline"><span class="slot" style="height:18px"><canvas class="aur" width="72" height="36" style="width:36px;height:18px"></canvas></span><span class="lab js-lab">размышляю</span><span class="sep">·</span><span class="t js-t">0.0s</span><span class="hint">Esc — стоп</span></div>
+    </div>
+
+  </div>
+
+  <!-- ================= IN CONTEXT ================= -->
+  <h2>В контексте ленты <span class="cnt">— как это выглядит среди сообщений (выбранный вариант №<span id="ctxNum">01</span>)</span></h2>
+  <div class="feed" id="feed">
+    <div class="u">&gt; почини падающий тест и объясни причину</div>
+    <div class="act"><span class="g">◇</span><span>Чтение файла</span><span class="sep" style="color:var(--dim-b)">·</span><span style="color:var(--dim-a)">tests/agent.test.ts</span></div>
+    <div class="act done"><span class="g">✓</span><span>Чтение файла</span><span class="sep" style="color:var(--dim-b)">·</span><span style="color:var(--dim-a)">120ms</span></div>
+    <div class="act"><span class="g">◇</span><span>Запуск команды</span><span class="sep" style="color:var(--dim-b)">·</span><span style="color:var(--dim-a)">bun test tests/agent.test.ts</span></div>
+    <div class="busy" id="feedBusy"></div>
+  </div>
+  <p class="legend">
+    <b>Строка статуса</b> — единственное место индикатора: он появляется при <code>phase: thinking</code>
+    и исчезает на <code>text</code>/<code>tool_start</code>/<code>turn_end</code> (как сейчас).
+    Претензия текущего UI: во время долгого <b>выполнения тула</b> строка исчезает вовсе — только
+    спиннер в <code>.busy</code> мигает между фазами. Предлагаю держать индикатор видимым всё время
+    <code>busy</code>, меняя фазу (thinking → tool → composing).
+  </p>
+
+  <!-- ================= BIG ABOVE COMPOSER ================= -->
+  <h2>Над строкой ввода — крупный индикатор общей занятости
+    <span class="cnt">— вариант <span id="bigPick">activity rail</span></span></h2>
+
+  <div class="grid" id="gBig" style="grid-template-columns: 1fr">
+
+    <div class="card big" data-big="activity-rail" data-pick="activity rail">
+      <div class="card-h"><span class="num">12</span><b>Activity rail</b>
+        <div class="tags"><span class="tag cost">CSS/DOM</span><span class="tag">полная ширина</span><span class="tag">без выдуманных %</span></div></div>
+      <p class="desc">Толстая (12px) полоса во всю ширину композера. <em>Без плана</em> — индeterminate: светящийся сегмент сканирует всю длину, скорость зависит от фазы; каждое реальное событие (tool_start, text, plan) даёт <em>вспышку</em> и счётчик в мета-строке. <em>С планом</em> — полоса честно заполняется по done/total, засечки = шаги. Никаких «занятость N%» — мы не знаем, сколько осталось.</p>
+      <div class="stage" data-bi-stage>
+        <div class="bigind">
+          <div class="bi-l1"><span class="bi-phase">✦ размышляю</span><span class="sep">·</span><span class="t bi-time">0.0s</span><span class="sep">·</span><span class="bi-steps">без плана</span><span class="right" style="margin-left:auto;color:var(--dim-a);font-size:12.5px">Esc — стоп</span></div>
+          <div class="rl-track" data-mode="scan"><div class="rl-fill"></div><div class="rl-scan"></div></div>
+          <div class="bi-l2"><span class="bi-tools">0 тулов</span><span class="sep">·</span><span class="bi-events">0 событий</span><span class="sep">·</span><span>последнее: <span class="bi-last">—</span></span><span class="right">Esc — стоп</span></div>
+        </div>
+        <div class="idle-note">— агент свободен —</div>
+        <div class="mock-composer"><span class="plus">＋</span><span class="grow">Сообщение… (Enter — отправить, Esc — стоп)</span><span class="send"></span></div>
+      </div>
+    </div>
+
+    <div class="card big" data-big="orb-block" data-pick="orb + block">
+      <div class="card-h"><span class="num">13</span><b>Orb + occupancy block</b>
+        <div class="tags"><span class="tag cost high">canvas + CSS</span><span class="tag">64px</span><span class="tag">план = кольцо</span></div></div>
+      <p class="desc">Крупный шар 64px с орбитальными частицами (фазо-зависимый: орбиты → скан → щелчок), вокруг — <em>conic-ring</em> с прогрессом плана (без плана кольцо пустое, «живость» несёт сам orb). Справа: фаза + таймер, полоса плана, мета-строка. Аватар агента: единственный элемент, который читается с одного взгляда.</p>
+      <div class="stage" data-bi-stage>
+        <div class="bigind">
+          <div class="ob-row">
+            <span class="ob-orb"><span class="ring"></span><canvas class="borb" width="96" height="96"></canvas></span>
+            <div class="ob-txt">
+              <div class="bi-l1"><span class="bi-phase">✦ размышляю</span><span class="sep">·</span><span class="t bi-time">0.0s</span></div>
+              <div class="rl-track"><div class="rl-fill"></div></div>
+              <div class="bi-l2"><span>шаг <b class="bi-stepk" style="color:var(--muted)">—</b>/5</span><span class="sep">·</span><span class="bi-tools">0 тулов</span><span class="sep">·</span><span>план <b class="bi-occ" style="color:var(--muted);font-weight:600">—</b></span><span class="right">Esc — стоп</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="idle-note">— агент свободен —</div>
+        <div class="mock-composer"><span class="plus">＋</span><span class="grow">Сообщение… (Enter — отправить, Esc — стоп)</span><span class="send"></span></div>
+      </div>
+    </div>
+
+    <div class="card big" data-big="wave-strip" data-pick="wave strip">
+      <div class="card-h"><span class="num">14</span><b>Aurora wave strip</b>
+        <div class="tags"><span class="tag cost high">canvas rAF</span><span class="tag">полная ширина</span><span class="tag">план = маркер</span></div></div>
+      <p class="desc">Широкая (56px) полоса-волна во всю ширину: при наличии плана слева от маркера (done/total) волна яркая, справа — приглушённая; без плана маркер убирается и волна целиком «живая». Амплитуда и частота зависят от фазы. Мягче полосы, «дышит» и не спорит с композером.</p>
+      <div class="stage" data-bi-stage>
+        <div class="bigind">
+          <div class="bi-l1"><span class="bi-phase">✦ размышляю</span><span class="sep">·</span><span class="t bi-time">0.0s</span><span class="sep">·</span><span class="bi-steps">без плана</span><span class="right" style="margin-left:auto;color:var(--dim-a);font-size:12.5px">план <b class="bi-occ" style="color:var(--muted);font-weight:600">—</b></span></div>
+          <canvas class="bwave"></canvas>
+          <div class="bi-l2"><span class="bi-tools">1 тул</span><span class="sep">·</span><span>Esc — стоп</span></div>
+        </div>
+        <div class="idle-note">— агент свободен —</div>
+        <div class="mock-composer"><span class="plus">＋</span><span class="grow">Сообщение… (Enter — отправить, Esc — стоп)</span><span class="send"></span></div>
+      </div>
+    </div>
+
+  </div>
+  <p class="hint-big">
+    <b>Что показывает полоса:</b> процента занятости не существует — мы не знаем, сколько осталось.
+    Режимы: <em>без плана</em> — индeterminate-сканер + вспышка на каждое реальное событие
+    (<code>tool_start</code>, <code>text</code>, <code>plan</code>), живость = «агент работает»;
+    <em>с планом</em> — честный <code>done/total</code>. Мета-строка: фаза (<code>phase</code>),
+    таймер с <code>POST /api/message</code>, счётчик тулов (<code>tool_start/end</code>),
+    последнее событие. Всё есть у клиента уже сейчас — новый бэкенд не нужен.
+  </p>
+
+
+  <div class="verdict">
+    <b>Рекомендация</b>
+    <ol class="v">
+      <li><b>Безопасный выбор — №05 Equalizer bars</b>: CSS, фазо-зависимый (первая фазо-зависимость в UI), живой, но дешёвый и совместимый с STYLE.md (обновление на месте, без новых глифов).</li>
+      <li><b>Максимальная «интересность» — №08 Thought-orb</b>: единственный вариант, который на бегу показывает <em>что</em> делает агент (orb/searching/solving), + плавный фолбэк на №01 при <code>prefers-reduced-motion</code>.</li>
+      <li><b>Гибрид</b>: строка статуса всегда (№05 или №01) + orb как отдельный «аватар» в шапке хода для длинных прогонов.</li>
+      <li><b>Над композером — №12 Activity rail</b> (выбрано): индeterminate-сканер + вспышки от реальных событий
+        (<code>tool_start</code>/<code>text</code>/<code>plan</code>), честный <code>done/total</code> только при
+        наличии плана; мета-строка = фаза · таймер · тулы · последнее событие. Без выдуманных процентов —
+        точной «занятости» не существует.</li>
+    </ol>
+    Стоимость: №01/02/04/05/07 — до 20 строк CSS; №03/06/10 — &lt;60 строк JS; №08/09/11 — 80–140 строк JS на canvas (rAF, отключается при reduced-motion).
+    Большие индикаторы (№12–14) добавляют ещё ~60–120 строк и используют только уже существующие данные клиента
+    (<code>busy</code>, <code>phase</code>, <code>plan</code>, <code>tool_start/end</code>).
+  </div>
+
+</div>
+
+<script>
+(function () {
+  var LABELS = {
+    thinking: { ru: 'размышляю', en: 'thinking' },
+    tool: { ru: 'выполняю', en: 'working' },
+    composing: { ru: 'пишу', en: 'composing' }
+  };
+  var state = 'thinking';
+  var selected = 'dots-wave';
+
+  /* ---- phase segmented control ---- */
+  document.getElementById('segState').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    state = b.dataset.v;
+    [].forEach.call(this.querySelectorAll('button'), function (x) {
+      x.setAttribute('aria-pressed', String(x === b));
+    });
+    document.body.dataset.state = state;
+    applyLabels();
+    rescramble();
+  });
+  document.getElementById('segTheme').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    document.documentElement.dataset.theme = b.dataset.v;
+    [].forEach.call(this.querySelectorAll('button'), function (x) {
+      x.setAttribute('aria-pressed', String(x === b));
+    });
+    document.querySelectorAll('canvas').forEach(function (c) { c._paint && c._paint(); });
+  });
+  document.getElementById('segMotion').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    document.body.classList.toggle('no-motion', b.dataset.v === 'off');
+    [].forEach.call(this.querySelectorAll('button'), function (x) {
+      x.setAttribute('aria-pressed', String(x === b));
+    });
+  });
+
+  function applyLabels() {
+    document.querySelectorAll('.js-lab').forEach(function (el) {
+      el.textContent = LABELS[state].ru;
+    });
+  }
+
+  /* ---- elapsed timers ---- */
+  var t0 = Date.now();
+  setInterval(function () {
+    var s = ((Date.now() - t0) / 1000).toFixed(1) + 's';
+    document.querySelectorAll('.js-t').forEach(function (el) { el.textContent = s; });
+  }, 100);
+
+  /* ---- braille ---- */
+  var BRAILLE = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏', bi = 0;
+  setInterval(function () {
+    bi = (bi + 1) % BRAILLE.length;
+    document.querySelectorAll('.js-braille').forEach(function (el) { el.textContent = BRAILLE[bi]; });
+  }, 80);
+
+  /* ---- plan progress demo (ring) ---- */
+  var p = 0;
+  setInterval(function () {
+    p = (p + 7) % 101;
+    document.querySelectorAll('.l-ring .prog').forEach(function (el) { el.style.setProperty('--p', p); });
+  }, 120);
+
+  /* ---- text scrambler ---- */
+  var CHARS = '▓▒░<>/\\|—·:*#01';
+  function scramble(el, final, dur) {
+    var start = Date.now();
+    clearInterval(el._iv);
+    el._iv = setInterval(function () {
+      var k = (Date.now() - start) / dur;
+      if (k >= 1) { el.textContent = final; clearInterval(el._iv); return; }
+      var fixed = Math.floor(final.length * k);
+      var out = final.slice(0, fixed);
+      for (var i = fixed; i < final.length; i++) {
+        out += Math.random() < .5 ? final[i] : CHARS[(Math.random() * CHARS.length) | 0];
+      }
+      el.textContent = out;
+    }, 40);
+  }
+  function rescramble() {
+    document.querySelectorAll('.js-scramble').forEach(function (el) {
+      scramble(el, LABELS[state].ru, 700);
+    });
+  }
+  rescramble();
+
+  /* ---- card selection ---- */
+  document.querySelectorAll('.card').forEach(function (card) {
+    card.addEventListener('click', function () {
+      selected = card.dataset.name;
+      document.querySelectorAll('.card').forEach(function (c) { c.classList.toggle('sel', c === card); });
+      var n = card.querySelector('.num').textContent;
+      document.getElementById('ctxNum').textContent = n;
+      renderFeedBusy();
+    });
+  });
+  document.querySelector('.card').classList.add('sel');
+
+  /* ---- feed busy line: renders the selected loader ---- */
+  var SLOT = {
+    'dots-wave': '<span class="slot"><span class="l-dots"><i></i><i></i><i></i></span></span>',
+    'pulse-glyph': '<span class="slot"><span class="l-pulse"><i>✦</i></span></span>',
+    'braille': '<span class="slot"><span class="l-braille">⠋</span></span>',
+    'shimmer': '',
+    'eq-bars': '<span class="slot"><span class="l-bars"><i></i><i></i><i></i><i></i><i></i></span></span>',
+    'ring-progress': '<span class="slot"><span class="l-ring"><svg viewBox="0 0 16 16"><circle class="seg" cx="8" cy="8" r="6"></circle></svg><span class="prog" style="--p:42"></span></span></span>',
+    'elastic-ellipsis': '<span class="slot"><span class="l-ell"><i></i><i></i><i></i></span></span>',
+    'orb': '<span class="slot"><canvas class="orb" width="56" height="56" style="width:18px;height:18px"></canvas></span>',
+    'constellation': '<span class="slot"><canvas class="con" width="56" height="56" style="width:18px;height:18px"></canvas></span>',
+    'scramble': '<span class="slot"><span class="l-scramble js-scramble">' + LABELS[state].ru + '</span></span>',
+    'aurora': '<span class="slot" style="height:18px"><canvas class="aur" width="72" height="36" style="width:36px;height:18px"></canvas></span>'
+  };
+  var NAME_BY_SEL = {};
+  document.querySelectorAll('.card').forEach(function (c) { NAME_BY_SEL[c.dataset.name] = c.querySelector('.num').textContent; });
+
+  function renderFeedBusy() {
+    var el = document.getElementById('feedBusy');
+    var label = LABELS[state].ru;
+    var lab = selected === 'shimmer'
+      ? '<span class="l-shimmer">' + label + '</span>'
+      : (selected === 'scramble' ? '' : '<span class="lab">' + label + '</span>');
+    el.innerHTML = (SLOT[selected] || '') + lab +
+      '<span class="sep">·</span><span class="t js-t">' +
+      ((Date.now() - t0) / 1000).toFixed(1) + 's</span>' +
+      '<span class="hint">Esc — стоп</span>';
+    if (selected === 'scramble') rescramble();
+    attachCanvases(el);
+  }
+
+  /* ---- phase changes re-render the feed line ---- */
+  var origApply = applyLabels;
+  applyLabels = function () {
+    origApply();
+    if (document.getElementById('feedBusy').children.length) renderFeedBusy();
+  };
+
+  /* ================= canvas loaders ================= */
+  function readVar(n) {
+    return getComputedStyle(document.body).getPropertyValue(n).trim() || '#8b7bb8';
+  }
+
+  /* 08 · orb */
+  function makeOrb(cv) {
+    var ctx = cv.getContext('2d'), raf, ph = 0;
+    var N = 26;
+    var dots = [];
+    for (var i = 0; i < N; i++) {
+      dots.push({ a: (i / N) * Math.PI * 2, r: .62 + Math.random() * .38, s: .5 + Math.random() });
+    }
+    function frame() {
+      if (!cv.isConnected) return;
+      var st = document.body.dataset.state;
+      var col = readVar('--think');
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      var cx = cv.width / 2, cy = cv.height / 2, R = cv.width * .42;
+      if (!document.body.classList.contains('no-motion')) ph += st === 'tool' ? .045 : .022;
+      raf = requestAnimationFrame(frame);
+      paint(col, cx, cy, R, st);
+    }
+    function paint(col, cx, cy, R, st) {
+      ctx.fillStyle = col;
+      ctx.strokeStyle = col;
+      var tilt = Math.sin(ph * .5) * .5;
+      /* scanning meridian for tool state */
+      if (st === 'tool') {
+        ctx.globalAlpha = .5;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        var mx = cx + Math.cos(ph * 2) * R;
+        ctx.ellipse(cx, cy, Math.abs(Math.cos(ph * 2)) * R + 1, R, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      for (var i = 0; i < dots.length; i++) {
+        var d = dots[i];
+        var a = d.a + ph * d.s;
+        var x = cx + Math.cos(a) * R * d.r;
+        var y = cy + Math.sin(a) * R * d.r * Math.cos(tilt);
+        var depth = (Math.sin(a) + 1) / 2;
+        var sz = 1 + depth * 1.6;
+        /* solving: dots snap into a ring */
+        if (st === 'composing') {
+          var snap = Math.sin(ph * 3 + i * .7) > 0 ? 1 : .55;
+          sz *= snap;
+        }
+        ctx.globalAlpha = .25 + depth * .75;
+        ctx.beginPath();
+        ctx.arc(x, y, sz, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+    cv._paint = function () {};
+    frame();
+  }
+
+  /* 09 · constellation */
+  function makeCon(cv) {
+    var ctx = cv.getContext('2d'), ph = 0;
+    var nodes = [], edges = [];
+    for (var i = 0; i < 5; i++) {
+      nodes.push({ x: 10 + Math.random() * (cv.width - 20), y: 10 + Math.random() * (cv.height - 20), vx: 0, vy: 0 });
+    }
+    for (var a = 0; a < 5; a++) for (var b = a + 1; b < 5; b++) if (Math.random() < .6) edges.push([a, b]);
+    if (!edges.length) edges.push([0, 1], [1, 2], [2, 3], [3, 4], [4, 0]);
+    function frame() {
+      if (!cv.isConnected) return;
+      var motion = !document.body.classList.contains('no-motion');
+      if (motion) ph += .016;
+      var col = readVar('--cyan');
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      if (motion) {
+        nodes.forEach(function (n, i) {
+          n.x += Math.sin(ph * (1 + i * .3)) * .35;
+          n.y += Math.cos(ph * (.8 + i * .2)) * .35;
+          n.x = Math.max(6, Math.min(cv.width - 6, n.x));
+          n.y = Math.max(6, Math.min(cv.height - 6, n.y));
+        });
+      }
+      var drawK = motion ? (Math.sin(ph * .7) * .5 + .5) : 1;
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 1.5;
+      edges.forEach(function (e, i) {
+        var A = nodes[e[0]], B = nodes[e[1]];
+        var k = Math.max(0, Math.min(1, drawK * edges.length - i));
+        ctx.globalAlpha = .28;
+        ctx.beginPath(); ctx.moveTo(A.x, A.y);
+        ctx.lineTo(A.x + (B.x - A.x) * k, A.y + (B.y - A.y) * k);
+        ctx.stroke();
+      });
+      /* pulse along first edge */
+      var A = nodes[edges[0][0]], B = nodes[edges[0][1]];
+      var t = (ph * .5) % 1;
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.arc(A.x + (B.x - A.x) * t, A.y + (B.y - A.y) * t, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+      nodes.forEach(function (n) {
+        ctx.globalAlpha = .9;
+        ctx.beginPath(); ctx.arc(n.x, n.y, 2, 0, Math.PI * 2); ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+      requestAnimationFrame(frame);
+    }
+    cv._paint = function () {};
+    frame();
+  }
+
+  /* 11 · aurora */
+  function makeAur(cv) {
+    var ctx = cv.getContext('2d'), ph = 0;
+    function frame() {
+      if (!cv.isConnected) return;
+      var motion = !document.body.classList.contains('no-motion');
+      if (motion) ph += document.body.dataset.state === 'tool' ? .09 : .045;
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      var col = readVar('--think');
+      for (var L = 0; L < 2; L++) {
+        ctx.beginPath();
+        var amp = (L ? 4 : 6) * (document.body.dataset.state === 'tool' ? 1.3 : 1);
+        for (var x = 0; x <= cv.width; x += 2) {
+          var y = cv.height / 2 +
+            Math.sin(x * .18 + ph * (L ? -1.4 : 1) + L * 2) * amp * Math.sin(x / cv.width * Math.PI);
+          if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.globalAlpha = L ? .45 : .9;
+        ctx.strokeStyle = col;
+        ctx.lineWidth = L ? 1.5 : 2;
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      requestAnimationFrame(frame);
+    }
+    cv._paint = function () {};
+    frame();
+  }
+
+  function attachCanvases(root) {
+    (root || document).querySelectorAll('canvas.orb').forEach(function (c) { if (!c._on) { c._on = 1; makeOrb(c); } });
+    (root || document).querySelectorAll('canvas.con').forEach(function (c) { if (!c._on) { c._on = 1; makeCon(c); } });
+    (root || document).querySelectorAll('canvas.aur').forEach(function (c) { if (!c._on) { c._on = 1; makeAur(c); } });
+  }
+  attachCanvases(document);
+  renderFeedBusy();
+
+  /* ================= big indicator above composer ================= */
+  var forcedBusy = true, bigT0 = Date.now(), lastOcc = 0;
+  var BIG_WORK = 18000; /* one simulated turn = 18s */
+  var hasPlan = false, toolCount = 0, evCount = 0, prevE = 0;
+
+  document.getElementById('segBusy').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    forcedBusy = b.dataset.v === 'busy';
+    if (forcedBusy) { bigT0 = Date.now(); prevE = 0; }
+    [].forEach.call(this.querySelectorAll('button'), function (x) {
+      x.setAttribute('aria-pressed', String(x === b));
+    });
+    bigTick();
+  });
+
+  document.getElementById('segPlan').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    hasPlan = b.dataset.v === 'plan';
+    [].forEach.call(this.querySelectorAll('button'), function (x) {
+      x.setAttribute('aria-pressed', String(x === b));
+    });
+    document.querySelectorAll('.rl-track').forEach(function (t) { t.dataset.mode = hasPlan ? 'plan' : 'scan'; });
+    bigTick();
+  });
+
+  document.querySelectorAll('.card.big').forEach(function (card) {
+    card.addEventListener('click', function () {
+      document.querySelectorAll('.card.big').forEach(function (c) { c.classList.toggle('sel', c === card); });
+      document.getElementById('bigPick').textContent = card.dataset.pick;
+    });
+  });
+
+  function plural(n, one, few, many) {
+    var m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return one;
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+    return many;
+  }
+
+  function bigTick() {
+    var e = (Date.now() - bigT0) % BIG_WORK;
+    if (e < prevE) { toolCount = 0; evCount = 0; } /* new simulated turn */
+    prevE = e;
+    if (forcedBusy) lastOcc = (e / BIG_WORK) * 100;
+    document.body.classList.toggle('idle', !forcedBusy);
+
+    var prog = hasPlan ? lastOcc : 0;
+    var step = Math.min(5, Math.floor(lastOcc / 20) + 1);
+    var time = (e / 1000).toFixed(1) + 's';
+    var phase = '✦ ' + LABELS[state].ru;
+    var toolsStr = toolCount + ' ' + plural(toolCount, 'тул', 'тула', 'тулов');
+    var evStr = evCount + ' ' + plural(evCount, 'событие', 'события', 'событий');
+
+    document.querySelectorAll('[data-bi-stage]').forEach(function (el) {
+      el.style.setProperty('--occ', prog.toFixed(2));
+    });
+    document.querySelectorAll('.bi-phase').forEach(function (el) { el.textContent = phase; });
+    document.querySelectorAll('.bi-time').forEach(function (el) { el.textContent = time; });
+    document.querySelectorAll('.bi-occ').forEach(function (el) { el.textContent = hasPlan ? Math.round(prog) + '%' : '—'; });
+    document.querySelectorAll('.bi-steps').forEach(function (el) { el.textContent = hasPlan ? 'шаг ' + step + '/5' : 'без плана'; });
+    document.querySelectorAll('.bi-stepk').forEach(function (el) { el.textContent = hasPlan ? String(step) : '—'; });
+    document.querySelectorAll('.bi-tools').forEach(function (el) { el.textContent = toolsStr; });
+    document.querySelectorAll('.bi-events').forEach(function (el) { el.textContent = evStr; });
+    document.querySelectorAll('.bi-last').forEach(function (el) { el.textContent = lastEventName; });
+  }
+  setInterval(bigTick, 100);
+
+  /* simulated SSE activity: every real event → counter + rail flash */
+  var EVENT_NAMES = ['чтение файла', 'запуск команды', 'запись файла', 'grep', 'список директории'];
+  var lastEventName = '—';
+  bigTick();
+  function scheduleEvent() { setTimeout(fireSimEvent, 900 + Math.random() * 1400); }
+  function fireSimEvent() {
+    if (forcedBusy) {
+      evCount++;
+      if (Math.random() < .55) toolCount++;
+      lastEventName = EVENT_NAMES[(Math.random() * EVENT_NAMES.length) | 0];
+      document.querySelectorAll('.rl-track').forEach(function (t) {
+        t.classList.add('flash');
+        setTimeout(function () { t.classList.remove('flash'); }, 460);
+      });
+    }
+    scheduleEvent();
+  }
+  scheduleEvent();
+
+  function fitWave(cv) {
+    var r = cv.getBoundingClientRect();
+    if (!r.width) return;
+    var d = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.round(r.width * d);
+    cv.height = Math.round(r.height * d);
+  }
+
+  function makeBigOrb(cv) {
+    var ctx = cv.getContext('2d'), ph = 0, N = 34, dots = [];
+    for (var i = 0; i < N; i++) {
+      dots.push({ a: (i / N) * Math.PI * 2, r: .6 + Math.random() * .4, s: .5 + Math.random() });
+    }
+    function frame() {
+      if (!cv.isConnected) return;
+      var st = document.body.classList.contains('idle') ? 'thinking' : state;
+      var col = readVar('--think');
+      if (!document.body.classList.contains('no-motion')) ph += st === 'tool' ? .03 : .015;
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      var cx = cv.width / 2, cy = cv.height / 2, R = cv.width * .42;
+      var tilt = Math.sin(ph * .5) * .5;
+      if (st === 'tool') {
+        ctx.globalAlpha = .45; ctx.strokeStyle = col; ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, Math.abs(Math.cos(ph * 2)) * R + 1, R, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      ctx.fillStyle = col;
+      for (var i = 0; i < dots.length; i++) {
+        var d = dots[i], a = d.a + ph * d.s;
+        var x = cx + Math.cos(a) * R * d.r;
+        var y = cy + Math.sin(a) * R * d.r * Math.cos(tilt);
+        var depth = (Math.sin(a) + 1) / 2;
+        var sz = 1.6 + depth * 2.4;
+        if (st === 'composing' && Math.sin(ph * 3 + i * .7) < 0) sz *= .55;
+        ctx.globalAlpha = .22 + depth * .78;
+        ctx.beginPath(); ctx.arc(x, y, sz, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      requestAnimationFrame(frame);
+    }
+    frame();
+  }
+
+  function makeBigWave(cv) {
+    fitWave(cv);
+    var ctx = cv.getContext('2d'), ph = 0;
+    function frame() {
+      if (!cv.isConnected) return;
+      if (!cv.width) fitWave(cv);
+      var motion = !document.body.classList.contains('no-motion');
+      var st = document.body.classList.contains('idle') ? 'thinking' : state;
+      if (motion) ph += st === 'tool' ? .1 : .05;
+      var occ = hasPlan ? lastOcc / 100 : 1, hx = cv.width * occ;
+      var col = readVar('--think'), mid = cv.height / 2;
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      for (var L = 0; L < 2; L++) {
+        ctx.beginPath();
+        var amp = cv.height * (st === 'tool' ? .3 : .22) * (L ? .55 : 1);
+        for (var x = 0; x <= cv.width; x += 4) {
+          var y = mid + Math.sin(x * .02 + ph * (L ? -1.3 : 1) + L * 1.7) * amp * Math.sin(x / cv.width * Math.PI);
+          if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = col; ctx.lineWidth = L ? 3 : 5;
+        ctx.save(); ctx.beginPath(); ctx.rect(0, 0, hx, cv.height); ctx.clip();
+        ctx.globalAlpha = .95; ctx.stroke(); ctx.restore();
+        ctx.save(); ctx.beginPath(); ctx.rect(hx, 0, cv.width - hx, cv.height); ctx.clip();
+        ctx.globalAlpha = .16; ctx.stroke(); ctx.restore();
+      }
+      if (hasPlan) {
+        ctx.globalAlpha = .85; ctx.strokeStyle = readVar('--accent'); ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(hx, 3); ctx.lineTo(hx, cv.height - 3); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      requestAnimationFrame(frame);
+    }
+    frame();
+  }
+
+  window.addEventListener('resize', function () {
+    document.querySelectorAll('canvas.bwave').forEach(fitWave);
+  });
+  document.querySelectorAll('canvas.borb').forEach(function (c) { if (!c._on) { c._on = 1; makeBigOrb(c); } });
+  document.querySelectorAll('canvas.bwave').forEach(function (c) { if (!c._on) { c._on = 1; makeBigWave(c); } });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,234 @@
+// `GET /api/sessions/:id/history` — нормализованный рендеримый транскрипт.
+//
+// Источник правды — `session.jsonl` менеджера (уже несёт по порядку текст
+// user/assistant/reasoning и события жизни тулов). Логам старых сборок его
+// может не хватать — фолбэк на историю сообщений (`history.jsonl` / ротированные
+// `.jsonl.gz`) для текста user/assistant/tool.
+//
+// Браузер получает плоский `HistoryEntry[]` хронологически, капнутый хвостом
+// `state.historyTail`, чтобы длинная сессия не раздула пейлоад. Секреты — тем же
+// точечным редактором, что в SSE-пути; сам лог уже санитизирован на записи, но
+// args/текст скрабим повторно, чтобы инвариант держался от любого продюсера.
+//
+// Auth и same-origin — выше в `server.ts`.
+import type { ServerResponse } from "node:http";
+import type { SessionLogEntry } from "../../session/store";
+import type { SessionMessage } from "../../session/types";
+import type { EgressTurnSummary } from "../../security/data-policy/types";
+import { getMessageText } from "../../../llm/provider";
+import { redactContextSecrets } from "../../../core/api";
+import { stripAnsi } from "../../../ui/line-math";
+import { scrubToolArgs } from "./forward";
+import { sendJson } from "../util";
+import type { SessionStore, HttpTransport } from "../state";
+
+/** Вид записи истории. */
+export type HistoryKind =
+  | "user"
+  | "assistant"
+  | "reasoning"
+  | "tool_call"
+  | "tool_result"
+  | "system"
+  | "plan"
+  | "context"
+  | "error"
+  | "egress"
+  | "retract";
+
+/** Нормализованная запись для браузера; `kind` выбирает визуальную форму. */
+export interface HistoryEntry {
+  ts: string;
+  kind: HistoryKind;
+  text?: string;
+  toolCallId?: string;
+  name?: string;
+  tool?: string;
+  args?: Record<string, unknown>;
+  success?: boolean;
+  duration?: number;
+  /** URL сохранённых картинок тула (`/api/sessions/:id/images/:name`). */
+  images?: string[];
+  /** DLP-агрегат хода (`kind: "egress"`). */
+  egress?: EgressTurnSummary;
+  /** Отзыв черновика (`kind: "retract"`): кто, вердикт и итерация. */
+  source?: string;
+  verdict?: string;
+  iteration?: number;
+}
+
+function scrub(text: string | undefined): string | undefined {
+  return text ? stripAnsi(redactContextSecrets(text)) : undefined;
+}
+
+/** URL сохранённой картинки тула; без sessionId/refs — undefined. */
+function imagesOf(
+  e: { images?: Array<{ file: string }> },
+  sessionId?: string,
+): string[] | undefined {
+  if (!sessionId || !e.images?.length) return undefined;
+  const urls = e.images.map(
+    (r) => `/api/sessions/${encodeURIComponent(sessionId)}/images/${encodeURIComponent(r.file)}`,
+  );
+  return urls.length ? urls : undefined;
+}
+
+/** Изображения тула в wire-форме (может не быть — тогда поле опущено). */
+function imagesField(e: SessionLogEntry, sessionId?: string): Pick<HistoryEntry, "images"> {
+  const images = imagesOf(e, sessionId);
+  return images ? { images } : {};
+}
+
+/** Маппит одну сырую запись лога в wire-форму; `null` — внутренним типам. */
+function mapLogEntry(e: SessionLogEntry, sessionId?: string): HistoryEntry | null {
+  switch (e.type) {
+    case "user":
+      return { ts: e.ts, kind: "user", text: scrub(e.content), ...imagesField(e, sessionId) };
+    case "assistant":
+      return { ts: e.ts, kind: "assistant", text: scrub(e.content) };
+    case "reasoning":
+      return { ts: e.ts, kind: "reasoning", text: scrub(e.content) };
+    case "tool_call":
+      return {
+        ts: e.ts,
+        kind: "tool_call",
+        toolCallId: e.tool_call_id,
+        name: e.tool,
+        args: scrubToolArgs(e.args ?? {}),
+      };
+    case "tool_result":
+      return {
+        ts: e.ts,
+        kind: "tool_result",
+        toolCallId: e.tool_call_id,
+        tool: e.tool,
+        success: e.success ?? false,
+        duration: e.duration,
+        ...imagesField(e, sessionId),
+      };
+    case "plan":
+      return { ts: e.ts, kind: "plan", text: scrub(e.content) };
+    case "error":
+      return { ts: e.ts, kind: "error", text: scrub(e.content) };
+    case "egress_turn":
+      return e.egress ? { ts: e.ts, kind: "egress", egress: e.egress } : null;
+    case "retract":
+      return {
+        ts: e.ts,
+        kind: "retract",
+        text: scrub(e.content),
+        source: e.retractSource,
+        verdict: e.verdict,
+        iteration: e.iteration,
+      };
+    default:
+      // system (текст системного промпта из slog.logSystem) и context
+      // (снапшоты "context snapshot at session start") — внутренняя
+      // диагностика: в живом SSE-потоке их нет, а в истории после reload
+      // они всплывали шумом поверх чата. Смотрятся в Trace (/api/.../log).
+      // tool_defs / llm_usage / session_start / baseline_typecheck /
+      // reasoning_control / context_probe / output / compaction / audit
+      // в чат-транскрипте бесполезны.
+      return null;
+  }
+}
+
+/** Best-effort транскрипт из `history.jsonl`, когда `session.jsonl` отсутствует. */
+function fromMessages(messages: SessionMessage[]): HistoryEntry[] {
+  const out: HistoryEntry[] = [];
+  for (const m of messages) {
+    const text = scrub(getMessageText(m.content));
+    if (m.role === "user") {
+      out.push({ ts: m.timestamp, kind: "user", text });
+    } else if (m.role === "assistant") {
+      if (text) out.push({ ts: m.timestamp, kind: "assistant", text });
+    } else if (m.role === "tool") {
+      out.push({
+        ts: m.timestamp,
+        kind: "tool_result",
+        toolCallId: m.tool_call_id,
+        tool: m.name,
+        success: true,
+      });
+    } else if (m.role === "system") {
+    }
+  }
+  return out;
+}
+
+/** Нормализует сырой лог (или фолбэк истории) и режет до хвоста `tail`. */
+export function normalizeHistory(
+  entries: SessionLogEntry[],
+  tail: number,
+  fallback: SessionMessage[] = [],
+  sessionId?: string,
+): HistoryEntry[] {
+  const out: HistoryEntry[] = [];
+  for (const e of entries) {
+    const mapped = mapLogEntry(e, sessionId);
+    if (!mapped) continue;
+    if (mapped.kind === "retract") {
+      // Забракованный черновик уже записан как `assistant` (критик/аудит
+      // логируют текст до отзыва). В живой ленте он удаляется — история должна
+      // совпадать: убираем последний ответ и ставим сворачиваемую пометку.
+      for (let i = out.length - 1; i >= 0; i--) {
+        if (out[i].kind === "assistant") {
+          out.splice(i, 1);
+          break;
+        }
+      }
+    }
+    out.push(mapped);
+  }
+  const source = out.length > 0 ? out : fromMessages(fallback);
+  return tail > 0 ? source.slice(-tail) : source;
+}
+
+/** `GET /api/sessions/:id/history` — 200 транскрипт, 404 чужой, 503 неввязанный. */
+export function handleSessionHistory(
+  res: ServerResponse,
+  id: string,
+  s: SessionStore & HttpTransport,
+): void {
+  if (!s.sessionManager) {
+    sendJson(res, 503, { error: "sessions_unavailable" });
+    return;
+  }
+  const manager = s.sessionManager;
+  if (!id) {
+    sendJson(res, 404, { error: "not_found" });
+    return;
+  }
+  const meta = manager.getWithStatus?.(id);
+  if (meta?.status === "unreadable") {
+    s.logger?.logSilent("warn", `session.history.read: meta unreadable for ${id} — ${meta.cause}`);
+    sendJson(res, 500, { error: "read_failed", reason: "session meta unreadable" });
+    return;
+  }
+  if (meta ? meta.status === "missing" : !manager.get(id)) {
+    sendJson(res, 404, { error: "not_found" });
+    return;
+  }
+  let log: SessionLogEntry[] = [];
+  let messages: SessionMessage[] = [];
+  try {
+    const read = manager.loadSessionLogWithStatus?.(id);
+    if (read?.status === "unreadable") {
+      // Нечитаемая сессия (в т.ч. мисматч шифрования) — 500 с причиной, а не
+      // пустой транскрипт: «не прочитано» неотличимо от «нечего показывать».
+      s.logger?.logSilent("warn", `session.history.read: ${id} unreadable — ${read.cause}`);
+      sendJson(res, 500, { error: "read_failed", reason: "session log unreadable" });
+      return;
+    }
+    log = read?.status === "ok" ? read.value : (manager.loadSessionLog?.(id) ?? []);
+    if (log.length === 0) messages = manager.getHistory?.(id) ?? [];
+  } catch (err) {
+    s.logger?.logSilent(
+      "warn",
+      `session.history.read: ${id} threw — ${err instanceof Error ? err.message : String(err)}`,
+    );
+    sendJson(res, 500, { error: "read_failed", reason: "session log unreadable" });
+    return;
+  }
+  sendJson(res, 200, { id, history: normalizeHistory(log, s.historyTail, messages, id) });
+}

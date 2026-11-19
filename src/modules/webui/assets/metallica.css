@@ -1,0 +1,338 @@
+/* Metallica theme: Master of Puppets palette + SVG cover background. */
+
+body.metallica {
+  position: relative;
+  z-index: 0;
+  color-scheme: dark;
+
+  --bg: #060403;
+  --fg: #ded5c9;
+  --panel: #120908;
+  --sb-bg: #0c0605;
+  --stab-bg: #0c0605;
+  --surface: #170d0a;
+  --input-surface: #110807;
+  --inp-bg: #0b0505;
+  --inp-border: rgba(226, 216, 205, 0.12);
+  --inp-focus: #bd6615;
+  --input-shadow: #bd661533;
+
+  --border: rgba(226, 216, 205, 0.1);
+  --border-2: rgba(226, 216, 205, 0.14);
+  --border-3: rgba(226, 216, 205, 0.1);
+
+  --muted: #b99269;
+  --dim-a: #907a68;
+  --dim-b: #6b5a4d;
+  --dim-c: #6b5a4d;
+
+  --accent: #bd6615;
+  --accent-bg: #210d09;
+
+  --green: #8ba06d;
+  --green-fill: #8ba06d;
+  --red: #c13b24;
+  --err: #c13b24;
+  --red-strong: #e25134;
+  --yellow: #d69a2d;
+  --purple: #a7698c;
+  --cyan: #7aa9b8;
+
+  --think: #907a68;
+  --cmdout: #b99269;
+  --meta: #907a68;
+  --args: #907a68;
+
+  --hover-bg: #24110d;
+  --hover-bg-2: #180c0a;
+  --x-hover-bg: #35120d;
+
+  --u-fg: #f2ebe1;
+  --u-bg: #1d0b08;
+  --u-border: rgba(189, 102, 21, 0.34);
+
+  --ans: #d5c9bc;
+  --ans-bg: rgba(136, 56, 37, 0.08);
+
+  --toggle-off: #36211b;
+  --toggle-knob: #907a68;
+  --scroll-thumb: #63432f;
+  --scroll-thumb-hover: #bd6615;
+  --stab-thumb: #63432f;
+  --stab-thumb-hover: #bd6615;
+  --pipe: rgba(226, 216, 205, 0.12);
+  --rule: rgba(226, 216, 205, 0.1);
+
+  --plan-line: #63432f;
+  --plan-bar-fg: #907a68;
+  --sec-h: #907a68;
+  --sec-h-hover: #d69a2d;
+  --stab-fg: #6b5a4d;
+
+  --overlay: rgba(6, 3, 2, 0.84);
+  --sb-backdrop: rgba(6, 3, 2, 0.72);
+  --shadow-menu: 0 12px 30px rgba(0, 0, 0, 0.72);
+  --shadow-dd: 0 14px 34px rgba(0, 0, 0, 0.76);
+  --shadow-modal: 0 0 0 1px var(--border-2), 0 24px 60px rgba(0, 0, 0, 0.84);
+}
+
+body.metallica.light {
+  color-scheme: light;
+
+  --bg: #e7dfd4;
+  --fg: #17110e;
+  --panel: #f3ece2;
+  --sb-bg: #dcd0c0;
+  --stab-bg: #dcd0c0;
+  --surface: #d2c4b4;
+  --input-surface: #f3ece2;
+  --inp-bg: #f6efe6;
+  --inp-border: rgba(35, 26, 20, 0.14);
+  --inp-focus: #883825;
+  --input-shadow: #88382522;
+  --border: rgba(35, 26, 20, 0.11);
+  --border-2: rgba(35, 26, 20, 0.16);
+  --border-3: rgba(35, 26, 20, 0.11);
+  --muted: #624637;
+  --dim-a: #765b4c;
+  --dim-b: #8d7260;
+  --dim-c: #8d7260;
+  --accent: #883825;
+  --accent-bg: #e8cbc1;
+  --green: #4b6635;
+  --green-fill: #4b6635;
+  --red: #a42916;
+  --err: #a42916;
+  --red-strong: #a42916;
+  --yellow: #9b5a0f;
+  --purple: #724a64;
+  --cyan: #296670;
+  --think: #765b4c;
+  --cmdout: #624637;
+  --meta: #765b4c;
+  --args: #765b4c;
+  --hover-bg: #d8c7b6;
+  --hover-bg-2: #e7dfd4;
+  --x-hover-bg: #d8b6a7;
+  --u-fg: #17110e;
+  --u-bg: #d0bcab;
+  --u-border: rgba(136, 56, 37, 0.32);
+  --ans: #2a1d17;
+  --ans-bg: rgba(136, 56, 37, 0.07);
+  --toggle-off: #b8a18a;
+  --toggle-knob: #765b4c;
+  --scroll-thumb: #8a694f;
+  --scroll-thumb-hover: #883825;
+  --stab-thumb: #8a694f;
+  --stab-thumb-hover: #883825;
+  --pipe: rgba(35, 26, 20, 0.12);
+  --rule: rgba(35, 26, 20, 0.1);
+  --plan-line: #8a694f;
+  --plan-bar-fg: #765b4c;
+  --sec-h: #765b4c;
+  --sec-h-hover: #9b5a0f;
+  --stab-fg: #8d7260;
+  --overlay: rgba(40, 26, 20, 0.45);
+  --sb-backdrop: rgba(40, 26, 20, 0.25);
+  --shadow-menu: 0 8px 24px rgba(75, 45, 30, 0.18);
+  --shadow-dd: 0 10px 26px rgba(75, 45, 30, 0.22);
+  --shadow-modal: 0 0 0 1px var(--border-2), 0 20px 50px rgba(75, 45, 30, 0.28);
+}
+
+body.metallica::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(4, 2, 1, 0.54) 0 18%, rgba(12, 3, 2, 0.34) 48%, rgba(4, 2, 1, 0.7)),
+    linear-gradient(90deg, rgba(4, 2, 1, 0.68) 0 24%, transparent 38% 62%, rgba(4, 2, 1, 0.7) 76% 100%),
+    url("/metallica-cover.svg") center 46% / cover no-repeat;
+}
+body.metallica.light::before {
+  background:
+    linear-gradient(180deg, rgba(231, 223, 212, 0.72) 0 18%, rgba(231, 223, 212, 0.54) 48%, rgba(231, 223, 212, 0.82)),
+    linear-gradient(90deg, rgba(231, 223, 212, 0.86) 0 24%, transparent 38% 62%, rgba(231, 223, 212, 0.88) 76% 100%),
+    url("/metallica-cover.svg") center 46% / cover no-repeat;
+  filter: contrast(0.78) sepia(0.18) brightness(1.12);
+}
+
+/* Living horizon: a soft radial glow behind the field, breathing slowly. */
+body.metallica::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(42% 12% at 50% 54%, rgba(255, 189, 78, 0.5), rgba(189, 102, 21, 0.26) 44%, transparent 74%);
+  mix-blend-mode: screen;
+  opacity: 0.34;
+  transform-origin: 50% 54%;
+  animation: metallica-horizon-pulse 8s ease-in-out infinite;
+}
+body.metallica.light::after {
+  background: radial-gradient(42% 12% at 50% 54%, rgba(189, 102, 21, 0.32), rgba(136, 56, 37, 0.16) 45%, transparent 74%);
+  mix-blend-mode: multiply;
+  opacity: 0.28;
+}
+
+@keyframes metallica-horizon-pulse {
+  0%, 100% {
+    opacity: 0.24;
+    transform: scale(0.985);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.025);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.metallica::after {
+    animation: none;
+    opacity: 0.32;
+    transform: none;
+  }
+}
+
+body.metallica,
+body.metallica *,
+body.metallica *::before,
+body.metallica *::after {
+  font-family: "Arial Narrow", "Helvetica Neue", Impact, "Segoe UI", sans-serif !important;
+  border-radius: 0 !important;
+}
+body.metallica .bar-top,
+body.metallica .bar-sub,
+body.metallica .modal-top,
+body.metallica .sec-title,
+body.metallica .sec-h,
+body.metallica .sb-name,
+body.metallica .theme-name,
+body.metallica h1,
+body.metallica h2,
+body.metallica h3 {
+  font-family: "Arial Black", "Helvetica Neue", Impact, "Segoe UI", sans-serif !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+body.metallica .bar-top,
+body.metallica .bar-sub {
+  background: #120908d6;
+  border-bottom: 1px solid rgba(226, 216, 205, 0.1);
+}
+body.metallica .sb {
+  border-left: 1px solid rgba(226, 216, 205, 0.08);
+}
+body.metallica .sb-tabs-bar,
+body.metallica .sb-name,
+body.metallica .sec {
+  border-color: rgba(226, 216, 205, 0.08);
+}
+body.metallica .sb-settings {
+  border-left: 1px solid rgba(226, 216, 205, 0.07);
+}
+body.metallica .sb-tab,
+body.metallica .sb-tab-toggle,
+body.metallica .stab {
+  border-color: rgba(189, 102, 21, 0.18);
+}
+body.metallica .sb-tab.on,
+body.metallica .stab.on {
+  border-color: rgba(189, 102, 21, 0.22);
+}
+body.metallica .icon-btn,
+body.metallica .btn,
+body.metallica .linkbtn {
+  border: 0;
+}
+body.metallica .composer {
+  background: #0b0505e0;
+}
+body.metallica.light .bar-top,
+body.metallica.light .bar-sub {
+  background: #f3ece2d6;
+  border-bottom-color: rgba(35, 26, 20, 0.11);
+}
+body.metallica.light .sb {
+  border-left-color: rgba(35, 26, 20, 0.08);
+}
+body.metallica.light .sb-tab,
+body.metallica.light .sb-tab-toggle,
+body.metallica.light .stab {
+  border-color: rgba(136, 56, 37, 0.14);
+}
+body.metallica.light .composer {
+  background: #f6efe6e0;
+}
+
+@media (min-width: 1040px) {
+  body.metallica .bar-top::after {
+    content: "";
+    position: absolute;
+    right: 78px;
+    top: 50%;
+    width: 68px;
+    height: 16px;
+    transform: translateY(-50%);
+    background: linear-gradient(180deg, #f6f1ea 0, #b1aba4 30%, #e9e3da 52%, #4a3b35 76%, #d7cec5 100%);
+    -webkit-mask: url("/metallica-logo.svg") center / contain no-repeat;
+    mask: url("/metallica-logo.svg") center / contain no-repeat;
+    pointer-events: none;
+  }
+}
+
+/* Chrome/marble treatment for panel titles, echoing the album logo. */
+body.metallica .sb-name,
+body.metallica .modal-top,
+body.metallica .sec-title {
+  color: transparent;
+  background: linear-gradient(180deg, #f0ece7 12%, #a49d96 38%, #d8d4cf 54%, #433a37 82%, #d4cfc9 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+body.metallica.light .sb-name,
+body.metallica.light .modal-top,
+body.metallica.light .sec-title {
+  background-image: linear-gradient(180deg, #20140f 8%, #70483b 38%, #281812 60%, #883825 94%);
+}
+
+body.metallica .composer-main::before {
+  content: "\203A";
+  color: var(--accent);
+  padding: 0 8px 0 4px;
+  align-self: center;
+  text-shadow: 0 0 8px rgba(189, 102, 21, 0.48);
+}
+
+/* MMART accessory: the horns, not a fake hat. */
+body.metallica .mdl::after {
+  content: "🤘";
+  position: absolute;
+  right: -24%;
+  bottom: -12%;
+  z-index: 5;
+  font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif !important;
+  font-size: clamp(12px, calc(var(--s) * 0.5), 62px);
+  line-height: 1;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.58));
+}
+/* Theme picker: use the supplied Metallica logo as the swatch itself. */
+.theme-card.theme-metallica .theme-swatch {
+  width: 52px;
+  min-width: 52px;
+  height: 26px;
+  background: linear-gradient(135deg, #581f14, #bd6615);
+  -webkit-mask: url("/metallica-logo.svg") center / contain no-repeat;
+  mask: url("/metallica-logo.svg") center / contain no-repeat;
+}
+.theme-card.theme-metallica .theme-name {
+  color: transparent;
+  background: linear-gradient(180deg, #f0ece7 12%, #a49d96 38%, #d8d4cf 54%, #433a37 82%, #d4cfc9 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+

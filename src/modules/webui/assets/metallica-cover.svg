@@ -1,0 +1,148 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-label="Master of Puppets inspired artwork">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#090202" />
+      <stop offset=".32" stop-color="#3a120f" />
+      <stop offset=".62" stop-color="#76291c" />
+      <stop offset=".86" stop-color="#a94c21" />
+      <stop offset="1" stop-color="#d78424" />
+    </linearGradient>
+    <linearGradient id="field" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#715a45" />
+      <stop offset=".08" stop-color="#32221a" />
+      <stop offset=".42" stop-color="#100a08" />
+      <stop offset="1" stop-color="#030202" />
+    </linearGradient>
+    <radialGradient id="sun" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#ffe08a" stop-opacity=".95" />
+      <stop offset=".22" stop-color="#bd6615" stop-opacity=".72" />
+      <stop offset=".58" stop-color="#883825" stop-opacity=".36" />
+      <stop offset="1" stop-color="#120606" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="clouds" cx="50%" cy="40%" r="58%">
+      <stop offset="0" stop-color="#7b3221" stop-opacity=".3" />
+      <stop offset=".62" stop-color="#320c0a" stop-opacity=".44" />
+      <stop offset="1" stop-color="#060202" stop-opacity=".72" />
+    </radialGradient>
+    <linearGradient id="crossLight" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fffdf7" />
+      <stop offset=".48" stop-color="#cfc2b1" />
+      <stop offset="1" stop-color="#624f43" />
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="1.2" />
+    </filter>
+    <g id="grave">
+      <path d="M-11-72H11v28h33v16H11v76H-11v-76h-33v-16h33z" fill="url(#crossLight)" stroke="#281812" stroke-width="1.6" />
+      <path d="M-6-67H6v27h31v8H6v70H-6V-32h-31v-8h31z" fill="#fffdf6" opacity=".3" />
+    </g>
+    <g id="smallGrave">
+      <path d="M-8-54H8v20h24v12H8v58H-8V-22h-24v-12h24z" fill="url(#crossLight)" />
+    </g>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#sky)" />
+  <ellipse cx="800" cy="462" rx="900" ry="320" fill="url(#sun)" />
+  <rect width="1600" height="900" fill="url(#clouds)" />
+  <rect y="452" width="1600" height="448" fill="url(#field)" />
+
+  <!-- Puppet strings rising past the top edge, outside the canvas. -->
+  <g class="strings" fill="none" stroke="#f0e7dc" opacity=".38" filter="url(#soft)">
+    <path d="M110 542 C220 310 360-60 520-720" />
+    <path d="M236 548 C320 316 420-54 560-712" />
+    <path d="M372 553 C432 320 510-48 605-704" />
+    <path d="M516 557 C552 323 600-42 652-697" />
+    <path d="M664 559 C676 325 700-36 718-690" />
+    <path d="M808 560 C804 326 810-32 812-685" />
+    <path d="M948 558 C932 324 915-38 895-690" />
+    <path d="M1082 554 C1048 321 1005-43 965-697" />
+    <path d="M1216 549 C1165 317 1095-50 1035-705" />
+    <path d="M1346 543 C1272 312 1170-57 1090-714" />
+    <path d="M1476 536 C1378 306 1245-64 1142-723" />
+
+    <path d="M166 653 C320 390 511 140 714-560" />
+    <path d="M413 661 C517 397 645 133 773-540" />
+    <path d="M658 665 C694 401 760 136 820-530" />
+    <path d="M903 663 C897 399 875 134 865-535" />
+    <path d="M1142 659 C1081 395 1004 131 922-548" />
+    <path d="M1370 651 C1262 388 1121 124 970-565" />
+
+    <path d="M262 795 C412 510 629 230 809-500" />
+    <path d="M623 803 C672 510 765 230 862-500" />
+    <path d="M978 801 C986 500 957 220 914-505" />
+    <path d="M1317 792 C1197 500 1027 220 881-525" />
+  </g>
+
+  <!-- Graveyard: repeated crosses receding to the fiery horizon. -->
+  <g class="graves">
+    <use href="#smallGrave" transform="translate(94 475) scale(.07)" opacity=".2" />
+    <use href="#smallGrave" transform="translate(184 475) scale(.07)" opacity=".23" />
+    <use href="#smallGrave" transform="translate(273 474) scale(.08)" opacity=".25" />
+    <use href="#smallGrave" transform="translate(363 474) scale(.08)" opacity=".27" />
+    <use href="#smallGrave" transform="translate(452 474) scale(.085)" opacity=".29" />
+    <use href="#smallGrave" transform="translate(542 473) scale(.09)" opacity=".32" />
+    <use href="#smallGrave" transform="translate(632 473) scale(.095)" opacity=".34" />
+    <use href="#smallGrave" transform="translate(722 473) scale(.1)" opacity=".36" />
+    <use href="#smallGrave" transform="translate(810 473) scale(.1)" opacity=".36" />
+    <use href="#smallGrave" transform="translate(898 473) scale(.096)" opacity=".34" />
+    <use href="#smallGrave" transform="translate(986 473) scale(.092)" opacity=".33" />
+    <use href="#smallGrave" transform="translate(1074 474) scale(.088)" opacity=".31" />
+    <use href="#smallGrave" transform="translate(1161 474) scale(.085)" opacity=".29" />
+    <use href="#smallGrave" transform="translate(1248 474) scale(.082)" opacity=".27" />
+    <use href="#smallGrave" transform="translate(1334 475) scale(.08)" opacity=".25" />
+    <use href="#smallGrave" transform="translate(1421 475) scale(.077)" opacity=".23" />
+    <use href="#smallGrave" transform="translate(1507 476) scale(.073)" opacity=".2" />
+
+    <use href="#smallGrave" transform="translate(128 501) scale(.13)" opacity=".38" />
+    <use href="#smallGrave" transform="translate(270 500) scale(.14)" opacity=".41" />
+    <use href="#smallGrave" transform="translate(416 499) scale(.155)" opacity=".46" />
+    <use href="#smallGrave" transform="translate(562 498) scale(.165)" opacity=".5" />
+    <use href="#smallGrave" transform="translate(704 498) scale(.175)" opacity=".54" />
+    <use href="#smallGrave" transform="translate(844 498) scale(.178)" opacity=".55" />
+    <use href="#smallGrave" transform="translate(982 499) scale(.168)" opacity=".51" />
+    <use href="#smallGrave" transform="translate(1121 500) scale(.156)" opacity=".47" />
+    <use href="#smallGrave" transform="translate(1262 501) scale(.145)" opacity=".42" />
+    <use href="#smallGrave" transform="translate(1403 502) scale(.135)" opacity=".39" />
+    <use href="#smallGrave" transform="translate(1525 503) scale(.12)" opacity=".33" />
+
+    <use href="#grave" transform="translate(174 541) scale(.25)" opacity=".58" />
+    <use href="#grave" transform="translate(430 539) scale(.29)" opacity=".65" />
+    <use href="#grave" transform="translate(680 537) scale(.33)" opacity=".72" />
+    <use href="#grave" transform="translate(932 538) scale(.31)" opacity=".68" />
+    <use href="#grave" transform="translate(1184 540) scale(.27)" opacity=".62" />
+    <use href="#grave" transform="translate(1425 543) scale(.23)" opacity=".55" />
+
+    <use href="#grave" transform="translate(120 601) scale(.48)" opacity=".8" />
+    <use href="#grave" transform="translate(350 597) rotate(-2) scale(.55)" opacity=".88" />
+    <use href="#grave" transform="translate(604 594) scale(.62)" opacity=".95" />
+    <use href="#grave" transform="translate(854 595) scale(.63)" opacity=".98" />
+    <use href="#grave" transform="translate(1097 598) rotate(2) scale(.58)" opacity=".91" />
+    <use href="#grave" transform="translate(1348 603) scale(.49)" opacity=".82" />
+
+    <use href="#grave" transform="translate(178 718) scale(.92)" opacity=".94" />
+    <use href="#grave" transform="translate(496 713) rotate(-4) scale(1.04)" opacity=".99" />
+    <use href="#grave" transform="translate(808 711) scale(1.16)" />
+    <use href="#grave" transform="translate(1117 714) rotate(4) scale(1.06)" opacity=".99" />
+    <use href="#grave" transform="translate(1414 721) scale(.9)" opacity=".92" />
+
+    <use href="#grave" transform="translate(184 872) scale(1.52)" opacity=".88" />
+    <use href="#grave" transform="translate(564 864) rotate(-3) scale(1.7)" opacity=".96" />
+    <use href="#grave" transform="translate(986 866) rotate(2) scale(1.74)" opacity=".97" />
+    <use href="#grave" transform="translate(1396 876) scale(1.45)" opacity=".85" />
+  </g>
+
+  <!-- Dry grass and weeds in the foreground. -->
+  <g class="weeds" fill="none" stroke="#452f20" opacity=".72" stroke-width="3">
+    <path d="M40 900 C72 822 95 760 126 693" />
+    <path d="M210 900 C239 825 262 770 297 703" />
+    <path d="M386 900 C412 832 428 777 464 713" />
+    <path d="M700 900 C712 831 725 776 762 714" />
+    <path d="M856 900 C884 836 902 781 931 717" />
+    <path d="M1188 900 C1220 831 1240 777 1271 716" />
+    <path d="M1360 900 C1388 837 1410 783 1437 720" />
+    <path d="M1538 900 C1565 842 1581 793 1598 739" />
+  </g>
+
+  <!-- Depth haze: keep the artwork from competing with chat text. -->
+  <rect width="1600" height="900" fill="url(#field)" opacity=".08" />
+</svg>

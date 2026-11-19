@@ -1,0 +1,253 @@
+import { describe, it, expect, afterEach } from "vitest";
+import type { IncomingMessage } from "node:http";
+import { stopServer } from "../src/modules/webui/server";
+import { createWebUiState } from "../src/modules/webui/state";
+import { checkAuth } from "../src/modules/webui/util";
+import type { Host } from "../src/core/host";
+import { submitTurnFromHost } from "../src/modules/webui/session/turns";
+import { withServer, doFetch, postJson } from "./helpers/webui-server";
+
+
+function makeBridge(s?: ReturnType<typeof createWebUiState>): Host {
+  return {
+    isBusy: () => false,
+    submit: (text, opts) =>
+      s ? submitTurnFromHost(s, text, opts) : Promise.resolve(undefined),
+    interrupt: () => {},
+    getState: async () => ({ busy: false }),
+    subscribeEvents: () => () => {},
+    getConfig: async () => ({ config: {}, version: 0 }),
+    listModels: async () => ({ models: [] }),
+    setConfig: async () => ({ ok: true, persisted: true }),
+    executeCommand: () => Promise.resolve(),
+  };
+}
+
+/** Сессия + фабрика стаб-раннеров (ходы повисают, пока не разрешены). */
+function withRunner(s: ReturnType<typeof createWebUiState>, ids: string[] = ["A"]): void {
+  const alive = new Set(ids);
+  s.sessionManager = {
+    list: () => [],
+    get: (id: string) => (alive.has(id) ? { id } : null) as never,
+    getActive: () => ids[0] ?? null,
+    setActive: () => {},
+    delete: () => {},
+  };
+  s.pool.setFactory(
+    (id: string) =>
+      ({
+        sessionId: id,
+        agent: { run: () => new Promise(() => {}), shutdown: () => {} },
+        contextManager: { addPendingImage: () => {} },
+        execModule: { getActivePlan: () => null },
+      }) as never,
+  );
+}
+
+
+describe("webui auth + limits", () => {
+  afterEach(() => stopServer());
+
+  it("401 without a token on /api/state and /api/command; 200/202 via header or ?token=", async () => {
+    const s = createWebUiState();
+    s.token = "s3cret";
+    s.bridge = makeBridge(s);
+    await withServer(s, async (base) => {
+      const stateDenied = await doFetch(`${base}/api/state`);
+      expect(stateDenied.status).toBe(401);
+
+      const cmdDenied = await doFetch(`${base}/api/command`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ line: "/status" }),
+      });
+      expect(cmdDenied.status).toBe(401);
+
+      const stateHeader = await doFetch(`${base}/api/state`, {
+        headers: { "x-mma-token": "s3cret" },
+      });
+      expect(stateHeader.status).toBe(200);
+
+      const stateQuery = await doFetch(`${base}/api/state?token=s3cret`);
+      expect(stateQuery.status).toBe(200);
+
+      const cmdHeader = await doFetch(`${base}/api/command`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-mma-token": "s3cret" },
+        body: JSON.stringify({ line: "/status" }),
+      });
+      expect(cmdHeader.status).toBe(202);
+    });
+  });
+
+  it("403 on a cross-origin POST to /api/message", async () => {
+    const s = createWebUiState();
+    s.minPostIntervalMs = 0;
+    s.bridge = makeBridge(s);
+    await withServer(s, async (base) => {
+      const res = await doFetch(`${base}/api/message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: "http://evil.test" },
+        body: JSON.stringify({ text: "hi" }),
+      });
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({ error: "cross-origin requests are not allowed" });
+    });
+  });
+
+  it("503 on /api/message when no session/runner is available", async () => {
+    const s = createWebUiState();
+    s.minPostIntervalMs = 0;
+    s.bridge = null;
+    await withServer(s, async (base) => {
+      const res = await postJson(base, "/api/message", { text: "hi" });
+      expect(res.status).toBe(503);
+      expect(res.json).toEqual({ error: "no_session" });
+    });
+  });
+
+  it("queues /api/message when the session slot is already busy", async () => {
+    const s = createWebUiState();
+    s.minPostIntervalMs = 0;
+    s.bridge = makeBridge(s);
+    withRunner(s, ["A"]);
+    s.pool.reserve("A");
+    s.busy = true;
+    await withServer(s, async (base) => {
+      const res = await postJson(base, "/api/message", { text: "hi", sessionId: "A" });
+      expect(res.status).toBe(202);
+      expect(res.json).toEqual({
+        ok: true,
+        queued: 1,
+        sessionId: "A",
+        queuedForSession: 1,
+        id: expect.any(String),
+      });
+    });
+  });
+
+  it("429 on a second /api/message within minPostIntervalMs", async () => {
+    const s = createWebUiState();
+    s.minPostIntervalMs = 60_000;
+    s.bridge = makeBridge(s);
+    withRunner(s, ["A"]);
+    s.lastPostTs.set("A", Date.now());
+    await withServer(s, async (base) => {
+      const res = await doFetch(`${base}/api/message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: "hi", sessionId: "A" }),
+      });
+      expect(res.status).toBe(429);
+      expect(await res.json()).toEqual({ error: "rate_limited" });
+    });
+  });
+
+  it("503 on /events once the client cap is reached", async () => {
+    const s = createWebUiState();
+    const controllers: AbortController[] = [];
+    await withServer(s, async (base) => {
+      // MAX_CLIENTS defaults to 5; hold that many streams open, then the next is capped.
+      for (let i = 0; i < 5; i++) {
+        const controller = new AbortController();
+        const ok = await doFetch(`${base}/events`, { signal: controller.signal });
+        expect(ok.status).toBe(200);
+        controllers.push(controller);
+      }
+      // Give the server a tick to register all clients.
+      await new Promise((r) => setTimeout(r, 0));
+      const capped = await doFetch(`${base}/events`);
+      expect(capped.status).toBe(503);
+      expect(await capped.json()).toEqual({ error: "too many clients" });
+    });
+    for (const c of controllers) c.abort();
+  });
+
+  it("202 on /api/command with a valid token and dispatches the line to the bridge", async () => {
+    const s = createWebUiState();
+    s.token = "s3cret";
+    const lines: string[] = [];
+    const bridge: Host = {
+      isBusy: () => false,
+      submit: () => Promise.resolve(),
+      interrupt: () => {},
+      getState: async () => ({ busy: false }),
+    subscribeEvents: () => () => {},
+    getConfig: async () => ({ config: {}, version: 0 }),
+    listModels: async () => ({ models: [] }),
+    setConfig: async () => ({ ok: true, persisted: true }),
+      executeCommand: (line) => {
+        lines.push(line);
+        return Promise.resolve();
+      },
+    };
+    s.bridge = bridge;
+    await withServer(s, async (base) => {
+      const res = await doFetch(`${base}/api/command?token=s3cret`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ line: "/status" }),
+      });
+      expect(res.status).toBe(202);
+      expect(await res.json()).toEqual({ ok: true });
+      // executeCommand is fire-and-forget; let the microtask run.
+      await new Promise((r) => setTimeout(r, 0));
+      expect(lines).toEqual(["/status"]);
+    });
+  });
+
+  it("checkAuth accepts the mma_web_auth cookie when a token is configured", () => {
+    const s = createWebUiState();
+    s.token = "s3cret";
+    const req = { headers: { cookie: "other=1; mma_web_auth=s3cret" } } as unknown as IncomingMessage;
+    expect(checkAuth(req, new URL("http://127.0.0.1/api/state"), s)).toBe(true);
+    const bad = { headers: { cookie: "mma_web_auth=nope" } } as unknown as IncomingMessage;
+    expect(checkAuth(bad, new URL("http://127.0.0.1/api/state"), s)).toBe(false);
+  });
+
+  it("checkAuth tolerates a malformed cookie encoding without throwing", () => {
+    const s = createWebUiState();
+    s.token = "s3cret";
+    const req = { headers: { cookie: "mma_web_auth=%ZZ" } } as unknown as IncomingMessage;
+    expect(checkAuth(req, new URL("http://127.0.0.1/api/state"), s)).toBe(false);
+  });
+
+  it("sets the auth cookie on an authenticated api response", async () => {
+    const s = createWebUiState();
+    s.token = "s3cret";
+    await withServer(s, async (base) => {
+      const res = await doFetch(`${base}/api/i18n`, { headers: { "x-mma-token": "s3cret" } });
+      const cookie = res.headers.get("set-cookie") || "";
+      expect(cookie).toContain("mma_web_auth=s3cret");
+      expect(cookie).toContain("HttpOnly");
+      expect(cookie).toContain("SameSite=Strict");
+      expect(cookie).toContain("Path=/");
+    });
+  });
+
+  it("sets the auth cookie on the /events stream", async () => {
+    const s = createWebUiState();
+    s.token = "s3cret";
+    const controller = new AbortController();
+    await withServer(s, async (base) => {
+      const res = await doFetch(`${base}/events?token=s3cret`, { signal: controller.signal });
+      expect(res.status).toBe(200);
+      const cookie = res.headers.get("set-cookie") || "";
+      expect(cookie).toContain("mma_web_auth=s3cret");
+      expect(cookie).toContain("HttpOnly");
+      expect(cookie).toContain("SameSite=Strict");
+      // Abort once headers are read; the stream would otherwise stay open.
+      controller.abort();
+    });
+    controller.abort();
+  });
+
+  it("round-trips a token with special characters through the cookie", () => {
+    const s = createWebUiState();
+    s.token = "a;b=c %";
+    const req = {
+      headers: { cookie: `mma_web_auth=${encodeURIComponent(s.token)}` },
+    } as unknown as IncomingMessage;
+    expect(checkAuth(req, new URL("http://127.0.0.1/api/state"), s)).toBe(true);
+  });
+});

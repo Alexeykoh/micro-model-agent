@@ -1,0 +1,73 @@
+name: quality
+
+# Runs on every push/PR: typecheck (backend + frontend), lint (Biome), unit
+# tests, and the fallow dead-code gate against the committed regression
+# baseline (`.fallow-baseline.json`) so existing architectural debt does not
+# fail the build, but NEW unused code/cycles do.
+on:
+  push:
+  pull_request:
+
+jobs:
+  quality:
+    # The full suite is Windows-oriented (absolute Windows paths, cmd.exe paths,
+    # the Windows LSP shim, …); those tests are platform assertions, not skips.
+    # The platform-independent subset is additionally checked on Linux by the
+    # `quality-posix` job below (W6, D4).
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck (backend)
+        run: bun run typecheck
+
+      - name: Typecheck (frontend)
+        run: bun run typecheck:frontend
+
+      - name: Lint (Biome)
+        run: bun run lint
+
+      - name: Unit tests (with coverage gate)
+        run: bun scripts/coverage-check.ts
+
+      - name: Evals gate (scorecard)
+        run: bun scripts/evals-check.ts
+
+      # Replay-инварианты петли. Отдельным шагом не ради красоты: `bun test`
+      # подхватывает `tests/replay/**` сам, и если конфиг витрины изменится,
+      # набор молча выпадет из защиты — а он единственный ловит класс дефектов,
+      # который юнит-тесты пропускают по построению.
+      - name: Replay invariants
+        run: bun test tests/replay
+
+      # fallow is distributed on npm. Pin the version: the baseline
+      # (`.fallow-baseline.json`) was saved with 2.88.0, and newer analyzers
+      # report additional findings that the baseline does not cover.
+      - name: Dead-code gate
+        run: npx --yes fallow@2.88.0 dead-code --baseline .fallow-baseline.json --fail-on-issues
+
+  # POSIX lane (W6, D4): release builds for five platforms, but nobody checks
+  # posix behaviour. The platform-independent subset (arch gates, core, tools)
+  # must be green on Linux; host-specific assertions are declared skips
+  # (tests/arch/platform-skips.test.ts) rather than silent gaps.
+  quality-posix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Arch gates, core and tools on POSIX
+        run: bun run quality:posix

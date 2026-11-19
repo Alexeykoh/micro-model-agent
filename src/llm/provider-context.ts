@@ -1,0 +1,266 @@
+/**
+ * Универсальная проба контекста провайдера: что бэкенд РЕАЛЬНО отдаёт для
+ * `model` прямо сейчас — длина загруженного инстанса (LM Studio/Ollama/
+ * llama.cpp), а не максимум карточки модели.
+ *
+ * Порядок: LM Studio native → Ollama native → llama.cpp `/props` →
+ * OpenAI-compat `/models`-метаданные (`context_length`, vLLM `max_model_len`,
+ * OpenRouter `top_provider.context_length`, OpenCode Zen/Go `limit.context`)
+ * → каталог models.dev (последний шанс, когда `/models` не сообщил окно).
+ *
+ * Null, если окно никто не сообщил — вызывающий хранит настроенный
+ * `contextWindow` (fail-open).
+ */
+import type { ModelCapabilities } from "../config/types";
+import {
+  probeOllama,
+  probeOllamaCapabilities,
+  probeLlamaCpp,
+  probeLlamaCppModalities,
+  probeLlamaCppReasoning,
+  probeOpenAICompatCapabilities,
+  probeOpenAICompatModels,
+  probeModelsDev,
+} from "./native-context";
+
+/** Канонические effort-уровни харнесса, которые эндпоинт может объявить. */
+const EFFORT_OPTION: Record<string, true> = {
+  low: true,
+  medium: true,
+  high: true,
+  minimal: true,
+  xhigh: true,
+  max: true,
+};
+
+/** Итог стартовой context-probe: с чем модель РЕАЛЬНО загружена. */
+export interface ContextProbeResult {
+  model: string;
+  /** Длина контекста загруженного инстанса (токены). */
+  actual: number;
+}
+
+/** Итог нативной пробы модели: окно контекста + заявленные capabilities. */
+export interface ModelProbeResult {
+  model: string;
+  /** Длина контекста загруженного инстанса (токены). */
+  contextLength: number;
+  /** Заявленные capabilities, если бэкенд их сообщает (LM Studio). */
+  capabilities?: ModelCapabilities;
+}
+
+/** Минимальная форма записи LM Studio `/api/v1/models`, что нам нужна. */
+interface LmStudioModel {
+  key?: string;
+  name?: string;
+  max_context_length?: number;
+  loaded_instances?: Array<{ config?: { context_length?: number } }>;
+  capabilities?: {
+    vision?: boolean;
+    trained_for_tool_use?: boolean;
+    /** Нативный вердикт о reasoning: какие опции эндпоинт принимает. */
+    reasoning?: { allowed_options?: string[]; default?: string };
+  };
+}
+interface LmStudioModelsResponse {
+  models?: LmStudioModel[];
+}
+
+/**
+ * Спрашивает нативный API бэкенда (LM Studio `/api/v1/models`) о длине
+ * контекста загруженной модели И заявленных capabilities. Длина — из живого
+ * инстанса (`loaded_instances[].config.context_length`), фолбэк —
+ * `max_context_length`. Capabilities читаются из `capabilities` (`vision`,
+ * `trained_for_tool_use`), если есть — это единый источник правды вместо
+ * гадания по имени.
+ *
+ * Хостед-эндпоинты (opencode-go и т.п.) на этот native API отвечают 404 — их
+ * capabilities приходят из `/models` (`probeOpenAICompatCapabilities`), а
+ * выключатель reasoning добирается эмпирической пробой (`reasoning-off-probe`).
+ *
+ * Null, если эндпоинт недоступен (не LM Studio), модели нет/снята или запрос
+ * упал — вызывающий деградирует молча.
+ */
+export async function probeModel(
+  baseUrl: string,
+  model: string,
+  timeoutMs = 3000,
+): Promise<ModelProbeResult | null> {
+  const base = baseUrl.replace(/\/$/, "").replace(/\/v1\/?$/, "");
+  try {
+    const response = await fetch(`${base}/api/v1/models`, {
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!response.ok) return null;
+    const data = (await response.json()) as LmStudioModelsResponse;
+    const models = data.models ?? [];
+    const found = models.find(
+      (m) => m.key === model || m.name === model || (m.key ? model.includes(m.key) : false),
+    );
+    if (!found) return null;
+    const loadedInstance = (found.loaded_instances ?? [])[0];
+    const contextLength = loadedInstance?.config?.context_length ?? found.max_context_length;
+    if (typeof contextLength !== "number" || contextLength <= 0) return null;
+
+    const raw = found.capabilities;
+    let capabilities: ModelCapabilities | undefined;
+    if (raw && typeof raw.vision === "boolean") {
+      capabilities = { vision: raw.vision };
+      if (typeof raw.trained_for_tool_use === "boolean") {
+        capabilities.tools = raw.trained_for_tool_use;
+      }
+    }
+    // Discovery механизма reasoning (INV-R2, средний слой): эндпоинт объявил,
+    // что умеет выключать thinking. LM Studio выражает это полем
+    // `reasoning_effort: "none"` (проверено вживую на Qwen3), а не kwarg/тегом —
+    // поэтому стратегия `openai-effort` + флаг `reasoningOff`.
+    if (raw?.reasoning?.allowed_options?.includes("off")) {
+      capabilities ??= {};
+      capabilities.reasoningStrategy = "openai-effort";
+      capabilities.reasoningOff = true;
+      // Объявленный список уровней effort — авторитетен (INV-R7). LM Studio
+      // обычно отдаёт только `["off","on"]`: гранулярных уровней нет, и пустой
+      // массив означает «выключение есть, усилий нет» — UI покажет только
+      // `none`, а не выдуманные low/medium/high/max.
+      const effort = raw.reasoning.allowed_options.filter((o) => o in EFFORT_OPTION);
+      capabilities.reasoningLevels = effort;
+    }
+
+    return { model: found.key ?? found.name ?? model, contextLength, capabilities };
+  } catch {
+    return null;
+  }
+}
+
+/** Итог native-пробы возможностей: модель, окно (если LM Studio) и capabilities. */
+export interface NativeProbeResult {
+  model: string;
+  /** Длина контекста загруженного инстанса (LM Studio); иначе undefined. */
+  contextLength?: number;
+  capabilities?: ModelCapabilities;
+  /** true — хотя бы один native/compat источник ответил. */
+  reachable?: boolean;
+}
+
+/**
+ * Единая native-проба возможностей ДО сборки провайдера (INV-R2/R6): LM Studio
+ * (`/api/v1/models`), Ollama (`/api/show.capabilities`), llama.cpp (`/props`
+ * modality-флаги и `chat_template_caps`) и декларативные `/models`-capabilities
+ * OpenAI-compat шлюзов (`modalities.input`, `architecture.input_modalities`,
+ * `capabilities.reasoning` — OpenRouter / OpenCode Zen/Go) опрашиваются
+ * параллельно. Медиамодальности и механизм reasoning нужны экземпляру
+ * провайдера сразу, поэтому эта проба, в отличие от context-probe, не фоновая.
+ */
+export async function probeNativeCapabilities(
+  baseUrl: string,
+  model: string,
+  timeoutMs = 3000,
+  providerType?: string,
+  apiKey?: string,
+): Promise<NativeProbeResult | null> {
+  const origin = baseUrl.replace(/\/$/, "").replace(/\/v1\/?$/, "");
+  // `/props` и Ollama `/api/show` — локальные бэкенды; хостед-типы не опрашиваем
+  // синхронно, иначе старт платит лишний сетевой round-trip к публичному
+  // эндпоинту.
+  const localEligible =
+    providerType === undefined || providerType === "openai-compat" || providerType === "lmstudio";
+  const [lm, llama, llamaModalities, ollamaCaps, compatProbe] = await Promise.all([
+    probeModel(baseUrl, model, timeoutMs),
+    localEligible ? probeLlamaCppReasoning(origin, timeoutMs, model) : Promise.resolve(null),
+    localEligible ? probeLlamaCppModalities(origin, timeoutMs, model) : Promise.resolve(null),
+    localEligible ? probeOllamaCapabilities(origin, model, timeoutMs) : Promise.resolve(null),
+    probeOpenAICompatCapabilities(baseUrl, model, apiKey, timeoutMs),
+  ]);
+  if (!lm && !llama && !llamaModalities && !ollamaCaps && !compatProbe.reachable) return null;
+  const capabilities: ModelCapabilities = {
+    ...(lm?.capabilities ?? {}),
+    ...(ollamaCaps ?? {}),
+    ...(llamaModalities ?? {}),
+    ...(compatProbe.capabilities ?? {}),
+  };
+  if (llama) {
+    capabilities.reasoningStrategy = llama.strategy;
+    capabilities.reasoningOff = llama.reasoningOff;
+    capabilities.reasoningLevels = llama.levels;
+  }
+  const hasCaps = Object.values(capabilities).some((v) => v !== undefined);
+  return {
+    model: lm?.model ?? model,
+    contextLength: lm?.contextLength,
+    capabilities: hasCaps ? capabilities : undefined,
+    reachable: true,
+  };
+}
+
+/**
+ * Тонкая context-only проекция {@link probeModel}. Для вызывающих, кому нужно
+ * только окно контекста (баннер, диагностика context-probe).
+ */
+export async function getLoadedContextLength(
+  baseUrl: string,
+  model: string,
+  timeoutMs = 3000,
+): Promise<ContextProbeResult | null> {
+  const probe = await probeModel(baseUrl, model, timeoutMs);
+  return probe ? { model: probe.model, actual: probe.contextLength } : null;
+}
+
+/** Опции пробы контекста: ключ, таймаут, тип провайдера. */
+export interface ProviderContextOpts {
+  /** Bearer-ключ для хостед OpenAI-совместимых эндпоинтов (OpenRouter, Zen/Go). */
+  apiKey?: string;
+  timeoutMs?: number;
+  /** Тип из реестра (`openai-compat`, `opencode-zen`, …) — гейтит models.dev. */
+  providerType?: string;
+}
+
+/**
+ * Лукап каталога models.dev — последний шанс; его сбой не должен отменять уже
+ * измеренные локальные источники (пробы идут параллельно, см. `Promise.all`).
+ */
+async function probeModelsDevSafe(
+  baseUrl: string,
+  model: string,
+  providerType: string | undefined,
+): Promise<number | null> {
+  try {
+    return await probeModelsDev(baseUrl, model, providerType);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Пробует все источники ПАРАЛЛЕЛЬНО и возвращает первый по прежнему приоритету
+ * (LM Studio → Ollama → llama.cpp → OpenAI-compat → models.dev): суммарное
+ * время пробы ≈ max по источникам, а не их сумма (волна B).
+ * @param baseUrl базовый URL провайдера; @param model имя модели;
+ * @param opts ключ/таймаут/тип; @returns окно контекста либо null (fail-open).
+ */
+export async function probeProviderContext(
+  baseUrl: string,
+  model: string,
+  opts: ProviderContextOpts = {},
+): Promise<ContextProbeResult | null> {
+  const timeoutMs = opts.timeoutMs ?? 3000;
+  const origin = baseUrl.replace(/\/$/, "").replace(/\/v1\/?$/, "");
+  try {
+    const [lm, ollama, llama, compat, catalog] = await Promise.all([
+      probeModel(baseUrl, model, timeoutMs),
+      probeOllama(origin, model, timeoutMs),
+      probeLlamaCpp(origin, timeoutMs, model),
+      probeOpenAICompatModels(baseUrl, model, opts.apiKey, timeoutMs),
+      // Каталог ловится отдельно: его сбой не должен отменять уже измеренные
+      // локальные источники (раньше это была последняя проба цепочки).
+      probeModelsDevSafe(baseUrl, model, opts.providerType),
+    ]);
+    if (lm) return { model: lm.model, actual: lm.contextLength };
+    if (ollama !== null) return { model, actual: ollama };
+    if (llama !== null) return { model, actual: llama };
+    if (compat !== null) return { model, actual: compat };
+    if (catalog !== null) return { model, actual: catalog };
+  } catch {
+    // Fail-open: любая ошибка пробы оставляет настроенный contextWindow.
+  }
+  return null;
+}

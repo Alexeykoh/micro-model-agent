@@ -1,0 +1,149 @@
+/**
+ * `Host`-поверхность REPL и плагинный мост: busy-предикат, submit/interrupt,
+ * подписка на шину вывода и снапшот состояния.
+ *
+ * Вынесено из `repl.ts` (правило 6). Мост один: и `Host`-методы, и плагины
+ * идут тем же run-путём, что и терминальный ввод.
+ */
+import { createHostBridge } from "../core/host";
+import type { HostBridge, HostBridgeSubmitOptions } from "../modules/types";
+import type { Host, HostStateSnapshot } from "../core/host";
+import { LocalHost } from "../core/local-host";
+import type { OutputEvent } from "../output/types";
+import { defaultOutputBus } from "../output";
+import { planSnapshotFromModule, adaptActivePlan } from "../core/host-plan";
+import { serializeConfigForWire } from "../config/redact";
+import { configVersion } from "../config/persist";
+import { buildConfigRegistry } from "../runtime/config-view";
+import { applyConfigWrite, toConfigRaw } from "../runtime/config-write";
+import { CONFIG_FILE, persistConfigChange } from "../config/persist";
+import { join } from "node:path";
+import type { Agent } from "../core/agent";
+import type { AppConfig } from "../config/types";
+import type { PluginManager } from "../modules/plugins/manager";
+import type { SessionManager } from "../modules/session/manager";
+import type { ExecutionModule } from "../modules/execution/module";
+
+/** Поля `Repl`, нужные `Host`-поверхности. */
+export interface ReplHostHost {
+  hostBridge?: HostBridge;
+  pluginManager?: PluginManager;
+  agentRunning: boolean;
+  agent: Agent;
+  config: AppConfig;
+  sessionManager?: SessionManager;
+  execModule?: ExecutionModule;
+  runAgent(input: string): Promise<void>;
+  executeCommand(line: string): Promise<import("../core/host").HostCommandResult>;
+  modelCache: string[];
+  configDir: string;
+}
+
+/** (Пере)аттач плагинного HostBridge. Зовётся в конструкторе и после того, как
+ *  /reload заменил PluginManager: без этого перезагруженный web-ui плагин
+ *  молча теряет способность сабмитить сообщения. */
+export function attachHostBridge(host: ReplHostHost, pm?: PluginManager): void {
+  const manager = pm ?? host.pluginManager;
+  if (!manager) return;
+  host.hostBridge ??= getHostBridge(host);
+  manager.setHostBridge(host.hostBridge);
+}
+
+/** Строит HostBridge поверх обычного run-пути этого REPL. */
+export function buildHostBridge(host: ReplHostHost): HostBridge {
+  return createHostBridge({
+    isBusy: () => host.agentRunning,
+    addPendingImage: (url) => {
+      host.agent.contextManager?.addPendingImage?.({
+        type: "image_url",
+        image_url: { url },
+      });
+    },
+    runAgent: (text) => host.runAgent(text),
+    interruptRun: () => host.agent.shutdown(),
+  });
+}
+
+/** Лениво резолвит общий мост, чтобы `Host`-методы работали без плагинов. */
+export function getHostBridge(host: ReplHostHost): HostBridge {
+  host.hostBridge ??= buildHostBridge(host);
+  return host.hostBridge;
+}
+
+/** Host/HostBridge: true, пока агент крутит ход. */
+export function isBusy(host: ReplHostHost): boolean {
+  return host.agentRunning;
+}
+
+/** Host/HostBridge: сабмит через общий мост (тот же run-путь). */
+export function submit(
+  host: ReplHostHost,
+  text: string,
+  opts?: HostBridgeSubmitOptions,
+): Promise<unknown> {
+  return getHostBridge(host).submit(text, opts);
+}
+
+/** Host/HostBridge: прерывание текущего прогона (в idle — no-op). */
+export function interrupt(host: ReplHostHost): void {
+  getHostBridge(host).interrupt();
+}
+
+/** Host/HostBridge: подписка на общую шину вывода. */
+export function subscribeOutput(fn: (ev: OutputEvent) => void): () => void {
+  return defaultOutputBus.subscribe(fn);
+}
+
+/**
+ * `Host` для REPL: `LocalHost` поверх того же run-пути и шины вывода.
+ * REPL — потребитель контракта, а не его реализация (split W1).
+ */
+export function buildLocalHost(host: ReplHostHost): Host {
+  const bridge = getHostBridge(host);
+  return new LocalHost({
+    isBusy: () => bridge.isBusy(),
+    submit: (text, opts) => bridge.submit(text, opts),
+    interrupt: () => bridge.interrupt(),
+    subscribeOutput: (fn) => subscribeOutput(fn),
+    executeCommand: (line) => host.executeCommand(line),
+    getState: (sessionId) => getState(host, sessionId),
+    listSessions: () => host.sessionManager?.list() ?? [],
+    createSession: (name) => {
+      if (!host.sessionManager) throw new Error("sessions unavailable");
+      return host.sessionManager.create(name);
+    },
+    deleteSession: (id) => {
+      host.sessionManager?.delete(id);
+    },
+    getHistory: (id) => host.sessionManager?.getHistory(id) ?? [],
+    getLog: (id, opts) => host.sessionManager?.loadSessionLog(id, opts ?? {}) ?? [],
+    getConfig: () => ({
+      config: serializeConfigForWire(host.config),
+      registry: buildConfigRegistry(host.config),
+      version: configVersion(host.config),
+    }),
+    listModels: () => ({ models: host.modelCache }),
+    setConfig: async (key, value) => {
+      const raw = toConfigRaw(value);
+      if (raw === null) return { ok: false, persisted: false, error: "invalid-value" };
+      const configPath = join(host.configDir, CONFIG_FILE);
+      return applyConfigWrite(host.config, key, raw, {
+        saveConfig: (cfg, changed) => persistConfigChange(cfg, changed, configPath, host.configDir),
+        reconfigure: (cfg) => host.agent.reconfigure(cfg),
+      });
+    },
+  });
+}
+
+/** Host: снапшот план/сессия/модель для UI-поверхностей. */
+export function getState(host: ReplHostHost, _sessionId?: string): HostStateSnapshot {
+  const meta = host.sessionManager?.getActiveMeta();
+  return {
+    busy: host.agentRunning,
+    sessionId: meta?.id,
+    sessionName: meta?.name,
+    model: host.config.model,
+    provider: host.config.provider?.active,
+    plan: planSnapshotFromModule(adaptActivePlan(host.execModule?.getActivePlan())),
+  };
+}

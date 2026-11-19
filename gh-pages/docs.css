@@ -1,0 +1,167 @@
+/* ============================================================
+   MMA docs — page layer.
+   Shared chrome and tokens come from shared.css (loaded first);
+   console.css re-registers the console tokens; this sheet adds
+   the docs layout and content components. The token block below
+   mirrors console.css so the page still works without it.
+   ============================================================ */
+
+:root {
+  --bg: #0a0a0b; --panel: #0f0f10; --surface: #121213;
+  --fg: #d0cecc; --muted: #b6b3b0;
+  --dim-a: #8a8686; --dim-b: #6a6666; --dim-c: #6a6666;
+  --border: #1f1f20; --border-2: #262627;
+  --accent: #d0cecc; --accent-bg: #171718;
+  --green: #86d992; --red: #f0837a; --yellow: #e8c46a;
+  --recon: #6fd0e6; --mutate: #d59cf0; --exec: #9db4d6; --think: #8a8686;
+  --seg-system: #8a8686; --seg-tools: #6fd0e6; --seg-history: #86d992;
+  --seg-reserve: #e8c46a; --seg-free: #1f1f20;
+  --term-bg: #08080a; --term-fg: #b6b3b0; --grain-op: 0;
+  --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  --maxw: 880px;
+}
+html.light {
+  --bg: #f7f7f4; --panel: #ffffff; --surface: #f0f0ed;
+  --fg: #1b1b19; --muted: #4a4a46;
+  --dim-a: #6a6a64; --dim-b: #8a8a84; --dim-c: #8a8a84;
+  --border: #dcdcd6; --border-2: #d2d2cb;
+  --accent: #1b1b19; --accent-bg: #ecece7;
+  --green: #1a7f37; --red: #cf222e; --yellow: #9a6700;
+  --recon: #0c7c86; --mutate: #8250df; --exec: #2563eb; --think: #6a6a64;
+  --seg-system: #6a6a64; --seg-tools: #0c7c86; --seg-history: #1a7f37;
+  --seg-reserve: #9a6700; --seg-free: #e4e4df;
+  --term-bg: #f2f2ee; --term-fg: #33332f; --grain-op: 0;
+}
+
+/* ---------- docs layout ---------- */
+.layout { min-height: 100vh; }
+main { margin-left: 248px; padding: 44px 48px 110px; }
+article { max-width: var(--maxw); }
+.side-meta { margin: auto 0 0; padding: 0 10px; font-size: 11.5px; color: var(--dim-b); }
+/* The sidebar scrolls, so results open in flow instead of being clipped. */
+.side .search-results {
+  position: static; left: auto; right: auto; margin-top: 6px; max-height: 300px;
+}
+
+/* ---------- sidebar: categories are not sections ---------- */
+/* The category labels (Начало, Возможности, …) must not read as just another
+   nav item: they get a rule above, more air, and the links nest under them. */
+.docs .side-head {
+  margin: 18px 0 5px;
+  padding: 9px 12px 0;
+  border-top: 1px solid var(--border);
+  color: var(--dim-a);
+}
+.docs .side-links > .side-head:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+.docs .side-links a {
+  padding-left: 24px;
+}
+
+/* ---------- typography ---------- */
+h1 { font-size: clamp(26px, 4vw, 36px); line-height: 1.15; margin: 0 0 12px; letter-spacing: -0.02em; }
+h2 {
+  font-size: 22px; line-height: 1.25; margin: 48px 0 12px; padding-top: 10px;
+  border-top: 1px solid var(--border); scroll-margin-top: 24px;
+}
+h3 { font-size: 16px; margin: 26px 0 8px; scroll-margin-top: 24px; }
+p { margin: 10px 0; color: var(--muted); }
+ul, ol { margin: 10px 0; padding-left: 22px; color: var(--muted); }
+li { margin: 5px 0; }
+article a { text-decoration: underline; text-decoration-color: var(--border-2); text-underline-offset: 3px; }
+article a:hover { color: var(--accent); text-decoration-color: var(--accent); }
+.lead { font-size: 16px; color: var(--dim-a); }
+.sub { font-size: 12.5px; color: var(--dim-b); }
+
+/* ---------- code ---------- */
+:not(pre) > code { background: var(--panel); border: 1px solid var(--border); padding: 1px 5px; font-size: 0.88em; }
+pre {
+  position: relative; background: var(--panel); border: 1px solid var(--border);
+  padding: 14px 16px; overflow: auto; font-size: 13px; line-height: 1.6; margin: 14px 0;
+}
+pre code { background: none; border: 0; padding: 0; }
+kbd { background: var(--panel); border: 1px solid var(--border); padding: 1px 6px; font-size: 12px; }
+pre .copy {
+  position: absolute; top: 7px; right: 7px; padding: 3px 7px; font-size: 11px;
+  color: var(--dim-a); background: var(--surface); border: 1px solid var(--border);
+  opacity: 0; transition: opacity 0.15s;
+}
+pre:hover .copy, pre:focus-within .copy { opacity: 1; }
+pre .copy:hover { color: var(--fg); }
+
+/* ---------- tables: thin rules, no grids ---------- */
+table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 13px; }
+th, td { text-align: left; vertical-align: top; padding: 8px 12px 8px 0; border-bottom: 1px solid var(--border); }
+th { color: var(--dim-b); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+td { color: var(--muted); }
+tbody tr:hover { background: var(--panel); }
+
+/* ---------- callout: one rule, no panel ---------- */
+.callout {
+  margin: 16px 0; padding: 2px 0 2px 14px; border-left: 2px solid var(--accent);
+  background: none; color: var(--muted); font-size: 13.5px;
+}
+.callout.warn { border-left-color: var(--yellow); }
+.callout.err { border-left-color: var(--red); }
+.callout b { color: var(--fg); }
+
+/* ---------- anchor list / pipeline / presets ---------- */
+.anchor { list-style: none; margin: 16px 0; padding: 0; }
+.anchor li {
+  display: flex; gap: 12px; align-items: baseline; padding: 10px 0;
+  border-bottom: 1px solid var(--border); font-size: 13.5px; color: var(--dim-a);
+}
+.anchor code { color: var(--accent); flex: none; }
+.pipe { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 6px; margin: 16px 0; }
+.pipe-step { display: inline-flex; align-items: center; gap: 8px; }
+.pipe-node {
+  padding: 7px 13px; border: 1px solid var(--border-2); background: var(--panel);
+  font-size: 13px; color: var(--muted); white-space: nowrap;
+}
+.pipe-node.gate { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
+.pipe-arrow { color: var(--dim-c); font-size: 14px; }
+.presets { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 16px 0; }
+.preset { font-size: 12.5px; padding: 5px 12px; border: 1px solid var(--border-2); color: var(--dim-a); }
+.preset.on { color: var(--accent-bg); background: var(--accent); border-color: var(--accent); font-weight: 700; }
+
+/* ---------- calculators ---------- */
+.calc { margin: 18px 0; border: 1px solid var(--border-2); background: var(--panel); padding: 12px 14px; }
+.calc-h { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim-b); margin-bottom: 10px; }
+.calc-row {
+  display: grid; grid-template-columns: minmax(110px, 1fr) 1.4fr auto; align-items: center;
+  gap: 10px; margin: 8px 0; font-size: 12.5px; color: var(--dim-a);
+}
+.calc-row input[type="range"] { width: 100%; accent-color: var(--accent); }
+.calc-row b { color: var(--fg); font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; }
+.calc-out {
+  display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap;
+  margin-top: 10px; font-size: 13px; color: var(--dim-a);
+}
+.calc-out b { color: var(--fg); font-size: 15px; font-variant-numeric: tabular-nums; }
+.calc-note { margin: 8px 0 0; font-size: 11.5px; color: var(--dim-b); }
+
+/* ---------- mascot lab ---------- */
+.mascot-lab { display: flex; gap: 36px; align-items: center; margin: 24px 0; flex-wrap: wrap; }
+.mascot-main { display: flex; flex-direction: column; align-items: center; gap: 12px; flex: none; }
+.mascot-main .mdl { --s: 96px; }
+.mascot-name { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim-b); }
+
+/* ---------- responsive / print ---------- */
+@media (max-width: 1180px) {
+  main { margin-left: 0; padding: 84px 18px 90px; }
+}
+@media (max-width: 700px) {
+  .calc-row { grid-template-columns: 1fr auto; }
+  .calc-row input[type="range"] { grid-column: 1 / -1; order: 3; }
+  table { display: block; overflow-x: auto; }
+  .mascot-lab { gap: 24px; }
+}
+@media print {
+  .burger, .side, pre .copy { display: none !important; }
+  main { margin-left: 0; padding: 0; }
+  body { background: #fff; color: #000; }
+  pre { white-space: pre-wrap; }
+}

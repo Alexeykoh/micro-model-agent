@@ -1,0 +1,308 @@
+import { describe, it, expect, vi } from "vitest";
+import { OutputBus, defaultOutputBus } from "../../src/output/bus";
+import { OutputChannel, type PromptSink } from "../../src/output/channel";
+import { getDefaultChannel, resetDefaultChannel } from "../../src/output/default-channel";
+
+class S {
+  data = "";
+  write(s: string): boolean {
+    this.data += s;
+    return true;
+  }
+}
+function prompt(active = true) {
+  const above: string[] = [];
+  let on = active;
+  const sink: PromptSink = { isActive: () => on, printAbove: (t) => above.push(t) };
+  return { sink, above, set: (v: boolean) => (on = v) };
+}
+function ch() {
+  const bus = new OutputBus();
+  const out = new S();
+  const err = new S();
+  const c = new OutputChannel(bus, { out: out as never, err: err as never, color: false });
+  return { bus, out, err, c };
+}
+
+/** Blocks flushed through a prompt sink are batched one microtask deep. */
+const flushMicrotasks = () => Promise.resolve();
+
+describe("OutputChannel", () => {
+  it("writes formatted lines to stdout in idle mode", () => {
+    const { bus, out } = ch();
+    bus.log("info", "module:indexer", "hello");
+    expect(out.data).toContain("[INFO] [indexer]");
+  });
+  it("prints above the prompt when idle and prompt is active", async () => {
+    const { bus, out, c } = ch();
+    const p = prompt(true);
+    c.attachPrompt(p.sink);
+    bus.log("warn", "module:probe.context", "big");
+    await flushMicrotasks();
+    expect(p.above).toEqual([expect.stringContaining("big")]);
+    expect(out.data).toBe("");
+  });
+  it("batches a synchronous burst of lines into one printAbove call", async () => {
+    const { c } = ch();
+    const p = prompt(true);
+    c.attachPrompt(p.sink);
+    c.writeLine("line 1");
+    c.writeLine("line 2");
+    c.writeLine("line 3");
+    expect(p.above).toEqual([]);
+    await flushMicrotasks();
+    expect(p.above).toHaveLength(1);
+    expect(p.above[0]).toContain("line 1");
+    expect(p.above[0]).toContain("line 2");
+    expect(p.above[0]).toContain("line 3");
+  });
+  it("flushes batched blocks before raw output (ordering)", async () => {
+    const { c, out } = ch();
+    const p = prompt(true);
+    c.attachPrompt(p.sink);
+    c.writeLine("queued");
+    // Raw output must not jump ahead of the queued block.
+    c.beginStreaming();
+    expect(p.above).toHaveLength(1);
+    expect(p.above[0]).toContain("queued");
+    c.writeRaw("raw");
+    expect(out.data).toContain("raw");
+    await flushMicrotasks();
+  });
+  it("passes streaming raw through and closes the partial before a log", () => {
+    const { bus, out, c } = ch();
+    c.beginStreaming();
+    c.writeRaw("partial");
+    expect(out.data.startsWith("partial")).toBe(true);
+    bus.log("warn", "mma", "note");
+    expect(out.data.startsWith("partial\n[WARN] [mma]")).toBe(true);
+  });
+  it("closes streaming with a newline", () => {
+    const { c, out } = ch();
+    c.beginStreaming();
+    c.writeRaw("x", "stdout");
+    c.endStreaming();
+    expect(out.data.endsWith("x\n")).toBe(true);
+  });
+  it("queues during modal and flushes on endModal", () => {
+    const { bus, out, c } = ch();
+    c.beginModal();
+    bus.log("info", "mma", "later");
+    expect(out.data).toBe("");
+    c.endModal();
+    expect(out.data).toContain("later");
+  });
+  it("restores the streaming mode after a modal (interactive tool mid-run)", () => {
+    const { c } = ch();
+    c.beginStreaming();
+    c.beginModal();
+    c.endModal();
+    expect(c.getMode()).toBe("streaming");
+  });
+  it("closes a streaming partial after a modal, so the next log does not glue", () => {
+    const { bus, out, c } = ch();
+    c.beginStreaming();
+    c.writeRaw("partial");
+    c.beginModal();
+    c.endModal();
+    bus.log("warn", "mma", "note");
+    expect(out.data.startsWith("partial\n[WARN] [mma]")).toBe(true);
+  });
+  it("drops human output in quiet mode", () => {
+    const { bus, out, c } = ch();
+    c.setQuiet(true);
+    bus.log("error", "mma", "boom");
+    c.writeLine("banner");
+    expect(out.data).toBe("");
+  });
+  it("drops diagnostic log events unless setShowDiagnostics is on", () => {
+    const { bus, out, c } = ch();
+    bus.log("warn", "module:agent", "internal retry 1/3", { diagnostic: true });
+    bus.log("warn", "module:agent", "user-facing notice");
+    expect(out.data).not.toContain("internal retry 1/3");
+    expect(out.data).toContain("user-facing notice");
+
+    out.data = "";
+    c.setShowDiagnostics(true);
+    bus.log("warn", "module:agent", "internal retry 1/3", { diagnostic: true });
+    expect(out.data).toContain("internal retry 1/3");
+  });
+  it("keeps quiet across streaming transitions and restores idle when lifted", () => {
+    const { bus, out, c } = ch();
+    c.setQuiet(true);
+    c.beginStreaming();
+    expect(c.getMode()).toBe("quiet");
+    bus.log("error", "mma", "boom");
+    c.writeLine("banner");
+    expect(out.data).toBe("");
+    c.setQuiet(false);
+    expect(c.getMode()).toBe("idle");
+  });
+  it("routes stderr events above an active prompt instead of writing to stderr", async () => {
+    const { bus, out, err, c } = ch();
+    const p = prompt(true);
+    c.attachPrompt(p.sink);
+    bus.emit({ level: "warn", source: "mma", kind: "log", text: "stderr-note", stream: "stderr" });
+    await flushMicrotasks();
+    expect(p.above).toEqual([expect.stringContaining("stderr-note")]);
+    expect(err.data).toBe("");
+    expect(out.data).toBe("");
+  });
+  it("restores streaming after nested modals", () => {
+    const { c } = ch();
+    c.beginStreaming();
+    c.beginModal();
+    c.beginModal();
+    c.endModal();
+    expect(c.getMode()).toBe("modal");
+    c.endModal();
+    expect(c.getMode()).toBe("streaming");
+  });
+  it("writeOverlay is suppressed while prompt is active", () => {
+    const { c, err } = ch();
+    const p = prompt(true);
+    c.attachPrompt(p.sink);
+    c.writeOverlay("\rspin");
+    expect(err.data).toBe("");
+    c.beginStreaming();
+    c.writeOverlay("\rspin");
+    expect(err.data).toBe("\rspin");
+  });
+  it("singleton returns the same instance and resets", () => {
+    resetDefaultChannel();
+    expect(getDefaultChannel()).toBe(getDefaultChannel());
+    resetDefaultChannel();
+  });
+  it("closes a buffered partial line after the prompt deactivates", () => {
+    const { bus, out, c } = ch();
+    const p = prompt(true);
+    c.attachPrompt(p.sink);
+    c.writeRaw("abc");
+    p.set(false);
+    c.beginStreaming();
+    bus.log("warn", "mma", "note");
+    expect(out.data.startsWith("abc\n[WARN] [mma]")).toBe(true);
+  });
+  it("drains pending buffered lines on newlines only", () => {
+    const { c } = ch();
+    const p = prompt(true);
+    c.attachPrompt(p.sink);
+    c.writeRaw("a\nb\nc");
+    expect(p.above).toEqual(["a\nb"]);
+    c.writeRaw("\n");
+    expect(p.above).toEqual(["a\nb", "c"]);
+  });
+  it("endStreaming emits no newline when there is no partial", () => {
+    const { c, out } = ch();
+    c.beginStreaming();
+    c.endStreaming();
+    expect(out.data).toBe("");
+  });
+  it("routes stderr events to the error stream", () => {
+    const { bus, out, err } = ch();
+    bus.emit({ level: "warn", source: "mma", kind: "log", text: "x", stream: "stderr" });
+    expect(err.data).toContain("x");
+    expect(out.data).toBe("");
+  });
+  it("restores the prior mode when quiet is lifted", () => {
+    const { bus, out, c } = ch();
+    c.beginModal();
+    bus.log("info", "mma", "a");
+    c.setQuiet(true);
+    c.setQuiet(false);
+    expect(c.getMode()).toBe("modal");
+    c.endModal();
+    expect(out.data).toContain("a");
+  });
+  it("writes block lines verbatim without formatting", () => {
+    const { out, c } = ch();
+    c.writeLine("banner");
+    expect(out.data).toBe("banner\n");
+  });
+  it("resets state and detaches from the bus after dispose", () => {
+    const { bus, out, c } = ch();
+    c.beginStreaming();
+    c.dispose();
+    expect(c.getMode()).toBe("idle");
+    bus.log("info", "mma", "x");
+    c.writeLine("after");
+    expect(out.data).toBe("");
+  });
+  it("emits ANSI color when forced on", () => {
+    const bus = new OutputBus();
+    const out = new S();
+    const err = new S();
+    const c = new OutputChannel(bus, { out: out as never, err: err as never, color: true });
+    bus.log("warn", "mma", "x");
+    expect(out.data).toContain("\x1b[");
+    c.dispose();
+  });
+  it("clearScreen writes the ANSI clear sequence when no prompt is active", () => {
+    const { c, out } = ch();
+    c.clearScreen();
+    expect(out.data).toBe("\x1b[2J\x1b[H");
+  });
+  it("clearScreen delegates to the active prompt sink", () => {
+    const { c, out } = ch();
+    let called = 0;
+    c.attachPrompt({
+      isActive: () => true,
+      printAbove: () => {},
+      clearScreen: () => {
+        called++;
+      },
+    });
+    c.clearScreen();
+    expect(called).toBe(1);
+    expect(out.data).toBe("");
+  });
+  it("clearScreen falls back to ANSI when the active sink has no clearScreen", () => {
+    const { c, out } = ch();
+    const p = prompt(true);
+    c.attachPrompt(p.sink);
+    c.clearScreen();
+    expect(out.data).toBe("\x1b[2J\x1b[H");
+  });
+  it("clearScreen drops a buffered raw partial", () => {
+    const { c, out } = ch();
+    const p = prompt(true);
+    c.attachPrompt(p.sink);
+    c.writeRaw("abc");
+    c.clearScreen();
+    // Buffered partial is flushed once and the sink lacks clearScreen → ANSI.
+    expect(p.above).toEqual(["abc"]);
+    expect(out.data).toBe("\x1b[2J\x1b[H");
+    c.beginStreaming();
+    expect(out.data).toBe("\x1b[2J\x1b[H");
+  });
+  it("clearScreen resets partialOpen so endStreaming adds no newline", () => {
+    const { c, out } = ch();
+    c.beginStreaming();
+    c.writeRaw("partial");
+    c.clearScreen();
+    const afterClear = out.data;
+    c.endStreaming();
+    expect(out.data).toBe(afterClear);
+  });
+  it("clearScreen is a no-op in quiet mode", () => {
+    const { c, out } = ch();
+    c.setQuiet(true);
+    c.clearScreen();
+    expect(out.data).toBe("");
+  });
+  it("renders config-style bus events once the default channel exists", () => {
+    // Eager creation at process entry (main.ts) guarantees a subscriber exists
+    // before config/bootstrap can emit; this proves the late-default-can-render
+    // half of that contract.
+    resetDefaultChannel();
+    const spy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    try {
+      getDefaultChannel();
+      defaultOutputBus.log("warn", "config", "EARLY_BUS_MARKER");
+      expect(spy).toHaveBeenCalledWith(expect.stringContaining("EARLY_BUS_MARKER"));
+    } finally {
+      spy.mockRestore();
+      resetDefaultChannel();
+    }
+  });
+});

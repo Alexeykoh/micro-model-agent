@@ -1,0 +1,194 @@
+/** Переполнение системного промпта: dry-run, бюджеты контекста и подсказки. */
+import { join } from "path";
+import { PromptBuilder } from "./prompt-builder";
+import type { PromptBlock, PromptBlockKind } from "./types";
+import type { AppConfig } from "../config/types";
+import { t } from "../i18n/index";
+
+// Резолвинг блоков — в prompt-overflow-resolve.ts (без реэкспорта: цикл графа).
+
+/** Предупреждение о переполнении: блок, токены до/после, режим. */
+export interface OverflowWarning {
+  kind: PromptBlockKind;
+  label: string;
+  /** Имя источника (`instructions (docs/)`) — для hint и варнингов (INV-1/17). */
+  sourceLabel?: string;
+  originalTokens: number;
+  resolvedTokens: number;
+  /** `dropped` — не влез даже обрезанным (остаток <100 токенов): блок потерян. */
+  mode: "summary" | "truncate" | "dropped";
+}
+
+/** Итог резолвинга переполнения: замены, hint-блок, варнинги. */
+export interface OverflowResolution {
+  /** Блоки-замены (kind сохранён) вместо исключённых оригиналов. */
+  replacements: PromptBlock[];
+  /** Малый блок: инструкции сжаты, как читать полный файл. Null, если резолвить нечего. */
+  hintBlock: PromptBlock | null;
+  warnings: OverflowWarning[];
+}
+
+/** Итог dry-run: сколько влезло и какие kind-блоки не влезли. */
+/** Человеческое имя kind-блока для hint и варнингов. */
+export const KIND_LABEL: Record<PromptBlockKind, string> = {
+  instructions: "project instructions (AGENTS.md)",
+  "project-map": "project map",
+};
+
+/** Файл-первоисточник kind-блока для back-reference в hint. */
+export const KIND_SOURCE_FILE: Record<PromptBlockKind, string> = {
+  instructions: "AGENTS.md",
+  "project-map": "",
+};
+
+/**
+ * Текст hint-блока о сжатых/потерянных источниках. Называет каждый источник
+ * (INV-1/17), дублирующиеся строки схлопывает. Null — резолвить было нечего.
+ */
+export function buildOverflowHintContent(
+  warnings: OverflowWarning[],
+  unresolved: PromptBlockKind[],
+  hasReplacements: boolean,
+): string | null {
+  if (!hasReplacements && unresolved.length === 0) return null;
+  const seen = new Set<string>();
+  const lines: string[] = [];
+  for (const w of warnings) {
+    const name = w.sourceLabel ?? KIND_LABEL[w.kind];
+    const line =
+      w.mode === "dropped"
+        ? `- ${name}: did not fit at all — read it yourself if needed`
+        : `- ${name}: ${w.originalTokens} tokens → ${w.resolvedTokens} tokens (${w.mode})`;
+    if (w.mode === "dropped" && seen.has(line)) continue;
+    seen.add(line);
+    lines.push(line);
+  }
+  const readHints = [
+    ...new Set(
+      warnings
+        .filter((w) => KIND_SOURCE_FILE[w.kind])
+        .map(
+          (w) =>
+            `Read the full ${KIND_SOURCE_FILE[w.kind]} with read_file if details are missing.`,
+        ),
+    ),
+  ];
+  return [
+    `[Instructions note] Some project blocks exceeded the system-prompt budget and were compressed:`,
+    ...lines,
+    ...readHints,
+  ].join("\n");
+}
+
+export interface OverflowDryRun {
+  includedTokens: number;
+  /** Исключённые блоки с kind (instructions / project-map). */
+  overflow: PromptBlock[];
+}
+
+/**
+ * Статический dry-run бюджета системного промпта: какие kind-блоки не влезают.
+ * Нужен bootstrap для стартового баннера и Agent перед первым LLM-вызовом.
+ */
+export function dryRunOverflow(allBlocks: PromptBlock[], systemBudget: number): OverflowDryRun {
+  const builder = new PromptBuilder(systemBudget);
+  builder.addBlocks(allBlocks);
+  const result = builder.build();
+  const includedTokens = result.blocks
+    .filter((b) => b.included)
+    .reduce((sum, b) => sum + b.tokens, 0);
+  const overflow = result.excludedBlocks.filter((b): b is PromptBlock & { kind: PromptBlockKind } =>
+    Boolean(b.kind),
+  );
+  return { includedTokens, overflow };
+}
+
+/** Источник активного окна контекста (запись провайдера или глобал). */
+export interface ContextWindowSource {
+  source: "global" | "entry";
+  /** Для "entry": метка записи, задающей contextWindow. */
+  label?: string;
+  value: number;
+}
+
+/** Источник активного окна: запись провайдера (entry) или глобальный конфиг. */
+export function resolveContextWindowSource(config: AppConfig): ContextWindowSource {
+  const entries = config.provider.entries ?? [];
+  const activeLabel = config.provider.active;
+  const activeEntry =
+    entries.find((e) => e.label && e.label === activeLabel) ??
+    (entries.length === 1 ? entries[0] : undefined);
+  if (activeEntry?.contextWindow) {
+    return { source: "entry", label: activeEntry.label, value: activeEntry.contextWindow };
+  }
+  return { source: "global", value: config.contextWindow };
+}
+
+/**
+ * Человеческая подсказка, как поднять окно контекста: глобал (`mma context <N>`)
+ * или override записи провайдера (править файл домена провайдера).
+ */
+export function contextWindowHint(config: AppConfig, configDir: string, recommended: number): string {
+  const src = resolveContextWindowSource(config);
+  if (src.source === "global") {
+    return `run "mma context ${recommended}"`;
+  }
+  return `edit "${join(configDir, "config", "provider.json")}" → provider.entries[label="${src.label}"].contextWindow = ${recommended}`;
+}
+
+/**
+ * Ближайший стандартный размер контекста, чей системный бюджет
+ * (`systemFraction`, по умолчанию 10%) вмещает `neededSystemTokens`.
+ * Фолбэк — крупнейший известный (L1: шкала продлена до 1M — хостед-модели
+ * с окнами 500K–1M раньше упирались в потолок 262K).
+ */
+export function recommendContextSize(neededSystemTokens: number, systemFraction = 0.1): number {
+  const sizes = [8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576];
+  const fraction = systemFraction > 0 ? systemFraction : 0.1;
+  return (
+    sizes.find((s) => Math.floor(s * fraction) >= neededSystemTokens) ?? sizes[sizes.length - 1]
+  );
+}
+
+/** Окно контекста, чтобы доля `systemFraction` покрыла `neededTokens`. */
+export function requiredContextWindow(neededTokens: number, systemFraction: number): number {
+  const fraction = systemFraction > 0 ? systemFraction : 0.1;
+  return Math.ceil(neededTokens / fraction);
+}
+
+/** Доля системного промпта ТЕКУЩЕГО окна, чтобы покрыть `neededTokens`. */
+export function requiredSystemFraction(neededTokens: number, contextWindow: number): number {
+  if (contextWindow <= 0) return 1;
+  return Math.min(1, Math.ceil((neededTokens / contextWindow) * 100) / 100);
+}
+
+/**
+ * Локализованный конкретный фикс переполнения: сырое требование + оба рычага
+ * (больше окно или больше доля текущего окна), а не грубый стандартный размер.
+ */
+export function overflowHint(
+  config: AppConfig,
+  configDir: string | undefined,
+  neededTokens: number,
+): string {
+  const fraction = config.contextBudget?.systemPrompt ?? 0.1;
+  const budget = Math.floor(config.contextWindow * fraction);
+  // L1: доля из живого конфига, а не захардкоженные 10% — иначе хинт врёт
+  // при нестандартном systemPrompt.
+  const recommended = recommendContextSize(neededTokens, fraction);
+  const requiredWindow = requiredContextWindow(neededTokens, fraction);
+  const requiredFraction = requiredSystemFraction(neededTokens, config.contextWindow);
+  const how = configDir
+    ? contextWindowHint(config, configDir, recommended)
+    : `increase contextWindow (e.g. to ${recommended})`;
+  return [
+    t("prompt.overflow.hint_needed", {
+      needed: neededTokens,
+      window: config.contextWindow,
+      fraction,
+      budget,
+    }),
+    t("prompt.overflow.hint_window", { required: requiredWindow, recommended, how }),
+    t("prompt.overflow.hint_fraction", { fraction: requiredFraction }),
+  ].join(" ");
+}

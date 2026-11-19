@@ -1,0 +1,242 @@
+/**
+ * Фаза системного промпта агента (`TurnCoordinator`, INV-23): сборка промпта из
+ * статических/динамических/плагинных блоков с override-ами переполнения, лог
+ * состояния контекста, `/sysprompt`-инфо, одноразовый резолв переполнения и
+ * обновление системного сообщения в контексте.
+ *
+ * Вынесено из `core/agent.ts`; функции работают над `PromptPhaseHost` — узким
+ * видом `Agent`.
+ */
+import { join } from "path";
+import { projectMmaDir } from "../../config/paths";
+import { PromptBuilder, omittedBlocksNote } from "../prompt-builder";
+import { overflowHint } from "../prompt-overflow";
+import { HINT_BLOCK_TOKENS, resolvePromptOverflow } from "../prompt-overflow-resolve";
+import { buildServiceJobPrompt } from "../system-prompt";
+import { estimateTokens } from "../../llm/token-counter";
+import {
+  applyOverrides,
+  gateBlocks,
+  overflowFingerprint,
+  pluginPromptBlocks,
+} from "./prompt-blocks";
+import type { PromptBlock, PromptProfile } from "../types";
+import type { AgentDeps } from "../agent";
+import { t } from "../../i18n/index";
+
+/** Мутабельный вид `Agent`, которым владеет фаза промпта. */
+export interface PromptPhaseHost {
+  deps: AgentDeps;
+  /** Профиль промпта на текущий ход (`service-job` — без блоков харнесса). */
+  promptProfile: PromptProfile;
+  /** Замены переполнения по имени источника (сжатые instructions/project-map). */
+  promptOverrides: Map<string, PromptBlock>;
+  /** Малый всегда-включённый hint-блок о сжатии. */
+  overflowHintBlock: PromptBlock | null;
+  /**
+   * Снимок карты проекта на текущий ход. Карта меняется после каждой записи
+   * (индексер пересобирается), а в системном промпте это рвёт KV-кеш префикса
+   * на каждой итерации (наблюдалось: стабильность 51%). Внутри хода карта
+   * имутабельна; свежую даёт тул `project_map` (аудит §8.7).
+   */
+  frozenMapBlock: PromptBlock | null;
+}
+
+export interface SystemPromptBuild {
+  prompt: string;
+  excluded: string[];
+  excludedBlocks: PromptBlock[];
+  blocks: Array<{ label: string; priority: string; tokens: number; included: boolean }>;
+  /** Токены essential-блоков (см. `BuildResult.essentialTokens`, B3). */
+  essentialTokens: number;
+  /** Essential-блоки рвут бюджет — вызывающий обязан предупредить (B3). */
+  essentialOverBudget: boolean;
+  /**
+   * Отпечаток входов резолва переполнения: бюджет + хеши kind-блоков
+   * (instructions/project-map) ДО подмен. Стабилен между прогонами, пока ни
+   * контент, ни бюджет не изменились — по нему `session-start` понимает, что
+   * нужен повторный резолв (B16/B17). Для `service-job` — константа.
+   */
+  fingerprint: string;
+}
+
+/** Собирает системный промпт из блоков с учётом override-ов переполнения. */
+export function buildSystemPrompt(host: PromptPhaseHost): SystemPromptBuild {
+  const { deps } = host;
+  // B2: учёт бюджета — одной линейкой (`estimateTokens`) во всём промпт-тракте
+  // (блоки, builder, dry-run, резолвер переполнения). Точный tiktoken-счётчик
+  // провайдера (`llmProvider.countTokens`) для бюджета не используется:
+  // смешанные линейки расходились до ±30% и вытесняли случайные блоки.
+  // Выбор линейки под класс модели — задача L6.
+  if (host.promptProfile === "service-job") {
+    const tools = deps.toolExecutor.getToolDefinitions(deps.toolTags).map((t) => t.name);
+    const prompt = buildServiceJobPrompt(deps.config.model, tools, deps.config.security);
+    return {
+      prompt,
+      excluded: [],
+      excludedBlocks: [],
+      blocks: [
+        {
+          label: "service-job",
+          priority: "high",
+          tokens: estimateTokens(prompt),
+          included: true,
+        },
+      ],
+      essentialTokens: 0,
+      essentialOverBudget: false,
+      fingerprint: "service-job",
+    };
+  }
+  const systemBudget = Math.floor(
+    deps.config.contextWindow * deps.config.contextBudget.systemPrompt,
+  );
+  const builder = new PromptBuilder(systemBudget);
+  const staticRaws = deps.promptBlocks;
+  const dynamicRaws = deps.getDynamicPromptBlocks?.() ?? [];
+  // B16/B17: отпечаток считается по исходникам (до override-подмен и фильтров).
+  const fingerprint = overflowFingerprint(systemBudget, [...staticRaws, ...dynamicRaws]);
+  // B12: гейт по реально видимым тегам схемы (allowlist-aware).
+  builder.addBlocks(applyOverrides(gateBlocks(deps, staticRaws), host.promptOverrides));
+  const dynamic = gateBlocks(deps, dynamicRaws);
+  const stableDynamic = freezeProjectMap(host, applyOverrides(dynamic, host.promptOverrides));
+  if (stableDynamic.length > 0) {
+    builder.addBlocks(stableDynamic);
+  }
+  const pluginBlocks = pluginPromptBlocks(deps, estimateTokens);
+  if (pluginBlocks.length > 0) {
+    builder.addBlocks(pluginBlocks);
+  }
+  if (host.overflowHintBlock) {
+    builder.addBlock(host.overflowHintBlock);
+  }
+  const result = builder.build();
+  // B4: остаток бюджета после первого прохода — заметка не должна его рвать.
+  const usedTokens = result.blocks
+    .filter((b) => b.included)
+    .reduce((sum, b) => sum + b.tokens, 0);
+  const note = omittedBlocksNote(result.excludedBlocks, Math.max(0, systemBudget - usedTokens));
+  if (!note) {
+    return {
+      prompt: result.prompt,
+      excluded: result.excluded,
+      excludedBlocks: result.excludedBlocks,
+      blocks: result.blocks,
+      essentialTokens: result.essentialTokens,
+      essentialOverBudget: result.essentialOverBudget,
+      fingerprint,
+    };
+  }
+  builder.addBlock(note);
+  const withNote = builder.build();
+  return {
+    prompt: withNote.prompt,
+    excluded: withNote.excluded,
+    excludedBlocks: withNote.excludedBlocks,
+    blocks: withNote.blocks,
+    essentialTokens: withNote.essentialTokens,
+    essentialOverBudget: withNote.essentialOverBudget,
+    fingerprint,
+  };
+}
+
+/**
+ * Держит карту проекта СНИМКОМ на ход: внутри хода системный промпт
+ * имутабелен (KV-кеш не рвётся), между ходами снимок обновляется.
+ */
+function freezeProjectMap(host: PromptPhaseHost, blocks: PromptBlock[]): PromptBlock[] {
+  const idx = blocks.findIndex((b) => b.kind === "project-map");
+  if (idx < 0) return blocks;
+  const current = blocks[idx]!;
+  if (!host.frozenMapBlock) host.frozenMapBlock = current;
+  const next = [...blocks];
+  next[idx] = host.frozenMapBlock;
+  return next;
+}
+
+/** Диагностика промпта (`/sysprompt`, лог контекста) — в `prompt-info.ts`. */
+
+/**
+ * Одноразовая (первый прогон) обработка instructions/project-map сверх бюджета:
+ * LLM суммаризирует в остаток (диск-кэш) или усекает; малый hint-блок говорит
+ * модели, что случилось и как читать полный источник.
+ */
+/**
+ * Втаскивает переполненные источники в бюджет (W5): truncate-выжимки.
+ * Без `truncate` блок не влезет в следующий `buildSystemPrompt`, и модель его не увидит.
+ * Каждая выжимка живёт по имени, а не shared `kind`; hint — только для summary.
+ */
+export async function resolvePromptOverflowOnce(host: PromptPhaseHost): Promise<void> {
+  const { deps } = host;
+  const cfg = deps.config;
+  // Пере-резолв после правки AGENTS.md: старые замены описывают прежний текст.
+  // Чистим ДО вычисления dry и до раннего return — иначе укороченный файл
+  // остался бы сжатым по прошлой версии (INV-6: деградация не молча).
+  host.promptOverrides.clear();
+  host.overflowHintBlock = null;
+  const dry = buildSystemPrompt(host);
+  // B3: essential-блоки рвут бюджет — единственная точка предупреждения для
+  // всех поверхностей (main + раннеры + one-shot): bootstrap dry-run молчит
+  // про essential специально, чтобы не дублировать баннер (kind-варнинги
+  // там уже есть).
+  if (dry.essentialOverBudget) {
+    const systemBudget = Math.floor(cfg.contextWindow * cfg.contextBudget.systemPrompt);
+    deps.logger.warn(
+      t("prompt.overflow.essential_over_budget", {
+        essential: String(dry.essentialTokens),
+        budget: String(systemBudget),
+        hint: overflowHint(cfg, deps.configDir, dry.essentialTokens),
+      }),
+    );
+  }
+  const overflow = dry.excludedBlocks.filter((b) => Boolean(b.kind));
+  if (overflow.length === 0) return;
+
+  const systemBudget = Math.floor(cfg.contextWindow * cfg.contextBudget.systemPrompt);
+  const res = await resolvePromptOverflow({
+    overflow,
+    includedTokens: dry.blocks.filter((b) => b.included).reduce((s, b) => s + b.tokens, 0),
+    systemBudget,
+    provider: cfg.instructions?.summarize === false ? null : deps.llmProvider,
+    cacheDir: join(projectMmaDir(deps.baseDir), "cache", "prompt-summaries"),
+    logger: deps.logger,
+    sessionId: deps.sessionManager?.getActiveMeta()?.id,
+    model: deps.config.model,
+    contextWindow: cfg.contextWindow,
+  });
+  for (const r of res.replacements) {
+    if (r.kind) host.promptOverrides.set(r.label ?? r.kind, r);
+  }
+  // Hint оставляем, когда модели нужно знать о потере: summary (читать полный
+  // файл при нехватке деталей) или dropped (источника в промпте нет вообще).
+  // Чистый truncate самодостаточен — весь срез уже лежит в подмене.
+  host.overflowHintBlock = res.warnings.some((w) => w.mode !== "truncate") ? res.hintBlock : null;
+
+  const needed =
+    dry.blocks.filter((b) => b.included).reduce((s, b) => s + b.tokens, 0) +
+    overflow.reduce((s, b) => s + b.estimatedTokens, 0) +
+    HINT_BLOCK_TOKENS;
+  const hint = overflowHint(cfg, deps.configDir, needed);
+  for (const w of res.warnings) {
+    if (w.mode === "dropped") continue; // уже предупреждены внутри резолва.
+    deps.logger.warn(
+      t("prompt.overflow.exceeded", {
+        label: w.label,
+        original: String(w.originalTokens),
+        needed: String(needed),
+        budget: String(systemBudget),
+        mode: w.mode === "summary" ? "summarized" : "truncated",
+        resolved: String(w.resolvedTokens),
+        hint,
+      }),
+    );
+  }
+}
+
+/** Обновляет системное сообщение в контексте, если промпт изменился. */
+/** Обновляет системное сообщение в контексте, если промпт изменился. */
+export function refreshSystemPrompt(host: PromptPhaseHost): void {
+  const { prompt } = buildSystemPrompt(host);
+  const current = host.deps.contextManager.getActiveHistory().find((m) => m.role === "system");
+  if (!current || current.content !== prompt) host.deps.contextManager.updateSystemPrompt?.(prompt);
+}

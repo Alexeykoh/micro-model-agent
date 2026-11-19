@@ -1,0 +1,567 @@
+import { describe, it, expect, vi } from "vitest";
+import { join, sep } from "path";
+import { tmpdir } from "os";
+import { Renderer, summarizeArgs, humanArgs } from "../../src/ui/renderer";
+import { OutputBus } from "../../src/output/bus";
+import { OutputChannel, resetDefaultChannel } from "../../src/output";
+import { writeWarning } from "../../src/ui/output";
+import { clearLastAction, getLastAction } from "../../src/ui/action-log";
+
+function makeOut(): { text: () => string; stream: NodeJS.WritableStream } {
+  const parts: string[] = [];
+  const stream = {
+    write: (s: string) => {
+      parts.push(s);
+      return true;
+    },
+  } as unknown as NodeJS.WritableStream;
+  return { text: () => parts.join(""), stream };
+}
+
+function makeRenderer(opts: { rich: boolean; verbosity?: "quiet" | "normal" | "verbose" }): {
+  renderer: Renderer;
+  text: () => string;
+} {
+  const out = makeOut();
+  const channel = new OutputChannel(new OutputBus(), {
+    out: out.stream,
+    err: out.stream,
+    color: false,
+  });
+  const renderer = new Renderer({
+    rich: opts.rich,
+    spinner: false,
+    channel,
+    width: 60,
+    verbosity: opts.verbosity,
+  });
+  return { renderer, text: out.text };
+}
+
+describe("summarizeArgs", () => {
+  it("prefers known path-like keys", () => {
+    expect(summarizeArgs({ path: "src/a.ts", offset: 10 })).toBe("src/a.ts");
+  });
+
+  it("falls back to JSON and truncates", () => {
+    const long = "x".repeat(100);
+    const out = summarizeArgs({ data: long });
+    expect(out).toContain("…");
+  });
+
+  it("returns empty for empty args", () => {
+    expect(summarizeArgs({})).toBe("");
+  });
+});
+
+describe("humanArgs", () => {
+  it("renders plan updates without raw JSON", () => {
+    const out = humanArgs("plan", { action: "update", status: "done", step: 2 });
+    expect(out).not.toContain("{");
+    expect(out).toContain("2");
+    expect(out).toContain("done");
+  });
+
+  it("uses the plan title for create", () => {
+    expect(humanArgs("plan", { action: "create", title: "Landing" })).toBe("Landing");
+  });
+
+  it("renders action-style tools as a phrase instead of JSON", () => {
+    expect(humanArgs("browser", { action: "scroll", direction: "down" })).toBe("scroll down");
+    expect(humanArgs("browser", { action: "snapshot" })).toBe("snapshot");
+    expect(humanArgs("browser", { action: "scroll", direction: "down" })).not.toContain("{");
+  });
+
+  it("renders common scalar args without JSON", () => {
+    expect(humanArgs("glob", { pattern: "**/*.ts" })).toBe("**/*.ts");
+    expect(humanArgs("grep", { pattern: "TODO" })).toBe("TODO");
+    expect(humanArgs("subagent", { task: "gather assets" })).toBe("gather assets");
+    expect(humanArgs("set_thinking", { level: "high" })).toBe("high");
+    expect(humanArgs("attach_image", { source: "mock.png" })).toBe("mock.png");
+    expect(humanArgs("verify", { step: 2 })).toBe("2");
+    expect(humanArgs("process_log", { id: "4821" })).toBe("4821");
+  });
+
+  it("composes multi-key tools", () => {
+    expect(humanArgs("move_file", { from: "a.png", to: "b.png" })).toBe("a.png → b.png");
+    expect(humanArgs("mcp_call", { server: "fs", tool: "read_file" })).toBe("fs/read_file");
+    expect(humanArgs("enable_tools", { tags: ["browser", "subagent"] })).toBe("browser, subagent");
+    expect(humanArgs("remember", { category: "facts", entry: "hero is 48px" })).toContain(
+      "hero is 48px",
+    );
+  });
+
+  it("falls back to the generic summary for ordinary tools", () => {
+    expect(humanArgs("read_file", { path: "src/a.ts" })).toBe("src/a.ts");
+  });
+});
+
+describe("Renderer", () => {
+  it("renders a tool card with the action glyph and footer", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.toolStart("write_file", { path: "src/a.ts" }, undefined, "📝");
+    renderer.meta("\ncreated src/a.ts\n");
+    renderer.toolEnd("write_file", 12, false);
+    renderer.flush();
+    const out = text();
+    // Per-tool emoji icons are ignored — the shared glyph is used.
+    expect(out).not.toContain("📝");
+    expect(out).toContain("◇");
+    expect(out).toContain("src/a.ts");
+    expect(out).toContain("✓");
+    expect(out).toContain("12ms");
+  });
+
+  it("marks failed tools with an error marker", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.toolStart("bash", { command: "false" });
+    renderer.toolEnd("bash", 5, true);
+    renderer.flush();
+    expect(text()).toContain("✗");
+  });
+
+  it("formats streamed text as markdown", () => {
+    const { renderer, text } = makeRenderer({ rich: false });
+    renderer.text("**bold** answer\n");
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("bold");
+    expect(out).toContain("answer");
+  });
+
+  it("renders a chunked markdown answer once, without garbling", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.text("**bo");
+    renderer.text("ld** ans");
+    renderer.text("wer\n");
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("bold answer");
+    // The formatted line is emitted exactly once (the raw partial is replaced,
+    // not duplicated) — the 1.0.0 streaming regression.
+    expect(out.split("bold answer").length - 1).toBe(1);
+  });
+
+  it("writes errors to the error stream", () => {
+    const { renderer, text } = makeRenderer({ rich: false });
+    renderer.error("boom");
+    expect(text()).toContain("boom");
+  });
+
+  it("closes an abandoned card on the next text write", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.toolStart("bash", { command: "sleep 1" });
+    renderer.text("final answer");
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("✓");
+    expect(out).toContain("final answer");
+  });
+
+  it("renders thought block with timing", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.thinkingStart();
+    renderer.reasoning("analyzing the request...");
+    renderer.thinkingEnd();
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("✦");
+    expect(out).toContain("thinking");
+    expect(out).toContain("ms");
+    // Label separated from the model's own words by a dim `·`.
+    expect(out).toContain("✦ thinking · analyzing the request...");
+  });
+
+  it("separates the tool label from its arguments with `·`", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.toolStart("read_file", { path: "src/a.ts" });
+    renderer.toolEnd("read_file", 4, false);
+    renderer.flush();
+    expect(text()).toContain("Reading file · src/a.ts");
+  });
+
+  it("does not render empty thought block", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.thinkingStart();
+    renderer.thinkingEnd();
+    renderer.flush();
+    expect(text()).not.toContain("✦");
+  });
+
+  it("closes the thought block before the final answer", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.thinkingStart();
+    renderer.reasoning("weighing options");
+    renderer.text("here is the answer");
+    renderer.flush();
+    const out = text();
+    const durIdx = out.search(/\d+(ms|s)/);
+    expect(durIdx).toBeGreaterThanOrEqual(0);
+    // The duration belongs to the thought line, never inside the answer.
+    expect(out.indexOf("here is the answer")).toBeGreaterThan(durIdx);
+  });
+
+  it("thinking is cleared by a tool start", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.thinkingStart();
+    renderer.toolStart("bash", { command: "ls" });
+    renderer.toolEnd("bash", 1, false);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("✓");
+    expect(out).toContain("ls");
+  });
+
+  it("shows step context above the tool", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.toolStart("bash", { command: "bun run build" }, "step 2: run the build");
+    renderer.toolEnd("bash", 10, false);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("↳");
+    expect(out).toContain("step 2: run the build");
+  });
+
+  it("shows the session cost in the tool footer when pricing is known", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.toolStart("write_file", { path: "src/a.ts" });
+    renderer.toolEnd("write_file", 10, false, 5, 0.0012);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("✓");
+    expect(out).toContain("cost");
+    expect(out).toContain("$0.0012");
+  });
+
+  it("omits the cost when the value is zero or unknown", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.toolStart("write_file", { path: "src/a.ts" });
+    renderer.toolEnd("write_file", 10, false, 5, 0);
+    renderer.flush();
+    expect(text()).not.toContain("cost");
+  });
+
+  it("renders a plan checklist block verbatim", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.planBlock(["[plan_x] Check", "  [x] 1. done", "  [ ] 2. todo"]);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("[plan_x] Check");
+    expect(out).toContain("[ ] 2. todo");
+  });
+
+  it("closes an open card before rendering the plan block", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.toolStart("bash", { command: "bun run build" });
+    renderer.planBlock(["[plan_x] Check"]);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("✓");
+    expect(out).toContain("[plan_x] Check");
+  });
+
+  it("renders footer with model info", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.footer("qwen3.5-9b", "ollama", 2800);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("⟡");
+    expect(out).toContain("qwen3.5-9b");
+    expect(out).toContain("ollama");
+    expect(out).toContain("2.8s");
+  });
+
+  it("flushes a pending markdown partial before a tool header", () => {
+    const { renderer, text } = makeRenderer({ rich: false });
+    renderer.text("pending partial");
+    renderer.toolStart("bash", { command: "ls" });
+    renderer.toolEnd("bash", 1, false);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("pending partial\n");
+  });
+
+  it("starts the answer on a fresh line without a marker prefix", () => {
+    const { renderer, text } = makeRenderer({ rich: true });
+    renderer.text("hello world");
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("hello world");
+    expect(out).not.toContain("- hello world");
+  });
+
+  describe("relative paths in tool headers", () => {
+    function makeBaseRenderer(baseDir?: string, width = 60) {
+      const out = makeOut();
+      const channel = new OutputChannel(new OutputBus(), {
+        out: out.stream,
+        err: out.stream,
+        color: false,
+      });
+      const renderer = new Renderer({
+        rich: true,
+        spinner: false,
+        channel,
+        width,
+        baseDir,
+      });
+      return { renderer, text: out.text };
+    }
+
+    it("shortens absolute paths inside the workspace", () => {
+      const base = join(tmpdir(), `mma-renderer-${process.pid}`);
+      const abs = join(base, "src", "a.ts");
+      const { renderer, text } = makeBaseRenderer(base);
+      renderer.toolStart("read_file", { path: abs });
+      renderer.flush();
+      expect(text()).toContain(`src${sep}a.ts`.split(sep).join("/"));
+      expect(text()).not.toContain(`${sep}mma-renderer-${process.pid}${sep}src`);
+    });
+
+    it("keeps paths outside the workspace as-is", () => {
+      const root = join(tmpdir(), `mma-renderer-out-${process.pid}`);
+      const abs = join(root, "elsewhere", "b.ts");
+      const { renderer, text } = makeBaseRenderer(join(root, "workspace"));
+      renderer.toolStart("read_file", { path: abs });
+      renderer.flush();
+      expect(text()).toContain(abs.slice(0, 30));
+    });
+
+    it("keeps relative paths untouched when no baseDir is set", () => {
+      const { renderer, text } = makeRenderer({ rich: true });
+      renderer.toolStart("read_file", { path: "src/a.ts" });
+      renderer.flush();
+      expect(text()).toContain("src/a.ts");
+    });
+  });
+
+  describe("busy spinners", () => {
+    function makeRich(): {
+      renderer: Renderer;
+      out: () => string;
+      err: () => string;
+    } {
+      const outState = { data: "" };
+      const errState = { data: "" };
+      const out = {
+        write: (s: string) => {
+          outState.data += s;
+          return true;
+        },
+      } as unknown as NodeJS.WritableStream;
+      const err = {
+        write: (s: string) => {
+          errState.data += s;
+          return true;
+        },
+      } as unknown as NodeJS.WritableStream;
+      const channel = new OutputChannel(new OutputBus(), { out, err, color: false });
+      const renderer = new Renderer({
+        rich: true,
+        spinner: true,
+        channel,
+        width: 60,
+      });
+      return { renderer, out: () => outState.data, err: () => errState.data };
+    }
+
+    it("spins while thinking", () => {
+      const { renderer, err } = makeRich();
+      renderer.thinkingStart();
+      expect(err().toLowerCase()).toContain("thinking");
+      renderer.thinkingEnd();
+    });
+
+    it("spinner shows the applied reasoning level (INV-R9)", () => {
+      const { renderer, err } = makeRich();
+      renderer.thinkingStart({ level: "low", source: "policy" });
+      expect(err().toLowerCase()).toContain("thinking");
+      expect(err()).toContain("low");
+      renderer.thinkingEnd();
+    });
+
+    it("spinner says `default` when effort is not applied", () => {
+      const { renderer, err } = makeRich();
+      renderer.thinkingStart({ level: "default", source: "policy" });
+      expect(err()).toContain("default");
+      renderer.thinkingEnd();
+    });
+
+    it("spins while a tool runs and clears on completion", () => {
+      const { renderer, out, err } = makeRich();
+      renderer.toolStart("read_file", { path: "src/a.ts" });
+      expect(err()).toContain("Reading file");
+      expect(out()).toContain("src/a.ts");
+      renderer.toolEnd("read_file", 5, false);
+      expect(err()).toMatch(/\r\x1b\[K$/);
+      expect(out()).toContain("✓");
+    });
+
+    it("restarts the spinner on a later thinking phase", () => {
+      const { renderer, err } = makeRich();
+      renderer.toolStart("bash", { command: "ls" });
+      renderer.toolEnd("bash", 1, false);
+      renderer.thinkingStart();
+      expect(err().toLowerCase()).toContain("thinking");
+      renderer.thinkingEnd();
+    });
+
+    it("does not spin for interactive tools", () => {
+      const { renderer, err } = makeRich();
+      renderer.toolStart("question", {});
+      expect(err()).not.toContain("Question to user");
+      renderer.toolEnd("question", 1, false);
+    });
+  });
+});
+
+describe("Renderer quiet verbosity", () => {
+  function makeQuiet(): { renderer: Renderer; text: () => string } {
+    const out = makeOut();
+    const channel = new OutputChannel(new OutputBus(), {
+      out: out.stream,
+      err: out.stream,
+      color: false,
+    });
+    const renderer = new Renderer({
+      rich: false,
+      spinner: false,
+      channel,
+      width: 60,
+      verbosity: "quiet",
+    });
+    return { renderer, text: out.text };
+  }
+
+  it("folds an action into a single line and hides its body", () => {
+    const { renderer, text } = makeQuiet();
+    renderer.toolStart("read_file", { path: "src/a.ts" });
+    expect(text()).not.toContain("Reading file");
+    renderer.meta("file content that should stay hidden\n");
+    renderer.toolEnd("read_file", 5, false);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("◇");
+    expect(out).toContain("Reading file");
+    expect(out).toContain("src/a.ts");
+    expect(out).toContain("✓");
+    expect(out).not.toContain("file content that should stay hidden");
+  });
+
+  it("still surfaces the first body line for a failure", () => {
+    const { renderer, text } = makeQuiet();
+    renderer.toolStart("bash", { command: "false" });
+    renderer.meta("exit code 1: command failed\nmore noise\n");
+    renderer.toolEnd("bash", 5, true);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("✗");
+    expect(out).toContain("exit code 1: command failed");
+    expect(out).not.toContain("more noise");
+  });
+
+  it("summarizes a run of read-only actions into one line", () => {
+    const { renderer, text } = makeQuiet();
+    renderer.toolStart("read_file", { path: "src/a.ts" });
+    renderer.toolEnd("read_file", 4, false);
+    renderer.toolStart("grep", { query: "foo" });
+    renderer.toolEnd("grep", 6, false);
+    renderer.toolStart("list_dir", { path: "src" });
+    renderer.toolEnd("list_dir", 5, false);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("│");
+    expect(out).toContain("3 actions");
+    expect(out).toContain("✓");
+    // Individual recon lines are folded away.
+    expect(out).not.toContain("Reading file");
+    expect(out).not.toContain("Searching content");
+  });
+
+  it("keeps mutating actions visible and flushes the recon group first", () => {
+    const { renderer, text } = makeQuiet();
+    renderer.toolStart("read_file", { path: "src/a.ts" });
+    renderer.toolEnd("read_file", 4, false);
+    renderer.toolStart("write_file", { path: "src/a.ts" });
+    renderer.toolEnd("write_file", 8, false);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("Writing file");
+    // A lone recon action prints as a normal line, not a group.
+    expect(out).not.toContain("actions");
+  });
+
+  it("records the last action (with body) for Ctrl+O reprint", () => {
+    clearLastAction();
+    const { renderer } = makeQuiet();
+    renderer.toolStart("write_file", { path: "src/a.ts" });
+    renderer.meta("+ created src/a.ts\n+ second line\n");
+    renderer.toolEnd("write_file", 8, false);
+    renderer.flush();
+    const last = getLastAction();
+    expect(last).not.toBeNull();
+    expect(last!.tool).toBe("write_file");
+    expect(last!.label).toBe("Writing file");
+    expect(last!.args).toBe("src/a.ts");
+    expect(last!.status).toBe("ok");
+    expect(last!.body.join("\n")).toContain("created src/a.ts");
+    expect(last!.body.join("\n")).toContain("second line");
+    clearLastAction();
+  });
+});
+
+describe("deprecated output wrappers", () => {
+  it("writeWarning reaches the default channel before any Renderer exists", () => {
+    const spy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    try {
+      resetDefaultChannel();
+      writeWarning("warn-test");
+      const written = spy.mock.calls.map((call) => String(call[0])).join("");
+      expect(written).toContain("warn-test");
+    } finally {
+      resetDefaultChannel();
+      spy.mockRestore();
+    }
+  });
+});
+
+describe("quiet repeat folding (ses_muih0ah5)", () => {
+  function runBash(renderer: Renderer, duration: number, error = false): void {
+    renderer.toolStart("bash", { command: "npm view x version" });
+    renderer.toolEnd("bash", duration, error);
+  }
+
+  it("folds three identical successful actions into one ×3 line", () => {
+    const { renderer, text } = makeRenderer({ rich: false, verbosity: "quiet" });
+    runBash(renderer, 10);
+    runBash(renderer, 20);
+    runBash(renderer, 30);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("×3");
+    expect(out.match(/✓/g)?.length).toBe(1);
+  });
+
+  it("prints distinct actions on separate lines without folding", () => {
+    const { renderer, text } = makeRenderer({ rich: false, verbosity: "quiet" });
+    runBash(renderer, 10);
+    renderer.toolStart("write_file", { path: "a.txt" });
+    renderer.toolEnd("write_file", 5, false);
+    runBash(renderer, 10);
+    renderer.flush();
+    const out = text();
+    expect(out).not.toContain("×");
+    expect(out.match(/✓/g)?.length).toBe(3);
+  });
+
+  it("an error flushes the folded run and prints separately", () => {
+    const { renderer, text } = makeRenderer({ rich: false, verbosity: "quiet" });
+    runBash(renderer, 10);
+    runBash(renderer, 10);
+    runBash(renderer, 5, true);
+    renderer.flush();
+    const out = text();
+    expect(out).toContain("×2");
+    expect(out).toContain("✗");
+  });
+});

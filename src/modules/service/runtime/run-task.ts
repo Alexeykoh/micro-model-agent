@@ -1,0 +1,183 @@
+/**
+ * Один ход над сессией (task) поверх её `SessionRunner`.
+ *
+ * Копирует синтез tool-call id из web-раннера (`makeRunAgent`): `ToolEvent` id не
+ * несёт, поэтому `start`/`end` матчатся LIFO по имени. Вместо webui-состояния
+ * пишет в транспортно-чистый `ServiceForwarder`. Контекст/тулы — ядровые.
+ *
+ * Structured output (§8.2): при `output.format === "json"` в вход добавляется
+ * инструкция; ответ парсится/валидируется, при провале — один retry, иначе
+ * `outputInvalid`.
+ */
+import type { AgentResult, PromptProfile, ToolEvent } from "../../../core/types";
+import type { SessionRunner } from "../../../core/bootstrap/session-runner";
+import type { ToolCall, ToolResult } from "../../../tools/types";
+import { errMsg } from "../../../utils/error";
+import { planEventFor } from "../../../core/host-state";
+import type { PlanSnapshot } from "../../../core/host";
+import { buildOutputInstruction, parseStructured } from "./output";
+import type { TaskRecord, TaskUsage } from "./task-registry";
+import type { ServiceForwarder } from "./event-bridge";
+
+/** Итог хода: текст/успех/usage; `data` — структурный вывод; `error` — причина. */
+export interface RunTaskResult {
+  success: boolean;
+  text: string;
+  usage: TaskUsage;
+  data?: unknown;
+  outputInvalid?: boolean;
+  /** Ход в job-режиме попытался вызвать интерактивный/запрещённый allowlist'ом тул. */
+  forbidden?: boolean;
+  error?: string;
+}
+
+/** Интерактивные тулы, запрещённые в job-режиме (спека §5.2). */
+const INTERACTIVE_TOOLS = new Set(["question", "approve"]);
+
+/**
+ * Job-скоуп хода (S-04): `job` без `toolAllowlist` получает **ноль** тулов и
+ * короткий профиль промпта. Возвращает восстановление — вызывать в `finally`,
+ * иначе следующий interactive-ход на том же раннере остался бы без тулов.
+ *
+ * Пустой массив — не «без ограничений», а «запрещено всё»: так его читает
+ * `ToolExecutor.allowedNames()`, и это же значение применяется как enforcement.
+ */
+export function applyTaskScope(runner: SessionRunner, task: TaskRecord): () => void {
+  if (task.mode !== "job") return () => {};
+  const priorAllow = runner.toolCtx.toolAllowlist;
+  const priorProfile: PromptProfile = runner.agent.promptProfile ?? "full";
+  runner.toolCtx.toolAllowlist = task.toolAllowlist?.length ? [...task.toolAllowlist] : [];
+  runner.agent.promptProfile = "service-job";
+  return () => {
+    runner.toolCtx.toolAllowlist = priorAllow;
+    runner.agent.promptProfile = priorProfile;
+  };
+}
+
+export interface RunTaskOptions {
+  runner: SessionRunner;
+  task: TaskRecord;
+  forwarder: ServiceForwarder;
+  /** Колбэк снапшота плана (эмит `plan`-envelope после plan/todo-тула). */
+  onPlan?: (plan: PlanSnapshot) => void;
+}
+
+/** Гоняет один ход агента и маппит его колбэки в события задачи. */
+export async function runTask(opts: RunTaskOptions): Promise<RunTaskResult> {
+  const { runner, task, forwarder } = opts;
+
+  const pendingIds = new Map<string, string[]>();
+  let toolSeq = 0;
+  const startId = (tool: string): string => {
+    const id = `t${++toolSeq}`;
+    const stack = pendingIds.get(tool) ?? [];
+    stack.push(id);
+    pendingIds.set(tool, stack);
+    return id;
+  };
+  const endId = (tool: string): string => pendingIds.get(tool)?.pop() ?? `t-stray-${++toolSeq}`;
+  const callFor = (ev: ToolEvent, id: string): ToolCall => ({
+    id,
+    name: ev.tool,
+    arguments: ev.args,
+  });
+  const resultFor = (ev: ToolEvent): ToolResult => ({
+    success: !ev.error,
+    output: ev.output ?? "",
+    ...(ev.imageRefs?.length ? { imageRefs: ev.imageRefs } : {}),
+    ...(ev.images?.length ? { images: ev.images } : {}),
+  });
+
+  // Job-режим: попытка интерактивного тула или тула вне allowlist = tool_forbidden.
+  // Пустой allowlist у job — тоже «ничего нельзя», поэтому набор строится всегда.
+  const allowSet = task.mode === "job" ? new Set(task.toolAllowlist ?? []) : null;
+  let forbidden = false;
+  const restoreScope = applyTaskScope(runner, task);
+
+  const callAgent = (text: string): Promise<AgentResult> =>
+    runner.agent.run(
+      text,
+      (chunk) => forwarder.onText(chunk),
+      (meta, kind, info) => forwarder.onMeta(meta, kind, info),
+      (ev: ToolEvent) => {
+        if (ev.type === "start") {
+          forwarder.onToolStart(callFor(ev, startId(ev.tool)));
+          return;
+        }
+        if (
+          task.mode === "job" &&
+          (INTERACTIVE_TOOLS.has(ev.tool) || (allowSet !== null && !allowSet.has(ev.tool)))
+        ) {
+          forbidden = true;
+        }
+        forwarder.onToolEnd(callFor(ev, endId(ev.tool)), resultFor(ev), ev.duration ?? 0);
+        const plan = planEventFor(ev.tool, runner.execModule);
+        if (plan) opts.onPlan?.(plan);
+      },
+      (phase) => forwarder.onPhase(phase),
+      (reasoning) => forwarder.onReasoning(reasoning),
+    );
+
+  const usageOf = (result: AgentResult): TaskUsage => ({
+    promptTokens: result.promptTokens ?? 0,
+    completionTokens: result.completionTokens ?? 0,
+    costUsd: result.totalCost ?? 0,
+  });
+  const finish = (r: Omit<RunTaskResult, "forbidden">): RunTaskResult =>
+    forbidden ? { ...r, forbidden: true } : r;
+
+  const wantsJson = task.output?.format === "json" && !!task.output;
+  const baseInput = wantsJson
+    ? `${task.input}\n\n${buildOutputInstruction(task.output!)}`
+    : task.input;
+
+  try {
+    // Структурный вывод: события первой попытки не показываем, пока ответ не
+    // прошёл валидацию; провал — попытка не увидела свет вовсе (attempt=2).
+    if (wantsJson) forwarder.hold();
+    let result = await callAgent(baseInput);
+    if (wantsJson && result.success && task.output) {
+      const parsed = parseStructured(result.text, task.output);
+      if (parsed.ok) {
+        forwarder.release();
+        forwarder.flush();
+        return finish({ success: true, text: result.text, data: parsed.data, usage: usageOf(result) });
+      }
+      forwarder.discard();
+      forwarder.setAttempt(2);
+      const retryInput = `${baseInput}\n\nPrevious attempt failed validation: ${parsed.detail}. Return ONLY valid JSON.`;
+      result = await callAgent(retryInput);
+      const retryParsed = parseStructured(result.text, task.output);
+      forwarder.flush();
+      if (!retryParsed.ok) {
+        return finish({
+          success: false,
+          text: result.text,
+          usage: usageOf(result),
+          outputInvalid: true,
+          error: `output_invalid: ${retryParsed.detail}`,
+        });
+      }
+      return finish({ success: true, text: result.text, data: retryParsed.data, usage: usageOf(result) });
+    }
+    forwarder.release();
+    forwarder.flush();
+    return finish({
+      success: result.success,
+      text: result.text,
+      usage: usageOf(result),
+      ...(result.error ? { error: result.error } : {}),
+    });
+  } catch (err) {
+    forwarder.discard();
+    forwarder.flush();
+    return finish({
+      success: false,
+      text: "",
+      usage: { promptTokens: 0, completionTokens: 0, costUsd: 0 },
+      error: errMsg(err),
+    });
+  } finally {
+    restoreScope();
+  }
+}

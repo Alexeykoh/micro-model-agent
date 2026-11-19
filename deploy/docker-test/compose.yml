@@ -1,0 +1,37 @@
+# Test `mma web` container with a host workspace and Hamachi reachability.
+# From the repo root:
+#   docker compose -f deploy/docker-test/compose.yml up -d --build
+# Host: http://<hamachi-ip>:7334/?token=docker-test-hamachi-2026
+services:
+  mma-web-test:
+    build:
+      context: ../..
+      dockerfile: deploy/Dockerfile.web
+    image: mma-web-test:0.26.0
+    container_name: mma-web-test
+    ports:
+      # Явный 0.0.0.0: без него Docker на Windows может опубликовать только
+      # loopback/IPv6, и Hamachi-клиенты не достучатся.
+      - "0.0.0.0:7334:7333"
+      # Порты dev-серверов, которые агент поднимает внутри контейнера
+      # (vite, `bun run dev`, статические сервера). Список правится свободно:
+      # сервис внутри обязан слушать 0.0.0.0 (`--host 0.0.0.0`), иначе
+      # опубликованный порт останется пустым.
+      - "0.0.0.0:3000-3010:3000-3010"
+      - "0.0.0.0:5173-5183:5173-5183"
+      - "0.0.0.0:8000-8010:8000-8010"
+      # 8080 на хосте часто занят другим сервисом — диапазон начинается с 8081.
+      - "0.0.0.0:8081-8090:8081-8090"
+    environment:
+      MMA_CONFIG_DIR: /config
+      MMA_WEBUI_HOST: 0.0.0.0
+      MMA_WEBUI_PORT: "7333"
+      MMA_WEBUI_OPEN: "0"
+      MMA_WEBUI_TOKEN: docker-test-hamachi-2026
+    volumes:
+      - mma-web-test-config:/config
+      - ${MMA_TEST_WORKSPACE:-E:/mma-docker-test/workspace}:/workspace
+    restart: unless-stopped
+
+volumes:
+  mma-web-test-config:

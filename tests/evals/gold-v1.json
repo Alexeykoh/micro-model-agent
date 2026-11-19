@@ -1,0 +1,46 @@
+{
+  "name": "gold-v1",
+  "note": "Human-gold fixtures: expected verdicts verified by a human on 2026-11-09 live runs. Re-verify on model upgrade.",
+  "traces": [
+    {
+      "id": "gold-needle-found",
+      "events": [
+        { "type": "tool_call", "tool": "read_file" },
+        { "type": "tool_call", "tool": "grep" },
+        { "type": "tool_result", "tool": "grep", "success": true },
+        { "role": "assistant", "content": "needle NEEDLE_A_111 found at corpus/hard-a.txt:1800" }
+      ],
+      "expect": {
+        "requiredTools": ["read_file", "grep"],
+        "forbiddenTools": ["bash"],
+        "order": ["read_file", "grep"],
+        "needlesInAnswer": ["NEEDLE_A_111"],
+        "maxToolFailures": 0,
+        "verdict": "pass"
+      }
+    },
+    {
+      "id": "gold-repeat-failure",
+      "events": [
+        { "type": "tool_call", "tool": "bash" },
+        { "type": "tool_result", "tool": "bash", "success": false },
+        { "type": "tool_call", "tool": "bash" },
+        { "type": "tool_result", "tool": "bash", "success": false }
+      ],
+      "expect": {
+        "maxToolFailures": 1,
+        "verdict": "fail"
+      }
+    },
+    {
+      "id": "gold-wrong-order",
+      "events": [
+        { "type": "tool_call", "tool": "grep" }
+      ],
+      "expect": {
+        "order": ["read_file", "grep"],
+        "verdict": "fail"
+      }
+    }
+  ]
+}

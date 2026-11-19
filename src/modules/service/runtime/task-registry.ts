@@ -1,0 +1,274 @@
+/**
+ * Реестр задач процесса: task = ход над сессией (спека §5.2).
+ *
+ * Состояние задачи выводится из `SessionManager`/журнала + этого in-memory
+ * реестра; отдельной «таблицы заданий» рядом с сессиями не вводится. Реестр
+ * держит: жизненный цикл, синхронных ожидающих (`wait:true`), события задачи,
+ * идемпотентность сабмита и retention терминальных результатов.
+ */
+import type { ProblemDetails } from "./problem";
+import type { Envelope } from "./envelope";
+import { newJobId } from "./ids";
+
+/**
+ * Tenant-контекст «едет с работой» (спека §10.2): резолвится из auth-заголовков
+ * control plane'а, никогда — из тела запроса/prompt. Пишется в журнал сессии.
+ */
+export interface TenantContext {
+  tenantId?: string;
+  principalId?: string;
+  runId?: string;
+  tier?: string;
+  scopes?: string[];
+}
+
+/** Режим задачи: интерактивная (вопросы разрешены) или автономная (job). */
+export type TaskMode = "interactive" | "job";
+
+/** Жизненный цикл задачи (спека §5.3). */
+export type TaskStatus =
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "cancelled"
+  | "timeout"
+  | "waiting_input";
+
+/** Учёт расхода токенов/стоимости по задаче. */
+export interface TaskUsage {
+  promptTokens: number;
+  completionTokens: number;
+  costUsd: number;
+}
+
+/** Контракт структурированного вывода (спека §8.2). */
+export interface TaskOutputSpec {
+  format: "text" | "json";
+  schema?: unknown;
+}
+
+/** Внутренняя запись задачи; сериализуется в Job-объект отдельным маппером. */
+export interface TaskRecord {
+  jobId: string;
+  sessionId: string;
+  mode: TaskMode;
+  status: TaskStatus;
+  input: string;
+  /** Data-URL картинки, приложенные к интерактивному ходу. */
+  images?: string[];
+  output?: TaskOutputSpec;
+  toolAllowlist?: string[];
+  timeoutMs?: number;
+  callbackUrl?: string;
+  externalRef?: string;
+  /** Tenant/run-контекст из auth control plane'а (для журнала/аудита). */
+  tenant?: TenantContext;
+  progress?: { percent: number; message?: string };
+  result?: { text: string; data?: unknown };
+  usage?: TaskUsage;
+  error?: ProblemDetails;
+  createdAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  /** Когда терминальный результат можно выбросить (`resultRetentionDays`). */
+  expiresAt?: string;
+  /** События задачи (для resume/наблюдаемости внутри процесса). */
+  events: Envelope[];
+  /** Ход отвязан от клиента и ждёт reconnect в grace-окне (split W13). */
+  detached?: boolean;
+  /** Резолверы синхронного ожидания завершения (`wait:true`). */
+  waiters: Array<() => void>;
+}
+
+/** Параметры создания задачи. */
+export interface TaskCreateParams {
+  sessionId: string;
+  mode: TaskMode;
+  input: string;
+  images?: string[];
+  output?: TaskOutputSpec;
+  toolAllowlist?: string[];
+  timeoutMs?: number;
+  callbackUrl?: string;
+  externalRef?: string;
+  tenant?: TenantContext;
+}
+
+/** Итог проверки Idempotency-Key. */
+export type IdempotencyResult =
+  | { kind: "miss" }
+  | { kind: "hit"; jobId: string }
+  | { kind: "conflict" };
+
+/** Терминальный ли статус (дальше переходов нет). */
+export function isTerminal(status: TaskStatus): boolean {
+  return (
+    status === "succeeded" ||
+    status === "failed" ||
+    status === "cancelled" ||
+    status === "timeout"
+  );
+}
+
+/** In-memory реестр задач; без IO (персистентность/строка — control plane). */
+export class TaskRegistry {
+  private tasks = new Map<string, TaskRecord>();
+  /**
+   * Ключ идемпотентности скоупится тенантом (silo), но помнит principal первого
+   * использования: hit под другим principal — конфликт, а не чужой JobObject.
+   */
+  private idem = new Map<
+    string,
+    { principal: string; bodyHash: string; jobId: string; expiresAt: number }
+  >();
+  private readonly now: () => number;
+
+  constructor(
+    private readonly opts: { retentionDays: number; idempotencyTtlHours: number; now?: () => number },
+  ) {
+    this.now = opts.now ?? Date.now;
+  }
+
+  /** Создаёт задачу в статусе `queued`; попутно чистит протухшие записи. */
+  create(params: TaskCreateParams): TaskRecord {
+    this.prune();
+    const rec: TaskRecord = {
+      jobId: newJobId(),
+      sessionId: params.sessionId,
+      mode: params.mode,
+      status: "queued",
+      input: params.input,
+      ...(params.images?.length ? { images: [...params.images] } : {}),
+      ...(params.output ? { output: params.output } : {}),
+      ...(params.toolAllowlist ? { toolAllowlist: params.toolAllowlist } : {}),
+      ...(params.timeoutMs !== undefined ? { timeoutMs: params.timeoutMs } : {}),
+      ...(params.callbackUrl ? { callbackUrl: params.callbackUrl } : {}),
+      ...(params.externalRef ? { externalRef: params.externalRef } : {}),
+      ...(params.tenant ? { tenant: params.tenant } : {}),
+      createdAt: new Date(this.now()).toISOString(),
+      events: [],
+      waiters: [],
+    };
+    this.tasks.set(rec.jobId, rec);
+    return rec;
+  }
+
+  get(jobId: string): TaskRecord | undefined {
+    return this.tasks.get(jobId);
+  }
+
+  /** Число задач в реестре (наблюдаемость/тесты retention). */
+  size(): number {
+    return this.tasks.size;
+  }
+
+  listForSession(sessionId: string): TaskRecord[] {
+    return [...this.tasks.values()].filter((t) => t.sessionId === sessionId);
+  }
+
+  /** Патч полей записи (статус/usage/progress/…). */
+  update(jobId: string, patch: Partial<TaskRecord>): TaskRecord | undefined {
+    const rec = this.tasks.get(jobId);
+    if (!rec) return undefined;
+    Object.assign(rec, patch);
+    return rec;
+  }
+
+  /** Терминальный переход: проставляет `finishedAt`/`expiresAt` и будит ожидающих. */
+  finish(jobId: string, patch: Partial<TaskRecord>): TaskRecord | undefined {
+    const rec = this.tasks.get(jobId);
+    if (!rec) return undefined;
+    Object.assign(rec, patch);
+    if (!rec.finishedAt) rec.finishedAt = new Date(this.now()).toISOString();
+    rec.expiresAt = new Date(
+      Date.parse(rec.finishedAt) + this.opts.retentionDays * 86_400_000,
+    ).toISOString();
+    const waiters = rec.waiters.splice(0);
+    for (const wake of waiters) wake();
+    return rec;
+  }
+
+  /**
+   * Резолвится немедленно, если задача терминальна, иначе — по завершении.
+   * `signal` снимает ожидание (таймаут `wait:true`), не оставляя мёртвый waiter.
+   */
+  whenFinished(jobId: string, signal?: AbortSignal): Promise<TaskRecord | undefined> {
+    const rec = this.tasks.get(jobId);
+    if (!rec) return Promise.resolve(undefined);
+    if (isTerminal(rec.status)) return Promise.resolve(rec);
+    if (signal?.aborted) return Promise.resolve(undefined);
+    return new Promise((resolve) => {
+      let done = false;
+      const wake = (): void => {
+        if (done) return;
+        done = true;
+        signal?.removeEventListener("abort", onAbort);
+        resolve(this.tasks.get(jobId));
+      };
+      const onAbort = (): void => {
+        if (done) return;
+        done = true;
+        const index = rec.waiters.indexOf(wake);
+        if (index >= 0) rec.waiters.splice(index, 1);
+        resolve(undefined);
+      };
+      rec.waiters.push(wake);
+      signal?.addEventListener("abort", onAbort, { once: true });
+    });
+  }
+
+  /**
+   * Проверка ключа идемпотентности: hit / conflict / miss (TTL учитывается).
+   * Ключ общий на тенант; чужой principal получает `conflict`, а не результат.
+   */
+  checkIdempotency(
+    tenantId: string,
+    principal: string,
+    key: string,
+    bodyHash: string,
+  ): IdempotencyResult {
+    const mapKey = `${tenantId}::${key}`;
+    const entry = this.idem.get(mapKey);
+    if (!entry) return { kind: "miss" };
+    if (entry.expiresAt <= this.now()) {
+      this.idem.delete(mapKey);
+      return { kind: "miss" };
+    }
+    if (entry.principal !== principal) return { kind: "conflict" };
+    if (entry.bodyHash !== bodyHash) return { kind: "conflict" };
+    return { kind: "hit", jobId: entry.jobId };
+  }
+
+  /** Запоминает ключ идемпотентности (тенант + principal + хэш канонического тела). */
+  recordIdempotency(
+    tenantId: string,
+    principal: string,
+    key: string,
+    bodyHash: string,
+    jobId: string,
+  ): void {
+    this.idem.set(`${tenantId}::${key}`, {
+      principal,
+      bodyHash,
+      jobId,
+      expiresAt: this.now() + this.opts.idempotencyTtlHours * 3_600_000,
+    });
+  }
+
+  /** Чистит протухшие idempotency-ключи и старые терминальные результаты. */
+  prune(): void {
+    const now = this.now();
+    for (const [id, rec] of this.tasks) {
+      if (!isTerminal(rec.status)) continue;
+      const expiresAt = rec.expiresAt
+        ? Date.parse(rec.expiresAt)
+        : (rec.finishedAt ? Date.parse(rec.finishedAt) : Date.parse(rec.createdAt)) +
+          this.opts.retentionDays * 86_400_000;
+      if (expiresAt <= now) this.tasks.delete(id);
+    }
+    for (const [key, entry] of this.idem) {
+      if (entry.expiresAt <= now) this.idem.delete(key);
+    }
+  }
+}

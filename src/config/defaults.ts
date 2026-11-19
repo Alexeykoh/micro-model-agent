@@ -1,0 +1,294 @@
+// Дефолты конфига: единственная точка правды для всех опций AppConfig.
+import type { AppConfig } from "./types";
+import { DEFAULT_SECURITY_CONFIG } from "./security";
+import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
+import { LLM_REQUEST_TIMEOUT_MS } from "./timeouts";
+
+/**
+ * Запас обёртки над провайдерским дедлайном (W2, D7).
+ *
+ * Обёртка должна быть длиннее того, что она оборачивает: иначе таймер
+ * срабатывает не когда запрос завис, а когда провайдер и так отрубил его по
+ * своему дедлайну, — и собственная диагностика обёртки не срабатывает никогда.
+ */
+export const WRAPPER_OVERHEAD_MS = 5000;
+
+/** Дефолтная модель (эксперты наследуют её). */
+const DEFAULT_MODEL = "qwen/qwen3.5-9b";
+
+/** Дефолтный конфиг. Глубоко мержится с пользовательским при загрузке. */
+export const DEFAULTS: AppConfig = {
+  version: "2.0.0",
+  model: DEFAULT_MODEL,
+  provider: {
+    type: "openai-compat",
+    baseUrl: "http://localhost:1234/v1",
+    apiKey: "not-needed",
+  },
+  critic: {
+    enabled: true,
+    // Phase 2: выделенные provider/model — opt-in; пока не заданы, делит активный
+    // провайдер (поведение v1). Read-only verify-цикл включён: запускается только
+    // после вердикта concern/critical, ограничен и fail-open.
+    provider: undefined,
+    model: undefined,
+    tools: true,
+    maxCalls: 4,
+    maxRepairCycles: 1,
+    // Таймаут ОДНОГО LLM-вызова (раньше — на всю цепочку из трёх проходов,
+    // из-за чего второй проход на длинном пакете не успевал: §5.8 аудита).
+    // Строго длиннее провайдерского request-дедлайна: при равенстве обёртка
+    // всегда проигрывала гонку, и диагностика `call_timeout` — единственная
+    // запись о том, что критик пришлось резать — была недостижима (W2, D7).
+    timeoutMs: LLM_REQUEST_TIMEOUT_MS + WRAPPER_OVERHEAD_MS,
+    // МИНИМАЛЬНЫЙ лимит completion-токенов критика. Реальный лимит =
+    // max(это, provider.maxCompletionTokens): критик не режет бюджет
+    // провайдера — у reasoning-моделей токены съедались до ответа, вердикт
+    // приходил пустым, и fail-open не отличить от «всё ок» (INV-C5).
+    maxTokens: 2048,
+  },
+  tools: {
+    // Автосужение P5 (2026-09-28): enableOnDemand:true показывает только
+    // defaultTags + alwaysOn структурные/интерактивные тулы; теги под тип задачи
+    // детерминированно досеиваются до первого вызова LLM (src/tools/auto-tags.ts),
+    // а модель расширяет набор через enable_tools. Дрейф 9B, вызвавший откат
+    // (скрытые тулы звались как shell-команды), гасится блоком промпта про скрытые
+    // тулы, хинтом bash про скрытые тулы + редиректом tool-call и alwaysOn
+    // question/approve.
+    defaultTags: ["file", "code"],
+    enableOnDemand: true,
+    grepEngine: "auto",
+  },
+  // Модель эксперта намеренно не задана: по умолчанию он идёт на активной
+  // модели агента. Пин (`model`/`provider`) — осознанный выбор пользователя
+  // (спека `2026-11-01-experts-model-selection-design`, INV-E1).
+  experts: {
+    code: {
+      tool_tags: ["file", "code", "shell"],
+      max_attempts: 3,
+      description: "file operations, code editing, shell commands",
+    },
+    research: {
+      tool_tags: ["research"],
+      max_attempts: 3,
+      description: "web search, web fetch, web browse, history search",
+    },
+    browser: {
+      tool_tags: ["browser", "vision"],
+      max_attempts: 3,
+      description: "browser automation, screenshots",
+    },
+    vision: {
+      tool_tags: ["browser", "vision", "file"],
+      max_attempts: 2,
+      description: "browser + file reading for visual tasks",
+    },
+  },
+  // Переопределения возможностей по моделям (ключ — id модели). Пусто по
+  // умолчанию: первичны живой native-probe (LM Studio) и пресет провайдера,
+  // эта карта — ручной escape hatch, когда оба ошиблись.
+  modelCapabilities: {},
+  contextWindow: 32768,
+  // Авто-детект окна у провайдера включён: проба на старте/смене модели
+  // уточняет настроенное значение (см. contextAuto в types.ts).
+  contextAuto: true,
+  // L7: потолочный лимит хода по умолчанию. Ноль (безлимит) на хостед-модели
+  // с maxToolIterations 200 — финансовая дыра: runaway-ход жжёт платные токены
+  // без остановки. Бесплатным моделям не мешает: без цены расход всегда 0,
+  // а 0 < любого положительного cap. Явный 0 — осознанный opt-out.
+  cost: { maxRunUsd: 5 },
+  hitl: { killSwitch: false, autoApproveLow: false },
+  compliance: { enabled: false, retentionDays: 180 },
+  memory: {
+    validator: {
+      enabled: true,
+      minChars: 15,
+      minWords: 3,
+      similarityThreshold: 0.8,
+    },
+    retentionDays: 0,
+  },
+  contextBudget: {
+    systemPrompt: 0.1,
+    responseReserve: 0.15,
+    compactionThreshold: 0.75,
+    compactionMinLoad: 0.5,
+    policy: "v2",
+    compactionSummary: "ledger",
+    overflowCooldown: 3,
+    toolResultKeep: 6,
+    toolDigest: "full",
+    admitMaxTokens: 3000,
+    notesPath: ".mma/NOTES.md",
+    ledgerMax: 200,
+    calibrationWarmup: 3,
+    ratioFloor: 0.5,
+  },
+  instructions: {
+    summarize: true,
+    sources: [],
+    fallback: "claude",
+  },
+  modelLoad: {
+    autoLoad: false,
+    flashAttention: true,
+    offloadKvCacheToGpu: true,
+  },
+  retry: {
+    maxRetries: 3,
+    baseDelay: 1000,
+    maxDelay: 30000,
+    maxStreamRetries: 2,
+    noDataTimeoutMs: 180000,
+  },
+  // Жёсткий потолок одного хода. 1000 не ограничивал runaway (сессия
+  // ses_mv44qabg_s1przq дошла до 225 вызовов и была прервана вручную): при
+  // исчерпании ход завершается best-effort финальным ответом. Пользователь
+  // может поднять значение через `/config maxToolIterations <N>`.
+  maxToolIterations: 200,
+  stuckThreshold: 6,
+  autoPlan: true,
+  promptProfile: "auto",
+  execution: {
+    autoAdvance: true,
+    profile: "local-trusted",
+    image: "oven/bun:1.3.14",
+  },
+  otel: {
+    enabled: false,
+    endpoint: "",
+    serviceName: "mma",
+  },
+  showReasoning: true,
+  logLevel: "info",
+  locale: "en",
+  session: {
+    autoSave: true,
+    maxSessions: 50,
+    isolateMemory: false,
+    autoName: true,
+  },
+  contextLog: {
+    enabled: false,
+    redact: true,
+  },
+  indexer: {
+    maxFiles: 5000,
+    respectGitignore: true,
+    mapTokenBudget: 1500,
+  },
+  // Ретенция изображений тулов (browser screenshot / attach_image) на сессию:
+  // последние 30 картинок или до 100 МБ, что наступит раньше.
+  images: {
+    maxCount: 30,
+    maxBytes: 104_857_600,
+  },
+  browser: {
+    enabled: true,
+    headless: true,
+    maxElements: 30,
+    maxContentChars: 2500,
+    maxConsoleEntries: 40,
+    maxConsoleLineChars: 400,
+    viewportWidth: 1280,
+    viewportHeight: 720,
+    navigationTimeout: 15000,
+  },
+  webSearch: {
+    enabled: true,
+    provider: "duckduckgo",
+    images: false,
+    maxImages: 2,
+  },
+  errorWebSearch: {
+    enabled: true,
+    threshold: 5,
+    maxResults: 5,
+    maxQueryChars: 200,
+    maxSearchesPerSession: 3,
+    requestTimeoutMs: 10000,
+  },
+  pricing: {
+    enabled: true,
+    overrides: {},
+  },
+  ui: {
+    spinner: true,
+    activityRail: "line",
+    showContextStats: false,
+    showCompaction: true,
+    verbose: false,
+    verbosity: "quiet",
+    fontSize: "comfortable",
+    draftMode: "live",
+    theme: "console",
+    themeMode: "auto",
+    themeEffects: true,
+    // Мастер выключен: звук не появляется сам после апгрейда (quiet by default).
+    sounds: { enabled: true, done: true, question: true, failed: true, volume: 50 },
+  },
+  mcpServers: {},
+  security: DEFAULT_SECURITY_CONFIG,
+  sessionIsolation: {
+    enabled: false,
+    isolateTempFiles: true,
+  },
+  skills: {
+    budget: 0.15,
+  },
+  plugins: {
+    // `angular11`, `telegram-notify` — встроенные плагины, выключены по
+    // умолчанию: включаются штатным контуром (`mma plugins enable`,
+    // `/plugins`, тумблер в вебе).
+    disabled: ["angular11", "telegram-notify"],
+    maxDrafts: 10,
+  },
+  hallucination: {
+    judge: {
+      enabled: false,
+    },
+  },
+  subagent: {
+    resultMode: "text",
+    maxSummaryChars: 2000,
+    artifactsDir: ".mma/artifacts",
+    stableSystemPrompt: true,
+    maxParallelChunkQueries: 4,
+    timeoutMs: 180000,
+    maxDurationMs: 1800000,
+  },
+  lsp: DEFAULT_LSP_CONFIG,
+  updater: {
+    enabled: true,
+    autoInstall: false,
+    intervalMs: 0,
+  },
+  reasoning: {
+    mode: "auto",
+    min: "low",
+    max: "high",
+    overrideCooldown: 5,
+    // Тривиальные Q&A-ходы не должны платить за medium reasoning; политика всё
+    // равно поднимает до high на галлюцинациях/отклонениях аудита/создании плана.
+    baseline: "low",
+  },
+  service: {
+    port: 7331,
+    host: "127.0.0.1",
+    token: undefined,
+    tenant: undefined,
+    resultRetentionDays: 7,
+    idempotencyTtlHours: 24,
+    syncWaitMs: 10_000,
+    maxQueueLength: 5,
+    detachedTurnGraceMs: 0,
+    callbackTimeoutMs: 10_000,
+    webhookSecret: undefined,
+    webhookAllowHttp: false,
+    tls: {
+      cert: undefined,
+      key: undefined,
+      terminatedByProxy: false,
+    },
+  },
+};

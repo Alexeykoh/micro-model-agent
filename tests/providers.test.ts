@@ -1,0 +1,438 @@
+import { describe, it, expect } from "vitest";
+import {
+  ProviderRegistry,
+  ProviderManager,
+  createProvider,
+  defaultRegistry,
+  BUILTIN_PROVIDERS,
+  HOSTED_BASE_URLS,
+} from "../src/modules/providers/index";
+
+describe("providers module", () => {
+  describe("registry", () => {
+    it("registers and looks up specs by type", () => {
+      const registry = new ProviderRegistry();
+      registry.register({ type: "test", label: "Test", baseUrl: "", capabilities: {
+        streaming: true, tools: true, vision: false, reasoningStrategy: "none",
+        listModels: false, requiresKey: false,
+      }, create: (opts) => ({ ...opts, model: opts.model, contextWindow: opts.contextWindow } as any) });
+
+      expect(registry.get("test")?.label).toBe("Test");
+      expect(registry.has("test")).toBe(true);
+      expect(registry.has("missing")).toBe(false);
+      expect(registry.types()).toContain("test");
+    });
+
+    it("default registry contains all builtin presets", () => {
+      const registry = defaultRegistry();
+      expect(registry.list()).toHaveLength(BUILTIN_PROVIDERS.length);
+      for (const spec of BUILTIN_PROVIDERS) {
+        expect(registry.get(spec.type)).toBeDefined();
+      }
+    });
+  });
+
+  describe("createProvider", () => {
+    it("builds an OpenAI-compatible provider", () => {
+      const provider = createProvider("openai-compat", {
+        model: "test-model",
+        baseUrl: "http://localhost:1234/v1",
+        contextWindow: 32768,
+      });
+      expect(provider.model).toBe("test-model");
+      expect(provider.contextWindow).toBe(32768);
+    });
+
+    it("builds an OpenRouter provider with its preset base URL", () => {
+      const provider = createProvider("openrouter", {
+        model: "gpt-4o",
+        baseUrl: "https://openrouter.ai/api/v1",
+        contextWindow: 32768,
+      });
+      expect(provider.model).toBe("gpt-4o");
+    });
+
+    it("falls back to openai-compat for unknown types (backward compatible)", () => {
+      const provider = createProvider("some-custom-type", {
+        model: "m",
+        baseUrl: "http://localhost:1234/v1",
+        contextWindow: 32768,
+      });
+      expect(provider).toBeDefined();
+      expect(provider.model).toBe("m");
+    });
+
+    it("forwards apiKey and rate limits to the provider", () => {
+      const provider = createProvider("openai-compat", {
+        model: "m",
+        baseUrl: "http://localhost:1234/v1",
+        apiKey: "sk-test",
+        contextWindow: 32768,
+        rateLimits: { maxRequestsPerMinute: 10, windowMs: 60000 },
+      }) as any;
+      expect(provider.config.apiKey).toBe("sk-test");
+    });
+  });
+
+  describe("presets", () => {
+    it("exposes hosted base URLs for hosted providers only", () => {
+      expect(HOSTED_BASE_URLS.openrouter).toBe("https://openrouter.ai/api/v1");
+      expect(HOSTED_BASE_URLS["opencode-zen"]).toBe("https://opencode.ai/zen/v1");
+      expect(HOSTED_BASE_URLS["opencode-go"]).toBe("https://opencode.ai/zen/go/v1");
+      expect(HOSTED_BASE_URLS["openai-compat"]).toBeUndefined(); // user-entered URL
+    });
+
+    it("flags the anthropic preset as non-OpenAI-compatible", () => {
+      const anthropic = BUILTIN_PROVIDERS.find((p) => p.type === "anthropic");
+      expect(anthropic).toBeDefined();
+      expect(anthropic?.capabilities.streaming).toBe(false);
+      expect(anthropic?.capabilities.tools).toBe(false);
+      expect(anthropic?.capabilities.requiresKey).toBe(true);
+    });
+
+    it("registers lmstudio as a first-class local preset", () => {
+      const lmstudio = BUILTIN_PROVIDERS.find((p) => p.type === "lmstudio");
+      expect(lmstudio).toBeDefined();
+      expect(lmstudio?.baseUrl).toBe("http://localhost:1234/v1");
+      expect(lmstudio?.capabilities.requiresKey).toBe(false);
+      expect(lmstudio?.capabilities.listModels).toBe(true);
+      expect(HOSTED_BASE_URLS["lmstudio"]).toBe("http://localhost:1234/v1");
+      const provider = createProvider("lmstudio", {
+        model: "qwen/qwen3.5-9b",
+        baseUrl: "http://localhost:1234/v1",
+        contextWindow: 32768,
+      });
+      expect(provider.model).toBe("qwen/qwen3.5-9b");
+      expect(provider.contextWindow).toBe(32768);
+    });
+  });
+
+  describe("ProviderManager", () => {
+    const opts = { contextWindow: 32768 };
+
+    it("normalizes a legacy single-provider config into one entry", () => {
+      const m = new ProviderManager(
+        { type: "openai-compat", baseUrl: "http://localhost:1234/v1" },
+        opts,
+      );
+      expect(m.list()).toHaveLength(1);
+      expect(m.activeName).toBe("openai-compat");
+    });
+
+    it("uses the active entry from multi-provider config", () => {
+      const m = new ProviderManager(
+        {
+          active: "zen",
+          entries: [
+            { type: "openai-compat", label: "local", baseUrl: "http://localhost:1234/v1" },
+            { type: "opencode-zen", label: "zen", baseUrl: "https://opencode.ai/zen/v1" },
+          ],
+        },
+        opts,
+      );
+      expect(m.activeName).toBe("zen");
+      expect(m.activeEntry.type).toBe("opencode-zen");
+    });
+
+    it("hot-swaps provider and rebuilds the active provider", () => {
+      const m = new ProviderManager(
+        {
+          active: "local",
+          entries: [
+            { type: "openai-compat", label: "local", baseUrl: "http://localhost:1234/v1" },
+            { type: "openrouter", label: "router", baseUrl: "https://openrouter.ai/api/v1" },
+          ],
+        },
+        opts,
+      );
+      const first = m.setModel("qwen");
+      expect(first.model).toBe("qwen");
+      const swapped = m.switch("router");
+      expect(m.activeName).toBe("router");
+      expect(swapped.model).toBe("qwen");
+      expect(m.activeEntry.baseUrl).toBe("https://openrouter.ai/api/v1");
+    });
+
+    it("changes model on the active provider", () => {
+      const m = new ProviderManager(
+        { type: "openai-compat", baseUrl: "http://localhost:1234/v1" },
+        opts,
+      );
+      const p = m.setModel("model-a");
+      expect(p.model).toBe("model-a");
+      const p2 = m.setModel("model-b");
+      expect(p2.model).toBe("model-b");
+      expect(m.activeModel).toBe("model-b");
+    });
+
+    it("setModel clears the build cache so old model providers do not accumulate", () => {
+      const m = new ProviderManager(
+        { type: "openai-compat", baseUrl: "http://localhost:1234/v1" },
+        opts,
+      );
+      const a1 = m.setModel("model-a");
+      expect(m.setModel("model-b")).not.toBe(a1);
+      // Возврат к прежней модели пересобирает провайдер (кэш сброшен).
+      const a2 = m.setModel("model-a");
+      expect(a2).not.toBe(a1);
+    });
+
+    it("throws on unknown provider switch", () => {
+      const m = new ProviderManager(
+        { type: "openai-compat", baseUrl: "http://localhost:1234/v1" },
+        opts,
+      );
+      // Сообщение локализовано (ru/en), поэтому проверяем имя провайдера.
+      expect(() => m.switch("nope")).toThrow(/nope/);
+    });
+
+    it("serializes back to config with active + entries + legacy fields", () => {
+      const m = new ProviderManager(
+        {
+          active: "router",
+          entries: [
+            { type: "openai-compat", label: "local", baseUrl: "http://localhost:1234/v1" },
+            { type: "openrouter", label: "router", baseUrl: "https://openrouter.ai/api/v1" },
+          ],
+        },
+        opts,
+      );
+      const cfg = m.toConfig();
+      expect(cfg.active).toBe("router");
+      expect(cfg.entries).toHaveLength(2);
+      expect(cfg.type).toBe("openrouter");
+      expect(cfg.baseUrl).toBe("https://openrouter.ai/api/v1");
+    });
+  });
+
+  describe("per-entry isolation (Phase 4.3)", () => {
+    const opts = { contextWindow: 32768 };
+
+    it("builds each entry with its own apiKey, retry and rateLimits", () => {
+      const registry = new ProviderRegistry();
+      const captured: any[] = [];
+      registry.register({
+        type: "capturing",
+        label: "Capturing",
+        baseUrl: "",
+        capabilities: {
+          streaming: true, tools: true, vision: false, reasoningStrategy: "none",
+          listModels: false, requiresKey: false,
+        },
+        create: (o) => {
+          captured.push(o);
+          return { model: o.model, contextWindow: o.contextWindow } as any;
+        },
+      });
+      const m = new ProviderManager(
+        {
+          active: "a",
+          entries: [
+            {
+              type: "capturing", label: "a", baseUrl: "http://a/v1",
+              apiKey: "key-a", contextWindow: 8192,
+              retry: { maxRetries: 1, baseDelay: 10, maxDelay: 20 },
+              rateLimits: { maxRequestsPerMinute: 30, maxParallelTasks: 1 },
+            },
+            { type: "capturing", label: "b", baseUrl: "http://b/v1" },
+          ],
+        },
+        { ...opts, registry },
+      );
+      void m.switch("a");
+      void m.active;
+      void m.switch("b");
+      void m.active;
+      expect(captured).toHaveLength(2);
+      expect(captured[0].apiKey).toBe("key-a");
+      expect(captured[0].contextWindow).toBe(8192);
+      expect(captured[0].retry.maxRetries).toBe(1);
+      expect(captured[0].rateLimits.maxRequestsPerMinute).toBe(30);
+      // Entry b has none of its own → falls back to global options.
+      expect(captured[1].apiKey).toBeUndefined();
+      expect(captured[1].contextWindow).toBe(opts.contextWindow);
+    });
+
+    it("forwards getSessionId to every built entry", () => {
+      const registry = new ProviderRegistry();
+      const captured: any[] = [];
+      registry.register({
+        type: "capturing",
+        label: "Capturing",
+        baseUrl: "",
+        capabilities: {
+          streaming: true, tools: true, vision: false, reasoningStrategy: "none",
+          listModels: false, requiresKey: false,
+        },
+        create: (o) => {
+          captured.push(o);
+          return { model: o.model, contextWindow: o.contextWindow } as any;
+        },
+      });
+      const m = new ProviderManager(
+        {
+          active: "a",
+          entries: [
+            { type: "capturing", label: "a", baseUrl: "http://a/v1" },
+            { type: "capturing", label: "b", baseUrl: "http://b/v1" },
+          ],
+        },
+        { ...opts, registry, getSessionId: () => "ses_x" },
+      );
+      void m.switch("a");
+      void m.active;
+      void m.switch("b");
+      void m.active;
+      expect(captured).toHaveLength(2);
+      expect(captured[0].getSessionId()).toBe("ses_x");
+      expect(captured[1].getSessionId()).toBe("ses_x");
+    });
+
+    it("listNames orders entries by priority ascending (undefined last, stable)", () => {
+      const m = new ProviderManager(
+        {
+          active: "local",
+          entries: [
+            { type: "openai-compat", label: "local", baseUrl: "http://l/v1" },
+            { type: "openrouter", label: "router", baseUrl: "http://r/v1", priority: 1 },
+            { type: "opencode-zen", label: "zen", baseUrl: "http://z/v1", priority: 0 },
+            { type: "openai", label: "oai", baseUrl: "http://o/v1" },
+          ],
+        },
+        opts,
+      );
+      expect(m.listNames()).toEqual(["zen", "router", "local", "oai"]);
+    });
+
+    it("toConfig preserves per-entry retry/rateLimits/priority", () => {
+      const m = new ProviderManager(
+        {
+          active: "a",
+          entries: [
+            {
+              type: "openai-compat", label: "a", baseUrl: "http://a/v1",
+              priority: 2,
+              rateLimits: { maxRequestsPerMinute: 10, maxParallelTasks: 2 },
+            },
+          ],
+        },
+        opts,
+      );
+      const cfg = m.toConfig();
+      expect(cfg.entries![0].priority).toBe(2);
+      expect(cfg.entries![0].rateLimits!.maxRequestsPerMinute).toBe(10);
+    });
+
+    it("pickFor returns the first capable entry by priority order", () => {
+      const registry = new ProviderRegistry();
+      const cap = (over: Partial<{ vision: boolean; tools: boolean; listModels: boolean }>) => ({
+        streaming: true, tools: true, vision: false, reasoningStrategy: "none",
+        listModels: false, requiresKey: false, ...over,
+      });
+      registry.register({
+        type: "novision", label: "novision", baseUrl: "",
+        capabilities: cap({}),
+        create: (o) => ({ model: o.model, contextWindow: o.contextWindow } as any),
+      });
+      registry.register({
+        type: "visionprov", label: "visionprov", baseUrl: "",
+        capabilities: cap({ vision: true }),
+        create: (o) => ({ model: o.model, contextWindow: o.contextWindow } as any),
+      });
+      const m = new ProviderManager(
+        {
+          active: "plain",
+          entries: [
+            { type: "novision", label: "plain", baseUrl: "http://p/v1" },
+            { type: "visionprov", label: "vis", baseUrl: "http://v/v1", priority: -1 },
+          ],
+        },
+        { ...opts, registry },
+      );
+      expect(m.pickFor({})).toBe("plain");
+      expect(m.pickFor({ vision: true })).toBe("vis");
+    });
+
+    it("pickFor resolves capabilities via preset → probe → override (D6)", () => {
+      const registry = new ProviderRegistry();
+      const cap = (over: Partial<{ vision: boolean; tools: boolean; listModels: boolean }>) => ({
+        streaming: true, tools: true, vision: false, reasoningStrategy: "none",
+        listModels: false, requiresKey: false, ...over,
+      });
+      registry.register({
+        type: "visionprov", label: "visionprov", baseUrl: "",
+        capabilities: cap({ vision: true }),
+        create: (o) => ({ model: o.model, contextWindow: o.contextWindow } as any),
+      });
+      const config = {
+        active: "vis",
+        entries: [{ type: "visionprov", label: "vis", baseUrl: "http://v/v1" }],
+      };
+      // Пресет заявляет vision — без верхних слоёв провайдер выбирается.
+      const presetOnly = new ProviderManager(config, { ...opts, registry });
+      presetOnly.setModel("m1");
+      expect(presetOnly.pickFor({ vision: true })).toBe("vis");
+      // Конфиг-оверрайд пользователя бьёт пресет: у модели нет vision.
+      const overridden = new ProviderManager(config, {
+        ...opts,
+        registry,
+        modelCapabilities: { m1: { vision: false, tools: true } },
+      });
+      overridden.setModel("m1");
+      expect(overridden.pickFor({ vision: true })).toBeUndefined();
+      // Живая проба бьёт пресет.
+      const probed = new ProviderManager(config, {
+        ...opts,
+        registry,
+        probeCapabilities: () => ({ vision: false, tools: true }),
+      });
+      probed.setModel("m1");
+      expect(probed.pickFor({ vision: true })).toBeUndefined();
+    });
+
+    it("pickFor respects minContext against entry or global window", () => {
+      const registry = defaultRegistry();
+      const m = new ProviderManager(
+        {
+          active: "small",
+          entries: [
+            { type: "openai-compat", label: "small", baseUrl: "http://s/v1" },
+            { type: "openai-compat", label: "big", baseUrl: "http://b/v1", contextWindow: 131072 },
+          ],
+        },
+        { contextWindow: 32768, registry },
+      );
+      expect(m.pickFor({ minContext: 8192 })).toBe("small");
+      expect(m.pickFor({ minContext: 65536 })).toBe("big");
+      expect(m.pickFor({ minContext: 999999 })).toBeUndefined();
+    });
+  });
+});
+describe("ProviderManager fallback preservation (audit 2026-08-26)", () => {
+  const opts = { contextWindow: 32768 };
+  it("toConfig preserves fallback:true after construction and hot-swap", () => {
+    const m = new ProviderManager(
+      {
+        active: "a",
+        entries: [
+          { type: "openai-compat", label: "a", baseUrl: "http://localhost:1/v1" },
+          { type: "openai-compat", label: "b", baseUrl: "http://localhost:2/v1" },
+        ],
+        fallback: true,
+      } as any,
+      opts,
+    );
+    expect(m.toConfig().fallback).toBe(true);
+    m.switch("b");
+    expect(m.toConfig().fallback).toBe(true);
+  });
+
+  it("toConfig keeps explicit explicit override parameter", () => {
+    const m = new ProviderManager(
+      { active: "a", entries: [{ type: "openai-compat", label: "a", baseUrl: "http://x/v1" }] },
+      opts,
+    );
+    expect(m.toConfig(false).fallback).toBe(false);
+    expect(m.toConfig().fallback).toBe(false);
+  });
+});

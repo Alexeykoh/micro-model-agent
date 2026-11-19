@@ -1,0 +1,61 @@
+// Модуль браузера: системный промпт, тул навигации, закрытие сессии на выходе.
+import type { AgentModule, AgentPlugin } from "../types";
+import type { PromptBlock } from "../../core/types";
+import type { ToolDefinition } from "../../tools/types";
+import { createBrowserTool, closeBrowserSession } from "../../tools/browser";
+import { isChromiumInstalled, CHROMIUM_INSTALL_CMD } from "./preflight";
+
+/** Модуль headless-браузера: промпт workflow, тул, плагин закрытия сессии. */
+export class BrowserModule implements AgentModule {
+  name = "browser";
+  /** Результат пробы Chromium из `setup()` (undefined — проба ещё не шла). */
+  private chromiumInstalled: boolean | undefined;
+
+  /** Проба Chromium для честного `health()` (вызывается из `ModuleDef.setup`). */
+  async probe(): Promise<void> {
+    this.chromiumInstalled = await isChromiumInstalled();
+  }
+
+  /** Честный health: Chromium не установлен → degraded с командой установки (INV-6). */
+  health(): { status: "ok" | "degraded" | "failed"; reason?: string } {
+    if (this.chromiumInstalled === undefined) {
+      return { status: "degraded", reason: "chromium not probed yet" };
+    }
+    if (!this.chromiumInstalled) {
+      return { status: "degraded", reason: `chromium not installed — run \`${CHROMIUM_INSTALL_CMD}\`` };
+    }
+    return { status: "ok" };
+  }
+
+  getSystemPromptBlock(): PromptBlock | null {
+    return {
+      content: [
+        "You have a headless browser tool. Use it to navigate websites, click links, fill forms, and read page content.",
+        "Workflow: open(url) → read snapshot → click/type on element numbers → read updated snapshot.",
+        'Each snapshot includes a "Content" section with the visible page text, a "Console" section with browser messages, and network errors. Use these to understand the page, detect JS errors, and verify the result of your actions.',
+        'Always start with "open" action. Use element numbers from snapshot for click/type targets.',
+        'The "screenshot" action is delivered automatically: a vision model receives the image, a text-only model receives the text snapshot instead. You do not need to decide — just call it and read what you get.',
+      ].join("\n"),
+      priority: "normal",
+      essential: false,
+      estimatedTokens: 80,
+      // Блок говорит «у тебя есть браузер» — только когда браузер реально
+      // виден модели; иначе модуль не рекламирует скрытый тул.
+      requiresTags: ["browser"],
+    };
+  }
+
+  getToolDefinitions(): ToolDefinition[] {
+    return [createBrowserTool()];
+  }
+
+  getPlugin(): AgentPlugin {
+    return {
+      name: "browser",
+      description: "opens and drives a browser for pages that need JavaScript",
+      onSessionEnd: () => {
+        closeBrowserSession();
+      },
+    };
+  }
+}

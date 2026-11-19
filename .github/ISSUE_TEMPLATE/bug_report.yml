@@ -1,0 +1,64 @@
+name: Баг
+description: Что-то работает не так, как ожидалось
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Спасибо за отчёт. Чем точнее воспроизведение, тем быстрее фикс.
+        Уязвимости не публикуйте здесь — напишите мейнтейнеру напрямую.
+  - type: textarea
+    id: what
+    attributes:
+      label: Что произошло
+      description: Ожидаемое и фактическое поведение.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Как воспроизвести
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Версия MMA
+      description: Вывод `mma --version`.
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Модель и провайдер
+      placeholder: qwen3.5-9b / LM Studio
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Поверхность
+      options:
+        - REPL
+        - mma web
+        - mma serve
+        - one-shot
+        - install/updater
+        - другое
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: ОС и версия
+      placeholder: Windows 11 / macOS 15 / Ubuntu 24.04
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Логи и `session.jsonl`
+      description: Уберите секреты и ключи перед вставкой.
+      render: shell

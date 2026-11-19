@@ -1,0 +1,73 @@
+// Параметризованные `/api/sessions/:id/<sub>` GET-роуты и `DELETE /:id`
+// (вынесено из `sessions-api.ts`, правило ≤300). DELETE прокинут колбэком,
+// чтобы не заводить цикл импортов с `sessions-api`.
+import type { IncomingMessage, ServerResponse } from "node:http";
+import { handleSessionHistory } from "./history-api";
+import { handleSessionImage } from "./images-api";
+import { handleSessionLog } from "./log-api";
+import { handleSubagentRunsGet, handleSubagentInterrupt } from "./subagent-api";
+import { handleSessionSecurity } from "./security-api";
+import { handleSystemPromptGet } from "./system-prompt-api";
+import type { SessionStore, RuntimeState, HttpTransport, SseTransport } from "../state";
+
+export function handleSessionItem(
+  req: IncomingMessage,
+  res: ServerResponse,
+  p: string,
+  s: SessionStore & RuntimeState & HttpTransport & SseTransport,
+  onDelete: (id: string) => void,
+): boolean {
+  if (!p.startsWith("/api/sessions/")) return false;
+  if (req.method === "DELETE") {
+    onDelete(decodeURIComponent(p.slice("/api/sessions/".length)));
+    return true;
+  }
+  if (req.method === "POST") {
+    // POST /api/sessions/:id/subagents/:runId/interrupt
+    if (!p.endsWith("/interrupt") || !p.includes("/subagents/")) return false;
+    const rest = p.slice("/api/sessions/".length, -"/interrupt".length);
+    const cut = rest.indexOf("/subagents/");
+    if (cut <= 0) return false;
+    const id = decodeURIComponent(rest.slice(0, cut));
+    const runId = decodeURIComponent(rest.slice(cut + "/subagents/".length));
+    handleSubagentInterrupt(res, id, runId, s);
+    return true;
+  }
+  if (req.method !== "GET") return false;
+  if (p.endsWith("/history")) {
+    const id = decodeURIComponent(p.slice("/api/sessions/".length, -"/history".length));
+    handleSessionHistory(res, id, s);
+    return true;
+  }
+  if (p.endsWith("/log")) {
+    const id = decodeURIComponent(p.slice("/api/sessions/".length, -"/log".length));
+    handleSessionLog(req, res, id, s);
+    return true;
+  }
+  if (p.endsWith("/subagents")) {
+    const id = decodeURIComponent(p.slice("/api/sessions/".length, -"/subagents".length));
+    handleSubagentRunsGet(req, res, id, s);
+    return true;
+  }
+  if (p.endsWith("/system-prompt")) {
+    const id = decodeURIComponent(p.slice("/api/sessions/".length, -"/system-prompt".length));
+    handleSystemPromptGet(res, id, s.pool);
+    return true;
+  }
+  if (p.endsWith("/security")) {
+    // U22: журнал защиты (бэкфилл из audit.jsonl сессии + живой буфер).
+    const id = decodeURIComponent(p.slice("/api/sessions/".length, -"/security".length));
+    const query = new URL(req.url ?? "", "http://localhost").searchParams;
+    handleSessionSecurity(res, id, query.get("limit"), s.sessionManager?.getSessionDirectory?.(id));
+    return true;
+  }
+  if (p.includes("/images/")) {
+    const rest = p.slice("/api/sessions/".length);
+    const cut = rest.indexOf("/images/");
+    const id = decodeURIComponent(rest.slice(0, cut));
+    const name = decodeURIComponent(rest.slice(cut + "/images/".length));
+    handleSessionImage(res, id, name, s);
+    return true;
+  }
+  return false;
+}

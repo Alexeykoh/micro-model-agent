@@ -1,0 +1,178 @@
+{
+  "model": "qwen/qwen3.5-9b",
+  "providerUrl": "http://localhost:1234/v1",
+  "mmaVersion": "0.54.1",
+  "certifiedAt": "2026-08-25T18:09:52.468Z",
+  "certified": false,
+  "suite": {
+    "passed": 21,
+    "failed": 1,
+    "skipped": 1,
+    "total": 23
+  },
+  "results": [
+    {
+      "id": "2.1-read-file",
+      "title": "Read file content",
+      "status": "pass",
+      "passed": 1,
+      "of": 1
+    },
+    {
+      "id": "2.2-create-file",
+      "title": "Create single file",
+      "status": "pass",
+      "passed": 1,
+      "of": 1
+    },
+    {
+      "id": "2.4-edit-file",
+      "title": "Create then edit file",
+      "status": "pass",
+      "passed": 1,
+      "of": 1
+    },
+    {
+      "id": "3.1-calculator",
+      "title": "Multi-step calculator module",
+      "status": "fail",
+      "passed": 0,
+      "of": 1,
+      "error": "rep 1 timed out",
+      "diagnostics": "  Files created: bun.lock, node_modules/@types/bun/index.d.ts, node_modules/@types/bun/LICENSE, node_modules/@types/bun/package.json, node_modules/@types/bun/README.md, node_modules/@types/node/assert/strict.d.ts, node_modules/@types/node/assert.d.ts, node_modules/@types/node/async_hooks.d.ts, node_modules/@types/node/buffer.buffer.d.ts, node_modules/@types/node/buffer.d.ts, node_modules/@types/node/child_process.d.ts, node_modules/@types/node/cluster.d.ts, node_modules/@types/node/compatibility/disposable.d.ts, node_modules/@types/node/compatibility/index.d.ts, node_modules/@types/node/compatibility/indexable.d.ts, node_modules/@types/node/compatibility/iterators.d.ts, node_modules/@types/node/console.d.ts, node_modules/@types/node/constants.d.ts, node_modules/@types/node/crypto.d.ts, node_modules/@types/node/dgram.d.ts, node_modules/@types/node/diagnostics_channel.d.ts, node_modules/@types/node/dns/promises.d.ts, node_modules/@types/node/dns.d.ts, node_modules/@types/node/domain.d.ts, node_modules/@types/node/events.d.ts, node_modules/@types/node/fs/promises.d.ts, node_modules/@types/node/fs.d.ts, node_modules/@types/node/globals.d.ts, node_modules/@types/node/globals.typedarray.d.ts, node_modules/@types/node/http.d.ts, node_modules/@types/node/http2.d.ts, node_modules/@types/node/https.d.ts, node_modules/@types/node/index.d.ts, node_modules/@types/node/inspector.generated.d.ts, node_modules/@types/node/LICENSE, node_modules/@types/node/module.d.ts, node_modules/@types/node/net.d.ts, node_modules/@types/node/os.d.ts, node_modules/@types/node/package.json, node_modules/@types/node/path.d.ts, node_modules/@types/node/perf_hooks.d.ts, node_modules/@types/node/process.d.ts, node_modules/@types/node/punycode.d.ts, node_modules/@types/node/querystring.d.ts, node_modules/@types/node/readline/promises.d.ts, node_modules/@types/node/readline.d.ts, node_modules/@types/node/README.md, node_modules/@types/node/repl.d.ts, node_modules/@types/node/sea.d.ts, node_modules/@types/node/stream/consumers.d.ts, node_modules/@types/node/stream/promises.d.ts, node_modules/@types/node/stream/web.d.ts, node_modules/@types/node/stream.d.ts, node_modules/@types/node/string_decoder.d.ts, node_modules/@types/node/test.d.ts, node_modules/@types/node/timers/promises.d.ts, node_modules/@types/node/timers.d.ts, node_modules/@types/node/tls.d.ts, node_modules/@types/node/trace_events.d.ts, node_modules/@types/node/ts5.6/buffer.buffer.d.ts, node_modules/@types/node/ts5.6/globals.typedarray.d.ts, node_modules/@types/node/ts5.6/index.d.ts, node_modules/@types/node/tty.d.ts, node_modules/@types/node/url.d.ts, node_modules/@types/node/util.d.ts, node_modules/@types/node/v8.d.ts, node_modules/@types/node/vm.d.ts, node_modules/@types/node/wasi.d.ts, node_modules/@types/node/web-globals/abortcontroller.d.ts, node_modules/@types/node/web-globals/domexception.d.ts, node_modules/@types/node/web-globals/events.d.ts, node_modules/@types/node/web-globals/fetch.d.ts, node_modules/@types/node/worker_threads.d.ts, node_modules/@types/node/zlib.d.ts, node_modules/bun-types/bun.d.ts, node_modules/bun-types/bun.ns.d.ts, node_modules/bun-types/bundle.d.ts, node_modules/bun-types/CLAUDE.md, node_modules/bun-types/deprecated.d.ts, node_modules/bun-types/devserver.d.ts, node_modules/bun-types/docs/bundler/bytecode.mdx, node_modules/bun-types/docs/bundler/css.mdx, node_modules/bun-types/docs/bundler/esbuild.mdx, node_modules/bun-types/docs/bundler/executables.mdx, node_modules/bun-types/docs/bundler/fullstack.mdx, node_modules/bun-types/docs/bundler/hot-reloading.mdx, node_modules/bun-types/docs/bundler/html-static.mdx, node_modules/bun-types/docs/bundler/index.mdx, node_modules/bun-types/docs/bundler/loaders.mdx, node_modules/bun-types/docs/bundler/macros.mdx, node_modules/bun-types/docs/bundler/minifier.mdx, node_modules/bun-types/docs/bundler/plugins.mdx, node_modules/bun-types/docs/bundler/standalone-html.mdx, node_modules/bun-types/docs/feedback.mdx, node_modules/bun-types/docs/guides/binary/arraybuffer-to-array.mdx, node_modules/bun-types/docs/guides/binary/arraybuffer-to-blob.mdx, node_modules/bun-types/docs/guides/binary/arraybuffer-to-buffer.mdx, node_modules/bun-types/docs/guides/binary/arraybuffer-to-string.mdx, node_modules/bun-types/docs/guides/binary/arraybuffer-to-typedarray.mdx, node_modules/bun-types/docs/guides/binary/blob-to-arraybuffer.mdx, node_modules/bun-types/docs/guides/binary/blob-to-dataview.mdx, node_modules/bun-types/docs/guides/binary/blob-to-stream.mdx, node_modules/bun-types/docs/guides/binary/blob-to-string.mdx, node_modules/bun-types/docs/guides/binary/blob-to-typedarray.mdx, node_modules/bun-types/docs/guides/binary/buffer-to-arraybuffer.mdx, node_modules/bun-types/docs/guides/binary/buffer-to-blob.mdx, node_modules/bun-types/docs/guides/binary/buffer-to-readablestream.mdx, node_modules/bun-types/docs/guides/binary/buffer-to-string.mdx, node_modules/bun-types/docs/guides/binary/buffer-to-typedarray.mdx, node_modules/bun-types/docs/guides/binary/dataview-to-string.mdx, node_modules/bun-types/docs/guides/binary/typedarray-to-arraybuffer.mdx, node_modules/bun-types/docs/guides/binary/typedarray-to-blob.mdx, node_modules/bun-types/docs/guides/binary/typedarray-to-buffer.mdx, node_modules/bun-types/docs/guides/binary/typedarray-to-dataview.mdx, node_modules/bun-types/docs/guides/binary/typedarray-to-readablestream.mdx, node_modules/bun-types/docs/guides/binary/typedarray-to-string.mdx, node_modules/bun-types/docs/guides/deployment/aws-lambda.mdx, node_modules/bun-types/docs/guides/deployment/digital-ocean.mdx, node_modules/bun-types/docs/guides/deployment/google-cloud-run.mdx, node_modules/bun-types/docs/guides/deployment/railway.mdx, node_modules/bun-types/docs/guides/deployment/render.mdx, node_modules/bun-types/docs/guides/deployment/vercel.mdx, node_modules/bun-types/docs/guides/ecosystem/astro.mdx, node_modules/bun-types/docs/guides/ecosystem/discordjs.mdx, node_modules/bun-types/docs/guides/ecosystem/docker.mdx, node_modules/bun-types/docs/guides/ecosystem/drizzle.mdx, node_modules/bun-types/docs/guides/ecosystem/elysia.mdx, node_modules/bun-types/docs/guides/ecosystem/express.mdx, node_modules/bun-types/docs/guides/ecosystem/gel.mdx, node_modules/bun-types/docs/guides/ecosystem/hono.mdx, node_modules/bun-types/docs/guides/ecosystem/mongoose.mdx, node_modules/bun-types/docs/guides/ecosystem/neon-drizzle.mdx, node_modules/bun-types/docs/guides/ecosystem/neon-serverless-postgres.mdx, node_modules/bun-types/docs/guides/ecosystem/nextjs.mdx, node_modules/bun-types/docs/guides/ecosystem/nuxt.mdx, node_modules/bun-types/docs/guides/ecosystem/pm2.mdx, node_modules/bun-types/docs/guides/ecosystem/prisma-postgres.mdx, node_modules/bun-types/docs/guides/ecosystem/prisma.mdx, node_modules/bun-types/docs/guides/ecosystem/qwik.mdx, node_modules/bun-types/docs/guides/ecosystem/react.mdx, node_modules/bun-types/docs/guides/ecosystem/remix.mdx, node_modules/bun-types/docs/guides/ecosystem/sentry.mdx, node_modules/bun-types/docs/guides/ecosystem/solidstart.mdx, node_modules/bun-types/docs/guides/ecosystem/ssr-react.mdx, node_modules/bun-types/docs/guides/ecosystem/sveltekit.mdx, node_modules/bun-types/docs/guides/ecosystem/systemd.mdx, node_modules/bun-types/docs/guides/ecosystem/tanstack-start.mdx, node_modules/bun-types/docs/guides/ecosystem/upstash.mdx, node_modules/bun-types/docs/guides/ecosystem/vite.mdx, node_modules/bun-types/docs/guides/html-rewriter/extract-links.mdx, node_modules/bun-types/docs/guides/html-rewriter/extract-social-meta.mdx, node_modules/bun-types/docs/guides/http/cluster.mdx, node_modules/bun-types/docs/guides/http/fetch-unix.mdx, node_modules/bun-types/docs/guides/http/fetch.mdx, node_modules/bun-types/docs/guides/http/file-uploads.mdx, node_modules/bun-types/docs/guides/http/hot.mdx, node_modules/bun-types/docs/guides/http/proxy.mdx, node_modules/bun-types/docs/guides/http/server.mdx, node_modules/bun-types/docs/guides/http/simple.mdx, node_modules/bun-types/docs/guides/http/sse.mdx, node_modules/bun-types/docs/guides/http/stream-file.mdx, node_modules/bun-types/docs/guides/http/stream-iterator.mdx, node_modules/bun-types/docs/guides/http/stream-node-streams-in-bun.mdx, node_modules/bun-types/docs/guides/http/tls.mdx, node_modules/bun-types/docs/guides/index.mdx, node_modules/bun-types/docs/guides/install/add-dev.mdx, node_modules/bun-types/docs/guides/install/add-git.mdx, node_modules/bun-types/docs/guides/install/add-optional.mdx, node_modules/bun-types/docs/guides/install/add-peer.mdx, node_modules/bun-types/docs/guides/install/add-tarball.mdx, node_modules/bun-types/docs/guides/install/add.mdx, node_modules/bun-types/docs/guides/install/azure-artifacts.mdx, node_modules/bun-types/docs/guides/install/cicd.mdx, node_modules/bun-types/docs/guides/install/custom-registry.mdx, node_modules/bun-types/docs/guides/install/from-npm-install-to-bun-install.mdx, node_modules/bun-types/docs/guides/install/git-diff-bun-lockfile.mdx, node_modules/bun-types/docs/guides/install/jfrog-artifactory.mdx, node_modules/bun-types/docs/guides/install/npm-alias.mdx, node_modules/bun-types/docs/guides/install/registry-scope.mdx, node_modules/bun-types/docs/guides/install/trusted.mdx, node_modules/bun-types/docs/guides/install/workspaces.mdx, node_modules/bun-types/docs/guides/install/yarnlock.mdx, node_modules/bun-types/docs/guides/process/argv.mdx, node_modules/bun-types/docs/guides/process/ctrl-c.mdx, node_modules/bun-types/docs/guides/process/ipc.mdx, node_modules/bun-types/docs/guides/process/nanoseconds.mdx, node_modules/bun-types/docs/guides/process/os-signals.mdx, node_modules/bun-types/docs/guides/process/spawn-stderr.mdx, node_modules/bun-types/docs/guides/process/spawn-stdout.mdx, node_modules/bun-types/docs/guides/process/spawn.mdx, node_modules/bun-types/docs/guides/process/stdin.mdx, node_modules/bun-types/docs/guides/read-file/arraybuffer.mdx, node_modules/bun-types/docs/guides/read-file/buffer.mdx, node_modules/bun-types/docs/guides/read-file/exists.mdx, node_modules/bun-types/docs/guides/read-file/json.mdx, node_modules/bun-types/docs/guides/read-file/mime.mdx, node_modules/bun-types/docs/guides/read-file/stream.mdx, node_modules/bun-types/docs/guides/read-file/string.mdx, node_modules/bun-types/docs/guides/read-file/uint8array.mdx, node_modules/bun-types/docs/guides/read-file/watch.mdx, node_modules/bun-types/docs/guides/runtime/build-time-constants.mdx, node_modules/bun-types/docs/guides/runtime/cicd.mdx, node_modules/bun-types/docs/guides/runtime/codesign-macos-executable.mdx, node_modules/bun-types/docs/guides/runtime/define-constant.mdx, node_modules/bun-types/docs/guides/runtime/delete-directory.mdx, node_modules/bun-types/docs/guides/runtime/delete-file.mdx, node_modules/bun-types/docs/guides/runtime/heap-snapshot.mdx, node_modules/bun-types/docs/guides/runtime/import-html.mdx, node_modules/bun-types/docs/guides/runtime/import-json.mdx, node_modules/bun-types/docs/guides/runtime/import-json5.mdx, node_modules/bun-types/docs/guides/runtime/import-toml.mdx, node_modules/bun-types/docs/guides/runtime/import-xml.mdx, node_modules/bun-types/docs/guides/runtime/import-yaml.mdx, node_modules/bun-types/docs/guides/runtime/read-env.mdx, node_modules/bun-types/docs/guides/runtime/set-env.mdx, node_modules/bun-types/docs/guides/runtime/shell.mdx, node_modules/bun-types/docs/guides/runtime/timezone.mdx, node_modules/bun-types/docs/guides/runtime/tsconfig-paths.mdx, node_modules/bun-types/docs/guides/runtime/typescript.mdx, node_modules/bun-types/docs/guides/runtime/vscode-debugger.mdx, node_modules/bun-types/docs/guides/runtime/web-debugger.mdx, node_modules/bun-types/docs/guides/streams/node-readable-to-arraybuffer.mdx, node_modules/bun-types/docs/guides/streams/node-readable-to-blob.mdx, node_modules/bun-types/docs/guides/streams/node-readable-to-json.mdx, node_modules/bun-types/docs/guides/streams/node-readable-to-string.mdx, node_modules/bun-types/docs/guides/streams/node-readable-to-uint8array.mdx, node_modules/bun-types/docs/guides/streams/to-array.mdx, node_modules/bun-types/docs/guides/streams/to-arraybuffer.mdx, node_modules/bun-types/docs/guides/streams/to-blob.mdx, node_modules/bun-types/docs/guides/streams/to-buffer.mdx, node_modules/bun-types/docs/guides/streams/to-json.mdx, node_modules/bun-types/docs/guides/streams/to-string.mdx, node_modules/bun-types/docs/guides/streams/to-typedarray.mdx, node_modules/bun-types/docs/guides/test/bail.mdx, node_modules/bun-types/docs/guides/test/concurrent-test-glob.mdx, node_modules/bun-types/docs/guides/test/coverage-threshold.mdx, node_modules/bun-types/docs/guides/test/coverage.mdx, node_modules/bun-types/docs/guides/test/happy-dom.mdx, node_modules/bun-types/docs/guides/test/migrate-from-jest.mdx, node_modules/bun-types/docs/guides/test/mock-clock.mdx, node_modules/bun-types/docs/guides/test/mock-functions.mdx, node_modules/bun-types/docs/guides/test/rerun-each.mdx, node_modules/bun-types/docs/guides/test/run-tests.mdx, node_modules/bun-types/docs/guides/test/skip-tests.mdx, node_modules/bun-types/docs/guides/test/snapshot.mdx, node_modules/bun-types/docs/guides/test/spy-on.mdx, node_modules/bun-types/docs/guides/test/svelte-test.mdx, node_modules/bun-types/docs/guides/test/testing-library.mdx, node_modules/bun-types/docs/guides/test/timeout.mdx, node_modules/bun-types/docs/guides/test/todo-tests.mdx, node_modules/bun-types/docs/guides/test/update-snapshots.mdx, node_modules/bun-types/docs/guides/test/watch-mode.mdx, node_modules/bun-types/docs/guides/util/base64.mdx, node_modules/bun-types/docs/guides/util/deep-equals.mdx, node_modules/bun-types/docs/guides/util/deflate.mdx, node_modules/bun-types/docs/guides/util/detect-bun.mdx, node_modules/bun-types/docs/guides/util/entrypoint.mdx, node_modules/bun-types/docs/guides/util/escape-html.mdx, node_modules/bun-types/docs/guides/util/file-url-to-path.mdx, node_modules/bun-types/docs/guides/util/gzip.mdx, node_modules/bun-types/docs/guides/util/hash-a-password.mdx, node_modules/bun-types/docs/guides/util/import-meta-dir.mdx, node_modules/bun-types/docs/guides/util/import-meta-file.mdx, node_modules/bun-types/docs/guides/util/import-meta-path.mdx, node_modules/bun-types/docs/guides/util/javascript-uuid.mdx, node_modules/bun-types/docs/guides/util/main.mdx, node_modules/bun-types/docs/guides/util/path-to-file-url.mdx, node_modules/bun-types/docs/guides/util/sleep.mdx, node_modules/bun-types/docs/guides/util/upgrade.mdx, node_modules/bun-types/docs/guides/util/version.mdx, node_modules/bun-types/docs/guides/util/which-path-to-executable-bin.mdx, node_modules/bun-types/docs/guides/websocket/compression.mdx, node_modules/bun-types/docs/guides/websocket/context.mdx, node_modules/bun-types/docs/guides/websocket/pubsub.mdx, node_modules/bun-types/docs/guides/websocket/simple.mdx, node_modules/bun-types/docs/guides/write-file/append.mdx, node_modules/bun-types/docs/guides/write-file/basic.mdx, node_modules/bun-types/docs/guides/write-file/blob.mdx, node_modules/bun-types/docs/guides/write-file/cat.mdx, node_modules/bun-types/docs/guides/write-file/file-cp.mdx, node_modules/bun-types/docs/guides/write-file/filesink.mdx, node_modules/bun-types/docs/guides/write-file/response.mdx, node_modules/bun-types/docs/guides/write-file/stdout.mdx, node_modules/bun-types/docs/guides/write-file/stream.mdx, node_modules/bun-types/docs/guides/write-file/unlink.mdx, node_modules/bun-types/docs/index.mdx, node_modules/bun-types/docs/installation.mdx, node_modules/bun-types/docs/pm/bunx.mdx, node_modules/bun-types/docs/pm/catalogs.mdx, node_modules/bun-types/docs/pm/cli/add.mdx, node_modules/bun-types/docs/pm/cli/audit.mdx, node_modules/bun-types/docs/pm/cli/dedupe.mdx, node_modules/bun-types/docs/pm/cli/info.mdx, node_modules/bun-types/docs/pm/cli/install.mdx, node_modules/bun-types/docs/pm/cli/link.mdx, node_modules/bun-types/docs/pm/cli/outdated.mdx, node_modules/bun-types/docs/pm/cli/patch.mdx, node_modules/bun-types/docs/pm/cli/pm.mdx, node_modules/bun-types/docs/pm/cli/prune.mdx, node_modules/bun-types/docs/pm/cli/publish.mdx, node_modules/bun-types/docs/pm/cli/remove.mdx, node_modules/bun-types/docs/pm/cli/update.mdx, node_modules/bun-types/docs/pm/cli/why.mdx, node_modules/bun-types/docs/pm/filter.mdx, node_modules/bun-types/docs/pm/global-cache.mdx, node_modules/bun-types/docs/pm/global-store.mdx, node_modules/bun-types/docs/pm/isolated-installs.mdx, node_modules/bun-types/docs/pm/lifecycle.mdx, node_modules/bun-types/docs/pm/lockfile.mdx, node_modules/bun-types/docs/pm/npmrc.mdx, node_modules/bun-types/docs/pm/overrides.mdx, node_modules/bun-types/docs/pm/scopes-registries.mdx, node_modules/bun-types/docs/pm/security-scanner-api.mdx, node_modules/bun-types/docs/pm/workspaces.mdx, node_modules/bun-types/docs/project/benchmarking.mdx, node_modules/bun-types/docs/project/bindgen.mdx, node_modules/bun-types/docs/project/building-windows.mdx, node_modules/bun-types/docs/project/contributing.mdx, node_modules/bun-types/docs/project/license.mdx, node_modules/bun-types/docs/project/roadmap.mdx, node_modules/bun-types/docs/quickstart.mdx, node_modules/bun-types/docs/README.md, node_modules/bun-types/docs/runtime/archive.mdx, node_modules/bun-types/docs/runtime/auto-install.mdx, node_modules/bun-types/docs/runtime/binary-data.mdx, node_modules/bun-types/docs/runtime/bun-apis.mdx, node_modules/bun-types/docs/runtime/bunfig.mdx, node_modules/bun-types/docs/runtime/c-compiler.mdx, node_modules/bun-types/docs/runtime/child-process.mdx, node_modules/bun-types/docs/runtime/color.mdx, node_modules/bun-types/docs/runtime/console.mdx, node_modules/bun-types/docs/runtime/cookies.mdx, node_modules/bun-types/docs/runtime/cron.mdx, node_modules/bun-types/docs/runtime/csrf.mdx, node_modules/bun-types/docs/runtime/debugger.mdx, node_modules/bun-types/docs/runtime/environment-variables.mdx, node_modules/bun-types/docs/runtime/ffi.mdx, node_modules/bun-types/docs/runtime/file-io.mdx, node_modules/bun-types/docs/runtime/file-system-router.mdx, node_modules/bun-types/docs/runtime/file-types.mdx, node_modules/bun-types/docs/runtime/glob.mdx, node_modules/bun-types/docs/runtime/globals.mdx, node_modules/bun-types/docs/runtime/hashing.mdx, node_modules/bun-types/docs/runtime/html-rewriter.mdx, node_modules/bun-types/docs/runtime/http/cookies.mdx, node_modules/bun-types/docs/runtime/http/error-handling.mdx, node_modules/bun-types/docs/runtime/http/metrics.mdx, node_modules/bun-types/docs/runtime/http/routing.mdx, node_modules/bun-types/docs/runtime/http/server.mdx, node_modules/bun-types/docs/runtime/http/tls.mdx, node_modules/bun-types/docs/runtime/http/websockets.mdx, node_modules/bun-types/docs/runtime/image.mdx, node_modules/bun-types/docs/runtime/index.mdx, node_modules/bun-types/docs/runtime/json5.mdx, node_modules/bun-types/docs/runtime/jsonl.mdx, node_modules/bun-types/docs/runtime/jsx.mdx, node_modules/bun-types/docs/runtime/markdown.mdx, node_modules/bun-types/docs/runtime/module-resolution.mdx, node_modules/bun-types/docs/runtime/networking/dns.mdx, node_modules/bun-types/docs/runtime/networking/fetch.mdx, node_modules/bun-types/docs/runtime/networking/tcp.mdx, node_modules/bun-types/docs/runtime/networking/udp.mdx, node_modules/bun-types/docs/runtime/node-api.mdx, node_modules/bun-types/docs/runtime/nodejs-compat.mdx, node_modules/bun-types/docs/runtime/plugins.mdx, node_modules/bun-types/docs/runtime/redis.mdx, node_modules/bun-types/docs/runtime/repl.mdx, node_modules/bun-types/docs/runtime/s3.mdx, node_modules/bun-types/docs/runtime/secrets.mdx, node_modules/bun-types/docs/runtime/semver.mdx, node_modules/bun-types/docs/runtime/shell.mdx, node_modules/bun-types/docs/runtime/sql.mdx, node_modules/bun-types/docs/runtime/sqlite.mdx, node_modules/bun-types/docs/runtime/streams.mdx, node_modules/bun-types/docs/runtime/templating/create.mdx, node_modules/bun-types/docs/runtime/templating/init.mdx, node_modules/bun-types/docs/runtime/toml.mdx, node_modules/bun-types/docs/runtime/transpiler.mdx, node_modules/bun-types/docs/runtime/typescript.mdx, node_modules/bun-types/docs/runtime/utils.mdx, node_modules/bun-types/docs/runtime/watch-mode.mdx, node_modules/bun-types/docs/runtime/web-apis.mdx, node_modules/bun-types/docs/runtime/webview.mdx, node_modules/bun-types/docs/runtime/workers.mdx, node_modules/bun-types/docs/runtime/xml.mdx, node_modules/bun-types/docs/runtime/yaml.mdx, node_modules/bun-types/docs/snippets/cli/add.mdx, node_modules/bun-types/docs/snippets/cli/build.mdx, node_modules/bun-types/docs/snippets/cli/bunx.mdx, node_modules/bun-types/docs/snippets/cli/init.mdx, node_modules/bun-types/docs/snippets/cli/install.mdx, node_modules/bun-types/docs/snippets/cli/link.mdx, node_modules/bun-types/docs/snippets/cli/outdated.mdx, node_modules/bun-types/docs/snippets/cli/patch.mdx, node_modules/bun-types/docs/snippets/cli/publish.mdx, node_modules/bun-types/docs/snippets/cli/remove.mdx, node_modules/bun-types/docs/snippets/cli/run.mdx, node_modules/bun-types/docs/snippets/cli/test.mdx, node_modules/bun-types/docs/snippets/cli/update.mdx, node_modules/bun-types/docs/test/code-coverage.mdx, node_modules/bun-types/docs/test/configuration.mdx, node_modules/bun-types/docs/test/dates-times.mdx, node_modules/bun-types/docs/test/discovery.mdx, node_modules/bun-types/docs/test/dom.mdx, node_modules/bun-types/docs/test/index.mdx, node_modules/bun-types/docs/test/lifecycle.mdx, node_modules/bun-types/docs/test/mocks.mdx, node_modules/bun-types/docs/test/parallel.mdx, node_modules/bun-types/docs/test/reporters.mdx, node_modules/bun-types/docs/test/runtime-behavior.mdx, node_modules/bun-types/docs/test/snapshots.mdx, node_modules/bun-types/docs/test/writing-tests.mdx, node_modules/bun-types/docs/typescript-6.mdx, node_modules/bun-types/docs/typescript.mdx, node_modules/bun-types/extensions.d.ts, node_modules/bun-types/fetch.d.ts, node_modules/bun-types/ffi.d.ts, node_modules/bun-types/globals.d.ts, node_modules/bun-types/html-rewriter.d.ts, node_modules/bun-types/index.d.ts, node_modules/bun-types/jsc.d.ts, node_modules/bun-types/jsx.d.ts, node_modules/bun-types/overrides.d.ts, node_modules/bun-types/package.json, node_modules/bun-types/README.md, node_modules/bun-types/redis.d.ts, node_modules/bun-types/s3.d.ts, node_modules/bun-types/security.d.ts, node_modules/bun-types/serve.d.ts, node_modules/bun-types/shell.d.ts, node_modules/bun-types/sql.d.ts, node_modules/bun-types/sqlite.d.ts, node_modules/bun-types/test-globals.d.ts, node_modules/bun-types/test.d.ts, node_modules/bun-types/vendor/expect-type/branding.d.ts, node_modules/bun-types/vendor/expect-type/index.d.ts, node_modules/bun-types/vendor/expect-type/messages.d.ts, node_modules/bun-types/vendor/expect-type/overloads.d.ts, node_modules/bun-types/vendor/expect-type/utils.d.ts, node_modules/bun-types/wasm.d.ts, node_modules/undici-types/agent.d.ts, node_modules/undici-types/api.d.ts, node_modules/undici-types/balanced-pool.d.ts, node_modules/undici-types/cache.d.ts, node_modules/undici-types/client.d.ts, node_modules/undici-types/connector.d.ts, node_modules/undici-types/content-type.d.ts, node_modules/undici-types/cookies.d.ts, node_modules/undici-types/diagnostics-channel.d.ts, node_modules/undici-types/dispatcher.d.ts, node_modules/undici-types/env-http-proxy-agent.d.ts, node_modules/undici-types/errors.d.ts, node_modules/undici-types/eventsource.d.ts, node_modules/undici-types/fetch.d.ts, node_modules/undici-types/file.d.ts, node_modules/undici-types/filereader.d.ts, node_modules/undici-types/formdata.d.ts, node_modules/undici-types/global-dispatcher.d.ts, node_modules/undici-types/global-origin.d.ts, node_modules/undici-types/handlers.d.ts, node_modules/undici-types/header.d.ts, node_modules/undici-types/index.d.ts, node_modules/undici-types/interceptors.d.ts, node_modules/undici-types/LICENSE, node_modules/undici-types/mock-agent.d.ts, node_modules/undici-types/mock-client.d.ts, node_modules/undici-types/mock-errors.d.ts, node_modules/undici-types/mock-interceptor.d.ts, node_modules/undici-types/mock-pool.d.ts, node_modules/undici-types/package.json, node_modules/undici-types/patch.d.ts, node_modules/undici-types/pool-stats.d.ts, node_modules/undici-types/pool.d.ts, node_modules/undici-types/proxy-agent.d.ts, node_modules/undici-types/readable.d.ts, node_modules/undici-types/README.md, node_modules/undici-types/retry-agent.d.ts, node_modules/undici-types/retry-handler.d.ts, node_modules/undici-types/util.d.ts, node_modules/undici-types/webidl.d.ts, node_modules/undici-types/websocket.d.ts, package.json, src/calculator.test.ts, src/calculator.ts\n  Plan: 0/4 steps done\n  Pending: #1 Create src directory; #2 Create src/calculator.ts with add, subtract, multiply, divide functions; #3 Create src/calculator.test.ts with tests for all functions; #4 Run bun test to verify tests pass"
+    },
+    {
+      "id": "3.5-data-pipeline",
+      "title": "Data processing pipeline",
+      "status": "pass",
+      "passed": 1,
+      "of": 1
+    },
+    {
+      "id": "3.6-bash-run",
+      "title": "Run bash command and capture output",
+      "status": "pass",
+      "passed": 1,
+      "of": 1
+    },
+    {
+      "id": "3.9-multi-tool-chain",
+      "title": "Read → grep → edit chain",
+      "status": "pass",
+      "passed": 1,
+      "of": 1
+    },
+    {
+      "id": "3.10-subagent-delegate",
+      "title": "Delegate to subagent",
+      "status": "pass",
+      "passed": 1,
+      "of": 1
+    },
+    {
+      "id": "3.11-plan-create-update",
+      "title": "Create and update a plan",
+      "status": "pass",
+      "passed": 1,
+      "of": 1
+    },
+    {
+      "id": "6.1-plan-create-execute",
+      "title": "Plan creation and step tracking",
+      "status": "pass",
+      "passed": 1,
+      "of": 1
+    },
+    {
+      "id": "7.1-subagent-file",
+      "title": "Subagent writes file in isolated scope",
+      "status": "pass",
+      "passed": 1,
+      "of": 1
+    },
+    {
+      "id": "8.1-enable-tools",
+      "title": "Enable hidden tools on demand",
+      "status": "pass",
+      "passed": 1,
+      "of": 1
+    },
+    {
+      "id": "9.1-lsp-check",
+      "title": "LSP detects TypeScript errors",
+      "status": "pass",
+      "passed": 1,
+      "of": 1
+    },
+    {
+      "id": "2.3-create-dir-file",
+      "title": "Create directory and file",
+      "status": "pass",
+      "passed": 3,
+      "of": 3
+    },
+    {
+      "id": "2.5-read-edit-chain",
+      "title": "Read existing file then edit it",
+      "status": "pass",
+      "passed": 3,
+      "of": 3
+    },
+    {
+      "id": "2.6-move-file",
+      "title": "Move/rename file",
+      "status": "pass",
+      "passed": 3,
+      "of": 3
+    },
+    {
+      "id": "2.7-delete-file",
+      "title": "Delete a file",
+      "status": "pass",
+      "passed": 3,
+      "of": 3
+    },
+    {
+      "id": "2.8-create-dir",
+      "title": "Create directory standalone",
+      "status": "pass",
+      "passed": 3,
+      "of": 3
+    },
+    {
+      "id": "2.9-list-dir",
+      "title": "List directory contents",
+      "status": "pass",
+      "passed": 3,
+      "of": 3
+    },
+    {
+      "id": "2.10-file-info",
+      "title": "Get file info",
+      "status": "pass",
+      "passed": 3,
+      "of": 3
+    },
+    {
+      "id": "3.7-grep-search",
+      "title": "Search file contents with grep",
+      "status": "pass",
+      "passed": 3,
+      "of": 3
+    },
+    {
+      "id": "3.8-glob-find",
+      "title": "Find files with glob",
+      "status": "pass",
+      "passed": 3,
+      "of": 3
+    },
+    {
+      "id": "1.1-question-tool",
+      "title": "Question tool (removed)",
+      "status": "skipped",
+      "passed": 0,
+      "of": 0
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+// Типы контр-агента: вердикты, замечания и пакет доказательств для проверки.
+export type CriticSeverity = "info" | "concern" | "critical";
+
+/** Одно замечание критика: утверждение, проблема, совет, доказательство. */
+export interface CriticIssue {
+  severity: CriticSeverity;
+  claim: string;
+  problem: string;
+  suggestion?: string;
+  evidence?: string;
+}
+
+/** Сырые запрошенные критиком проверки (форма и allowlist enforced при разборе). */
+export type RawCriticChecks = Array<{ tool: string; args?: Record<string, unknown> }>;
+
+/** Вердикт критика: статус, сводка, замечания, запрошенные read-only проверки. */
+export interface CriticVerdict {
+  status: "ok" | "concern" | "critical";
+  summary: string;
+  issues: CriticIssue[];
+  /**
+   * Запрошенные критиком read-only проверки (Phase 2). Парсятся терпимо —
+   * allowlist и кап enforced в `parseChecks` (`src/modules/critic/tools.ts`),
+   * вслепую не доверяем.
+   */
+  checks?: RawCriticChecks;
+}
+
+/** Событие прогресса проверки (какой проход идёт и что уже найдено). */
+export interface CriticStage {
+  stage: "verdict" | "checks" | "final";
+  /** Номер LLM-прохода (1 — первый вердикт). */
+  pass: number;
+  verdict?: CriticVerdict;
+  checks?: RawCriticChecks;
+  results?: Array<{ tool: string; ok: boolean; output: string }>;
+}
+
+/** Раннер одной read-only проверки: тул + args (+ общий сигнал отмены). */
+export type CriticRunCheck = (
+  tool: string,
+  args: Record<string, unknown>,
+  signal?: AbortSignal,
+) => Promise<{ ok: boolean; output: string }>;
+
+/** Пакет доказательств: задача, план, изменённые файлы, команды, дайджест тулов. */
+export interface EvidencePack {
+  task: string;
+  planSummary?: string;
+  /** Каталог конфига (вне workspace): валидная улика для config-задач. */
+  configDir?: string;
+  /** Незакрытые шаги плана (кап 8; рендер добавляет «+N more»). */
+  planPendingSteps?: string[];
+  planPendingStepsTotal?: number;
+  changedFiles: string[];
+  commands: Array<{ command: string; exitCode?: number; output?: string }>;
+  toolDigest: string;
+  /** Ограниченные head-выдержки изменённых файлов (читаются с диска при известном baseDir). Нет, если нечитаемы. */
+  fileExcerpts?: Array<{ path: string; excerpt: string }>;
+  /**
+   * Выдержка финального ответа модели (только для ходов без work-мутаций:
+   * чат-доставка без файлов). Даёт критику зрение на текст ответа —
+   * иначе чат-задачи («покажи пример») он судит вслепую по одним тулам.
+   */
+  answerExcerpt?: string;
+  /**
+   * Веб-обоснование: были ли реально получены содержательные данные из сети.
+   * `attempted` — сколько web_fetch/web_search; `verified` — хотя бы один
+   * web_fetch вернул непустой содержательный текст. Ложь вида «цена X BYN»
+   * без `verified` критик должен помечать (наблюдалось: выдуманный md-файл).
+   */
+  webGrounding?: { attempted: number; verified: boolean; unverifiedClaims?: string[] };
+}

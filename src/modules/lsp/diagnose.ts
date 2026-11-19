@@ -1,0 +1,170 @@
+// Диагностика LSP-серверов проекта: причина неисправности + класс + проба.
+import type { LspConfig } from "./types";
+import { LspClient, type LspClientLogger } from "./client";
+import { getServerKeyForFile } from "./config";
+import { collectCheckFiles, LSP_DIAGNOSE_SCAN_LIMIT } from "./check-tool";
+import { findOnPath, isOfflineLsp } from "./resolve";
+import {
+  LSP_DOCTOR_TIMEOUT_MS as DEFAULT_TIMEOUT_MS,
+  LSP_DOCTOR_DEADLINE_MS as DEFAULT_DEADLINE_MS,
+} from "../../config/timeouts";
+import {
+  diagnoseServer,
+  baseDiagnosis,
+  type LspServerDiagnosis,
+  type ServerContext,
+} from "./diagnose-server";
+import { detectProjectToolchain, type ProjectToolchain } from "./toolchain";
+import { readNodeVersion, readVersion, type NodeVersion } from "./node-version";
+import { findProjectRoot } from "./project-root";
+
+/** Сколько разных корней на один язык пробуем в doctor (монорепо). */
+export const DIAGNOSE_ROOT_LIMIT = 3;
+
+// Классификация/установка/типы сервера живут в `./diagnose-server`; реэкспорт
+// для существующих импортёров (`./module`, `./index`, тесты).
+export { classifyLspError, npxPackages, installCommandFor } from "./diagnose-server";
+export type { LspFailureReason, LspServerDiagnosis } from "./diagnose-server";
+
+/** Полная диагностика LSP проекта (для `/lsp doctor`). */
+export interface LspDiagnosis {
+  enabled: boolean;
+  offline: boolean;
+  projectRoot: string;
+  servers: LspServerDiagnosis[];
+  /** Объявленные версии тулчейна проекта (все языки) — что учтено в подсказках. */
+  toolchain?: ProjectToolchain;
+  /** Версия Node из PATH: объясняет крах сервера на неподходящем рантайме. */
+  nodeVersion?: NodeVersion;
+  /**
+   * Версия `npx` из PATH. npx-серверы зависят от связки node↔npm: если npx
+   * собран под другой Node, запуск падает ещё до сервера — это надо видеть, а
+   * не списывать на «сервер не отвечает». `null` — npx не запускается.
+   */
+  npxVersion?: string | null;
+}
+
+/** Зависимости диагностики (инжекции для тестов). */
+export interface LspDiagnoseDeps {
+  client?: LspClient;
+  /** Кап таймаута одного сервера, мс. */
+  timeoutMs?: number;
+  /** Общий дедлайн, мс. */
+  deadlineMs?: number;
+  /** Инжектируемый сборщик файлов (тесты). */
+  collectFiles?: (baseDir: string, config: LspConfig) => Promise<string[]>;
+  /** Инжектируемый поиск бинарника в PATH (тесты). */
+  findOnPath?: (name: string) => string | null;
+  /** Override офлайн-режима (по умолчанию `MMA_LSP_OFFLINE`). */
+  offline?: boolean;
+  /** Инжектируемый тулчейн проекта (тесты); по умолчанию читается с диска. */
+  toolchain?: ProjectToolchain;
+  /** Инжектируемая версия Node (тесты); по умолчанию `node --version`. */
+  nodeVersion?: NodeVersion | null;
+  /** Инжектируемая версия npx (тесты); по умолчанию `npx --version`. */
+  npxVersion?: string | null;
+  logger?: LspClientLogger;
+}
+
+/**
+ * Продиагностировать LSP-серверы, применимые к проекту: применимость,
+ * включённость, резолв запуска, реальная проба (`spawn+initialize`) и класс
+ * причины. Сервера, которым не нужна сеть и которые заведомо не стартуют
+ * (disabled / нет файлов / нет бинарника / офлайн), не пробуются.
+ */
+export async function diagnoseLspServers(
+  config: LspConfig,
+  baseDir: string,
+  deps: LspDiagnoseDeps = {},
+): Promise<LspDiagnosis> {
+  const offline = deps.offline ?? isOfflineLsp(undefined, config.offline);
+  const timeoutCap = deps.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const deadlineMs = deps.deadlineMs ?? DEFAULT_DEADLINE_MS;
+  const collect =
+    deps.collectFiles ??
+    ((dir: string, cfg: LspConfig) => collectCheckFiles(dir, cfg, LSP_DIAGNOSE_SCAN_LIMIT));
+  const probePath = deps.findOnPath ?? findOnPath;
+  const toolchain = deps.toolchain ?? detectProjectToolchain(baseDir);
+  const nodeVersion = deps.nodeVersion === undefined ? readNodeVersion() : deps.nodeVersion;
+  const entries = Object.entries(config.servers);
+  // npx читаем один раз: он нужен для npx-серверов и объясняет класс отказов
+  // «node и npm/npx из разных установок».
+  const usesNpx = entries.some(([, server]) => server.command === "npx");
+  const npxVersion =
+    deps.npxVersion !== undefined ? deps.npxVersion : usesNpx ? readVersion("npx") : null;
+
+  if (!config.enabled) {
+    return {
+      enabled: false,
+      offline,
+      projectRoot: baseDir,
+      toolchain,
+      nodeVersion: nodeVersion ?? undefined,
+      npxVersion,
+      servers: entries.map(([language, server]) =>
+        baseDiagnosis(language, server, { enabled: false, applicable: false, reason: "disabled" }),
+      ),
+    };
+  }
+
+  const files = await collect(baseDir, config);
+  const applicable = new Set<string>();
+  // Корни проектов, к которым относятся файлы: проверка идёт с корнем ФАЙЛА
+  // (`my-app`), а не с baseDir. Doctor обязан пробовать тот же корень, иначе
+  // «doctor ок, проверка не работает» — штатное поведение.
+  const rootsByLanguage = new Map<string, string[]>();
+  for (const file of files) {
+    const key = getServerKeyForFile(file, config);
+    if (!key) continue;
+    applicable.add(key);
+    const server = config.servers[key];
+    if (!server) continue;
+    const root = findProjectRoot(file, baseDir, server.workspaceMarkers ?? []);
+    const known = rootsByLanguage.get(key) ?? [];
+    if (!known.includes(root) && known.length < DIAGNOSE_ROOT_LIMIT) {
+      known.push(root);
+      rootsByLanguage.set(key, known);
+    }
+  }
+
+  const client = deps.client ?? new LspClient();
+  if (!deps.client) {
+    client.setLogger(deps.logger ?? null);
+    client.setOffline(config.offline);
+  }
+
+  const ctx: ServerContext = {
+    offline,
+    deadline: Date.now() + deadlineMs,
+    client,
+    baseDir,
+    defaultTimeout: config.timeout,
+    timeoutCap,
+    probePath,
+    toolchain,
+  };
+  const servers: LspServerDiagnosis[] = [];
+  for (const [language, server] of entries) {
+    const roots = rootsByLanguage.get(language) ?? [];
+    if (!applicable.has(language)) {
+      servers.push(await diagnoseServer(language, server, false, ctx));
+      continue;
+    }
+    // Один сервер может обслуживать несколько корней (монорепо): каждый корень
+    // — отдельная строка, потому что `initialize` у них разный.
+    for (const root of roots) {
+      servers.push(await diagnoseServer(language, server, true, ctx, root));
+    }
+    if (roots.length === 0) servers.push(await diagnoseServer(language, server, true, ctx));
+  }
+
+  return {
+    enabled: true,
+    offline,
+    projectRoot: baseDir,
+    toolchain,
+    nodeVersion: nodeVersion ?? undefined,
+    npxVersion,
+    servers,
+  };
+}

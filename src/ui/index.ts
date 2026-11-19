@@ -1,0 +1,14 @@
+// Фасад UI: форматтеры, вывод, таблицы, спиннер, рендерер.
+export {
+  formatMarkdown,
+  formatError,
+  formatSuccess,
+  formatWarning,
+  FormattingStream,
+} from "./md-formatter";
+export { writeOutput, writeError, writeSuccess, writeWarning } from "./output";
+export { formatTable, splitRow, isSeparatorRow, getTerminalWidth } from "./table";
+export { box, divider, wrapText } from "./box";
+export { Spinner, isSpinnerSupported } from "./spinner";
+export { Renderer, isRichTerminal, summarizeArgs } from "./renderer";
+export type { RendererOptions } from "./renderer";

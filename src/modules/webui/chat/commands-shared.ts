@@ -1,0 +1,97 @@
+// Общая обвязка слеш-хендлеров `mma web`: единый путь записи конфига (реестр → персист).
+/**
+ * Ядерный диспетчер (`commands.ts`) и расширенные хендлеры настроек
+ * (`commands-settings.ts`) идут ОДНИМ путём записи: реестр конфига
+ * (`setConfigValue`), хуки `saveConfig`/`reconfigure` хоста. Хелперы здесь,
+ * чтобы между модулями хендлеров не было цикла импортов.
+ */
+import type { AppConfig } from "../../../config/types";
+import { setLocale, t } from "../../../i18n/index";
+import { setConfigValue } from "../../../config/registry";
+import { needsRebuild } from "../../../config/effects";
+import { broadcast, type SessionStore, type ConfigStore, type SseTransport, type RuntimeState } from "../state";
+
+/** Вывод строки в ленту команды. */
+export type Out = (line: string) => void;
+/** Хендлер команды: аргументы и вывод. */
+export type Handler = (args: string[], out: Out) => void | Promise<void>;
+
+/** Гоняет `fn` только при wired конфиге; иначе — подсказка. */
+export function withConfig(
+  state: SessionStore & ConfigStore & RuntimeState,
+  out: Out,
+  fn: (cfg: AppConfig) => void | Promise<void>,
+): void | Promise<void> {
+  if (!state.config) {
+    out(t("web.config.unavailable"));
+    return;
+  }
+  return fn(state.config);
+}
+
+/** Мета активной сессии; null, если сессий нет. */
+export function activeMeta(state: SessionStore & ConfigStore & RuntimeState) {
+  const id = state.sessionManager?.getActive();
+  return id ? (state.sessionManager?.get(id) ?? null) : null;
+}
+
+/** Человекочитаемый текст ошибки записи конфига по причине реестра. */
+export function configErrorText(reason: string, input: string, key?: string): string {
+  const target = key ?? input;
+  switch (reason) {
+    case "unknown-key":
+      return t("web.config.unknown_key", { key: input });
+    case "read-only":
+      return t("web.config.read_only", { key: target });
+    case "range":
+      return t("web.config.range", { key: target });
+    case "combined":
+      return t("web.config.combined");
+    default:
+      return t("web.config.invalid_value", { key: target });
+  }
+}
+
+/** Персист + reconfigure после успешной записи реестра, затем отчёт. */
+export async function applyConfigWrite(
+  cfg: AppConfig,
+  name: string,
+  value: string,
+  out: Out,
+  state: SessionStore & ConfigStore & RuntimeState & SseTransport,
+): Promise<void> {
+  // Конфиг меняет живой раннер через `reconfigure` (resize контекста, подмена
+  // провайдера) — во время хода это гонка. Читающие команды (`/status`,
+  // `/model list`, `/config <key>`) проходят мимо этого пути и остаются.
+  if (state.busy) {
+    out("↳ busy: stop the running turn before changing settings");
+    return;
+  }
+  const result = setConfigValue(cfg, name, value);
+  if (!result.ok) {
+    out(`↳ ${configErrorText(result.reason, result.input, result.key)}`);
+    return;
+  }
+  // У `locale` в реестре `reconfigure: false`, так что больше некому применить
+  // его к процесс-глобальному i18n. Делаем здесь, чтобы серверный вывод и
+  // перезапрошенный словарь браузера сошлись сразу (зеркалит `handleConfigPost`).
+  if (result.key === "locale") setLocale(cfg.locale);
+  let note = "saved";
+  try {
+    state.saveConfig?.(cfg, result.key);
+  } catch {
+    note = "not persisted";
+  }
+  if (needsRebuild(result.effects) && state.reconfigure) {
+    try {
+      await state.reconfigure(cfg);
+    } catch {
+      note = `${note}; reconfigure failed`;
+    }
+  }
+  // Клиенты держат собственную копию конфига (панель настроек, селекторы);
+  // команда пишет конфиг мгновенно, поэтому шлём событие — иначе настройки
+  // показывали бы устаревшее значение до перезагрузки страницы.
+  broadcast({ type: "config", ts: Date.now() }, state);
+  out(`${result.key} = ${result.display} · ${note}`);
+}

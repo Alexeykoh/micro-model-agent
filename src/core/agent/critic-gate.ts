@@ -1,0 +1,281 @@
+/** Вентиль контр-агента (критика): проверка работы перед финалом. */
+import { t } from "../../i18n/index";
+import type { CriticIssue, CriticVerdict } from "../../modules/critic/types";
+import { normalizedSignature, syntheticIssue } from "../../modules/critic/issue-key";
+import { withProvenance } from "../../modules/critic/provenance";
+import type { CriticAction, CriticGateDeps, CriticGateOptions } from "./critic-contract";
+import { announceRetract, criticRetractInfo } from "./draft-retract";
+import { packFingerprint, evidenceSignature } from "./critic-budget";
+import { injectActDirective, stalledAfterVerdict } from "./critic-act";
+import { buildCriticReport, emitCriticReport } from "./critic-report";
+import { verifySafely as runCriticVerify } from "./critic-verify";
+import type { LoopState } from "./loop-state";
+import { isRepeatedVerdict, renderIssues } from "./critic-issues";
+import { logCheck, logDegraded, logExhausted, logSkipped, logVerdict } from "./critic-gate-log";
+
+export type { CriticAction, CriticGateDeps, CriticGateOptions } from "./critic-contract";
+
+export { normalizedSignature } from "../../modules/critic/issue-key";
+
+/**
+ * Жёсткий кап СОВЕТНЫХ кругов за ход (не конфиг — такой же внутренний
+ * потолок, как `MAX_CRITIC_CHECKS`). Совет отдельён от ремонта, чтобы
+ * `concern` не крал бюджет `critical` (maxRepairCycles).
+ */
+const MAX_CRITIC_ADVICE_CYCLES = 1;
+
+/**
+ * Кап «действуй, а не описывай» кругов за ход: один раз даём модели явную
+ * команду вызвать тул. Второй раз — принимаем ответ честно (с записью).
+ */
+const MAX_CRITIC_ACT_CYCLES = 1;
+
+/**
+ * Вентиль критика: триггерит проверку по работе хода, инжектит вердикт в
+ * контекст. Fail-open: сломанный/перебюджетный критик никогда не блокирует
+ * агента.
+ */
+export class CriticGate {
+  /** Счётчик советных кругов за ход (гейт живёт один ход). */
+  private adviceCycles = 0;
+  /** Счётчик «действуй» кругов за ход. */
+  private actCycles = 0;
+  /** Отпечаток входа прошлой проверки — база для отказа от повторного вызова. */
+  private lastFingerprint: string | undefined;
+  /** Подпись улик (только тул-события) прошлой проверки. */
+  private lastEvidenceKey: string | undefined;
+  /** Прошлый не-ok вердикт: нужен для понуждения к действию и честной записи. */
+  private lastVerdict: CriticVerdict | undefined;
+  /**
+   * Прошлый вердикт был не-ok, и все его жалобы уже показаны модели. Повторная
+   * проверка того же входа добавить нечего: тот же набор жалоб уже в наборе.
+   */
+  private lastVerdictNonOk = false;
+
+  constructor(private readonly opts: CriticGateOptions) {}
+
+  /**
+   * Оценивает ход через критика.
+   * @param deps состояние цикла и события тулов; @returns "pass" или "retry".
+   */
+  async evaluate(deps: CriticGateDeps): Promise<CriticAction> {
+    if (!this.shouldRun(deps)) return "pass";
+
+    // Тот же вход и сказать больше нечего — платить LLM-вызов не за что (A15).
+    const fingerprint = packFingerprint(deps);
+    if (this.canSkip(fingerprint)) {
+      logSkipped(deps);
+      return "pass";
+    }
+
+    // Новых улик нет: после не-ok вердикта модель не вызвала ни одного тула,
+    // только переписала текст. Тот же evidence даст тот же вердикт, но за
+    // полную цену (живая сессия ses_mvzp8cuk: 19 с и снова «critical»).
+    const evidenceKey = evidenceSignature(deps);
+    if (
+      stalledAfterVerdict(
+        this.lastVerdict,
+        this.lastEvidenceKey,
+        evidenceKey,
+        deps.toolEvents.length,
+      )
+    ) {
+      this.lastEvidenceKey = evidenceKey;
+      return this.afterStall(deps);
+    }
+    this.lastEvidenceKey = evidenceKey;
+
+    logCheck(deps, this.opts.budgetMs);
+    deps.state.criticCalls++;
+    deps.state.mutationsSinceCritic = 0;
+
+    const outcome = await runCriticVerify(deps, {
+      verify: this.opts.verify,
+      buildPack: this.opts.buildPack,
+      budgetMs: this.opts.budgetMs,
+      signal: this.opts.signal,
+    });
+    this.lastFingerprint = fingerprint;
+    // Прерывание пользователем — не деградация: ход уже останавливается, а
+    // «проверка не выполнена» в ленте выглядело бы как сбой проверки.
+    if (outcome.aborted) {
+      deps.logger.diagnostic("info", "Critic check aborted by user");
+      return "pass";
+    }
+    if (!outcome.verdict) {
+      // Вердикта нет — но «critic_check» без записи о verdict неотличим от
+      // pass при разборе сессии. Пишем явный отказ: critic_verdict degraded
+      // плюс отдельный critic_error (INV-15: «сломался» ≠ «сказал ок»).
+      logDegraded(deps, outcome.error, {
+        timedOut: outcome.timedOut,
+        durationMs: outcome.durationMs,
+        degradationReason: this.opts.degradationReason,
+      });
+      emitCriticReport(
+        deps,
+        buildCriticReport(null, outcome.stages, outcome.durationMs, outcome.timedOut),
+      );
+      return "pass";
+    }
+    // `critical` без улики в жалобах → `concern` (A6): repair не тратим.
+    const provenance = withProvenance(outcome.verdict);
+    const verdict = provenance.verdict;
+    // Отчёт эмитим ДО решения о repair: «проверил и сказал ок» тоже должен
+    // оставлять раскрываемый след (что смотрел и сколько это заняло). Статус —
+    // уже после понижения, чтобы блок и `critic_verdict` не расходились.
+    emitCriticReport(
+      deps,
+      buildCriticReport(verdict, outcome.stages, outcome.durationMs, outcome.timedOut),
+    );
+    this.lastVerdict = verdict;
+    if (verdict.status === "ok") {
+      this.lastVerdictNonOk = false;
+      return "pass";
+    }
+
+    // Не-ok вердикт не теряется: issues могли не распарситься, но status +
+    // summary — достаточное основание.
+    const issues = verdict.issues.length > 0 ? verdict.issues : [syntheticIssue(verdict)];
+    // Повтор уже виденной жалобы — считаем ДО takeFreshIssues (он пополняет набор).
+    const isRepeat = isRepeatedVerdict(deps.state, issues);
+    const fresh = this.takeFreshIssues(deps.state, issues);
+    // Логируем НЕ-ok вердикт всегда: `critic_check` без следа о вердикте
+    // читается как «проверил и сказал ок» (INV-C2).
+    logVerdict(deps, verdict, issues.length, outcome.durationMs, provenance.downgraded);
+    this.lastVerdictNonOk = true;
+
+    // Повтор тех же жалоб: ремонт не тратим, но модель должна услышать причину.
+    if (fresh.length === 0) {
+      if (this.canAdvise()) {
+        this.injectAdvice(deps, verdict, issues, true);
+        return "retry";
+      }
+      return "pass";
+    }
+
+    if (this.shouldRepair(deps, verdict, isRepeat)) {
+      this.injectRepair(deps, verdict, fresh, outcome.durationMs);
+      return "retry";
+    }
+    // `concern` (или critical без бюджета ремонта): совет ДОХОДИТ до модели
+    // — иначе инъекция мертва, и вердикт остаётся без последствий (INV-C6).
+    if (verdict.status === "concern" && this.canAdvise()) {
+      this.injectAdvice(deps, verdict, fresh, false);
+      return "retry";
+    }
+    logExhausted(deps, verdict);
+    return "pass";
+  }
+
+  /**
+   * Повторный вызов на неизменном входе, когда добавить нечего: советный цикл
+   * уже израсходован, а прошлый вердикт был не-ok — те же жалобы уже показаны.
+   */
+  private canSkip(fingerprint: string): boolean {
+    return this.lastFingerprint === fingerprint && this.lastVerdictNonOk && !this.canAdvise();
+  }
+
+  /**
+   * После не-ok вердикта улики не изменились — повторная проверка не нужна.
+   * Само решение — в `critic-act.ts` (правило ≤300).
+   */
+  private afterStall(deps: CriticGateDeps): CriticAction {
+    const verdict = this.lastVerdict;
+    if (!verdict) return "pass";
+    if (this.actCycles < MAX_CRITIC_ACT_CYCLES) {
+      this.actCycles++;
+      injectActDirective(deps, verdict, this.actCycles);
+      return "retry";
+    }
+    // Бюджет исчерпан: ответ уходит, но в журнале остаётся след, что вердикт
+    // остался не-ok (иначе «критик сказал critical» и «ход принят» не сходятся).
+    logExhausted(deps, verdict);
+    return "pass";
+  }
+
+  /** Починка положена только свежему critical в пределах repair-бюджета. */
+  private shouldRepair(deps: CriticGateDeps, verdict: CriticVerdict, isRepeat: boolean): boolean {
+    return (
+      verdict.status === "critical" &&
+      deps.beforeFinish &&
+      deps.state.criticRepairCycles < this.opts.maxRepairCycles &&
+      !isRepeat
+    );
+  }
+
+  /** Остался ли ещё один советный круг. */
+  private canAdvise(): boolean {
+    return this.adviceCycles < MAX_CRITIC_ADVICE_CYCLES;
+  }
+
+  private shouldRun(deps: CriticGateDeps): boolean {
+    if (!this.opts.enabled) return false;
+    if (deps.state.criticCalls >= this.opts.maxCalls) return false;
+    // Единственный вызов — перед финалом (beforeFinish, см. agent.ts):
+    // mid-turn ветки по mutationsSinceCritic нет, счётчик — только лог-поле.
+    if (!deps.beforeFinish) return false;
+    // Проверять нечего: ни работы тулами, ни ответа для оценки. Чат-доставка
+    // (ответ без файлов) — тоже предмет проверки (INV-C7).
+    if (deps.toolEvents.length === 0 && !deps.answerText?.trim()) return false;
+    return true;
+  }
+
+  private takeFreshIssues(state: LoopState, issues: CriticIssue[]): CriticIssue[] {
+    const fresh: CriticIssue[] = [];
+    for (const issue of issues) {
+      const sig = normalizedSignature(issue);
+      if (state.seenCriticIssues.has(sig)) continue;
+      state.seenCriticIssues.add(sig);
+      fresh.push(issue);
+    }
+    return fresh;
+  }
+
+  /**
+   * Совет: инжектит текст и ТРЕБУЕТ нового ответа (retry). Раньше совет
+   * инжектился в уже завершающийся ход — модель его не видела, и вердикт
+   * оставался без последствий (INV-C6).
+   */
+  private injectAdvice(
+    deps: CriticGateDeps,
+    verdict: CriticVerdict,
+    issues: CriticIssue[],
+    isRepeat: boolean,
+  ): void {
+    this.adviceCycles++;
+    // Черновик уже в ленте — убираем до переответа, иначе дубль.
+    announceRetract(deps.onMeta, criticRetractInfo(verdict, issues, deps.iteration), deps.slog);
+    deps.contextManager.addMessage({
+      role: "user",
+      content: `<system-summary>${
+        isRepeat
+          ? t("critic.repeat", { issues: renderIssues(issues) })
+          : t("critic.advice", { issues: renderIssues(issues) })
+      }</system-summary>`,
+    });
+  }
+
+  /** Починка: тратит repair-бюджет, пишет escalation, ретраит. */
+  private injectRepair(
+    deps: CriticGateDeps,
+    verdict: CriticVerdict,
+    fresh: CriticIssue[],
+    durationMs: number,
+  ): void {
+    deps.state.criticRepairCycles++;
+    // Черновик уже в ленте — убираем до переответа, иначе дубль.
+    announceRetract(deps.onMeta, criticRetractInfo(verdict, fresh, deps.iteration), deps.slog);
+    deps.slog.logCritic("critic_escalation", {
+      summary: verdict.summary,
+      cycle: deps.state.criticRepairCycles,
+      duration: durationMs,
+    });
+    deps.contextManager.addMessage({
+      role: "user",
+      content: `<system-summary>${t("critic.repair", {
+        summary: verdict.summary,
+        issues: renderIssues(fresh),
+      })}</system-summary>`,
+    });
+  }
+}

@@ -1,0 +1,181 @@
+// Дисковый кэш индекса проекта: envelope с версией, root и сигнатурой дерева.
+import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from "fs";
+import { join } from "path";
+import type { IndexResult, IndexedFile } from "./walker";
+
+/**
+ * Инкремент при смене envelope или формы `IndexResult`: кэши старого MMA
+ * считаются протухшими и перестраиваются.
+ */
+/** Версия схемы кэша индекса. */
+export const CACHE_VERSION = 3;
+
+/**
+ * Проверяет форму значения как `IndexedFile` перед доверием дисковому кэшу.
+ * `symbols`/`mtimeMs` опциональны для чтения: запись всегда их ставит, но
+ * форма не должна рушиться на кэше, где их ещё нет (инкрементальный reuse
+ * просто отключится и файл перечитается).
+ */
+function isIndexedFile(v: unknown): v is IndexedFile {
+  if (typeof v !== "object" || v === null) return false;
+  const f = v as Record<string, unknown>;
+  return (
+    typeof f.path === "string" &&
+    typeof f.language === "string" &&
+    Array.isArray(f.exports) &&
+    typeof f.size === "number"
+  );
+}
+
+/** True, если значение — целый `IndexResult` пригодной для использования формы. */
+function isIndexResult(v: unknown): v is IndexResult {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  return (
+    Array.isArray(r.files) &&
+    (r.files as unknown[]).every(isIndexedFile) &&
+    typeof r.totalSize === "number"
+  );
+}
+
+/** Дисковая обёртка с валидационными метаданными вокруг индекса. */
+interface CacheEnvelope {
+  version: number;
+  /** Абсолютный корень проекта, для которого построен индекс. */
+  root: string;
+  /** Отпечаток дерева из `Indexer.scanSignature()` на момент сохранения. */
+  signature: string;
+  /** Время сборки индекса (epoch ms). */
+  builtAt?: number;
+  result: IndexResult;
+}
+
+/** Опции кэша индекса: корень проекта и функция сигнатуры дерева. */
+export interface IndexCacheOptions {
+  /** Абсолютный корень проекта; кэш под другой root отвергается. */
+  root?: string;
+  /**
+   * Текущая сигнатура дерева проекта. Если задана, `load()` пересчитывает её и
+   * отвергает кэш с другой сохранённой сигнатурой — протухшая карта проекта
+   * никогда не попадёт в системный промпт. Опусти для отключения валидации.
+   */
+  signature?: () => string;
+}
+
+/** Разобранный envelope до валидации сигнатуры. */
+interface ParsedCache {
+  result: IndexResult;
+  builtAt: number | null;
+  signature: string;
+}
+
+/** Дисковый кэш индекса с валидацией версии/root/сигнатуры. */
+export class IndexCache {
+  private cachePath: string;
+  private cache: IndexResult | null = null;
+  private cachedBuiltAt: number | null = null;
+  private root: string | undefined;
+  private signature: (() => string) | undefined;
+
+  constructor(cacheDir: string, opts: IndexCacheOptions = {}) {
+    this.cachePath = join(cacheDir, "index-cache.json");
+    this.root = opts.root;
+    this.signature = opts.signature;
+  }
+
+  /**
+   * Разбирает `index-cache.json` и проверяет версию схемы, `root` и форму
+   * результата — общее для строгой загрузки и загрузки для reuse.
+   */
+  private readEnvelope(): ParsedCache | null {
+    if (!existsSync(this.cachePath)) return null;
+    try {
+      const parsed = JSON.parse(readFileSync(this.cachePath, "utf-8")) as Partial<CacheEnvelope>;
+      if (parsed.version !== CACHE_VERSION || !isIndexResult(parsed.result)) return null;
+      if (this.root !== undefined && parsed.root !== this.root) return null;
+      return {
+        result: parsed.result,
+        builtAt: typeof parsed.builtAt === "number" ? parsed.builtAt : null,
+        signature: typeof parsed.signature === "string" ? parsed.signature : "",
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Возвращает кэшированный индекс, только если он описывает текущее дерево
+   * И имеет пригодную форму. Отвергает кэш при расхождении версии схемы,
+   * сохранённого `root`, `signature` или формы `result` (чужая версия агента,
+   * битый JSON, частично записанный файл); легаси-кэш (сырой `IndexResult`
+   * без envelope) считается протухшим. Вызывающие на `null` делают полный обход.
+   */
+  load(): IndexResult | null {
+    if (this.cache) return this.cache;
+    const parsed = this.readEnvelope();
+    if (!parsed) return null;
+    if (this.signature && this.currentSignature() !== parsed.signature) return null;
+    this.cache = parsed.result;
+    this.cachedBuiltAt = parsed.builtAt;
+    return this.cache;
+  }
+
+  /**
+   * Возвращает кэш для инкрементального переиспользования: проверяются только
+   * версия/root/форма, сигнатура игнорируется. `walk(prev)` сам решит по
+   * per-file `size`/`mtimeMs`, какие файлы перечитать. Не заполняет `this.cache`
+   * (строгая `load()` должна остаться честной).
+   */
+  loadForReuse(): IndexResult | null {
+    return this.readEnvelope()?.result ?? null;
+  }
+
+  /** Сохраняет результат индекса в кэш (память + диск). */
+  save(result: IndexResult): void {
+    const now = Date.now();
+    this.cache = result;
+    this.cachedBuiltAt = now;
+    const envelope: CacheEnvelope = {
+      version: CACHE_VERSION,
+      root: this.root ?? "",
+      signature: this.currentSignature(),
+      builtAt: now,
+      result,
+    };
+    const dir = join(this.cachePath, "..");
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    writeFileSync(this.cachePath, JSON.stringify(envelope), "utf-8");
+  }
+
+  /** Инвалидирует кэш (память + дисковый файл). */
+  invalidate(): void {
+    this.cache = null;
+    this.cachedBuiltAt = null;
+    if (existsSync(this.cachePath)) {
+      try {
+        rmSync(this.cachePath);
+      } catch {
+        /* best-effort очистка */
+      }
+    }
+  }
+
+  /** Время сборки кэшированного индекса (epoch ms) или null. */
+  getBuiltAt(): number | null {
+    return this.cachedBuiltAt;
+  }
+
+  /**
+   * Считает сигнатуру дерева защищённо: нечитаемое дерево даёт пустую строку,
+   * которая не совпадёт с сохранённой успешным обходом — битое дерево
+   * инвалидирует кэш, а не вызывает доверие к нему.
+   */
+  private currentSignature(): string {
+    if (!this.signature) return "";
+    try {
+      return this.signature();
+    } catch {
+      return "";
+    }
+  }
+}

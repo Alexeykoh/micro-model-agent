@@ -1,0 +1,160 @@
+// Content painting for the Files viewer: fetch a file (already jail-checked by
+// `GET /api/file`) and render it into the detail body. Split out of
+// `sidebar/files.ts` so the tab module stays about state/navigation and this
+// stays about "text / markdown / image / pdf / media / error".
+//
+// Same-origin fetch/<img> authenticates via the HttpOnly `mma_web_auth` cookie,
+// so no token rides in the URL.
+import { el } from "../../dom.js";
+import { t } from "../../i18n.js";
+import { renderMarkdown } from "../../../md.js";
+import { openLightbox } from "../../lightbox.js";
+import { formatJson } from "./json-format.js";
+
+export { mapLine } from "./json-format.js";
+
+export interface FetchedFile {
+  ok: boolean;
+  mime: string;
+  text: string;
+}
+
+export function fileUrl(path: string): string {
+  return "/api/file?path=" + encodeURIComponent(path);
+}
+
+export async function fetchFile(path: string): Promise<FetchedFile> {
+  try {
+    const res = await fetch(fileUrl(path));
+    if (!res.ok) return { ok: false, mime: "", text: "" };
+    const mime = res.headers.get("content-type") || "";
+    const text = mime.indexOf("text/plain") === 0 ? await res.text() : "";
+    return { ok: true, mime, text };
+  } catch {
+    return { ok: false, mime: "", text: "" };
+  }
+}
+
+export function paintLoading(body: HTMLElement | null): void {
+  if (!body) return;
+  body.textContent = "";
+  body.appendChild(el("div", "fdim", t("web.files.loading")));
+}
+
+export function paintError(body: HTMLElement | null): void {
+  if (!body) return;
+  body.textContent = "";
+  body.appendChild(el("div", "fdim wn", t("web.files.open_failed")));
+}
+
+/**
+ * Renders a fetched file; falls back to the localized error on failure.
+ * Returns the display-line map (for LSP "open at line" after formatting).
+ */
+export function paintFile(body: HTMLElement | null, path: string, file: FetchedFile): number[] {
+  if (!body) return [];
+  if (!file.ok) {
+    paintError(body);
+    return [];
+  }
+  body.textContent = "";
+  if (file.mime.indexOf("text/plain") === 0) return paintText(body, path, file.text);
+  paintMedia(body, path, file.mime);
+  return [];
+}
+
+/** Предел для нумерации строк: выше — рендерим без жёлоба, чтобы не тормозить. */
+const LINE_NUMBER_CAP = 20000;
+
+/**
+ * Текст в `<pre>` с жёлобом номеров строк. Жёлоб — отдельная колонка с тем же
+ * шрифтом/интерлиньяжем; код идёт с `white-space: pre` (горизонтальная
+ * прокрутка), поэтому номер совпадает со своей строкой и длинные строки больше
+ * не рвутся посреди атрибута.
+ */
+function paintNumbered(body: HTMLElement, text: string, code: HTMLElement): void {
+  const wrap = el("div", "fv");
+  const lines = text.split("\n").length;
+  if (lines <= LINE_NUMBER_CAP) {
+    const gutter = el("pre", "fv-gutter");
+    // Служебная колонка: не попадает ни в копирование, ни в скринридер.
+    gutter.setAttribute("aria-hidden", "true");
+    gutter.textContent = Array.from({ length: lines }, (_, i) => String(i + 1)).join("\n");
+    wrap.appendChild(gutter);
+  }
+  const pre = el("pre", "fpre");
+  pre.appendChild(code);
+  wrap.appendChild(pre);
+  body.appendChild(wrap);
+}
+
+/** Text files: markdown rendered, everything else in a highlighted <pre>. */
+function paintText(body: HTMLElement, path: string, text: string): number[] {
+  const ext = extOf(path);
+  if (ext === "md" || ext === "markdown") {
+    const wrap = el("div", "fmd");
+    renderMarkdown(wrap, text);
+    body.appendChild(wrap);
+    return [];
+  }
+  // Минимизированный JSON нечитаем: разворачиваем с отступами прямо в вьюере.
+  // Исходный файл и /api/file не меняются — только то, что видит пользователь.
+  const formatted = ext === "json" || ext === "jsonc" ? formatJson(text) : null;
+  const viewText = formatted ? formatted.text : text;
+  const code = el("code", "fcode");
+  code.textContent = viewText;
+  const hl = window.hljs;
+  if (hl) {
+    try {
+      const res2 = hl.getLanguage(ext)
+        ? hl.highlight(viewText, { language: ext, ignoreIllegals: true })
+        : hl.highlightAuto(viewText);
+      code.replaceChildren(...nodesFromHtml(res2.value));
+    } catch {
+      /* подсветка best-effort */
+    }
+  }
+  paintNumbered(body, viewText, code);
+  return formatted ? formatted.lineMap : [];
+}
+
+/** Binary-but-viewable files: images/audio/video/PDF via native elements. */
+function paintMedia(body: HTMLElement, path: string, mime: string): void {
+  const src = fileUrl(path);
+  if (mime.indexOf("image/") === 0) {
+    const img = document.createElement("img");
+    img.className = "fimg";
+    img.alt = path;
+    img.title = path;
+    img.src = src;
+    // The sidebar is the quick look; a click opens the same full-screen
+    // lightbox as feed thumbnails (zoom, open-in-tab, copy link).
+    img.addEventListener("click", () => openLightbox(src, path));
+    body.appendChild(img);
+    return;
+  }
+  if (mime.indexOf("application/pdf") === 0) {
+    const emb = el("embed", "fembed");
+    emb.setAttribute("src", src);
+    emb.setAttribute("type", "application/pdf");
+    body.appendChild(emb);
+    return;
+  }
+  const tag = mime.indexOf("audio/") === 0 ? "audio" : mime.indexOf("video/") === 0 ? "video" : null;
+  if (!tag) return paintError(body);
+  const media = document.createElement(tag);
+  media.controls = true;
+  media.src = src;
+  body.appendChild(media);
+}
+
+function extOf(path: string): string {
+  const i = path.lastIndexOf(".");
+  return i === -1 ? "" : path.slice(i + 1).toLowerCase();
+}
+
+/** highlight.js output is trusted HTML; import inertly (no `innerHTML`). */
+function nodesFromHtml(html: string): Node[] {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  return Array.from(doc.body.childNodes).map((n) => document.importNode(n, true));
+}
