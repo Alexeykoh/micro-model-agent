@@ -13,7 +13,7 @@ import type { CostTracker } from "../../modules/pricing/index";
 import { CostTracker as CostTrackerCtor } from "../../modules/pricing/index";
 import { createPolicyState, type PolicyState } from "../../modules/reasoning/policy";
 import { ContextRenderer } from "./context-renderer";
-import type { PromptBlockKind, PromptProfile } from "../types";
+import type { PromptProfile } from "../types";
 import type { AgentDeps } from "./deps";
 import {
   getProviderFor as phaseGetProviderFor,
@@ -67,9 +67,9 @@ export class AgentBase {
   protected _currentIteration = 0;
   /** Профиль системного промпта (S-04); job-ход ставит `service-job`. */
   promptProfile: PromptProfile = "full";
-  /** Kind → блок-замена для instructions/project-map сверх бюджета (резолв раз до первого LLM-вызова). */
+  /** Имя источника → блок-замена для сверхбюджетных инструкций/карты. */
   // biome-ignore lint/correctness/noUnusedPrivateClassMembers: читается через PromptPhaseHost
-  private promptOverrides = new Map<PromptBlockKind, PromptBlock>();
+  private promptOverrides = new Map<string, PromptBlock>();
   /** Идентичность, против которой гонялась проба. Сравнение ПО ЗНАЧЕНИЮ: все
    *  write-пути мутят живой конфиг in place и передают ТОТ ЖЕ объект в
    *  `reconfigure` — сравнение объектов изменения бы не увидело. Сидируется

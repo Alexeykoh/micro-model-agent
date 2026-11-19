@@ -249,7 +249,9 @@ export function loadAgentsMdBlocks(
           label,
           content,
           priority: "high",
-          essential: false,
+          // Корневой файл — нормативный источник: идёт дословно даже сверх
+          // бюджета; вложенные источники можно сжать по отдельности (W5).
+          essential: label === "instructions",
           estimatedTokens: estimateTokens(content),
           kind: "instructions",
         });

@@ -19,7 +19,7 @@ import {
   overflowFingerprint,
   pluginPromptBlocks,
 } from "./prompt-blocks";
-import type { PromptBlock, PromptBlockKind, PromptProfile } from "../types";
+import type { PromptBlock, PromptProfile } from "../types";
 import type { SessionLogger } from "../session-logger";
 import type { AgentDeps } from "../agent";
 import { t } from "../../i18n/index";
@@ -29,8 +29,8 @@ export interface PromptPhaseHost {
   deps: AgentDeps;
   /** Профиль промпта на текущий ход (`service-job` — без блоков харнесса). */
   promptProfile: PromptProfile;
-  /** Замены переполнения по kind (сжатые instructions/project-map). */
-  promptOverrides: Map<PromptBlockKind, PromptBlock>;
+  /** Замены переполнения по имени источника (сжатые instructions/project-map). */
+  promptOverrides: Map<string, PromptBlock>;
   /** Малый всегда-включённый hint-блок о сжатии. */
   overflowHintBlock: PromptBlock | null;
   /**
@@ -261,7 +261,7 @@ export async function resolvePromptOverflowOnce(host: PromptPhaseHost): Promise<
     contextWindow: cfg.contextWindow,
   });
   for (const r of res.replacements) {
-    if (r.kind) host.promptOverrides.set(r.kind, r);
+    if (r.kind) host.promptOverrides.set(r.label ?? r.kind, r);
   }
   host.overflowHintBlock = res.hintBlock;
 

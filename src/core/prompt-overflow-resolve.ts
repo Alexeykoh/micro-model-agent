@@ -253,6 +253,10 @@ export async function resolvePromptOverflow(opts: {
       essential: false,
       estimatedTokens: resolvedTokens,
       kind,
+      // INV-IS-4: замена сохраняет владельца и имя исходного блока —
+      // `applyOverrides` подменяет каждый источник его собственной выжимкой.
+      label: block.label,
+      source: block.source,
     });
     warnings.push({
       kind,

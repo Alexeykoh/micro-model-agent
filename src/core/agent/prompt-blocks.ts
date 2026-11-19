@@ -30,11 +30,19 @@ export function overflowFingerprint(systemBudget: number, blocks: PromptBlock[])
 }
 
 /** Применяет сжатые резолвом замены по kind (B-overflow). */
+/** Ключ замены: имя источника (per-source), а не общий `kind`. */
+function overrideKey(block: PromptBlock): string | undefined {
+  return block.kind ? block.label ?? block.kind : undefined;
+}
+
 export function applyOverrides(
   blocks: PromptBlock[],
   overrides: Map<string, PromptBlock>,
 ): PromptBlock[] {
-  return blocks.map((b) => (b.kind && overrides.has(b.kind) ? overrides.get(b.kind)! : b));
+  return blocks.map((b) => {
+    const key = overrideKey(b);
+    return key && overrides.has(key) ? overrides.get(key)! : b;
+  });
 }
 
 /** Гейт блоков по активным и реально видимым тегам (B12, allowlist-aware). */
