@@ -155,37 +155,69 @@ export function nestedAgentsMdPaths(baseDir: string): string[] {
 }
 
 /**
+ * Инструкции в каталогах от workspace вверх до дома (если дом — предок).
+ * Для workspace вне дома возвращает пустой список (стоп на корне проекта).
+ */
+function upwardInstructionPaths(baseDir: string, fileName: string): string[] {
+  const home = homedir();
+  const start = relative(home, baseDir);
+  if (start.startsWith("..") || isAbsolute(start)) return [];
+  const found: string[] = [];
+  let dir = dirname(baseDir);
+  for (;;) {
+    const rel = relative(home, dir);
+    if (rel.startsWith("..") || isAbsolute(rel)) break;
+    const candidate = join(dir, fileName);
+    if (existsSync(candidate)) found.push(candidate);
+    if (rel === "") break;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return found;
+}
+
+/**
  * Кандидаты инструкций по приоритету: проект, проектный `.mma`, вложенные,
- * глобальный. При `fallback: "claude"` каталог без `AGENTS.md` даёт `CLAUDE.md`.
+ * вверх до дома, глобальный. `CLAUDE.md` — fallback, если файла нет.
  */
 export function agentsMdPaths(
   baseDir: string,
   configDir: string,
   fallback: "claude" | "none" = "none",
 ): string[] {
-  const explicit: string[] = [
-    join(baseDir, "AGENTS.md"),
-    join(projectMmaDir(baseDir), "AGENTS.md"),
-  ];
+  const noProject = process.env.OPENCODE_DISABLE_PROJECT_CONFIG === "1";
+  const useClaude =
+    fallback === "claude" && process.env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT !== "1";
+  const explicit: string[] = noProject
+    ? []
+    : [join(baseDir, "AGENTS.md"), join(projectMmaDir(baseDir), "AGENTS.md")];
   // Nested-обход тоже находит корневой AGENTS.md (depth 0) — без фильтра он
   // попадался в промпт дважды (2× токены, дубль варнингов dry-run).
   const explicitSet = new Set(explicit);
-  const nested = nestedAgentsMdPaths(baseDir).filter((p) => !explicitSet.has(p));
+  const nested = noProject
+    ? []
+    : nestedAgentsMdPaths(baseDir).filter((p) => !explicitSet.has(p));
+  const upward = noProject ? [] : upwardInstructionPaths(baseDir, "AGENTS.md");
   const global = join(configDir, "AGENTS.md");
-  const candidates = [...explicit, ...nested, global];
-  if (fallback !== "claude") return candidates;
+  const candidates = [...explicit, ...upward, ...nested, global];
+  if (!useClaude) return [...new Set(candidates)];
 
   const withFallback = candidates.map((p) => {
     if (existsSync(p)) return p;
     if (p === global) return join(homedir(), ".claude", "CLAUDE.md");
     return join(dirname(p), "CLAUDE.md");
   });
-  const claudeNested = nestedInstructionPaths(baseDir, "CLAUDE.md").filter(
-    (p) => !withFallback.some((x) => dirname(x) === dirname(p)),
-  );
+  const claudeNested = noProject
+    ? []
+    : nestedInstructionPaths(baseDir, "CLAUDE.md").filter(
+        (p) => !withFallback.some((x) => dirname(x) === dirname(p)),
+      );
+  const claudeUpward = noProject ? [] : upwardInstructionPaths(baseDir, "CLAUDE.md");
   return [
     ...new Set([
       ...withFallback,
+      ...claudeUpward,
       ...claudeNested,
       join(homedir(), ".claude", "CLAUDE.md"),
     ]),

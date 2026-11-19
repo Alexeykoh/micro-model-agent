@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadAgentsMdBlocks } from "../../src/core/bootstrap/state";
 
@@ -45,6 +45,43 @@ describe("instructions.sources и CLAUDE.md fallback", () => {
     const blocks = loadAgentsMdBlocks(dir, dir, false, [], "claude");
     expect(blocks.some((b) => b.content.includes("Agents wins"))).toBe(true);
     expect(blocks.some((b) => b.content.includes("Claude loses"))).toBe(false);
+  });
+
+  it("discovers AGENTS.md in ancestors up to the home directory", () => {
+    const parent = mkdtempSync(join(homedir(), "mma-upward-"));
+    dirs.push(parent);
+    const child = join(parent, "child");
+    mkdirSync(child, { recursive: true });
+    writeFileSync(join(parent, "AGENTS.md"), "# Parent rule\n", "utf-8");
+
+    const blocks = loadAgentsMdBlocks(child, child, false, [], "none");
+    expect(blocks.some((b) => b.content.includes("Parent rule"))).toBe(true);
+  });
+
+  it("respects OPENCODE_DISABLE_PROJECT_CONFIG and OPENCODE_DISABLE_CLAUDE_CODE_PROMPT", () => {
+    const dir = tempDir();
+    mkdirSync(join(dir, "child"), { recursive: true });
+    writeFileSync(join(dir, "AGENTS.md"), "# Parent\n", "utf-8");
+    writeFileSync(join(dir, "child", "CLAUDE.md"), "# Claude\n", "utf-8");
+    const child = join(dir, "child");
+
+    process.env.OPENCODE_DISABLE_PROJECT_CONFIG = "1";
+    try {
+      expect(loadAgentsMdBlocks(child, child, false, [], "claude")).toHaveLength(0);
+    } finally {
+      delete process.env.OPENCODE_DISABLE_PROJECT_CONFIG;
+    }
+
+    process.env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT = "1";
+    try {
+      expect(
+        loadAgentsMdBlocks(child, child, false, [], "claude").some((b) =>
+          b.content.includes("Claude"),
+        ),
+      ).toBe(false);
+    } finally {
+      delete process.env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT;
+    }
   });
 
   it("skips missing and URL sources without throwing", () => {

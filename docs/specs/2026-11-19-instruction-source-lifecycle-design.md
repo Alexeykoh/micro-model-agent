@@ -52,6 +52,11 @@ tool calls у строгих провайдеров и рвёт KV-кеш. MMA �
 | `instructions.sources` | list | `[]` | Доп. файлы и glob'ы (HTTPS — `DEBT(ins-url-sources)`) |
 | `instructions.fallback` | enum | `"claude"` | `CLAUDE.md` там, где нет `AGENTS.md` |
 
+Порядок discovery: проект → `.mma/` → вложенные → **вверх до дома** → глобальный.
+`CLAUDE.md` подставляется только там, где нет `AGENTS.md`. Флаги
+`OPENCODE_DISABLE_PROJECT_CONFIG=1` и `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1`
+отключают проектную часть и fallback соответственно.
+
 Разрешение путей: относительный — от workspace, `~/` — от дома, абсолютный —
 как есть, glob — через `globSync`. HTTPS-источники отложены (синхронный
 загрузчик): `DEBT(ins-url-sources)` в `docs/agents/debt.md`.
