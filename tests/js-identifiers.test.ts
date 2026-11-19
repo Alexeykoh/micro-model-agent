@@ -30,6 +30,8 @@ describe("isFilePathLike", () => {
     expect(isFilePathLike("console.log")).toBe(false);
     expect(isFilePathLike("node.js")).toBe(false);
     expect(isFilePathLike("react.js")).toBe(false);
+    expect(isFilePathLike("llama.cpp")).toBe(false);
+    expect(isFilePathLike("whisper.cpp")).toBe(false);
   });
 
   it("rejects extension-only path segments (empty stem)", () => {
@@ -59,6 +61,10 @@ describe("extractFileLikeTokens", () => {
     expect(extractFileLikeTokens("Use config.json; see Gismeteo.by or weather.com.")).toEqual([
       "config.json",
     ]);
+  });
+
+  it("does not treat provider/model labels like llama.cpp as files", () => {
+    expect(extractFileLikeTokens("provider llama.cpp serves qwen3.8-27b")).toEqual([]);
   });
 
   it("strips URLs before extraction (as auditor/factual do)", () => {

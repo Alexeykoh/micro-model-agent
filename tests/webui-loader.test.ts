@@ -1,6 +1,6 @@
 // Loader faces: pure state mapping + DOM builder. `bun test` doesn't apply
 // vitest's environment docblock, so happy-dom is wired manually.
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import { readFileSync } from "node:fs";
 import { Window } from "happy-dom";
 import {
@@ -8,9 +8,6 @@ import {
   toolState,
   createFace,
   setFaceState,
-  setGreetResolver,
-  MMART_NAME,
-  initCursor,
   lspOutputSignal,
 } from "../src/modules/webui/assets/js/loader.js";
 import type { FaceState } from "../src/modules/webui/assets/js/loader.js";
@@ -183,13 +180,13 @@ describe("LSP mascot reactions", () => {
 });
 
 describe("createFace / setFaceState", () => {
-  it("builds a canvas face with the greeting tip", () => {
+  it("builds a canvas face without the old greeting bubble", () => {
     const face = createFace("think", "sm");
     expect(face.classList.contains("mdl")).toBe(true);
     expect(face.classList.contains("sm")).toBe(true);
     expect(face.classList.contains("has-canvas")).toBe(true);
     expect(face.querySelector("canvas.mdl-cv")).not.toBeNull();
-    expect(face.querySelector(".mdl-tip")).not.toBeNull();
+    expect(face.querySelector(".mdl-tip")).toBeNull();
   });
 
   it("swaps state classes without recreating the canvas", () => {
@@ -233,47 +230,5 @@ describe("boot splash asset", () => {
     const css = readFileSync("src/modules/webui/assets/styles.css", "utf8");
     expect(css).toContain(".mdl.st-read");
     expect(css).toContain("#bootSplash");
-  });
-});
-
-describe("MMART greeting", () => {
-  beforeAll(() => {
-    // One-shot wiring of the window listeners; must run before dispatching.
-    initCursor();
-  });
-
-  it("carries a tip element in every face", () => {
-    const tip = createFace("idle", "lg").querySelector<HTMLElement>(".mdl-tip");
-    expect(tip).not.toBeNull();
-    expect(MMART_NAME).toBe("MMART");
-  });
-
-  it("localizes the greeting through the injected resolver", () => {
-    const face = createFace("idle", "lg");
-    document.body.appendChild(face);
-    setGreetResolver(() => "Hola MMART");
-    face.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
-    expect(face.querySelector(".mdl-tip")?.textContent).toBe("Hola MMART");
-    expect(face.classList.contains("show-tip")).toBe(true);
-  });
-
-  it("only greets when the click lands on the face itself", () => {
-    const face = createFace("idle", "lg");
-    document.body.appendChild(face);
-    document.body.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
-    expect(face.classList.contains("show-tip")).toBe(false);
-    face.querySelector("canvas")?.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
-    expect(face.classList.contains("show-tip")).toBe(true);
-  });
-
-  it("does not greet a working face (idle-only `.poke`)", () => {
-    const face = createFace("run", "lg");
-    document.body.appendChild(face);
-    face.dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
-    expect(face.classList.contains("show-tip")).toBe(false);
-  });
-
-  afterAll(() => {
-    setGreetResolver(() => `Привет! Я ${MMART_NAME}`);
   });
 });

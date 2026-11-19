@@ -21,6 +21,18 @@ async function withMemory(fn: (store: MemoryStore, dir: string) => Promise<void>
 }
 
 describe("webui settings REST", () => {
+  it("GET /api/os-theme reports whether OS themes are available", async () => {
+    const s = createWebUiState();
+    await withServer(s, async (base) => {
+      const res = await doFetch(`${base}/api/os-theme`);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { available: boolean; omarchy: unknown };
+      expect(body.available).toBe(process.platform === "linux");
+      expect(body).toHaveProperty("omarchy");
+      if (process.platform !== "linux") expect(body.omarchy).toBeNull();
+    });
+  });
+
   it("GET /api/memory groups entries by category and redacts secrets", async () => {
     await withMemory(async (store) => {
       store.append("facts", "plain fact");

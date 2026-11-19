@@ -70,9 +70,55 @@ export function removePromptBlock(deps: AgentDeps, block: PromptBlock): void {
   if (i >= 0) deps.promptBlocks.splice(i, 1);
 }
 
+/**
+ * Подменяет блоки инструкций (`AGENTS.md`) на месте, сохраняя их позицию.
+ * Массив мутируется, а не заменяется: он общий для main-агента и шаблона
+ * раннеров, поэтому свежие инструкции видят все, кто ещё будет собран.
+ *
+ * @returns сколько блоков пришло на замену.
+ */
+export function replaceInstructionBlocks(
+  blocks: PromptBlock[],
+  fresh: readonly PromptBlock[],
+): number {
+  const first = blocks.findIndex((b) => b.kind === "instructions");
+  const kept = blocks.filter((b) => b.kind !== "instructions");
+  const at = first < 0 ? kept.length : Math.min(first, kept.length);
+  kept.splice(at, 0, ...fresh);
+  blocks.splice(0, blocks.length, ...kept);
+  return fresh.length;
+}
+
 /** Тестовый вид текущих блоков промпта. */
 export function promptBlocksForTest(deps: AgentDeps): PromptBlock[] {
   return deps.promptBlocks;
+}
+
+/**
+ * Мягкий reload `AGENTS.md` без перезапуска процесса: подменяет блоки
+ * инструкций на месте и обновляет системное сообщение живого контекста.
+ * Overflow-override инструкций сбрасывается — иначе старая версия осталась
+ * бы приоритетнее свежей.
+ *
+ * @param blocks свежие блоки `kind: "instructions"` (пусто — убрать).
+ * @returns сколько блоков пришло на замену.
+ */
+export function reloadInstructionBlocks(
+  deps: AgentDeps,
+  overrides: Map<string, PromptBlock>,
+  refresh: () => void,
+  blocks: readonly PromptBlock[],
+): number {
+  // Per-source ключи (`instructions`, `instructions (docs/)`, …): чистим все
+  // замены инструкций, иначе старый сжатый источник остался бы поверх свежего.
+  for (const [key, override] of overrides) {
+    if (override.kind === "instructions" || key === "instructions") {
+      overrides.delete(key);
+    }
+  }
+  const count = replaceInstructionBlocks(deps.promptBlocks, blocks);
+  refresh();
+  return count;
 }
 
 /** Общий ToolContext (бросает, если bootstrap его не дал). */

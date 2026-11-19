@@ -1,7 +1,7 @@
 /** Исполнитель тулов: allowlist, плагины, таймауты, мемо read-only. */
 import type { ToolContext, ToolCall, ToolResult, PluginManager } from "./types";
 import type { ToolRegistry } from "./registry";
-import { filterToolsByTags } from "./filter-tools";
+import { earlyToolRejection } from "./executor-reject";
 import { AsyncLock } from "./async-lock";
 import { t } from "../i18n/index";
 import { ToolMemo } from "./executor-memo";
@@ -13,6 +13,7 @@ import {
 } from "./executor-security";
 import { runBeforeToolPlugins, runAfterToolPlugins } from "./executor-hooks";
 import { runToolWithTimeout } from "./executor-call";
+import { filterToolsWithOverrides } from "./filter-tools";
 import { finalizeToolResult, logToolResult } from "./executor-result";
 
 /** Исполнитель: реестр, контекст, плагины, сессионное мемо. */
@@ -132,35 +133,10 @@ export class ToolExecutor {
 
   /** Выполнить tool call: allowlist → плагины → хендлер → post-хуки. */
   async execute(call: ToolCall, signal?: AbortSignal): Promise<ToolResult> {
-    const allow = allowedToolNames(this.ctx);
-    if (allow && !allow.has(call.name)) {
-      return {
-        success: false,
-        output: t("tool.not_allowed", { name: call.name }),
-        toolCallId: call.id,
-      };
-    }
-
-    const tool = this.registry.get(call.name);
-    if (!tool) {
-      return {
-        success: false,
-        output: t("tool.unknown", { name: call.name }),
-        toolCallId: call.id,
-      };
-    }
-
-    // Теги ограничивают исполнение, а не только схему (INV-11): вызов тула вне
-    // активного набора тегов блокируется ДО хендлера. Критерий — тот же, что у
-    // `filterToolsByTags` (alwaysOn переживает сужение); пустой набор тегов —
-    // легаси «все тулы».
-    if (filterToolsByTags([tool], this.ctx.activeToolTags ?? []).length === 0) {
-      return {
-        success: false,
-        output: t("tool.tags_blocked", { name: call.name }),
-        toolCallId: call.id,
-      };
-    }
+    // Ранние отказы (allowlist / неизвестный тул / теги) — в executor-reject.ts.
+    const rejected = earlyToolRejection(this.registry, this.ctx, call);
+    if (rejected) return rejected;
+    const tool = this.registry.get(call.name)!;
 
     // Enforcement политик тула — ОДНА точка (INV-9/10): scope/protected по
     // объявленным `pathArgs`, SSRF по `urlArgs` — ДО хендлера. Хендлер политику
@@ -236,26 +212,41 @@ export class ToolExecutor {
     return result;
   }
 
-  /** Определения тулов с учётом allowlist (для схемы LLM). */
+  /** Теги тулов, реально попавших в схему LLM (allowlist + overrides, гейт B12). */
+  getVisibleTags(tags?: string[]): Set<string> {
+    const out = new Set<string>();
+    for (const def of this.selectForLLM(tags)) {
+      for (const tag of this.registry.get(def.name)?.tags ?? []) out.add(tag);
+    }
+    return out;
+  }
+
+  /** Определения тулов с учётом allowlist и per-session overrides (схема LLM). */
   getToolDefinitions(tags?: string[]): Array<{
     name: string;
     description: string;
     parameters: Record<string, unknown>;
     boundedOutput?: boolean;
   }> {
+    return this.selectForLLM(tags).map((t) => ({
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters,
+      boundedOutput: t.boundedOutput,
+    }));
+  }
+
+  /** Allowlist → теги → ручные on/off; allowlist остаётся жёсткой границей. */
+  private selectForLLM(tags?: string[]) {
     const allow = allowedToolNames(this.ctx);
-    if (allow) {
-      return this.registry
-        .getAll()
-        .filter((t) => allow.has(t.name))
-        .map((t) => ({
-          name: t.name,
-          description: t.description,
-          parameters: t.parameters,
-          boundedOutput: t.boundedOutput,
-        }));
-    }
-    return this.registry.getAllForLLM(tags);
+    const pool = allow
+      ? this.registry.getAll().filter((t) => allow.has(t.name))
+      : this.registry.getAll();
+    return filterToolsWithOverrides(
+      pool,
+      allow ? [] : (tags ?? this.ctx.activeToolTags ?? []),
+      this.ctx.toolOverrides,
+    );
   }
 
   /** Доступ к реестру. */

@@ -165,6 +165,8 @@ export interface LoopState {
    * каждый раз новые).
    */
   toolTargetCounts: Map<string, number>;
+  /** Провалы подряд по «тул + цель»; цели с уже выданной директивой перечитать. */
+  toolTargetFailures: Map<string, number>; targetFailureNudged: Set<string>;
   /** Ключи-цели, по которым nudge «закрывай задачу» уже отправлен (1 раз на цель). */
   cycleNudgedKeys: Set<string>;
 

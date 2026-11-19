@@ -4,12 +4,9 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { setLocale } from "../../../i18n/index";
 import { serializeConfigForWire } from "../../../config/redact";
-import {
-  configDefs,
-  resolveConfigKey,
-  setConfigValue,
-  type ConfigKeyDef,
-} from "../../../config/registry";
+import { resolveConfigKey, setConfigValue } from "../../../config/registry";
+import { buildConfigRegistry } from "../../../runtime/config-view";
+export { buildConfigRegistry, type ConfigRegistryEntry } from "../../../runtime/config-view";
 import { configVersion } from "../../../config/persist";
 import { needsRebuild } from "../../../config/effects";
 import type { AppConfig } from "../../../config/types";
@@ -19,6 +16,7 @@ import { persistAndReconfigure } from "../http/persist";
 import { applyAutoContext, type AutoContextResult } from "./context-auto";
 import { rawFromValue } from "../../../cli/config-mutations";
 import { buildReasoningView } from "./reasoning-view";
+import { capabilitiesBody } from "./capabilities-body";
 import type {
   ConfigStore,
   RuntimeState,
@@ -36,55 +34,6 @@ import { broadcast } from "../state";
  * `2026-10-30-webui-theme-persistence-design.md`).
  */
 const BUSY_EXEMPT_KEYS: ReadonlySet<string> = new Set(["ui.theme", "ui.themeMode"]);
-
-/** Запись реестра для UI настроек. */
-export interface ConfigRegistryEntry {
-  key: string;
-  aliases: string[];
-  valueType: string;
-  group: string;
-  enum?: readonly string[];
-  /**
-   * Численные границы для контролов `int`/`share`. Из дефов реестра, где есть
-   * реальная мета (напр. доли — те же лимиты 0.05–0.9, что держит парсер,
-   * `contextWindow` мин 1024); у безлимитных опускаются.
-   */
-  min?: number;
-  max?: number;
-  step?: number;
-  /** `version` и подобные в UI рендерятся нередактируемым значением. */
-  readOnly?: boolean;
-  /**
-   * Резолвленное значение read-only ключей. Их геттер реестра авторитетен и
-   * может отличаться от сырого поля конфига (напр. `version` отдаёт версию
-   * установленного пакета, а не версию схемы конфига).
-   */
-  value?: unknown;
-  /** Подсказка GUI-рендера значений `list`/`json` (чипсы, чекбоксы, таблица). */
-  editor?: ConfigKeyDef["editor"];
-}
-
-/** Сериализует реестр в порядке реестра (только канонические ключи). */
-export function buildConfigRegistry(config?: AppConfig): ConfigRegistryEntry[] {
-  return configDefs().map((def) => {
-    const entry: ConfigRegistryEntry = {
-      key: def.key,
-      aliases: def.aliases,
-      valueType: def.valueType,
-      group: def.domain,
-    };
-    if (def.enumValues) entry.enum = def.enumValues;
-    if (def.min !== undefined) entry.min = def.min;
-    if (def.max !== undefined) entry.max = def.max;
-    if (def.step !== undefined) entry.step = def.step;
-    if (def.readOnly) {
-      entry.readOnly = true;
-      if (config) entry.value = def.get(config);
-    }
-    if (def.editor) entry.editor = def.editor;
-    return entry;
-  });
-}
 
 /** Маскирует секрет для показа: последние 4 символа видны, остальное скрыто. */
 function maskToken(token: string | null): string | null {
@@ -161,7 +110,10 @@ export function handleConfigPost(
       }
 
       // Предыдущее значение — для отката, если ход начнётся, пока мы ждём.
+      // Свитч провайдера меняет и `model` (память INV-19 + INV-P1), поэтому
+      // откат обязан вернуть обе части, иначе 409 оставит пустую модель.
       const previousRaw = previousConfigRaw(config, key);
+      const previousModel = config.model;
 
       const result = setConfigValue(config, key, rawValue);
       if (!result.ok) {
@@ -184,15 +136,18 @@ export function handleConfigPost(
         s.lspDoctor = undefined;
       }
 
-      // Окно контекста в режиме auto принадлежит провайдеру, поэтому его надо
-      // перепробить не только при включении auto, но и при смене модели или
-      // провайдера: иначе после свитча остаётся окно прошлой модели (или 32K
-      // дефолт), пока не случится следующий reconfigure. Fail-open — при
-      // молчащем бэкенде окно прежнее.
+      // Окно контекста в режиме auto принадлежит провайдеру. При свитче модели/
+      // провайдера его перепробует сам reconfigure (`reprobeActiveProvider`) —
+      // один сетевой вызов на операцию (INV-W6). Здесь — только явное
+      // включение auto, где UI ждёт `probed`, чтобы честно сказать «провайдер
+      // не сообщил окно». Fail-open: молчащий бэкенд оставляет окно прежним.
       const autoContextSwitch = key === "model" || key === "provider.active";
+      // Свитч модели/провайдера НЕ пробует окно здесь: reconfigure сделает это
+      // сам (`reprobeActiveProvider`), иначе провайдер опрашивался бы дважды за
+      // один свитч. Здесь проба нужна только для явного включения auto — там
+      // UI ждёт результат, чтобы честно показать «провайдер не сообщил окно».
       const wantsAutoProbe =
-        (key === "contextAuto" && result.value === true) ||
-        (autoContextSwitch && config.contextAuto !== false);
+        config.model.trim().length > 0 && key === "contextAuto" && result.value === true;
       let autoProbe: AutoContextResult | undefined;
       if (wantsAutoProbe) {
         autoProbe = await applyAutoContext(config);
@@ -208,10 +163,23 @@ export function handleConfigPost(
       // Сначала персист, затем reconfigure — но только когда реестр требует
       // реконфига для ключа; иначе shared шаг зря дёргал бы провайдеров/модели
       // на каждое нажатие.
+      // `model` живёт в домене agent, `provider.active` — в provider: без
+      // отдельной записи очистка модели при свитче не переживёт рестарт.
+      const modelChanged = key === "provider.active" && config.model !== previousModel;
       let persisted = true;
       let warning: string | undefined;
+      if (modelChanged) {
+        try {
+          s.saveConfig?.(config, "model");
+        } catch {
+          persisted = false;
+          warning = "config not persisted";
+        }
+      }
       if (needsRebuild(result.effects)) {
-        ({ persisted, warning } = await persistAndReconfigure(s, config, key));
+        const next = await persistAndReconfigure(s, config, key);
+        persisted = persisted && next.persisted;
+        warning = warning ?? next.warning;
       } else {
         try {
           s.saveConfig?.(config, key);
@@ -227,11 +195,23 @@ export function handleConfigPost(
         persisted,
       };
       if (warning) body.warning = warning;
+      // Смена модели/провайдера: reconfigure уже перепробовал capabilities.
+      // Отдаём их в ответе, чтобы чип не держал набор прошлой модели до
+      // прихода SSE `models` (старые иконки при новом бэкенде — ложь).
+      if (key === "model" || key === "provider.active") {
+        const capabilities = capabilitiesBody(s.providerReasoning?.());
+        if (capabilities) body.capabilities = capabilities;
+      }
       // Итог пробы — чтобы UI честно сказал «провайдер не сообщил окно»,
       // когда auto включён, но бэкенд промолчал (fail-open).
       if (autoProbe) {
         body.contextWindow = autoProbe.contextWindow;
         body.probed = autoProbe.probed;
+      } else if (autoContextSwitch && config.contextAuto !== false) {
+        // Окно свитча измерил reconfigure — отдаём итог, но без `probed`:
+        // HTTP-пробы в этом хендлере не было, врать про «провайдер сообщил»
+        // нельзя.
+        body.contextWindow = config.contextWindow;
       }
       // Все вкладки/окна держат собственную копию конфига; после записи шлём
       // событие, чтобы клиенты перечитали `/api/config` и настроечные панели
@@ -270,15 +250,40 @@ export function handleModelsGet(
   // `reasoning` аддитивен и выводится на запрос из живого конфига, так что ряд
   // селекторов всегда отражает активных провайдера+модель без reconfigure-обвязки.
   // Без wired конфига опускается (легаси-стабы).
-  const body: Record<string, unknown> = { models: s.knownModels() };
+  const activeState = s.knownModelsState?.();
+  // «Повторить» после ошибки: GET сам запускает новую попытку (иначе кнопка
+  // возвращала бы тот же error из кеша) и отвечает `loading`, чтобы клиент
+  // продолжил опрос.
+  const retrying =
+    activeState?.error === true && !activeState.loading && !!s.knownModelsRefresh;
+  if (retrying) void s.knownModelsRefresh!();
+  const body: Record<string, unknown> = {
+    models: activeState?.models ?? s.knownModels(),
+  };
+  if (activeState) {
+    // Честные состояния: «грузится» и «не ответил» не маскируются под пустой
+    // список (UI иначе говорит «провайдер не сообщил моделей» во всех случаях).
+    body.loading = retrying ? true : activeState.loading;
+    body.error = retrying ? false : activeState.error === true;
+  }
   if (s.config) {
     const probe = s.providerReasoning?.();
+    // Холодная llama-swap-модель не отдала /props на старте — стратегия осталась
+    // из пресета. Читающий запрос даёт бэкенду ещё один шанс; успех публикует
+    // SSE `models`, и клиент перечитает снимок (INV-R2/R7).
+    if (probe?.needsReprobe === true && s.refreshProviderCapabilities) {
+      void s.refreshProviderCapabilities();
+    }
     body.reasoning = buildReasoningView(s.config, {
       reachable: s.providerReachable?.(),
       strategy: probe?.strategy as never,
       levels: probe?.levels,
       reasoningOff: probe?.reasoningOff,
     });
+    // Capabilities активной модели для чипа композера. Отдельного запроса нет:
+    // композер и так перечитывает список моделей после смены пары.
+    const capabilities = capabilitiesBody(probe);
+    if (capabilities) body.capabilities = capabilities;
   }
   sendJson(res, 200, body);
 }

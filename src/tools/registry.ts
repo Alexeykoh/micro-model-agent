@@ -63,6 +63,28 @@ export class ToolRegistry {
     return Array.from(this.tools.values());
   }
 
+  /**
+   * Теги тулов, реально попавших в схему LLM (B12): зеркалит `getAllForLLM`
+   * плюс строгий allowlist. Пустой набор тегов без allowlist — legacy «все
+   * тулы» (все теги видимы); с allowlist — только теги перечисленных имён.
+   * Гейт для `PromptBlock.requiresTags`: тег активен, но ни один его тул
+   * не в схеме — блок врёт, его нельзя показывать.
+   */
+  visibleTagsOf(activeTags?: string[], toolAllowlist?: string[]): Set<string> {
+    const allow = toolAllowlist?.length ? new Set(toolAllowlist) : null;
+    const active = new Set(activeTags ?? []);
+    const out = new Set<string>();
+    for (const t of this.getAll()) {
+      const inSchema = allow
+        ? allow.has(t.name)
+        : active.size === 0 || t.alwaysOn || (t.tags?.some((tag) => active.has(tag)) ?? false);
+      if (inSchema) {
+        for (const tag of t.tags ?? []) out.add(tag);
+      }
+    }
+    return out;
+  }
+
   /** Подмножество с любым из тегов (без alwaysOn). */
   getByTags(tags: string[]): RegisteredTool[] {
     return this.getAll().filter((t) => {

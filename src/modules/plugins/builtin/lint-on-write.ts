@@ -7,11 +7,13 @@ import { findProjectRoot, resolveTscCommand } from "../../lsp/project-root";
 import { autoFixErrors, parseTscOutput } from "../../../tools/auto-fixer";
 import { LINT_TYPE_CHECK_DEBOUNCE_MS as TYPE_CHECK_DEBOUNCE_MS } from "../../../config/timeouts";
 import {
+  childErr,
   isLintBinaryMissing,
   isMissingBinaryError,
   markLintBinaryMissing,
   runAsync,
 } from "./lint-run";
+import { checkSyntax } from "./lint-syntax";
 import {
   autoFixedBlock,
   lintFailureBlock,
@@ -19,36 +21,14 @@ import {
   syntaxFailureBlock,
   typecheckFailureBlock,
 } from "./lint-format";
-
-// Пофайловые синтаксис-проверки кешируются по (путь, хеш содержимого): перезапись
-// файла с тем же содержимым скипает (дорогую) проверку. Смена контента →
-// промах кеша → свежая проверка.
-/** Ошибка дочернего процесса (settleChildClose): статус + захваченные потоки. */
-type ChildProcessError = Error & {
-  status?: number;
-  stdout?: unknown;
-  stderr?: unknown;
-};
-
-function childErr(err: unknown): ChildProcessError {
-  return err instanceof Error ? err as ChildProcessError : new Error(String(err)) as ChildProcessError;
-}
-
-const syntaxCache = new Map<string, { hash: string; error: string | null }>();
-
-function contentHash(content: string): string {
-  let h = 5381;
-  for (let i = 0; i < content.length; i++) {
-    h = ((h << 5) + h + content.charCodeAt(i)) | 0;
-  }
-  return String(h);
-}
+import { LINT_ON_WRITE_SCHEMA, lintOnWriteSettings } from "./plugin-settings";
 
 /** Встроенный плагин: проверяет каждую запись/правку файла (синтаксис, lint, типы). */
 export class LintOnWritePlugin implements AgentPlugin {
   name = "lint-on-write";
   priority = 10;
   isBuiltin = true;
+  settingsSchema = LINT_ON_WRITE_SCHEMA;
   // Дебаунснутый проектный typecheck по корню проекта. Один общий слот
   // протекал tsc-ошибками одного проекта в записи другого (монорепо).
   private _checks = new Map<string, { at: number; promise: Promise<string | null> }>();
@@ -60,9 +40,10 @@ export class LintOnWritePlugin implements AgentPlugin {
       return;
     }
 
-    if (!result.success) {
-      return;
-    }
+    if (!result.success) return;
+
+    const settings = lintOnWriteSettings();
+    if (!settings.syntaxCheck && !settings.projectLint && !settings.typeCheck) return;
 
     const path = String(call.arguments.path || "");
     if (!path) return;
@@ -74,7 +55,9 @@ export class LintOnWritePlugin implements AgentPlugin {
     if (signal?.aborted) return;
 
     const ext = extname(fullPath);
-    const syntaxError = await this.checkSyntax(fullPath, ext, tctx.baseDir, signal);
+    const syntaxError = settings.syntaxCheck
+      ? await checkSyntax(fullPath, ext, tctx.baseDir, signal)
+      : null;
     if (signal?.aborted) return;
 
     if (syntaxError) {
@@ -82,74 +65,9 @@ export class LintOnWritePlugin implements AgentPlugin {
       return;
     }
 
-    await this.runProjectLint(tctx, result, signal);
+    if (settings.projectLint) await this.runProjectLint(tctx, result, signal);
     if (signal?.aborted) return;
-    await this.runProjectTypeCheck(fullPath, tctx.baseDir, result, signal);
-  }
-
-  private async checkSyntax(
-    filePath: string,
-    ext: string,
-    baseDir: string,
-    signal?: AbortSignal,
-  ): Promise<string | null> {
-    if (ext === ".ts" || ext === ".tsx" || ext === ".cts" || ext === ".mts") {
-      // Проверка только синтаксиса парсером bun (~200мс) вместо `npx tsc`
-      // (~3-5с на запись). Полные ошибки типов всё равно отдаёт дебаунснутый
-      // проектный typecheck ниже, когда есть tsconfig.
-      let content = "";
-      try {
-        content = readFileSync(filePath, "utf-8");
-      } catch {
-        return null;
-      }
-      const hash = contentHash(content);
-      const cached = syntaxCache.get(filePath);
-      if (cached && cached.hash === hash) {
-        return cached.error;
-      }
-      try {
-        await runAsync(
-          { file: "bun", args: ["build", "--no-bundle", "--target=bun", filePath] },
-          baseDir,
-          10000,
-          signal,
-        );
-        // Прерванная проверка (interrupt) файл не валидировала — не кешируем.
-        if (signal?.aborted) return null;
-        syntaxCache.set(filePath, { hash, error: null });
-        return null;
-      } catch (rawErr: unknown) {
-        const err = childErr(rawErr);
-        if (
-          err.status === 127 ||
-          err.message.includes("not found") ||
-          err.message.includes("ENOENT")
-        ) {
-          return null;
-        }
-        const stderr = String(err.stderr ?? "") || String(err.stdout ?? "");
-        const firstError =
-          stderr.split("\n").find((line: string) => line.trim()) || "TypeScript syntax error";
-        syntaxCache.set(filePath, { hash, error: firstError.trim() });
-        return firstError.trim();
-      }
-    }
-
-    if (ext === ".js" || ext === ".jsx" || ext === ".cjs" || ext === ".mjs") {
-      try {
-        await runAsync({ file: "node", args: ["--check", filePath] }, baseDir, 5000, signal);
-        return null;
-      } catch (rawErr: unknown) {
-        const err = childErr(rawErr);
-        const stderr = String(err.stderr ?? "");
-        const firstError =
-          stderr.split("\n").find((line: string) => line.trim()) || "JavaScript syntax error";
-        return firstError.trim();
-      }
-    }
-
-    return null;
+    if (settings.typeCheck) await this.runProjectTypeCheck(fullPath, tctx.baseDir, result, signal);
   }
 
   private async runProjectLint(
@@ -160,16 +78,12 @@ export class LintOnWritePlugin implements AgentPlugin {
     let lintScript: string | undefined;
     try {
       const packageJsonPath = join(ctx.baseDir, "package.json");
-      if (!existsSync(packageJsonPath)) {
-        return;
-      }
+      if (!existsSync(packageJsonPath)) return;
 
       const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
       lintScript = packageJson.scripts?.lint;
 
-      if (!lintScript) {
-        return;
-      }
+      if (!lintScript) return;
 
       // Объявленный, но неустановленный бинарник линтера ("eslint" не стоит) —
       // пробел проектного сетапа, а не проблема кода: дописывание его к каждой
@@ -210,14 +124,10 @@ export class LintOnWritePlugin implements AgentPlugin {
     // вообще без типового фидбэка (наблюдено в ses_mst2r0r5).
     const projectRoot = findProjectRoot(filePath, baseDir, ["tsconfig.json", "package.json"]);
     const tsconfigPath = join(projectRoot, "tsconfig.json");
-    if (!existsSync(tsconfigPath)) {
-      return;
-    }
+    if (!existsSync(tsconfigPath)) return;
     // Без локального tsc проверка невозможна — не платим npx-задержку.
     const tsc = resolveTscCommand(projectRoot);
-    if (!tsc) {
-      return;
-    }
+    if (!tsc) return;
 
     const now = Date.now();
     const prev = this._checks.get(projectRoot);
@@ -247,7 +157,7 @@ export class LintOnWritePlugin implements AgentPlugin {
       if (errors.length > 0) {
         const fixResult = autoFixErrors(filePath, readFileSync(filePath, "utf-8"), errors);
 
-        if (fixResult.fixed) {
+        if (fixResult.fixed && lintOnWriteSettings().autoFix) {
           // Пишем починенное содержимое
           writeFileSync(filePath, fixResult.newContent, "utf-8");
           result.output += autoFixedBlock(fixResult.applied);

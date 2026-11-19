@@ -3,7 +3,9 @@ import { ToolRegistry } from "../src/tools/registry";
 import type { ToolDefinition } from "../src/tools/types";
 import { buildHiddenToolsBlock } from "../src/tools/hidden-tools-block";
 import { enableToolsTool } from "../src/tools/enable-tools";
-import { filterToolsByTags } from "../src/tools/filter-tools";
+import { filterToolsByTags, filterToolsWithOverrides } from "../src/tools/filter-tools";
+import { rememberTool } from "../src/tools/remember";
+import { recallTool } from "../src/tools/recall";
 import type { ToolContext } from "../src/tools/types";
 
 function tool(name: string, tags?: string[], alwaysOn?: boolean): ToolDefinition {
@@ -43,6 +45,15 @@ describe("buildHiddenToolsBlock", () => {
 
   it("returns empty string when no tools", () => {
     expect(buildHiddenToolsBlock([], ["file"])).toBe("");
+  });
+
+  it("returns empty string for the wide set: empty tags mean all tools are visible (L4)", () => {
+    const tools = [
+      tool("read_file", ["file"]),
+      tool("web_search", ["research"]),
+      tool("plan", undefined, true),
+    ];
+    expect(buildHiddenToolsBlock(tools, [])).toBe("");
   });
 
   it("groups hidden tools by their first tag and sorts names", () => {
@@ -102,6 +113,17 @@ describe("enableToolsTool", () => {
     // still resolve via toolExecutor if present.
     expect(res.success).toBe(false);
   });
+
+  it("is a no-op when all tools are already visible (wide mode, L4)", async () => {
+    const activeToolTags: string[] = [];
+    const ctx = {
+      activeToolTags,
+      toolExecutor: { getToolDefinitions: () => [] },
+    } as unknown as ToolContext;
+    const res = await enableToolsTool.handler(ctx, { tags: ["research"] });
+    expect(res.success).toBe(true);
+    expect(activeToolTags).toEqual([]);
+  });
 });
 
 describe("filterToolsByTags", () => {
@@ -129,5 +151,41 @@ describe("filterToolsByTags", () => {
     const tools = [tool("read_file", ["file"]), tool("untagged")];
     const filtered = filterToolsByTags(tools, ["file"]);
     expect(filtered.map((t) => t.name)).toEqual(["read_file"]);
+  });
+});
+
+describe("filterToolsWithOverrides", () => {
+  const tools = [
+    tool("read_file", ["file"], true),
+    tool("web_search", ["research"]),
+    tool("plan", undefined, true),
+  ];
+
+  it("adds a force-enabled tool outside the active tags", () => {
+    const names = filterToolsWithOverrides(tools, ["file"], { enabled: ["web_search"] }).map(
+      (t) => t.name,
+    );
+    expect(names).toEqual(["read_file", "web_search", "plan"]);
+  });
+
+  it("removes a force-disabled tool even when it is alwaysOn", () => {
+    const names = filterToolsWithOverrides(tools, ["file"], {
+      disabled: ["plan"],
+    }).map((t) => t.name);
+    expect(names).toEqual(["read_file"]);
+  });
+
+  it("keeps the tag baseline when no overrides are set", () => {
+    expect(filterToolsWithOverrides(tools, ["file"]).map((t) => t.name)).toEqual([
+      "read_file",
+      "plan",
+    ]);
+  });
+});
+
+describe("memory tools", () => {
+  it("stay in the schema even when the active tags are narrow", () => {
+    const visible = filterToolsByTags([rememberTool, recallTool], ["file", "code"]);
+    expect(visible.map((t) => t.name)).toEqual(["remember", "recall"]);
   });
 });

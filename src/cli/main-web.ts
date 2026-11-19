@@ -48,6 +48,8 @@ export async function dispatchLongRunningCommand(
     host?: string;
     token?: string;
     open?: boolean;
+    daemonUrl?: string;
+    rotateToken?: boolean;
   };
 
   if (name === "web") {
@@ -56,6 +58,7 @@ export async function dispatchLongRunningCommand(
       port,
       host: raw.host,
       token: raw.token,
+      daemonUrl: raw.daemonUrl,
       noOpen: raw.open === false,
       projectDir: ctx.projectDir,
       noAgentsMd: ctx.noAgentsMd,
@@ -70,6 +73,7 @@ export async function dispatchLongRunningCommand(
     token: raw.token,
     projectDir: ctx.projectDir,
     noAgentsMd: ctx.noAgentsMd,
+    rotateToken: raw.rotateToken === true,
   });
   process.exit(0);
 }

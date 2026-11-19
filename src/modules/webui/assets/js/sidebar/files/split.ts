@@ -129,8 +129,24 @@ export function toggleViewerFull(): boolean {
  * `false`: leaving the tree hidden with no viewer open shows the user nothing.
  */
 export function setViewerFull(on: boolean): boolean {
+  if (!on) autoForImage = false;
   if (full === on) return full;
   full = on;
   applySplit();
   return full;
+}
+
+/**
+ * Image files take the whole sidebar automatically; opening a non-image
+ * afterwards restores the split, unless the user widened the viewer by hand.
+ */
+let autoForImage = false;
+
+export function autoViewerForImage(isImage: boolean): void {
+  if (isImage) {
+    autoForImage = true;
+    setViewerFull(true);
+  } else if (autoForImage) {
+    setViewerFull(false);
+  }
 }

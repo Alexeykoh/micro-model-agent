@@ -10,7 +10,13 @@ import { describe, it, expect, vi } from "vitest";
 import { Agent, type AgentDeps } from "../../src/core/agent";
 import { DEFAULTS } from "../../src/config/defaults";
 
-const config = { ...DEFAULTS, maxToolIterations: 5, autoPlan: false };
+const config = {
+  ...DEFAULTS,
+  maxToolIterations: 5,
+  autoPlan: false,
+  // Pause-тест считает вызовы основного провайдера; critic тоже ходит в него.
+  critic: { ...DEFAULTS.critic, enabled: false },
+};
 
 /**
  * Провайдер из двух сцен: 1-й вызов — tool_call (ход продолжает итерацию),

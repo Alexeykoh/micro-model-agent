@@ -117,7 +117,12 @@ export function makeRunAgent(deps: RunAgentDeps): RunAgent {
     if (!cm) return () => {};
     const tick = (): void => {
       try {
-        const usage = liveContextUsage(state.sessionUsage[owner] ?? state.usage, cm);
+        // База — снимок ЭТОЙ сессии: после reload `activeUsage` поднимет его с
+        // диска вместе с тоталами журнала. Глобальный `state.usage` — last-turn
+        // ЧУЖОЙ сессии, а запись снимка в `sessionUsage[owner]` до конца хода
+        // закрыла бы `activeUsage` кэшем и обнулила накопленные ↓/↑/↺.
+        const base = state.sessionUsage[owner] ?? activeUsage(state, owner);
+        const usage = liveContextUsage(base, cm);
         state.usage = usage;
         state.sessionUsage[owner] = usage;
         broadcast(

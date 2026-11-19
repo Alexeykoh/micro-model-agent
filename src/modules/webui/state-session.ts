@@ -42,18 +42,5 @@ export interface WebSessionManager {
   getSessionDirectory?(id: string): string;
 }
 
-/** Одно входящее сообщение, ждущее конца текущего хода (`POST /api/message` при busy). */
-export interface QueuedMessage {
-  /** Стабильный id в пуле: адресат отмены/принудительного старта. */
-  id: string;
-  text: string;
-  images: string[];
-  /**
-   * Сессия-владелец сообщения. Заполняется из `POST /api/message {sessionId}`
-   * (фолбэк — тогда-активная); дренаж переключается на неё перед стартом хода,
-   * чтобы сообщение из вкладки B не уехало в сессию A (v2, per-session очередь).
-   */
-  sessionId: string | null;
-  /** Когда принято (для сортировки/диагностики; порядок — порядок прихода). */
-  ts: number;
-}
+/** Очередь входящего сообщения — контракт нейтрального runtime-слоя (RunPool). */
+export type { QueuedMessage } from "../../runtime/run-pool/queued-message";

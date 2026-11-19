@@ -2,17 +2,16 @@
 import type { AgentModule, AgentPlugin } from "../types";
 import type { PromptBlock } from "../../core/types";
 import { SkillsLoader, type SkillMeta } from "./loader";
-import { buildCatalogBlock } from "./catalog";
+import { buildCatalogBlock, buildLoadedBlock, CATALOG_LIMIT } from "./catalog";
+import { LoadedEvents, type LoadedSkillRef } from "./loaded-events";
 import type { SkillUsage } from "./usage";
 import { t } from "../../i18n/index";
 import { estimateTokens } from "../../llm/token-counter";
+import { checkLoadBudget, type LoadResult } from "./load-budget";
+export { SKILLS_LOADED_TOKENS_CAP } from "./load-budget";
+export type { LoadResult } from "./load-budget";
 
-/** Итог загрузки скилла по имени (успех, сообщение, сам скилл). */
-export interface LoadResult {
-  success: boolean;
-  message: string;
-  skill?: SkillMeta;
-}
+
 
 /** Каталоги-источники скиллов в порядке приоритета (builtin → global → project). */
 export interface SkillSources {
@@ -27,23 +26,32 @@ export class SkillsModule implements AgentModule {
 
   private availableSkills: SkillMeta[];
   private loadedSkills: Map<string, SkillMeta> = new Map();
+  /** Hub подписки на изменение загруженного набора (веб-индикатор). */
+  private readonly loadedEvents = new LoadedEvents();
   private budget: number;
   private currentTokens = 0;
   /** Каталоги для `reload()`; без них пересканировать навыки нечем. */
   private sources?: SkillSources;
   /** Счётчики использования: каталог в промпте показывает топ-10. */
   private usage?: SkillUsage;
+  /**
+   * Сколько имён показывает каталог (L2): дефолт — small-канон (10),
+   * workspace-фаза ставит 25 на больших окнах.
+   */
+  catalogLimit: number;
 
   constructor(
     availableSkills: SkillMeta[],
     budget: number,
     sources?: SkillSources,
     usage?: SkillUsage,
+    catalogLimit: number = CATALOG_LIMIT,
   ) {
     this.availableSkills = availableSkills;
     this.budget = budget;
     this.sources = sources;
     this.usage = usage;
+    this.catalogLimit = catalogLimit;
   }
 
   /**
@@ -88,9 +96,11 @@ export class SkillsModule implements AgentModule {
     const before = new Set(this.availableSkills.map((s) => s.name));
     const after = new Set(next.map((s) => s.name));
     // Загруженные скиллы, которых больше нет на диске, уходят из бюджета.
+    let unloadedAny = false;
     for (const name of [...this.loadedSkills.keys()]) {
-      if (!after.has(name)) this.unload(name);
+      if (!after.has(name)) { this.unload(name); unloadedAny = true; }
     }
+    if (unloadedAny) this.loadedEvents.notify([...this.loadedSkills.values()]);
     this.availableSkills = next;
     this.currentTokens = 0;
     for (const skill of this.loadedSkills.values()) {
@@ -140,6 +150,7 @@ export class SkillsModule implements AgentModule {
     if (!skill) return false;
     this.loadedSkills.delete(name);
     this.currentTokens -= this.estimateTokens(skill.content);
+    this.loadedEvents.notify([...this.loadedSkills.values()]);
     return true;
   }
 
@@ -151,6 +162,11 @@ export class SkillsModule implements AgentModule {
   /** Все доступные (загруженные и нет) скиллы. */
   getAvailable(): SkillMeta[] {
     return this.availableSkills;
+  }
+
+  /** Подписка на изменение загруженного набора (веб-индикатор, REPL). Возвращает отписку. */
+  onChange(cb: (loaded: LoadedSkillRef[]) => void): () => void {
+    return this.loadedEvents.subscribe(cb);
   }
 
   /** Ищет скилл по точному имени среди доступных. */
@@ -183,12 +199,17 @@ export class SkillsModule implements AgentModule {
 
   /** Системный блок: каталог + тела загруженных (совместимый вход). */
   getSystemPromptBlock(): PromptBlock | null {
+    // B19: тонкая обёртка над раздельным путём, а не свой формат: раньше
+    // склейка шла одним high-блоком без source/label — приоритеты и лог
+    // деградации (INV-17) расходились со `getPromptBlocks`.
     const blocks = this.getPromptBlocks();
     if (blocks.length === 0) return null;
     const content = blocks.map((b) => b.content).join("\n\n");
     return {
+      source: "skills",
+      label: "skills",
       content,
-      priority: "high",
+      priority: "normal",
       essential: false,
       estimatedTokens: this.estimateTokens(content),
     };
@@ -207,29 +228,14 @@ export class SkillsModule implements AgentModule {
     return blocks;
   }
 
-  /** Компактный каталог: топ-10 по использованию, имена без описаний. */
+  /** Компактный каталог: топ-N по использованию, имена без описаний. */
   getCatalogBlock(): PromptBlock | null {
-    return buildCatalogBlock(this.availableSkills, this.usage);
+    return buildCatalogBlock(this.availableSkills, this.usage, this.catalogLimit);
   }
 
   /** Тела загруженных скиллов: низкий приоритет и хвост промпта. */
   getLoadedBlock(): PromptBlock | null {
-    if (this.loadedSkills.size === 0) return null;
-    const lines = ["[Loaded Skills]"];
-    for (const skill of this.loadedSkills.values()) {
-      lines.push(`--- ${skill.name} ---`);
-      lines.push(skill.content);
-      lines.push("");
-    }
-    const content = lines.join("\n");
-    return {
-      content,
-      label: "loaded skills",
-      priority: "low",
-      essential: false,
-      estimatedTokens: this.estimateTokens(content),
-      tail: true,
-    };
+    return buildLoadedBlock([...this.loadedSkills.values()]);
   }
 
   /** Плагин-заглушка: модуль работает через системный блок, хуки не нужны. */
@@ -243,41 +249,21 @@ export class SkillsModule implements AgentModule {
   }
 
   private tryLoad(skill: SkillMeta): LoadResult {
-    const tokens = this.estimateTokens(skill.content);
-
-    if (tokens > this.budget) {
-      return {
-        success: false,
-        message: t("skill.too_large", {
-          name: skill.name,
-          tokens,
-          budget: this.budget,
-        }),
-      };
-    }
-
-    if (this.currentTokens + tokens > this.budget) {
-      const remaining = this.budget - this.currentTokens;
-      return {
-        success: false,
-        message: t("skill.exceeds_budget", {
-          name: skill.name,
-          tokens,
-          remaining,
-        }),
-      };
-    }
+    const decision = checkLoadBudget(skill, this.budget, this.currentTokens);
+    if (!decision.ok) return { success: false, message: decision.message };
+    const { tokens, effectiveBudget } = decision;
 
     this.loadedSkills.set(skill.name, skill);
     this.currentTokens += tokens;
     this.usage?.recordLoad(skill.name);
+    this.loadedEvents.notify([...this.loadedSkills.values()]);
 
     return {
       success: true,
       message: t("skill.loaded", {
         name: skill.name,
         tokens,
-        remaining: this.budget - this.currentTokens,
+        remaining: effectiveBudget - this.currentTokens,
       }),
       skill,
     };

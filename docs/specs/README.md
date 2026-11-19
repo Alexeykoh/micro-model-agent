@@ -18,6 +18,7 @@
 
 - [outbound policy](./2026-10-15-outbound-policy-design.md)
 - [corporate data policy](./2026-10-19-corporate-data-policy-design.md)
+- [enterprise auth](./2026-11-12-enterprise-auth-design.md) — домен → сервер: identity, policy, actor
 
 Провайдеры и LLM:
 
@@ -83,3 +84,4 @@
 - [webui activity phase](./2026-11-05-webui-activity-phase-design.md)
 - [critic transparency and fixes](./2026-11-05-critic-transparency-and-fixes-design.md)
 - [monolith split](./2026-11-10-monolith-split-design.md) — полное разделение UI / runtime
+- [web search provider](./2026-11-18-web-search-provider-design.md) — выбор источника `web_search`: duckduckgo / tavily / searxng

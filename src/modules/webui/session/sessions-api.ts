@@ -7,36 +7,27 @@ import { readBody, requestError, sendJson } from "../util";
 import { parseJsonBody, readJsonBody } from "../http/body";
 import { isSessionBusy, pushState } from "./session-status";
 import { cancelPendingQuestions } from "./prompt-io";
-import { broadcast, type SessionStore, type RuntimeState, type HttpTransport, type SseTransport } from "../state";
+import { inWorkspace } from "./project-scope";
+import { emitSessions, sessionList } from "./session-list";
+import {
+  type SessionStore,
+  type RuntimeState,
+  type HttpTransport,
+  type SseTransport,
+  type WorkspaceStore,
+} from "../state";
 
-/** Проекция меты сессии для списка (`GET /api/sessions` и SSE `sessions`). */
-interface SessionMetaLite {
-  id: string;
-  name?: string;
-  updatedAt?: string;
-  model?: string;
-  messageCount?: number;
-}
+export { emitSessions } from "./session-list";
 
-/** Список сессий в форме, общей для REST и SSE. */
-function sessionList(s: SessionStore): SessionMetaLite[] {
-  if (!s.sessionManager) return [];
-  return s.sessionManager.list().map((meta) => ({
-    id: meta.id,
-    name: meta.name,
-    updatedAt: meta.updatedAt,
-    model: meta.model,
-    messageCount: meta.messageCount,
-  }));
-}
+/** Входы хендлеров `/api/sessions*`: сессии + workspace (фильтр по проекту). */
+type SessionsState = SessionStore &
+  RuntimeState &
+  HttpTransport &
+  SseTransport &
+  Pick<WorkspaceStore, "workspace">;
 
-/** Рассылает список сессий событием `sessions` (замена 15с-поллу клиента). */
-export function emitSessions(s: SessionStore & SseTransport): void {
-  broadcast({ type: "sessions", ts: Date.now(), sessions: sessionList(s) }, s);
-}
-
-/** `GET /api/sessions` — список сессий (id/имя/обновление/модель/счёт). */
-export function handleSessionsGet(res: ServerResponse, s: SessionStore & RuntimeState & HttpTransport & SseTransport): void {
+/** `GET /api/sessions` — список сессий (id/имя/обновление/модель/счёт/проект). */
+export function handleSessionsGet(res: ServerResponse, s: SessionsState): void {
   if (!s.sessionManager) {
     sendJson(res, 503, { error: "sessions_unavailable" });
     return;
@@ -54,7 +45,7 @@ export function handleSessionsGet(res: ServerResponse, s: SessionStore & Runtime
 export function handleSessionCreate(
   req: IncomingMessage,
   res: ServerResponse,
-  s: SessionStore & RuntimeState & HttpTransport & SseTransport,
+  s: SessionsState,
 ): void {
   const manager = s.sessionManager;
   if (!manager || typeof manager.create !== "function") {
@@ -106,7 +97,7 @@ export function handleSessionCreate(
 export function handleSessionActivate(
   req: IncomingMessage,
   res: ServerResponse,
-  s: SessionStore & RuntimeState & HttpTransport & SseTransport,
+  s: SessionsState,
 ): void {
   if (!s.sessionManager) {
     sendJson(res, 503, { error: "sessions_unavailable" });
@@ -122,6 +113,17 @@ export function handleSessionActivate(
       const id = typeof rec.id === "string" ? rec.id : "";
       if (!id) {
         sendJson(res, 400, { error: "missing id" });
+        return;
+      }
+      const meta = manager.get(id);
+      if (!meta) {
+        sendJson(res, 404, { error: "not_found" });
+        return;
+      }
+      // Чужая сессия (другой `projectDir`) — не «нет такой», а «сюда нельзя»:
+      // иначе вкладка из прошлого проекта активировала бы чужой контекст.
+      if (!inWorkspace(meta, s.workspace)) {
+        sendJson(res, 403, { error: "foreign_project" });
         return;
       }
       try {
@@ -154,10 +156,7 @@ export function handleSessionActivate(
  * закрытый контекст. Idle-раннер выгружается (контекст не «висит»); бегущую/
  * queued сессию не трогаем — её ход может завершаться. Идемпотентно.
  */
-export function handleSessionDeactivate(
-  res: ServerResponse,
-  s: SessionStore & RuntimeState & HttpTransport & SseTransport,
-): void {
+export function handleSessionDeactivate(res: ServerResponse, s: SessionsState): void {
   if (!s.sessionManager) {
     sendJson(res, 503, { error: "sessions_unavailable" });
     return;
@@ -199,7 +198,7 @@ export function handleSessionDeactivate(
  * указывать на исчезнувший файл посреди хода; UI сначала переключается.
  * Чужие id — 404.
  */
-export function handleSessionDelete(res: ServerResponse, id: string, s: SessionStore & RuntimeState & HttpTransport & SseTransport): void {
+export function handleSessionDelete(res: ServerResponse, id: string, s: SessionsState): void {
   if (!s.sessionManager) {
     sendJson(res, 503, { error: "sessions_unavailable" });
     return;
@@ -249,7 +248,7 @@ export function handleSessionsApi(
   req: IncomingMessage,
   res: ServerResponse,
   reqUrl: URL,
-  s: SessionStore & RuntimeState & HttpTransport & SseTransport,
+  s: SessionsState,
 ): boolean {
   const p = reqUrl.pathname;
   if (p === "/api/sessions" && req.method === "GET") {

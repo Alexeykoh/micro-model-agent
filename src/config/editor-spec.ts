@@ -17,6 +17,11 @@ export interface ConfigEditorSpec {
   optionsSource?: "models" | "providers";
   /** Допустимые значения для `checkboxes`. */
   options?: readonly string[];
+  /**
+   * Раскладка `table`: `grid` (по умолчанию) — колонки в строку, `stack` —
+   * поля записи столбиком (для широких записей вроде экспертов).
+   */
+  layout?: "grid" | "stack";
   /** Колонки для `table`. Первая колонка — ключ записи. */
   columns?: ReadonlyArray<{
     key: string;

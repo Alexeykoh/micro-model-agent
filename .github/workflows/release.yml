@@ -90,3 +90,6 @@ jobs:
             release/mma-*.tar.gz
             release/latest.json
           generate_release_notes: true
+          # Pre-тег (vX.Y.Z-pre.N) публикует Pre-Release: /releases/latest остаётся
+          # на предыдущем стабильном, обычные установщики не получают тестовую сборку.
+          prerelease: ${{ contains(github.ref_name, '-pre') }}

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { probeProviderContext } from "../../src/llm/model-loader";
+import { probeNativeCapabilities, probeProviderContext } from "../../src/llm/model-loader";
 import { lookupModelsDevContext, resetModelsDevCache } from "../../src/llm/models-dev";
 
 function mockFetch(handler: (url: string, init?: RequestInit) => unknown) {
@@ -61,9 +61,7 @@ describe("probeProviderContext", () => {
     mockFetch((url) =>
       String(url).endsWith("/v1/models")
         ? {
-            data: [
-              { id: "x/y", top_provider: { context_length: 65536, is_moderated: true } },
-            ],
+            data: [{ id: "x/y", top_provider: { context_length: 65536, is_moderated: true } }],
           }
         : null,
     );
@@ -144,9 +142,7 @@ describe("probeProviderContext", () => {
 
   it("returns null when the model is not reported anywhere", async () => {
     mockFetch((url) =>
-      String(url).endsWith("/v1/models")
-        ? { data: [{ id: "other", context_length: 8192 }] }
-        : null,
+      String(url).endsWith("/v1/models") ? { data: [{ id: "other", context_length: 8192 }] } : null,
     );
     expect(await probeProviderContext("https://example.com/v1", "missing")).toBeNull();
   });
@@ -154,6 +150,51 @@ describe("probeProviderContext", () => {
   it("fails open when the network throws", async () => {
     mockFetch(() => new Error("down"));
     expect(await probeProviderContext("http://localhost:1234/v1", "m")).toBeNull();
+  });
+});
+
+describe("probeNativeCapabilities reachability", () => {
+  let originalFetch: typeof global.fetch;
+
+  beforeEach(() => {
+    originalFetch = global.fetch;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it("counts an HTTP answer without /models as reachable, not as down", async () => {
+    // llama.cpp за прокси без `/v1/models`: 404 — это ответ, сервер жив.
+    mockFetch(() => null);
+    const probe = await probeNativeCapabilities(
+      "http://10.0.0.5:8080/v1",
+      "m",
+      500,
+      "openai-compat",
+    );
+    expect(probe?.reachable).toBe(true);
+    expect(probe?.capabilities).toBeUndefined();
+  });
+
+  it("does not claim reachability when nothing answered", async () => {
+    mockFetch(() => new Error("ECONNREFUSED"));
+    expect(
+      await probeNativeCapabilities("http://127.0.0.1:1/v1", "m", 500, "openai-compat"),
+    ).toBeNull();
+  });
+
+  it("still reads declarative capabilities from a real answer", async () => {
+    mockFetch((url) =>
+      String(url).endsWith("/v1/models")
+        ? { data: [{ id: "m", capabilities: { reasoning: { supported: true } } }] }
+        : null,
+    );
+    const probe = await probeNativeCapabilities("https://host/v1", "m", 500, "openai-compat");
+    expect(probe).toMatchObject({
+      reachable: true,
+      capabilities: { reasoningStrategy: "openai-effort" },
+    });
   });
 });
 
@@ -199,9 +240,7 @@ describe("probeProviderContext models.dev fallback", () => {
   });
 
   it("resolves Zen bare ids via the models.dev catalog", async () => {
-    mockBareProvider((url) =>
-      url === "https://models.dev/api.json" ? ZEN_CATALOG : undefined,
-    );
+    mockBareProvider((url) => (url === "https://models.dev/api.json" ? ZEN_CATALOG : undefined));
     const probe = await probeProviderContext(
       "https://opencode.ai/zen/go/v1",
       "deepseek-v4.1-flash",
@@ -211,13 +250,8 @@ describe("probeProviderContext models.dev fallback", () => {
   });
 
   it("sniffs the Zen URL even without a provider type", async () => {
-    mockBareProvider((url) =>
-      url === "https://models.dev/api.json" ? ZEN_CATALOG : undefined,
-    );
-    const probe = await probeProviderContext(
-      "https://opencode.ai/zen/v1",
-      "deepseek-v4.1-flash",
-    );
+    mockBareProvider((url) => (url === "https://models.dev/api.json" ? ZEN_CATALOG : undefined));
+    const probe = await probeProviderContext("https://opencode.ai/zen/v1", "deepseek-v4.1-flash");
     expect(probe).toEqual({ model: "deepseek-v4.1-flash", actual: 1000000 });
   });
 
@@ -232,9 +266,7 @@ describe("probeProviderContext models.dev fallback", () => {
   });
 
   it("returns null for unknown model ids (catalog still caches)", async () => {
-    mockBareProvider((url) =>
-      url === "https://models.dev/api.json" ? ZEN_CATALOG : undefined,
-    );
+    mockBareProvider((url) => (url === "https://models.dev/api.json" ? ZEN_CATALOG : undefined));
     expect(
       await probeProviderContext("https://opencode.ai/zen/go/v1", "nope", {
         providerType: "opencode-go",

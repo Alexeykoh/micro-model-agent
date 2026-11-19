@@ -124,7 +124,7 @@ describe("bash", () => {
     expect(result.output).toContain("PID");
     expect(result.output).toContain("process_log");
 
-    const idMatch = result.output.match(/proc_\d+_\d+/);
+    const idMatch = result.output.match(/proc_[0-9a-z]+_[0-9a-z]+/);
     expect(idMatch).not.toBeNull();
     const entry = processRegistry.get(idMatch![0]);
     expect(entry).toBeDefined();
@@ -143,7 +143,7 @@ describe("bash", () => {
     expect(result.output).toContain("proc_");
     expect(result.output).toContain("process_log");
 
-    const idMatch = result.output.match(/proc_\d+_\d+/);
+    const idMatch = result.output.match(/proc_[0-9a-z]+_[0-9a-z]+/);
     expect(idMatch).not.toBeNull();
     processRegistry.kill(idMatch![0]);
   });

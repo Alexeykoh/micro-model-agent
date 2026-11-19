@@ -10,6 +10,7 @@ import type { Dict } from "../core/store/types.js";
 import { contextLabel, matchesQuery } from "../format.js";
 import { closeAllMenus, setSessOpen } from "../core/menus.js";
 import { reasoningStatus } from "./reasoning-status.js";
+import { renderCapsChip } from "./caps-chip-render.js";
 import {
   postConfig,
   loadModels,
@@ -224,6 +225,7 @@ export function renderSelectors(): void {
   ctxMenu.appendChild(custom);
 
   renderReasoningSelector();
+  renderCapsChip();
 
   // Keep the pending paint in sync: boot (config === null) and an in-flight
   // switch both show the mark; a mid-switch re-read must not clear it.

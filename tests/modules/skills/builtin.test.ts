@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readdirSync } from "fs";
 import { join, resolve } from "path";
 import { fileURLToPath } from "node:url";
-import { SkillsLoader } from "../../../src/modules/skills/loader";
+import { SkillsLoader, resolveBuiltinSkillsDir } from "../../../src/modules/skills/loader";
 
 /**
  * Гвард встроенных скиллов (`src/modules/skills/builtin/`): загрузчик молча
@@ -22,6 +22,11 @@ function mdFiles(): string[] {
 }
 
 describe("скиллы: встроенный каталог", () => {
+  it("источник находит каталог builtin и при запуске из исходников", () => {
+    const fromSource = join(REPO_ROOT, "src", "core", "bootstrap");
+    expect(resolveBuiltinSkillsDir(fromSource)).toBe(BUILTIN_DIR);
+  });
+
   it("каждый builtin-файл проходит загрузчик (frontmatter не битый)", () => {
     const skills = new SkillsLoader().loadFromDir(BUILTIN_DIR, "builtin");
     expect(skills.length, "файл отброшен молча — проверьте `---` и обязательный name").toBe(

@@ -1,8 +1,24 @@
 /** Подсчёт токенов: точный (tiktoken) и дешёвая эвристика для блоков. */
+import { createRequire } from "node:module";
 import { Tiktoken } from "js-tiktoken/lite";
 import cl100k from "js-tiktoken/ranks/cl100k_base";
 import { getMessageText } from "./provider";
 import type { ContentPart } from "./provider";
+
+/**
+ * Класс BPE-энкодинга модели (L6). `o200k` — OpenAI 4o/o1/o3/o4/4.1/5;
+ * всё остальное (локальные, Anthropic — для него точного ранга в tiktoken
+ * нет, cl100k здесь осознанное приближение) — `cl100k`.
+ */
+export type TokenEncoding = "cl100k" | "o200k";
+
+const O200K_RE = /(gpt-4o|gpt-4\.1|gpt-5|chatgpt-4o|\bo[134](-mini|-preview)?\b)/i;
+
+/** Энкодинг по имени модели; пустое/неизвестное — cl100k (статус-кво локали). */
+export function encodingForModel(model: string | undefined): TokenEncoding {
+  if (!model) return "cl100k";
+  return O200K_RE.test(model) ? "o200k" : "cl100k";
+}
 
 /**
  * Скриптозависимая ОЦЕНКА токенов (дешёвая, без полной токенизации). Достаточно
@@ -34,16 +50,30 @@ export function estimateTokens(text: string): number {
 }
 
 /**
- * Точный счётчик токенов поверх cl100k_base (единая rank-таблица, ~1.1 MB вместо
- * ~5.6 MB полного `js-tiktoken` со всеми таблицами). `cl100k_base` — тот же
- * энкодинг, в который и раньше уходил фолбэк для локальных моделей; модели
- * o200k-класса (OpenAI GPT-4o) считаются им же — расхождение в несколько процентов.
+ * Точный счётчик токенов (L6): энкодинг выбирается по имени модели, а не
+ * захардкожен. `cl100k_base` (~1.1 MB) грузится всегда; `o200k_base` (~2.3 MB)
+ * — лениво при первом подсчёте o200k-модели, чтобы локальные 9B не платили
+ * за чужие ранги на каждом старте. Дефолт без модели — cl100k (статус-кво).
  */
 export class TokenCounter {
-  private encoder: Tiktoken;
+  private encoder: Tiktoken | null = null;
+  /** Выбранный энкодинг (для диагностики, какой линейкой считали). */
+  readonly encoding: TokenEncoding;
 
-  constructor(_model: string = "gpt-4o") {
-    this.encoder = new Tiktoken(cl100k);
+  constructor(model?: string) {
+    this.encoding = encodingForModel(model);
+    if (this.encoding === "cl100k") {
+      this.encoder = new Tiktoken(cl100k);
+    }
+  }
+
+  private ensureEncoder(): Tiktoken {
+    if (!this.encoder) {
+      const require = createRequire(import.meta.url);
+      const ranks = require("js-tiktoken/ranks/o200k_base").default ?? require("js-tiktoken/ranks/o200k_base");
+      this.encoder = new Tiktoken(ranks as typeof cl100k);
+    }
+    return this.encoder;
   }
 
   /**
@@ -52,7 +82,7 @@ export class TokenCounter {
    */
   count(text: string): number {
     if (!text) return 0;
-    return this.encoder.encode(text).length;
+    return this.ensureEncoder().encode(text).length;
   }
 
   /**
@@ -77,7 +107,7 @@ export class TokenCounter {
    * @param text текст; @returns массив id токенов.
    */
   encode(text: string): number[] {
-    return this.encoder.encode(text);
+    return this.ensureEncoder().encode(text);
   }
 
   /**
@@ -85,6 +115,6 @@ export class TokenCounter {
    * @param tokens id токенов; @returns текст.
    */
   decode(tokens: number[]): string {
-    return this.encoder.decode(tokens);
+    return this.ensureEncoder().decode(tokens);
   }
 }

@@ -1,5 +1,6 @@
 // Типы конфига AppConfig: провайдеры, бюджет, критик, безопасность, UI.
 import type { ContextBudget } from "./types-budget";
+import type { InstructionsConfig } from "./types-instructions";
 import type { ServiceConfig } from "./types-service";
 import type { ExpertConfig } from "./types-experts";
 import type { MemoryValidatorConfig } from "./memory-types";
@@ -15,7 +16,6 @@ import type {
   HallucinationConfig,
   ImagesConfig,
   IndexerConfig,
-  InstructionsConfig,
   MCPServerConfigEntry,
   ModelLoadConfig,
   PluginsConfig,
@@ -65,7 +65,6 @@ export type {
   HallucinationConfig,
   ImagesConfig,
   IndexerConfig,
-  InstructionsConfig,
   MCPHeader,
   MCPServerConfigEntry,
   ModelLoadConfig,
@@ -80,6 +79,11 @@ export type {
 } from "./types-runtime";
 
 export type { ContextBudget };
+
+export type { InstructionsConfig } from "./types-instructions";
+
+export type { WebSearchProvider } from "./web-search-provider";
+export { WEB_SEARCH_PROVIDERS } from "./web-search-provider";
 
 export type { ExpertConfig };
 
@@ -123,6 +127,12 @@ export interface AppConfig {
   maxToolIterations: number;
   stuckThreshold: number;
   autoPlan: boolean;
+  /**
+   * Профиль системного промпта (L5): `auto` — класс по окну контекста
+   * (≥128K → `large`), `full`/`large` — вручную. `service-job` ставит
+   * только сервис на время задачи и в конфиг не входит.
+   */
+  promptProfile: "auto" | "full" | "large";
   /** Настройки execution-модуля: autoAdvance — автопометка done по файлам (дефолт true).
    * + профиль исполнения (P0 изоляция): profile — local-trusted = хост, sandbox = Docker. */
   execution?: {

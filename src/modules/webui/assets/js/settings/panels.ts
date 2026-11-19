@@ -6,7 +6,6 @@
 import { el } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
-import { settings } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 import { setIndicator } from "../dialog.js";
 import { getUpdateInfo } from "../update-state.js";
@@ -26,7 +25,7 @@ export function renderPanel(panel: string): void {
 // Bespoke (not a registry key) because it mixes a read-only value with an action.
 function aboutCard(): HTMLElement {
   const upd = getUpdateInfo();
-  const card = el("div", "settings-section");
+  const card = el("div", "settings-section master-card");
   const head = el("div", "sec-head");
   head.appendChild(el("span", "sec-title", t("web.update.sec")));
   card.appendChild(head);
@@ -82,32 +81,7 @@ export function renderUiPanel(): void {
   renderSections("ui", PANEL_SECTIONS.ui || []);
 }
 
-// --- Security panel ------------------------------------------------------
-export function renderSecurityPanel(): void {
-  const container = document.querySelector<HTMLElement>('[data-panel="security"]');
-  if (!container) return;
-  container.textContent = "";
-  renderSections("security", PANEL_SECTIONS.security || []);
-  const access = el("div", "settings-section");
-  const head = el("div", "sec-head");
-  head.appendChild(el("span", "sec-title", t("web.settings.sec.security.access")));
-  access.appendChild(head);
-  const body = el("div", "sec-body");
-  body.appendChild(
-    row(
-      t("web.settings.web_token"),
-      el("span", "val dim", settings.webToken || t("web.settings.web_token_none")),
-      t("config.desc.webToken"),
-    ),
-  );
-  const note = el("div", "placeholder");
-  note.appendChild(el("span", "tag", t("web.settings.terminal_tag")));
-  note.appendChild(document.createTextNode(" " + t("web.settings.security_note")));
-  body.appendChild(note);
-  access.appendChild(body);
-  container.appendChild(access);
-}
-
+export { renderSecurityPanel } from "./panels-security.js";
 export {
   configLabel,
   enumLabel,
@@ -115,6 +89,7 @@ export {
   descFor,
   row,
   renderSections,
+  renderSectionsInto,
   settingsSection,
   chip,
   placeholderFor,

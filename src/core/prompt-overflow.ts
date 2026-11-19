@@ -5,16 +5,18 @@ import type { PromptBlock, PromptBlockKind } from "./types";
 import type { AppConfig } from "../config/types";
 import { t } from "../i18n/index";
 
-// Публичный API: резолвинг блоков живёт в prompt-overflow-resolve.ts.
-export { HINT_BLOCK_TOKENS, resolvePromptOverflow } from "./prompt-overflow-resolve";
+// Резолвинг блоков — в prompt-overflow-resolve.ts (без реэкспорта: цикл графа).
 
 /** Предупреждение о переполнении: блок, токены до/после, режим. */
 export interface OverflowWarning {
   kind: PromptBlockKind;
   label: string;
+  /** Имя источника (`instructions (docs/)`) — для hint и варнингов (INV-1/17). */
+  sourceLabel?: string;
   originalTokens: number;
   resolvedTokens: number;
-  mode: "summary" | "truncate";
+  /** `dropped` — не влез даже обрезанным (остаток <100 токенов): блок потерян. */
+  mode: "summary" | "truncate" | "dropped";
 }
 
 /** Итог резолвинга переполнения: замены, hint-блок, варнинги. */
@@ -27,6 +29,57 @@ export interface OverflowResolution {
 }
 
 /** Итог dry-run: сколько влезло и какие kind-блоки не влезли. */
+/** Человеческое имя kind-блока для hint и варнингов. */
+export const KIND_LABEL: Record<PromptBlockKind, string> = {
+  instructions: "project instructions (AGENTS.md)",
+  "project-map": "project map",
+};
+
+/** Файл-первоисточник kind-блока для back-reference в hint. */
+export const KIND_SOURCE_FILE: Record<PromptBlockKind, string> = {
+  instructions: "AGENTS.md",
+  "project-map": "",
+};
+
+/**
+ * Текст hint-блока о сжатых/потерянных источниках. Называет каждый источник
+ * (INV-1/17), дублирующиеся строки схлопывает. Null — резолвить было нечего.
+ */
+export function buildOverflowHintContent(
+  warnings: OverflowWarning[],
+  unresolved: PromptBlockKind[],
+  hasReplacements: boolean,
+): string | null {
+  if (!hasReplacements && unresolved.length === 0) return null;
+  const seen = new Set<string>();
+  const lines: string[] = [];
+  for (const w of warnings) {
+    const name = w.sourceLabel ?? KIND_LABEL[w.kind];
+    const line =
+      w.mode === "dropped"
+        ? `- ${name}: did not fit at all — read it yourself if needed`
+        : `- ${name}: ${w.originalTokens} tokens → ${w.resolvedTokens} tokens (${w.mode})`;
+    if (w.mode === "dropped" && seen.has(line)) continue;
+    seen.add(line);
+    lines.push(line);
+  }
+  const readHints = [
+    ...new Set(
+      warnings
+        .filter((w) => KIND_SOURCE_FILE[w.kind])
+        .map(
+          (w) =>
+            `Read the full ${KIND_SOURCE_FILE[w.kind]} with read_file if details are missing.`,
+        ),
+    ),
+  ];
+  return [
+    `[Instructions note] Some project blocks exceeded the system-prompt budget and were compressed:`,
+    ...lines,
+    ...readHints,
+  ].join("\n");
+}
+
 export interface OverflowDryRun {
   includedTokens: number;
   /** Исключённые блоки с kind (instructions / project-map). */
@@ -84,13 +137,16 @@ export function contextWindowHint(config: AppConfig, configDir: string, recommen
 }
 
 /**
- * Ближайший стандартный размер контекста, чей системный бюджет (10%)
- * вмещает `neededSystemTokens`. Фолбэк — крупнейший известный.
+ * Ближайший стандартный размер контекста, чей системный бюджет
+ * (`systemFraction`, по умолчанию 10%) вмещает `neededSystemTokens`.
+ * Фолбэк — крупнейший известный (L1: шкала продлена до 1M — хостед-модели
+ * с окнами 500K–1M раньше упирались в потолок 262K).
  */
-export function recommendContextSize(neededSystemTokens: number): number {
-  const sizes = [8192, 16384, 32768, 65536, 131072, 262144];
+export function recommendContextSize(neededSystemTokens: number, systemFraction = 0.1): number {
+  const sizes = [8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576];
+  const fraction = systemFraction > 0 ? systemFraction : 0.1;
   return (
-    sizes.find((s) => Math.floor(s * 0.1) >= neededSystemTokens) ?? sizes[sizes.length - 1]
+    sizes.find((s) => Math.floor(s * fraction) >= neededSystemTokens) ?? sizes[sizes.length - 1]
   );
 }
 
@@ -117,7 +173,9 @@ export function overflowHint(
 ): string {
   const fraction = config.contextBudget?.systemPrompt ?? 0.1;
   const budget = Math.floor(config.contextWindow * fraction);
-  const recommended = recommendContextSize(neededTokens);
+  // L1: доля из живого конфига, а не захардкоженные 10% — иначе хинт врёт
+  // при нестандартном systemPrompt.
+  const recommended = recommendContextSize(neededTokens, fraction);
   const requiredWindow = requiredContextWindow(neededTokens, fraction);
   const requiredFraction = requiredSystemFraction(neededTokens, config.contextWindow);
   const how = configDir

@@ -12,6 +12,7 @@ import type { SessionLogger } from "../session-logger";
 import type { HallucinationGate } from "./hallucination-gate";
 import type { CriticGate } from "./critic-gate";
 import type { AuditGate } from "./audit-gate";
+import type { DraftSink } from "./draft-buffer";
 import { gatherTurnToolEvents } from "./critic-events";
 import { resolveArtifactStates } from "./artifact-resolve";
 import { resolveVerbosity } from "../../ui/theme";
@@ -52,6 +53,8 @@ export interface GatesInput {
   timings?: GateTimings;
   /** Пользователь прервал ход: после критика не гоняем аудит. */
   isShutdownRequested?: () => boolean;
+  /** Буфер черновика (`ui.draftMode: after-review`); live-режим — no-op. */
+  draft?: DraftSink;
 }
 
 /** Прогоняет hallucination/critic/audit и возвращает сигнал управления. */
@@ -82,8 +85,12 @@ export async function runFinalGates(host: AgentDeps, inp: GatesInput): Promise<G
   });
   if (timings) timings.hallucination = Date.now() - hallucinationStarted;
   // Прерванный ход не должен дальше тратить LLM-вызовы на критика/аудит.
-  if (inp.isShutdownRequested?.()) return { kind: "break" };
+  if (inp.isShutdownRequested?.()) {
+    inp.draft?.discard();
+    return { kind: "break" };
+  }
   if (verdict.action === "block") {
+    inp.draft?.discard();
     return {
       kind: "return",
       result: {
@@ -94,12 +101,24 @@ export async function runFinalGates(host: AgentDeps, inp: GatesInput): Promise<G
       },
     };
   }
-  if (verdict.action === "retry") return { kind: "continue" };
-  if (verdict.action === "exit") return { kind: "break" };
+  if (verdict.action === "retry") {
+    inp.draft?.discard();
+    return { kind: "continue" };
+  }
+  if (verdict.action === "exit") {
+    inp.draft?.flush();
+    return { kind: "break" };
+  }
   // warn/accept → принятие ответа
 
+  // Assistant message stays in the in-memory context for the critic's repair
+  // round, but session history/log are written only after acceptance below.
   if (textContent) {
     contextManager.addMessage({ role: "assistant", content: textContent });
+  }
+  state.lastText = textContent;
+  const recordAccepted = (): void => {
+    if (!textContent) return;
     if (config.session.autoSave) slog.saveAssistantMessage(textContent);
     slog.logAssistant(
       textContent,
@@ -108,8 +127,7 @@ export async function runFinalGates(host: AgentDeps, inp: GatesInput): Promise<G
       state.iteration,
       state.lastFinishReason,
     );
-  }
-  state.lastText = textContent;
+  };
 
   for (const match of textContent.matchAll(
     /(?:plan|decided|decision|решено|план|решение):\s*(.+?)(?:\n|$)/gi,
@@ -131,6 +149,7 @@ export async function runFinalGates(host: AgentDeps, inp: GatesInput): Promise<G
         content:
           "<system-summary>Your previous response was empty. Answer the user's task now with a final text response or call a tool. Do not reply with reasoning only.</system-summary>",
       });
+      inp.draft?.discard();
       return { kind: "continue" };
     }
     state.emptyResponseExhausted = true;
@@ -152,15 +171,21 @@ export async function runFinalGates(host: AgentDeps, inp: GatesInput): Promise<G
     planPendingSteps: host.planPendingSteps?.() ?? undefined,
     toolEvents: gatherTurnToolEvents(contextManager, state.criticHistoryMark),
     beforeFinish: true,
-    // Текст ответа — только для ходов без мутаций (чат-доставка).
-    answerText: state.mutationsSinceCritic === 0 ? textContent : undefined,
+    // Текст ответа нужен критику и после мутаций: read-only bash/read_file
+    // инкрементят mutationsSinceCritic, и раньше ANSWER пропадал — критик
+    // писал «answer/conclusion not delivered» при корректном ответе.
+    answerText: textContent.trim() ? textContent : undefined,
     onMeta,
   });
   if (timings) timings.critic = Date.now() - criticStarted;
   // Остановка во время критика: аудит — ещё один LLM-вызов, его пропускаем.
-  if (inp.isShutdownRequested?.()) return { kind: "break" };
+  if (inp.isShutdownRequested?.()) {
+    inp.draft?.discard();
+    return { kind: "break" };
+  }
   if (criticAction === "retry") {
     state.suppressRepetitionRetry = true;
+    inp.draft?.discard();
     return { kind: "continue" };
   }
 
@@ -176,12 +201,18 @@ export async function runFinalGates(host: AgentDeps, inp: GatesInput): Promise<G
   });
   if (timings) timings.audit = Date.now() - auditStarted;
   if (auditVerdict === null || auditVerdict.action === "pass") {
+    inp.draft?.flush();
+    recordAccepted();
     state.finalAnswerAccepted = true;
     return { kind: "break" };
   }
   if (auditVerdict.action === "exhausted") {
-    // auditFailed уже выставлен вентилем.
+    // auditFailed already set by the audit gate; the text is the last accepted
+    // candidate, so show it together with the error.
+    inp.draft?.flush();
+    recordAccepted();
     return { kind: "break" };
   }
+  inp.draft?.discard();
   return { kind: "ok" };
 }

@@ -211,8 +211,8 @@ export function buildRunnerExecutor(
 
 /** Входы сборки dynamic-блоков раннера. */
 export interface RunnerDynamicBlocksInput {
-  /** Живой конфиг раннера (идентичность активной модели). */
-  config: AppConfig;
+  /** Живой источник идентичности модели (раннер переживает `/model use`, B5). */
+  getModel: () => string;
   skillsModule: { getSystemPromptBlock(): PromptBlock | null };
   sessionModule: { getSystemPromptBlock(): PromptBlock | null };
   indexerModule: { getSystemPromptBlock(): PromptBlock | null };
@@ -235,7 +235,7 @@ export function buildRunnerDynamicBlocks(input: RunnerDynamicBlocksInput): () =>
       pluginsVisible: !input.toolAllowlist,
     });
     return assembleDynamicPromptBlocks({
-      model: input.config.model,
+      model: input.getModel(),
       skillsModule: input.skillsModule,
       sessionModule: input.sessionModule,
       indexerModule: input.indexerModule,

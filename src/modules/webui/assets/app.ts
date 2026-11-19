@@ -69,7 +69,7 @@ import {
   sidebarSecurityEvent,
 } from "./js/sidebar.js";
 import { insertIntoDraft, submitPrompt } from "./js/session/composer.js";
-import { openMainPreview } from "./js/main-preview.js";
+import { openFilePreview } from "./js/file-view.js";
 import { initShortcuts } from "./js/shortcuts.js";
 import { drainQueuedTurn } from "./js/session/queue.js";
 import { initCursor, loaderStateFor, setFaceState } from "./js/loader.js";
@@ -85,6 +85,7 @@ import type { FaceState } from "./js/loader.js";
 import { applyUpdateEvent } from "./js/update-ui.js";
 import { connectSSE as wireSse } from "./js/sse.js";
 import { initSubagentView, onSubagentEvent } from "./js/feed/subagent.js";
+import { initToolsPanel } from "./js/session/tools-panel.js";
 import {
   applyState,
   ensureTabState,
@@ -119,8 +120,8 @@ hooks.ensureTabState = ensureTabState;
 // Lets `tabs.js` reset the sidebar chrome when the last tab closes.
 hooks.renderActive = renderActiveState;
 // `line` здесь не подсвечивается: переход к строке живёт в сайдбаре (`openFilesTabFor`).
-hooks.openFileInTree = (p) => openMainPreview(p);
-hooks.openFileAtLine = (p) => openMainPreview(p);
+hooks.openFileInTree = (p) => openFilePreview(p);
+hooks.openFileAtLine = (p) => openFilePreview(p);
 hooks.showFilesTab = () => {
   void openFilesTabFor("");
 };
@@ -253,7 +254,7 @@ async function boot(): Promise<void> {
     initSidebar();
     initSidebarDrawer();
     initShortcuts();
-    initSubagentView();
+    initSubagentView(); initToolsPanel();
     applySidebarI18n();
     initFiles({ insertPath: (p) => insertIntoDraft("@" + p + " ") });
     bootStage("web.loader.step.models", 45);

@@ -45,6 +45,10 @@ spec:
               value: "0.0.0.0"
             - name: MMA_SERVICE_PORT
               value: "8080"
+            - name: MMA_CONFIG_DIR
+              value: "/data/mma"
+            - name: MMA_SERVICE_TLS_PROXY
+              value: "true"
           ports:
             - containerPort: 8080
               name: http
@@ -75,8 +79,12 @@ spec:
           volumeMounts:
             - name: mma-data
               mountPath: /data
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: mma-data
+          emptyDir: {}
+        - name: tmp
           emptyDir: {}
 ---
 apiVersion: v1

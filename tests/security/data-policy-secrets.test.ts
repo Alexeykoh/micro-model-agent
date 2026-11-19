@@ -133,14 +133,14 @@ describe("INV-S3: токен восстанавливается независи
 
   it("hex в верхнем регистре — тот же токен", () => {
     const g = external();
-    const src = "open C:\\work\\proj\\src\\a.ts";
+    const src = "open C:\\Users\\alex\\a.ts";
     const projected = String(
       (g.sanitizeChat([{ role: "user", content: src }]).messages as Array<{ content: string }>)[0]
         .content,
     );
     const token = projected.match(/<PATH:[0-9a-f]+>/)?.[0] ?? "";
     expect(token).not.toBe("");
-    expect(g.rehydrateArgs(token.toUpperCase())).toBe("C:\\work\\proj");
+    expect(g.rehydrateArgs(token.toUpperCase())).toBe("C:\\Users\\alex\\a.ts");
   });
 
   it("чужая метка не восстанавливается", () => {

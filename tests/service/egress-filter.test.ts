@@ -3,7 +3,7 @@ import { hostname } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { startAgentService, type ServiceHandle } from "../../src/modules/service/module";
 import { deliverWebhook, signature } from "../../src/modules/service/runtime/webhook";
-import { apiGuard } from "../../src/modules/webui/egress";
+import { apiGuard } from "../../src/runtime/egress";
 import { DEFAULT_DATA_POLICY } from "../../src/modules/security/data-policy/defaults";
 import type { AppConfig } from "../../src/config/types";
 import { DEFAULTS } from "../../src/config/defaults";

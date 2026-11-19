@@ -95,6 +95,7 @@ export function createSessionRunnerFactory(
       activeToolTags,
       capabilitiesProbeRef,
       contextLogEnabled,
+      profileCompressed,
     } = template;
 
     // Запиненный sibling поверх общего стора: пишет только свою сессию,
@@ -194,7 +195,9 @@ export function createSessionRunnerFactory(
     // Сессионный модуль для dynamic-блоков — свой (id/имя в системном промпте).
     const runnerSessionModule = new SessionModule(pinned);
     const getDynamicPromptBlocks = buildRunnerDynamicBlocks({
-      config,
+      // B5: живой источник, а не снимок `config` на спавн — раннер переживает
+      // смену модели/провайдера через общий configRef.
+      getModel: () => configRef.current?.model ?? bootConfig.model,
       skillsModule,
       sessionModule: runnerSessionModule,
       indexerModule,
@@ -224,6 +227,7 @@ export function createSessionRunnerFactory(
       logger: runnerLogger,
       baseDir,
       configDir,
+      noAgentsMd: template.noAgentsMd === true,
       runnerTags,
       promptBlocks,
       envReport: runnerEnvReport(envReport, config),
@@ -240,6 +244,7 @@ export function createSessionRunnerFactory(
       contextProbeRef,
       registry,
       capabilitiesProbeRef,
+      profileCompressed,
     });
     seedRunnerHistory(agent, pinned, sessionId);
 

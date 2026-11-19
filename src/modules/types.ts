@@ -3,6 +3,7 @@
  * мост для управления прогоном из хоста (REPL/веб).
  */
 import type { PromptBlock, AgentPhase, LLMResponse } from "../core/types";
+import type { ClientTz } from "../core/prompt-facts";
 import type { ToolDefinition, ToolCall, ToolResult } from "../tools/types";
 import type { OutputEvent } from "../output/types";
 
@@ -16,6 +17,13 @@ export interface AgentModule {
 export interface HostBridgeSubmitOptions {
   /** Data URL картинок к сообщению (`data:image/png;base64,...`). */
   images?: string[];
+  /**
+   * Сессия-владелец хода (split W10). `undefined` — активная сессия хоста.
+   * Нужен вебу: вкладки шлют ходы параллельно, «активная» — понятие вкладки.
+   */
+  sessionId?: string;
+  /** Часовой пояс клиента (B18b): доезжает до агента до хода. */
+  clientTz?: ClientTz;
 }
 
 /**
@@ -72,6 +80,39 @@ export interface PluginProvides {
 }
 
 /**
+ * Тип значения настройки плагина. Покрывает те же контролы, что веб-панель
+ * уже умеет рисовать (`controlFor`): отдельные типы — отдельные инпуты.
+ */
+export type PluginSettingType = "string" | "number" | "boolean" | "enum" | "list" | "json";
+
+/**
+ * Манифест одной настройки плагина. Декларация для показа и валидации —
+ * значения живут в своём файле (`settings.json` рядом с плагином).
+ */
+export interface PluginSettingDef {
+  /** Ключ в файле настроек: `^[A-Za-z][A-Za-z0-9_]{0,63}$`, уникален в схеме. */
+  key: string;
+  type: PluginSettingType;
+  /** Подпись в UI; fallback — key. */
+  title?: string;
+  /** Пояснение под строкой. */
+  description?: string;
+  /** Значение по умолчанию (валидируется по type, битое отбрасывается). */
+  default?: unknown;
+  /** Допустимые значения при `type: "enum"` (обязательно непустое). */
+  enum?: string[];
+  /** Границы при `type: "number"`. */
+  min?: number;
+  max?: number;
+  /**
+   * Секрет: в `GET` отдаётся как `""` (+ имя в `hasSecrets`), пустое значение
+   * в `PUT` оставляет хранимое — тот же контракт, что env/headers у MCP.
+   */
+  secret?: boolean;
+  placeholder?: string;
+}
+
+/**
  * Контекстный пакет хук-контекста плагинов. Поля задают вызывающие стороны
  * (агент и диспетчер ядра), плагин читает известные ему ключи через
  * структурные подтипы (напр. execution'а `ExecutionThinkContext`).
@@ -103,6 +144,13 @@ export interface AgentPlugin {
   homepage?: string;
   /** Права, которые плагин запрашивает (только декларация и показ). */
   permissions?: PluginPermission[];
+  /**
+   * Манифест настроек: декларация ключей, типов и дефолтов. Значения живут в
+   * своём файле (`settings.json` рядом с плагином, см.
+   * `settingsPathFor`), сюда попадают только через валидацию. Пустая или
+   * отсутствующая схема = у плагина нет подстраницы настроек.
+   */
+  settingsSchema?: PluginSettingDef[];
   /** Что добавляет. `tools` заполняется ядром, `hooks` вычисляется при регистрации. */
   provides?: PluginProvides;
   /** Абсолютный путь к файлу плагина; проставляет загрузчик. */

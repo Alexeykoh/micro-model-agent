@@ -7,7 +7,7 @@ import { requestError, sendJson } from "../util";
 import { readJsonBody } from "../http/body";
 import { broadcast } from "../state";
 import { setConfigValue } from "../../../config/registry";
-import { mcpList } from "./settings-api-mcp";
+import { mcpServersView } from "../../../runtime/mcp-view";
 import type { SettingsState } from "./settings-api-write";
 
 /** `GET /api/skills` — доступные скиллы с флагом загруженности. */
@@ -42,7 +42,7 @@ export function handlePluginsGet(res: ServerResponse, s: SettingsState): void {
   sendJson(res, 200, {
     plugins: s.plugins.getRecords(),
     failures: s.plugins.getFailures(),
-    mcp: mcpList(s),
+    mcp: mcpServersView(s.config),
   });
 }
 

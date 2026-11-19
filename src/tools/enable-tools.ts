@@ -23,7 +23,7 @@ export const enableToolsTool: ToolDefinition = {
         type: "array",
         items: { type: "string" },
         description:
-          'Tool tags to enable (e.g. ["research"] for web_search/web_fetch, ["browser"] for the browser, ["memory"] for remember/recall, ["shell"] for process management).',
+          'Tool tags to enable (e.g. ["research"] for web_search/web_fetch, ["browser"] for the browser, ["shell"] for process management).',
       },
     },
     required: ["tags"],
@@ -34,7 +34,18 @@ export const enableToolsTool: ToolDefinition = {
       return { success: false, output: t("tools.enable_no_tags") };
     }
 
-    const active = ctx.activeToolTags ?? [];
+    const rawActive = ctx.activeToolTags;
+    // L4: широкий набор (пустой массив — все тулы уже в схеме) сужать некуда:
+    // enable_tools на нём был бы самосаботажем (добавление тега означает
+    // «только эти»). Отвечаем честно, ничего не меняя. `undefined` — НЕ wide,
+    // а неизвестный набор старых поверхностей: идёт старым путём.
+    if (rawActive && rawActive.length === 0) {
+      return {
+        success: true,
+        output: t("tools.enable_all_visible"),
+      };
+    }
+    const active = rawActive ?? [];
     const added: string[] = [];
     for (const tag of requested) {
       if (!active.includes(tag)) {

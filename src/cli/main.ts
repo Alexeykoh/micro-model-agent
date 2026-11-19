@@ -27,6 +27,8 @@ import { startAutoUpdate } from "./auto-update";
 import { applyLogVisibility } from "./log-visibility";
 import { dispatchLongRunningCommand } from "./main-web";
 import { isJsonMode, runOneShot } from "./main-oneshot";
+import { runDaemonRepl } from "./daemon-repl";
+import { runDaemonOneShot } from "./daemon-oneshot";
 
 /**
  * Резолвит UI-локаль ДО `createProgram()`: описания команд и подсказка-тайпоупор
@@ -85,7 +87,7 @@ async function main(): Promise<void> {
   // из parse(), поэтому флаг one-shot нужно выставить заранее, иначе bootstrap
   // успеет стартовать фоновый startup health check (ребёнок переживает
   // process.exit и на Windows держит stdout-пайп — команда «виснет»).
-  const valueOpts = new Set(["-d", "--dir", "--reasoning"]);
+  const valueOpts = new Set(["-d", "--dir", "--reasoning", "--daemon"]);
   const argv = process.argv.slice(2);
   let firstPositional: string | undefined;
   for (let i = 0; i < argv.length; i++) {
@@ -122,9 +124,24 @@ async function main(): Promise<void> {
 
   applyLogVisibility(verboseOpt);
 
+
   // `web`/`serve` долгоживущие: их action — no-op, сервер стартует здесь, после
   // parse, чтобы пережить one-shot exit-хук (на них он осознанно не вешается).
   if (await dispatchLongRunningCommand(program, { projectDir, noAgentsMd })) {
+    return;
+  }
+
+  // Thin-REPL: локальный рантайм не поднимаем вовсе — всё состояние в демоне.
+  const daemonUrl = typeof opts.daemon === "string" ? opts.daemon : undefined;
+  if (daemonUrl) {
+    // С промптом — one-shot через job API; без промпта — thin-REPL.
+    const daemonPrompt =
+      program.args.length > 0 && !onboardingStart ? program.args.join(" ") : "";
+    if (daemonPrompt.trim()) {
+      await runDaemonOneShot({ url: daemonUrl, prompt: daemonPrompt, json: jsonOpt });
+      return;
+    }
+    await runDaemonRepl({ url: daemonUrl });
     return;
   }
 

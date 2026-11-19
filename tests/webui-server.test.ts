@@ -10,19 +10,24 @@ import {
   parseMessageBody,
   readBody,
 } from "../src/modules/webui/util";
-import { finishTurn } from "../src/modules/webui/session/turns";
+import { finishTurn, submitTurnFromHost } from "../src/modules/webui/session/turns";
 import { MAX_QUEUE_LENGTH } from "../src/modules/webui/limits";
 import { activeUsage, createWebUiState } from "../src/modules/webui/state";
 import type { Host } from "../src/core/host";
 import { withServer, doFetch, postJson, webuiAssets as assets } from "./helpers/webui-server";
 
 
-function makeBridge(): Host {
+function makeBridge(s?: ReturnType<typeof createWebUiState>): Host {
   return {
     isBusy: () => false,
-    submit: () => Promise.resolve(),
+    submit: (text, opts) =>
+      s ? submitTurnFromHost(s, text, opts) : Promise.resolve(undefined),
     interrupt: () => {},
-    getState: () => ({ busy: false }),
+    getState: async () => ({ busy: false }),
+    subscribeEvents: () => () => {},
+    getConfig: async () => ({ config: {}, version: 0 }),
+    listModels: async () => ({ models: [] }),
+    setConfig: async () => ({ ok: true, persisted: true }),
     executeCommand: () => Promise.resolve(),
   };
 }
@@ -231,9 +236,13 @@ describe("webui server", () => {
     s.minPostIntervalMs = 0;
     const bridge: Host = {
       isBusy: () => false,
-      submit: () => Promise.resolve(),
+      submit: (text, opts) => submitTurnFromHost(s, text, opts),
       interrupt: () => {},
-      getState: () => ({ busy: false }),
+      getState: async () => ({ busy: false }),
+    subscribeEvents: () => () => {},
+    getConfig: async () => ({ config: {}, version: 0 }),
+    listModels: async () => ({ models: [] }),
+    setConfig: async () => ({ ok: true, persisted: true }),
       executeCommand: () => Promise.resolve(),
     };
     s.bridge = bridge;
@@ -276,7 +285,7 @@ describe("webui server", () => {
     const s = createWebUiState();
     s.minPostIntervalMs = 0;
     s.maxBodyBytes = 16;
-    s.bridge = makeBridge();
+    s.bridge = makeBridge(s);
     await withServer(s, async (base) => {
       const res = await doFetch(`${base}/api/message`, {
         method: "POST",
@@ -525,7 +534,7 @@ describe("webui server", () => {
       setActive: () => {},
       delete: () => {},
     };
-    s.bridge = makeBridge();
+    s.bridge = makeBridge(s);
     await withServer(s, async (base) => {
       const res = await doFetch(`${base}/api/message`, {
         method: "POST",
@@ -609,7 +618,7 @@ describe("webui server", () => {
 
   it("interrupt returns 409 when idle", async () => {
     const s = createWebUiState();
-    s.bridge = makeBridge();
+    s.bridge = makeBridge(s);
     await withServer(s, async (base) => {
       const res = await doFetch(`${base}/api/interrupt`, { method: "POST" });
       expect(res.status).toBe(409);
@@ -666,6 +675,12 @@ describe("webui message body validation", () => {
 
   it("rejects a non-data-url image", () => {
     const body = parseMessageBody(JSON.stringify({ text: "hi", images: ["http://x/y.png"] }));
+    expect(body).toEqual({ error: "invalid image" });
+  });
+
+  it("rejects an SVG data URL (the model cannot decode it)", () => {
+    const svg = `data:image/svg+xml;base64,${"A".repeat(16)}`;
+    const body = parseMessageBody(JSON.stringify({ text: "hi", images: [svg] }));
     expect(body).toEqual({ error: "invalid image" });
   });
 

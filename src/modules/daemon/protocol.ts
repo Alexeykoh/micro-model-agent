@@ -4,6 +4,7 @@
  * UI clients are thin. Token lives in OS keychain (external) or in the
  * fallback file `~/.mma/daemon.token` (0600).
  */
+import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -40,6 +41,13 @@ export function writeDaemonToken(token: string, tokenFile = defaultTokenFile()):
   writeFileSync(tokenFile, `${token}\n`, { encoding: "utf-8", mode: 0o600 });
 }
 
+/** Генерирует новый токен, пишет его в файл и возвращает значение. */
+export function rotateDaemonToken(tokenFile = defaultTokenFile()): string {
+  const token = randomBytes(32).toString("hex");
+  writeDaemonToken(token, tokenFile);
+  return token;
+}
+
 /** Thin UI client: talks to the daemon over the wire (no in-process Host). */
 export class DaemonClient {
   constructor(
@@ -51,7 +59,9 @@ export class DaemonClient {
     const res = await fetch(`${this.baseUrl}/v1/health`, { signal: AbortSignal.timeout(5_000) });
     const body = (await res.json()) as { status: string; protocol?: string };
     if (body.protocol && !protocolCompatible(body.protocol)) {
-      throw new Error(`daemon protocol ${body.protocol} incompatible with client ${PROTOCOL_VERSION}`);
+      throw new Error(
+        `daemon protocol ${body.protocol} incompatible with client ${PROTOCOL_VERSION}`,
+      );
     }
     return body;
   }

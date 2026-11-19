@@ -21,6 +21,8 @@ import type { ReasoningState } from "../../tools/set-thinking";
 import { handleLlmError } from "./loop-llm-errors";
 import { issueDirective, clearDirective } from "./directives";
 import { detectRepeatedToolCall } from "./loop-repeat";
+import { MIN_NARRATION_CHARS } from "./constants";
+import { resetSilenceStreak } from "./silence-streak";
 import { consumeLlmStream, createLlmStreamResult } from "./loop-llm-stream";
 import { predictMaxTokens } from "./harness-budget";
 import { buildLlmResponse, finalizeLlmUsage, recordLlmOutput } from "./loop-llm-usage";
@@ -52,6 +54,8 @@ export interface LlmPhaseInput {
   tokenTracker: TokenTracker;
   reasoningResolver: ReasoningEffortResolver;
   onChunk?: (chunk: string) => void;
+  /** Куда отдавать текст ответа (может быть буфером `after-review`). */
+  onDraftText?: (chunk: string) => void;
   onMeta?: OnMeta;
   onReasoning?: (reasoning: string) => void;
   onPhase?: OnPhase;
@@ -78,7 +82,7 @@ export async function runLlmPhase(
   const { deps } = host;
   const { state, slog, input, history, allToolsForBudget, tokenTracker, reasoningResolver } = inp;
   const { contextManager, pluginManager, logger, config } = deps;
-  const { onChunk, onReasoning, onPhase } = inp;
+  const { onChunk, onDraftText, onReasoning, onPhase } = inp;
 
   const llmStart = Date.now();
   // Сырая оценка на момент отправки — вход калибровки по реальному usage.
@@ -157,6 +161,7 @@ export async function runLlmPhase(
         isShutdownRequested: () => host.isShutdownRequested(),
         getAbortSignal: () => host.getAbortSignal(),
         onChunk,
+        onText: onDraftText ?? onChunk,
         onReasoning,
       },
       stream,
@@ -177,6 +182,12 @@ export async function runLlmPhase(
   } finally {
     host.emitPhase(state.iteration, "done", onPhase);
   }
+
+  // Успешный ответ — прямое доказательство достижимости эндпоинта. Discovery-
+  // проба трёхсекундная и пишет `reachable=false` при таймауте/VPN-лаге, а сам
+  // факт ответа модели её не снимал: сайдбар показывал «unavailable» до смены
+  // провайдера (INV-15: «не смогли спросить» ≠ «недоступен»).
+  if (deps.capabilitiesProbeRef) deps.capabilitiesProbeRef.reachable = true;
 
   // Провайдер не отдал usage — калибровка помечается stale (>1 вызова).
   if (!stream.sawUsage) contextManager.noteMissingUsage?.();
@@ -249,6 +260,14 @@ export async function runLlmPhase(
       state.stopReason = "duplicate";
       return { kind: "break" };
     }
+  }
+
+  // Модель заговорила — пользователь увидел текст, серия молчания (индикатор
+  // «пользователь в темноте») прервана. Раньше счётчик копился только по пакетам
+  // тулов, и видимый ответ вне пакета тишину не прерывал: стрик доживал до
+  // жёсткого стопа «инструменты отключены» (ses_mwc2p7hh).
+  if (stream.textContent.trim().length >= MIN_NARRATION_CHARS) {
+    resetSilenceStreak(state, contextManager);
   }
 
   return {

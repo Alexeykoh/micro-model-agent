@@ -12,13 +12,14 @@ import type { ExecutionModule } from "../execution/module";
 import { CONFIG_FILE, persistConfigChange as persistConfig } from "../../config/persist";
 import { buildSetupDisplay } from "../setup/answers";
 import { WebHost } from "../../core/web-host";
+import { makeHostConfigWiring } from "./settings/host-wiring";
 import { createAssetSource } from "./asset-cache";
 import { makeWebCommands } from "./chat/commands";
-import { makeReconfigure } from "./settings/reconfigure";
+import { installModelSurface } from "./settings/model-surface";
 import { installWebForwarding } from "./event-forward";
+import { installSkillsEvents } from "./skills-events";
 import { installWebPromptIO } from "./session/prompt-io";
 import { startServer, stopServer } from "./server";
-import { makeModelCache } from "./settings/model-cache";
 import { buildHostState } from "./host-state";
 import { attachIndexWatcher } from "./index-watcher";
 import { createGitCache, gitPeek } from "./git/snapshot-cache";
@@ -31,6 +32,8 @@ import {
   type WebUiState,
 } from "./state";
 import { pushState } from "./session/session-status";
+import { submitTurnFromHost } from "./session/turns";
+import { applyToolOverrides } from "./session/tools-view";
 import { emitSessions } from "./session/sessions-api";
 // Чистые снапшот-хелперы живут в `./host-state`; реэкспорт, чтобы существующие
 // импортёры (`webui-usage`, `webui-plan` тесты) не чинить.
@@ -102,6 +105,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   });
   state.memory = deps.memory;
   state.skills = deps.skills;
+  const detachSkillsEvents = installSkillsEvents(state, deps.skills);
   state.plugins = deps.plugins;
   state.workspace = deps.baseDir;
   state.gitCache = createGitCache();
@@ -111,6 +115,8 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     gitPeek(state.gitCache, deps.baseDir, state.filesRevision, () => pushState(state));
   }
   state.agentsMd = deps.agentsMd;
+  if (deps.reload) state.reload = deps.reload;
+  state.toolCatalog = () => deps.toolRegistry?.getAll?.() ?? [];
   if (deps.indexer) {
     state.projectMapStats = () => deps.indexer?.stats() ?? null;
     if (deps.indexer.refresh) {
@@ -169,6 +175,8 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     const spawnRunner = deps.spawnRunner;
     state.pool.setFactory((id: string) => {
       const runner = spawnRunner(id);
+      const overrides = state.toolOverrides.get(id);
+      if (overrides) applyToolOverrides(runner, overrides);
       installWebPromptIO({
         state,
         agent: runner.agent,
@@ -181,17 +189,12 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   }
 
   // Список моделей: явный источник побеждает; иначе фоновый кеш (рефреш на reconfigure).
-  const modelCache = deps.knownModels ? null : makeModelCache(deps.agent, deps.config);
-  state.knownModels = deps.knownModels ?? modelCache!.get;
-  state.knownModelsFor = modelCache?.getFor;
+  installModelSurface(state, deps.agent, deps.config, deps.knownModels);
   state.providerReachable = () => deps.agent.providerReachableSnapshot?.();
   state.providerReasoning = () => deps.agent.providerReasoningSnapshot?.();
-  if (modelCache) void modelCache.refresh();
-  state.reconfigure = makeReconfigure(
-    state,
-    deps.agent,
-    modelCache ? () => modelCache.refresh() : undefined,
-  );
+  state.refreshProviderCapabilities = () =>
+    deps.agent.refreshProviderCapabilities?.(() => broadcast({ type: "models", ts: Date.now() }, state)) ??
+    Promise.resolve(false);
 
   // Глобальные шины → SSE: лог/предупреждения, снимок запроса (U20), журнал
   // защиты (U22). Ходы идут раннерами (см. turns.ts), main-агент их не ведёт.
@@ -213,15 +216,18 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
 
   const host = new WebHost({
     isBusy: () => state.pool.anyBusy(),
-    // Ходы браузера — только `POST /api/message` → per-session раннер.
-    // `Host.submit` (плагинный `hostBridge`) в web не поддерживается.
-    runAgent: () => Promise.reject(new Error("web submit: use POST /api/message")),
+    // Ход браузера идёт тем же путём, что `POST /api/message` (INV-S2):
+    // `Host.submit` — единственная точка входа, второго пути нет.
+    submitTurn: (text, opts) => submitTurnFromHost(state, text, opts),
     // Scoped-стоп раннеров ведёт `actions-api` (по владельцу слота); здесь —
     // no-op fallback для легаси-слота без сессии.
     interrupt: () => {},
     // Слеш-команды идут через shared карту хендлеров; вывод стримится по SSE
     // событиями `command` (HTTP POST лишь подтверждает приём).
-    executeCommand: makeWebCommands({ state }),
+    executeCommand: async (line: string) => {
+      await makeWebCommands({ state })(line);
+      return { ok: true, output: [] };
+    },
     getState: (sessionId?: string) =>
       buildHostState(
         {
@@ -243,6 +249,19 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
         },
         state.busy,
       ),
+    ...(deps.sessionManager
+      ? {
+          sessions: {
+            list: () => deps.sessionManager!.list(),
+            create: (name?: string) => deps.sessionManager!.create(name),
+            delete: (id: string) => deps.sessionManager!.delete(id),
+            getHistory: (id: string) => deps.sessionManager!.getHistory(id),
+            loadSessionLog: (id: string, opts?: { since?: string }) =>
+              deps.sessionManager!.loadSessionLog(id, opts),
+          },
+        }
+      : {}),
+    ...makeHostConfigWiring(deps.config, state),
   });
 
   state.bridge = host;
@@ -260,6 +279,7 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
     stop: () => {
       detachIndexWatcher();
       detachRenameListener?.();
+      detachSkillsEvents();
       cancelPendingQuestions(state);
       stopForwarding();
       state.pool.clear();

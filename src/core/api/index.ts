@@ -19,3 +19,5 @@ export { ContextCalibrator, isImplausibleJump } from "../agent/context-calibrati
 export type { CalibrationState } from "../agent/context-calibration";
 // Тип агента для раннеров/веб-поверхностей (только тип — рантайм-цикла нет).
 export type { Agent } from "../agent";
+// Мягкий reload источников (`/reload` на проводных поверхностях): тип отчёта.
+export type { ReloadSourcesResult } from "../sources-reload";

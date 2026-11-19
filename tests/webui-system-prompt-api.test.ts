@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ServerResponse } from "node:http";
 import { handleSystemPromptGet } from "../src/modules/webui/session/system-prompt-api";
-import type { RunPool } from "../src/modules/webui/session/session-pool";
+import type { RunPool } from "../src/runtime/run-pool/run-pool";
 
 function capture(): { res: ServerResponse; body: () => unknown } {
   let raw = "";

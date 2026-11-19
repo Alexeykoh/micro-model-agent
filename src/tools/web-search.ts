@@ -1,4 +1,4 @@
-/** Веб-поиск (DuckDuckGo HTML): тул и shared-функция для автопоиска ошибок. */
+/** Веб-поиск: тул `web_search` и shared-функция для автопоиска ошибок. */
 import { t } from "../i18n/index";
 import type { ToolDefinition, ToolContext } from "./types";
 import type { NetworkSecurityConfig } from "../config/types";
@@ -7,15 +7,20 @@ import { logNetworkRequest, logSecurityBlock } from "../modules/security/audit-l
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { machinePolicyContext } from "../modules/security/data-policy/context";
 import { projectOutboundText } from "../modules/security/data-policy/outbound";
-import { readMmaVersion } from "../core/version";
 import { wrapUntrusted } from "./web-content";
+import { DEFAULTS } from "../config/defaults";
+import { downloadSearchImages } from "./search-images";
+import type { ToolImageAsset } from "../modules/session/image-store";
+import {
+  clampResultCount,
+  planSearchRequest,
+  type SearchResult,
+  type WebSearchProviderOptions,
+} from "./search-providers";
 
-/** Элемент выдачи: заголовок, URL, сниппет. */
-export interface SearchResult {
-  title: string;
-  url: string;
-  snippet: string;
-}
+export type { SearchResult, WebSearchProviderOptions } from "./search-providers";
+export type { WebSearchProvider } from "../config/web-search-provider";
+export { unwrapDdgUrl } from "./search-providers";
 
 /** Итог поиска: успех, результаты, ошибка. */
 export interface WebSearchOutcome {
@@ -24,15 +29,14 @@ export interface WebSearchOutcome {
   error?: string;
   /** true — URL отклонён security-политикой (не I/O-ошибка). */
   blocked?: boolean;
+  /** URL реально запрошенного провайдера (аудит, provenance выдачи). */
+  url?: string;
+  /** URL картинок выдачи (Tavily `images`, SearXNG `img_src`), если провайдер дал. */
+  imageUrls?: string[];
 }
 
 /** Задержка перед единственным ретраем на 429/503. */
 const RETRY_DELAY_MS = 800;
-
-/** User-Agent: поисковики режут запросы без него. */
-function userAgent(): string {
-  return `micro-models-agent/${readMmaVersion()}`;
-}
 
 /** Пауза перед ретраем. */
 function sleep(ms: number): Promise<void> {
@@ -40,28 +44,11 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Разворачивает редирект DuckDuckGo `//duckduckgo.com/l/?uddg=<enc>` в прямой
- * URL. Иначе выдача отдаёт непроходимые редирект-ссылки, и модель не может по
- * ним перейти (`web_fetch` вернёт обёртку DDG). Не-DDG/битые URL — как есть.
- */
-export function unwrapDdgUrl(url: string): string {
-  try {
-    const u = new URL(url, "https://duckduckgo.com");
-    if (/(^|\.)duckduckgo\.com$/i.test(u.hostname) && u.pathname === "/l/") {
-      const target = u.searchParams.get("uddg");
-      if (target) return decodeURIComponent(target);
-    }
-    return url;
-  } catch {
-    return url;
-  }
-}
-
-/**
- * Общий веб-поиск (DuckDuckGo HTML) для тула web_search и автопоиска ошибок
- * (execution-модуль). `networkConfig` — резолвленная сетевая security-конфигурация
- * (undefined при выключенной безопасности); `requestTimeoutMs` переопределяет
- * таймаут, когда у вызывающего свой (автопоиск — errorWebSearch.requestTimeoutMs).
+ * Общий веб-поиск для тула `web_search` и автопоиска ошибок (execution-модуль).
+ * Провайдер выбирается `providerOptions` (webSearch.provider); `networkConfig` —
+ * резолвленная сетевая security-конфигурация (undefined при выключенной
+ * безопасности); `requestTimeoutMs` переопределяет таймаут, когда у вызывающего
+ * свой (автопоиск — errorWebSearch.requestTimeoutMs).
  *
  * Статус ответа проверяется: 429/503 — это не «пустая выдача», а ошибка
  * (аудит §2.1). `fetchImpl` — точка подмены для тестов.
@@ -72,55 +59,59 @@ export async function performWebSearch(
   networkConfig: NetworkSecurityConfig | undefined,
   requestTimeoutMs?: number,
   fetchImpl: typeof fetch = fetch,
+  providerOptions?: WebSearchProviderOptions,
 ): Promise<WebSearchOutcome> {
   // DLP (E1-семантика): запрос уже спроецирован `projectSearchQuery`.
-  const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-  const validation = isUrlAllowed(url, networkConfig);
+  const plan = planSearchRequest(providerOptions, query, numResults);
+  if (!plan.ok) return { success: false, results: [], error: plan.error };
+  const validation = isUrlAllowed(plan.url, networkConfig);
   if (!validation.allowed) {
     return {
       success: false,
       blocked: true,
       results: [],
+      url: plan.url,
       error: validation.reason || "URL blocked by security policy",
     };
   }
   const timeoutMs = requestTimeoutMs ?? networkConfig?.requestTimeout ?? 10000;
   try {
-    let response = await fetchImpl(url, {
+    let response = await fetchImpl(plan.url, {
+      ...plan.init,
       signal: AbortSignal.timeout(timeoutMs),
-      headers: { "User-Agent": userAgent() },
     });
     // Один ретрай на 429/503: поисковик часто отвечает «слишком много
     // запросов», и повтор через 800 мс почти всегда проходит.
     if (response.status === 429 || response.status === 503) {
       await sleep(RETRY_DELAY_MS);
-      response = await fetchImpl(url, {
+      response = await fetchImpl(plan.url, {
+        ...plan.init,
         signal: AbortSignal.timeout(timeoutMs),
-        headers: { "User-Agent": userAgent() },
       });
     }
     if (!response.ok) {
       return {
         success: false,
         results: [],
+        url: plan.url,
         error: `HTTP ${response.status}: ${response.statusText}`,
       };
     }
-    const html = await response.text();
-    const results: SearchResult[] = [];
-    const snippetRegex =
-      /<a[^>]+class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi;
-    let match: RegExpExecArray | null;
-    while ((match = snippetRegex.exec(html)) !== null && results.length < numResults) {
-      results.push({
-        url: unwrapDdgUrl(match[1].trim()),
-        title: match[2].replace(/<[^>]+>/g, "").trim(),
-        snippet: match[3].replace(/<[^>]+>/g, "").trim(),
-      });
-    }
-    return { success: true, results };
+    const body = await response.text();
+    const parsed = plan.parse(body, clampResultCount(numResults));
+    return {
+      success: true,
+      results: parsed.results,
+      url: plan.url,
+      ...(parsed.images.length ? { imageUrls: parsed.images } : {}),
+    };
   } catch (err: unknown) {
-    return { success: false, results: [], error: err instanceof Error ? err.message : String(err) };
+    return {
+      success: false,
+      results: [],
+      url: plan.url,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
@@ -179,13 +170,34 @@ export const webSearchTool: ToolDefinition = {
     const rawQuery = String(args.query || "");
     const query = projectSearchQuery(rawQuery, ctx);
     const numResults = Number(args.numResults) || 5;
+    const ws = ctx.config?.webSearch;
+    const providerOptions: WebSearchProviderOptions = {
+      provider: ws?.provider,
+      apiKey: ws?.apiKey,
+      baseUrl: ws?.baseUrl,
+      images: ws?.images === true,
+    };
 
     const securityConfig = ctx.sessionContext
       ? getSessionSecurityConfig(ctx.config, ctx.sessionContext).network
       : ctx.config.security?.network;
 
-    const outcome = await performWebSearch(query, numResults, securityConfig);
-    const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+    const outcome = await performWebSearch(
+      query,
+      numResults,
+      securityConfig,
+      undefined,
+      undefined,
+      providerOptions,
+    );
+    // Конфигурационная ошибка провайдера: запроса не было — сеть не логируем.
+    if (!outcome.url) {
+      return {
+        success: false,
+        output: t("error.search_failed", { message: String(outcome.error ?? "") }),
+      };
+    }
+    const url = outcome.url;
     if (outcome.blocked) {
       logSecurityBlock(
         ctx.sessionId,
@@ -224,20 +236,33 @@ export const webSearchTool: ToolDefinition = {
     if (outcome.results.length === 0) {
       return { success: true, output: t("tool.no_results", { query }) };
     }
-    return {
-      success: true,
-      // Сниппеты — тоже недоверенный текст (аудит §2.14).
-      output: wrapUntrusted(
-        url,
-        t("tool.search_results", {
+    // Картинки выдачи (webSearch.images): скачиваем серверно и отдаём в
+    // пайплайн ToolResult.imageFiles — модель получает только текст, веб
+    // рисует same-origin карточки. Неудача — тихий пропуск, не ошибка поиска.
+    const success: { success: true; output: string; display?: string; imageFiles?: ToolImageAsset[] } =
+      {
+        success: true,
+        // Сниппеты — тоже недоверенный текст (аудит §2.14).
+        output: wrapUntrusted(
+          url,
+          t("tool.search_results", {
+            query,
+            results: formatResults(outcome.results),
+          }),
+        ),
+        display: t("tool.web_search_result", {
           query,
-          results: formatResults(outcome.results),
+          count: String(outcome.results.length),
         }),
-      ),
-      display: t("tool.web_search_result", {
-        query,
-        count: String(outcome.results.length),
-      }),
-    };
+      };
+    if (ws?.images === true && outcome.imageUrls?.length) {
+      const assets = await downloadSearchImages(
+        outcome.imageUrls,
+        ws.maxImages ?? DEFAULTS.webSearch?.maxImages ?? 2,
+        securityConfig,
+      );
+      if (assets.length) success.imageFiles = assets;
+    }
+    return success;
   },
 };

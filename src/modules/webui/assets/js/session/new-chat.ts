@@ -2,6 +2,7 @@
 // (правило ≤300); `openTab`/`loadSessions` приходят снаружи — обратный импорт
 // замкнул бы граф вкладок.
 import { api } from "../api.js";
+import { inp } from "../dom.js";
 import { t } from "../i18n.js";
 import { setIndicator } from "../dialog.js";
 import { tabs as tabState } from "../store.js";
@@ -12,6 +13,14 @@ import type { Dict } from "../core/store/types.js";
 export interface NewChatDeps {
   openTab: (id: string, name: string, kind: string, server: boolean) => void;
   loadSessions: () => Promise<void>;
+}
+
+/** Фокус в поле ввода: новый чат сразу должен принимать текст. */
+function focusComposer(): void {
+  if (!inp) return;
+  // Next tick: the session-loading overlay mounts after openTab and would
+  // otherwise swallow the focus.
+  window.setTimeout(() => inp.focus(), 0);
 }
 
 /** `POST /api/sessions` → вкладка; локал-фолбэк при отказе сервера. */
@@ -25,6 +34,7 @@ export async function createNewChatTab(deps: NewChatDeps): Promise<void> {
     // выглядел зависшим.
     setSessionLoading(true);
     deps.openTab(meta.id, meta.name || String(meta.id), "session", false);
+    focusComposer();
     await deps.loadSessions();
     return;
   }
@@ -32,5 +42,6 @@ export async function createNewChatTab(deps: NewChatDeps): Promise<void> {
   // so the user is not blocked, but surface the failure.
   tabState.newSeq++;
   deps.openTab("new" + tabState.newSeq, t("web.empty.title"), "new", false);
+  focusComposer();
   setIndicator(t("web.sessions.create_failed"), true);
 }

@@ -8,9 +8,9 @@ import { hostname } from "node:os";
 import { describe, expect, it } from "vitest";
 import type { AppConfig } from "../src/config/types";
 import { DEFAULT_DATA_POLICY } from "../src/modules/security/data-policy/defaults";
-import { apiGuard } from "../src/modules/webui/egress";
+import { apiGuard } from "../src/runtime/egress";
 import { broadcast, createWebUiState } from "../src/modules/webui/state";
-import { isLoopbackAddress } from "../src/modules/webui/util";
+import { isLoopbackAddress } from "../src/runtime/net";
 import { doFetch, withServer } from "./helpers/webui-server";
 
 const WORKSPACE = "C:\\work\\proj";

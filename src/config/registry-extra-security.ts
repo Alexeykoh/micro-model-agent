@@ -4,6 +4,7 @@
 import type { AuditEventType } from "./types";
 import type { ConfigKeyDef } from "./registry";
 import { DEFAULT_SECURITY_CONFIG } from "./security";
+import { DEFAULTS } from "./defaults";
 import { bool, enumOf, int, jsonShape, list, sec, strOpt } from "./registry-extra-factories";
 
 /** Канонический набор типов аудит-событий (валидация реестра и setup-визарда). */
@@ -150,4 +151,31 @@ export const SECURITY_EXTRA_DEFS: ConfigKeyDef[] = [
   bool("security.sessionEncryption.encryptSessionLog", "security", false,
     (c) => c.security?.sessionEncryption.encryptSessionLog ?? DEFAULT_SECURITY_CONFIG.sessionEncryption.encryptSessionLog,
     (c, v) => { sec(c).sessionEncryption.encryptSessionLog = v as boolean; }),
+
+  // HITL/compliance live in the Security panel but have no `security.` prefix:
+  // the config fields and defaults already exist and are read by the runtime.
+  bool("hitl.killSwitch", "hitl", false,
+    (c) => c.hitl?.killSwitch ?? DEFAULTS.hitl!.killSwitch!,
+    (c, v) => {
+      c.hitl ??= structuredClone(DEFAULTS.hitl!);
+      c.hitl.killSwitch = v as boolean;
+    }),
+  bool("hitl.autoApproveLow", "hitl", false,
+    (c) => c.hitl?.autoApproveLow ?? DEFAULTS.hitl!.autoApproveLow!,
+    (c, v) => {
+      c.hitl ??= structuredClone(DEFAULTS.hitl!);
+      c.hitl.autoApproveLow = v as boolean;
+    }),
+  bool("compliance.enabled", "compliance", false,
+    (c) => c.compliance?.enabled ?? DEFAULTS.compliance!.enabled!,
+    (c, v) => {
+      c.compliance ??= structuredClone(DEFAULTS.compliance!);
+      c.compliance.enabled = v as boolean;
+    }),
+  int("compliance.retentionDays", "compliance", 1, 3650, 1, false,
+    (c) => c.compliance?.retentionDays ?? DEFAULTS.compliance!.retentionDays!,
+    (c, v) => {
+      c.compliance ??= structuredClone(DEFAULTS.compliance!);
+      c.compliance.retentionDays = v as number;
+    }),
 ];

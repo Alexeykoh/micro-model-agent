@@ -85,10 +85,12 @@ export function inferExtraToolTags(input: string): KnownToolTag[] {
 /**
  * Аддитивный preseed: дописывает выведенные теги в `activeTags`, возвращает
  * добавленные. Ничего не удаляет (гранты `enable_tools` сохраняются).
- * No-op при выключенном сужении (`activeTags` undefined = legacy-режим).
+ * No-op при выключенном сужении (`activeTags` undefined — legacy-режим)
+ * и при пустом наборе (wide: все тулы уже в схеме — добавление тега только
+ * СУЗИЛО бы набор, L4).
  */
 export function seedToolTags(activeTags: string[] | undefined, input: string): string[] {
-  if (!activeTags) return [];
+  if (!activeTags || activeTags.length === 0) return [];
   const added: string[] = [];
   for (const tag of inferExtraToolTags(input)) {
     if (!activeTags.includes(tag)) {

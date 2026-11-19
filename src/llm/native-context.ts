@@ -1,64 +1,22 @@
 // Нативные пробы контекста бэкендов (Ollama / llama.cpp / OpenAI-compat
 // /models / models.dev) — вынесено из `provider-context.ts` (правило ≤300).
 import { lookupModelsDevContext } from "./models-dev";
+import { asPositiveInt, declaredMediaCapabilities, matchesModel, pickContextField } from "./openai-compat-models";
 import type { ModelCapabilities, ReasoningStrategy } from "../config/types";
 
-/** Числовые context-подобные поля, что может нести запись `/models`. */
-const CONTEXT_KEYS = [
-  "context_length",
-  "context_window",
-  "max_context_length",
-  "max_context_window",
-  "max_model_len",
-  "maxModelLen",
-  "n_ctx",
-  "num_ctx",
-  "contextLength",
-  "contextWindow",
-] as const;
+// `/models`-часть (context-поля, декларативные capabilities, достижимость)
+// живёт в `openai-compat-models.ts`; реэкспорт — публичный API прежнего места.
+export {
+  probeOpenAICompatModels,
+  probeOpenAICompatCapabilities,
+  type OpenAICompatCapabilitiesProbe,
+} from "./openai-compat-models";
 
-function asPositiveInt(v: unknown): number | null {
-  const n = typeof v === "string" && v.trim() !== "" ? Number(v) : v;
-  return typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
-}
-
-/**
- * Первое положительное среди известных context-полей объекта. OpenRouter
- * кладёт per-endpoint значение в `top_provider.context_length`, а OpenCode
- * Zen/Go — в `limit.context` (проверено вживую 2026-11-10: `/models` отдаёт
- * `limit: {context, output}`), поэтому обе вложенности покрыты.
- */
-function pickContextField(obj: Record<string, unknown>): number | null {
-  for (const k of CONTEXT_KEYS) {
-    const n = asPositiveInt(obj[k]);
-    if (n !== null) return n;
-  }
-  const top = obj.top_provider ?? obj.topProvider;
-  if (top && typeof top === "object") {
-    for (const k of CONTEXT_KEYS) {
-      const n = asPositiveInt((top as Record<string, unknown>)[k]);
-      if (n !== null) return n;
-    }
-  }
-  const limit = obj.limit;
-  if (limit && typeof limit === "object") {
-    const n = asPositiveInt((limit as Record<string, unknown>).context);
-    if (n !== null) return n;
-  }
-  return null;
-}
-
-function matchesModel(entry: Record<string, unknown>, model: string): boolean {
-  for (const k of ["id", "name", "model", "key"]) {
-    const v = entry[k];
-    if (typeof v === "string" && v && (v === model || model.includes(v) || v.includes(model))) {
-      return true;
-    }
-  }
-  return false;
-}
-
-async function fetchJson(url: string, timeoutMs: number, init?: RequestInit): Promise<unknown | null> {
+async function fetchJson(
+  url: string,
+  timeoutMs: number,
+  init?: RequestInit,
+): Promise<unknown | null> {
   try {
     const response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
     if (!response.ok) return null;
@@ -94,16 +52,12 @@ function contextFromModelInfo(bag: Record<string, unknown>): number | null {
   return pickContextField(bag);
 }
 
-/** Ollama `/api/show`: детали модели, пробуем полное и короткое имя. */
-async function probeOllamaShow(
-  origin: string,
-  model: string,
-  timeoutMs: number,
-): Promise<number | null> {
+/** Ответы Ollama `/api/show` для полного и короткого имени (приоритет — полное). */
+function fetchOllamaShows(origin: string, model: string, timeoutMs: number): Promise<unknown[]> {
   const short = model.split(":")[0];
   // Оба имени — параллельно: порядок имён задаёт приоритет ответа.
   const names = short === model || short === "" ? [model] : [model, short];
-  const shows = await Promise.all(
+  return Promise.all(
     names.map((name) =>
       fetchJson(`${origin}/api/show`, timeoutMs, {
         method: "POST",
@@ -112,6 +66,15 @@ async function probeOllamaShow(
       }),
     ),
   );
+}
+
+/** Ollama `/api/show`: детали модели, пробуем полное и короткое имя. */
+async function probeOllamaShow(
+  origin: string,
+  model: string,
+  timeoutMs: number,
+): Promise<number | null> {
+  const shows = await fetchOllamaShows(origin, model, timeoutMs);
   for (const show of shows) {
     const info = show as {
       model_info?: Record<string, unknown>;
@@ -122,6 +85,26 @@ async function probeOllamaShow(
       const n = contextFromModelInfo(bag as Record<string, unknown>);
       if (n !== null) return n;
     }
+  }
+  return null;
+}
+
+/**
+ * Ollama `/api/show.capabilities` — декларация вида `["completion","tools",
+ * "vision","thinking"]`. Положительные флаги только: молчание эндпоинта не
+ * должно затирать preset/override.
+ */
+export async function probeOllamaCapabilities(
+  origin: string,
+  model: string,
+  timeoutMs: number,
+): Promise<ModelCapabilities | null> {
+  const shows = await fetchOllamaShows(origin, model, timeoutMs);
+  for (const show of shows) {
+    const caps = (show as { capabilities?: unknown } | null)?.capabilities;
+    if (!Array.isArray(caps)) continue;
+    const declared = declaredMediaCapabilities({ capabilities: caps });
+    if (Object.keys(declared).length > 0) return declared;
   }
   return null;
 }
@@ -143,11 +126,40 @@ export async function probeOllama(
   return ps ?? show;
 }
 
+/**
+ * `/props` локального бэкенда. Голый путь понимает llama-server, но llama-swap
+ * (один порт на несколько моделей) отвечает на него 404 «no model id could be
+ * identified»: id модели приходит query-параметром. Второй адрес —
+ * `/props?model=…&autoload=false`: llama-swap проксирует props загруженного
+ * инстанса, но не имеет права поднимать холодную модель ради пробы
+ * (на незагруженную он вернёт 409, и мы честно остаёмся без данных).
+ */
+async function fetchLlamaProps(
+  origin: string,
+  timeoutMs: number,
+  model?: string,
+): Promise<Record<string, unknown> | null> {
+  const urls = [`${origin}/props`];
+  if (model) {
+    urls.push(`${origin}/props?model=${encodeURIComponent(model)}&autoload=false`);
+  }
+  for (const url of urls) {
+    const props = await fetchJson(url, timeoutMs);
+    if (props && typeof props === "object" && !Array.isArray(props)) {
+      return props as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
 /** Сервер llama.cpp: одномодельный `/props` несёт загруженный `n_ctx`. */
-export async function probeLlamaCpp(origin: string, timeoutMs: number): Promise<number | null> {
-  const props = await fetchJson(`${origin}/props`, timeoutMs);
-  if (!props || typeof props !== "object") return null;
-  const bag = props as Record<string, unknown>;
+export async function probeLlamaCpp(
+  origin: string,
+  timeoutMs: number,
+  model?: string,
+): Promise<number | null> {
+  const bag = await fetchLlamaProps(origin, timeoutMs, model);
+  if (!bag) return null;
   const direct = pickContextField(bag);
   if (direct !== null) return direct;
   const gen = bag.default_generation_settings;
@@ -155,6 +167,32 @@ export async function probeLlamaCpp(origin: string, timeoutMs: number): Promise<
     return pickContextField(gen as Record<string, unknown>);
   }
   return null;
+}
+
+/** Media-возможности, объявленные llama.cpp в `/props.modalities`. */
+export type LlamaCppModalities = Pick<ModelCapabilities, "vision" | "video" | "audio">;
+
+/**
+ * llama.cpp `/props.modalities: {vision, video, audio}` — булевы флаги
+ * загруженного mmproj. `true` — принимает; `false` здесь не возвращаем, чтобы
+ * не затирать preset/override при отсутствии проектора (модель может уметь
+ * vision сама). Null — сервер не декларирует.
+ */
+export async function probeLlamaCppModalities(
+  origin: string,
+  timeoutMs: number,
+  model?: string,
+): Promise<LlamaCppModalities | null> {
+  const props = await fetchLlamaProps(origin, timeoutMs, model);
+  if (!props) return null;
+  const mods = props.modalities;
+  if (!mods || typeof mods !== "object" || Array.isArray(mods)) return null;
+  const bag = mods as Record<string, unknown>;
+  const out: LlamaCppModalities = {};
+  for (const key of ["vision", "video", "audio"] as const) {
+    if (bag[key] === true) out[key] = true;
+  }
+  return Object.keys(out).length > 0 ? out : null;
 }
 
 /** Механизм reasoning, объявленный llama.cpp в `/props` (INV-R6). */
@@ -173,10 +211,10 @@ export interface LlamaCppReasoningCaps {
 export async function probeLlamaCppReasoning(
   origin: string,
   timeoutMs: number,
+  model?: string,
 ): Promise<LlamaCppReasoningCaps | null> {
-  const props = await fetchJson(`${origin}/props`, timeoutMs);
-  if (!props || typeof props !== "object") return null;
-  const bag = props as Record<string, unknown>;
+  const bag = await fetchLlamaProps(origin, timeoutMs, model);
+  if (!bag) return null;
   const caps = bag.chat_template_caps;
   if (caps && typeof caps === "object") {
     const c = caps as Record<string, unknown>;
@@ -192,75 +230,6 @@ export async function probeLlamaCppReasoning(
     return { strategy: "template-kwarg", reasoningOff: true };
   }
   return null;
-}
-
-/**
- * Список моделей OpenAI-compat `/models` (общая часть context- и
- * capabilities-проб): `null` при любом промахе.
- */
-async function fetchOpenAICompatModelsList(
-  baseUrl: string,
-  apiKey: string | undefined,
-  timeoutMs: number,
-): Promise<Record<string, unknown>[] | null> {
-  const url = `${baseUrl.replace(/\/+$/, "")}/models`;
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (apiKey && apiKey !== "not-needed") headers.Authorization = `Bearer ${apiKey}`;
-  const data = await fetchJson(url, timeoutMs, { headers });
-  const list = (data as { data?: unknown } | null)?.data;
-  if (!Array.isArray(list)) return null;
-  return list.filter((m): m is Record<string, unknown> => !!m && typeof m === "object");
-}
-
-/**
- * OpenAI-совместимый `/models` с расширенными метаданными. Серверы с голыми id
- * (чистый OpenAI, Zen/Go) context-полей не несут → null.
- */
-export async function probeOpenAICompatModels(
-  baseUrl: string,
-  model: string,
-  apiKey: string | undefined,
-  timeoutMs: number,
-): Promise<number | null> {
-  const list = await fetchOpenAICompatModelsList(baseUrl, apiKey, timeoutMs);
-  const found = list?.find((m) => matchesModel(m, model));
-  if (!found) return null;
-  return pickContextField(found);
-}
-
-/**
- * Декларативные возможности reasoning из OpenAI-compat `/models`
- * (`capabilities.reasoning: {supported, effort}` — OpenCode Zen/Go и т.п.).
- * Выключатель здесь НЕ декларируется — он выясняется эмпирически
- * (`probeReasoningOffSwitch`), поэтому `reasoningOff` мы не ставим.
- */
-export interface OpenAICompatCapabilitiesProbe {
-  reachable: boolean;
-  capabilities?: ModelCapabilities;
-}
-
-export async function probeOpenAICompatCapabilities(
-  baseUrl: string,
-  model: string,
-  apiKey: string | undefined,
-  timeoutMs: number,
-): Promise<OpenAICompatCapabilitiesProbe> {
-  const list = await fetchOpenAICompatModelsList(baseUrl, apiKey, timeoutMs);
-  if (list === null) return { reachable: false };
-  const found = list.find((m) => matchesModel(m, model));
-  if (!found) return { reachable: true };
-  const raw = found.capabilities;
-  if (!raw || typeof raw !== "object") return { reachable: true };
-  const reasoning = (raw as { reasoning?: unknown }).reasoning;
-  if (!reasoning || typeof reasoning !== "object") return { reachable: true };
-  const r = reasoning as { supported?: unknown; effort?: unknown };
-  const capabilities: ModelCapabilities = {};
-  if (r.supported === true) capabilities.reasoningStrategy = "openai-effort";
-  if (Array.isArray(r.effort)) {
-    const levels = r.effort.filter((v): v is string => typeof v === "string");
-    if (levels.length > 0) capabilities.reasoningLevels = levels;
-  }
-  return { reachable: true, capabilities: Object.keys(capabilities).length > 0 ? capabilities : undefined };
 }
 
 /**

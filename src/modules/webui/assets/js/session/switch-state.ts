@@ -22,6 +22,16 @@ export function setSwitching(on: boolean): void {
     if (on) sendBtn.setAttribute("disabled", "disabled");
     else sendBtn.removeAttribute("disabled");
   }
+  // Attach / tools / skills живут рядом с отправкой: во время свитча они
+  // привязали бы вложение или тул к сменяемой паре.
+  for (const id of ["attachBtn", "skillsBtn", "toolsBtn"]) {
+    const btn = document.getElementById(id) as HTMLButtonElement | null;
+    if (!btn) continue;
+    if (on) btn.setAttribute("disabled", "disabled");
+    else btn.removeAttribute("disabled");
+  }
+  const picker = document.getElementById("imgPicker") as HTMLInputElement | null;
+  if (picker) picker.disabled = on;
   document.querySelector(".input-area")?.classList.toggle("switching", on);
   if (on) msgs?.setAttribute("aria-busy", "true");
   else msgs?.removeAttribute("aria-busy");

@@ -11,6 +11,7 @@ import type { ToolCall, ToolDefinition, ToolResult } from "../../../../tools/typ
 import { ANGULAR11_KNOWLEDGE } from "./knowledge";
 import { angularTools } from "./tools";
 import { runWriteCheck } from "./write-check";
+import { ANGULAR11_SCHEMA, angular11Settings } from "../plugin-settings";
 
 /** Плагин Angular 11: блок знания, `angular_check`, write-check, скаффолд. */
 export class Angular11Plugin implements AgentPlugin {
@@ -22,6 +23,7 @@ export class Angular11Plugin implements AgentPlugin {
   description = "Angular 11 knowledge, workspace checks and scaffolding (off by default).";
   homepage = "https://github.com/micro-models-agent";
   permissions: PluginPermission[] = ["fs:read", "fs:write"];
+  settingsSchema = ANGULAR11_SCHEMA;
 
   /** Блок `[ANGULAR 11]` в системный промпт, пока плагин включён (F1). */
   onBuildPrompt(): string | null {
@@ -35,6 +37,7 @@ export class Angular11Plugin implements AgentPlugin {
 
   /** Проверка идиом Angular 11 после записи `.ts`/`.html` в воркспейсе (F3). */
   onAfterTool(ctx: PluginHookContext, call: ToolCall, result: ToolResult): void {
+    if (!angular11Settings().writeCheck) return;
     runWriteCheck(ctx as { baseDir: string }, call, result);
   }
 }

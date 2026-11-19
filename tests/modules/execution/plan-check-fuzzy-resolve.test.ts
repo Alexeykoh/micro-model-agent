@@ -69,6 +69,7 @@ describe("auto-advance respects the step check", () => {
       title: "T",
       steps: ["Create src/app/page.tsx"],
       checks: ["file-exists:src/app/x/page.tsx"],
+      evidence: ["behavioral"],
     });
     expect(res.success).toBe(true);
 

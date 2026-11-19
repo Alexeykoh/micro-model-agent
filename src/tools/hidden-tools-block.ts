@@ -9,9 +9,12 @@ const HIDDEN_TOOLS_HEADER =
  * Компактный блок системного промпта со скрытыми тулами. Модель должна знать
  * об их существовании (и пути доступа), хотя их нет в tool-схеме LLM.
  * Группировка по тегам, размер ограничен.
+ * Пустой набор тегов — легаси «все тулы» (getAllForLLM на пустых отдаёт всё):
+ * скрытых нет, блок не нужен. Раньше тут перечислялись тулы, которые уже
+ * были в схеме, — модель зря дёргала enable_tools (L4).
  */
 export function buildHiddenToolsBlock(allTools: ToolDefinition[], activeTags: string[]): string {
-  if (!allTools.length) return "";
+  if (!allTools.length || activeTags.length === 0) return "";
 
   const activeSet = new Set(activeTags);
   const visible = new Set<string>();

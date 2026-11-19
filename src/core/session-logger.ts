@@ -2,7 +2,7 @@
 import type { SessionManager } from "../modules/session/manager";
 import type { SessionLogEntry } from "../modules/session/store";
 import type { Diagnostic, DiagnosticEvent } from "../output";
-import type { ToolCall, RetractInfo } from "./types";
+import type { InstructionLogInfo, ToolCall, RetractInfo } from "./types";
 import type { Logger } from "../logger/app-logger";
 import { sanitizeLogMessageTargeted } from "../modules/security/data-sanitizer";
 import { redactContextSecrets } from "./agent/context-log";
@@ -25,6 +25,7 @@ import {
   auditEntry,
   claimRetryEntry,
   criticEntry,
+  instructionsEntry,
   onboardingEntry,
   reasoningControlEntry,
   sanitizeToolArgs,
@@ -82,13 +83,13 @@ export class SessionLogger {
     this.session?.appendLog({ ts: new Date().toISOString(), source: "core", ...entry });
   }
 
-  /**
-   * Пишет системное сообщение в лог сессии.
-   */
+  /** Пишет системное сообщение в лог сессии. */
   logSystem(content: string): void {
     this.log(systemEntry(content));
   }
 
+  /** Версия инструкций без содержимого файлов. */
+  logInstructions(info: InstructionLogInfo): void { this.log(instructionsEntry(info)); }
   /**
    * Пишет сообщение пользователя (санитизированное) и историю сессии.
    */

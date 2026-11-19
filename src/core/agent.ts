@@ -41,6 +41,9 @@ export class Agent extends AgentBase {
   /** Гард одноразового асинхронного резолва переполнения в run(). */
   // biome-ignore lint/correctness/noUnusedPrivateClassMembers: пишется через TurnRunHost
   private overflowResolved = false;
+  /** Отпечаток входов последнего резолва (B16/B17); null — сверить заново. */
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: пишется через TurnRunHost
+  private overflowFingerprint: string | null = null;
   /** Пауза хода на границе итераций (INV-P1, спека webui-pause-resume). */
   private pauseRequested = false;
   /** Резолвер ждущего гейта; один waiter на ход (агент не reentrant). */
@@ -76,8 +79,16 @@ export class Agent extends AgentBase {
     tokenTracker: TokenTracker,
     onChunk?: (chunk: string) => void,
     slog?: SessionLogger,
+    record = true,
   ): Promise<string> {
-    return phaseFinalizeWithoutTools(turnOutputHost(this.hostView()), state, tokenTracker, onChunk, slog);
+    return phaseFinalizeWithoutTools(
+      turnOutputHost(this.hostView()),
+      state,
+      tokenTracker,
+      onChunk,
+      slog,
+      record,
+    );
   }
 
   /**
@@ -187,8 +198,8 @@ export class Agent extends AgentBase {
         llmPhaseHost: () => llmPhaseHost(view),
         batchHost: () => batchHost(view),
         loopResultHost: () => loopResultHost(view),
-        finalizeWithoutTools: (state, tt, onChunk, slog) =>
-          this.finalizeWithoutTools(state, tt, onChunk, slog),
+        finalizeWithoutTools: (state, tt, onChunk, slog, record) =>
+          this.finalizeWithoutTools(state, tt, onChunk, slog, record),
       },
       input,
       slog,

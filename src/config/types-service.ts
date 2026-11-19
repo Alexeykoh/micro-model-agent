@@ -25,6 +25,12 @@ export interface ServiceConfig {
   syncWaitMs: number;
   /** Кап FIFO-очереди задач на сессию. */
   maxQueueLength: number;
+  /**
+   * Сколько держать interactive-ход после отключения последнего SSE-клиента
+   * (мс). `0` — отменять сразу (сегодняшнее поведение). Положительное значение
+   * даёт переподключиться и забрать ход/вопрос; истёк — задача отменяется.
+   */
+  detachedTurnGraceMs: number;
   /** Таймаут доставки webhook-колбэка (мс). */
   callbackTimeoutMs: number;
   /** Секрет HMAC-подписи webhook-колбэков. Не задан — подпись не выставляется. */
@@ -34,4 +40,14 @@ export interface ServiceConfig {
    * По умолчанию только `https`: тело webhook'а несёт результат хода.
    */
   webhookAllowHttp?: boolean;
+  /**
+   * TLS демона. `cert`/`key` — пути к PEM; оба заданы — сервер слушает HTTPS.
+   * `terminatedByProxy` — явное разрешение HTTP на не-loopback, когда TLS
+   * терминирует доверенный прокси/ingress (pod-сеть приватна).
+   */
+  tls?: {
+    cert?: string;
+    key?: string;
+    terminatedByProxy?: boolean;
+  };
 }

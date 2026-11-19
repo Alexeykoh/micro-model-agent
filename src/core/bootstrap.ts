@@ -173,6 +173,7 @@ export async function bootstrap(
       logger,
       baseDir: workspace.baseDir,
       configDir: dir,
+      noAgentsMd: noAgentsMd === true,
       activeToolTags: session.activeToolTags,
       promptBlocks: modules.promptBlocks,
       envReport: workspace.envReport,
@@ -191,6 +192,8 @@ export async function bootstrap(
       contextProbePromise: provider.contextProbePromise,
       contextProbeRef: provider.contextProbeRef,
       capabilitiesProbeRef: provider.capabilitiesRef,
+      // B14: сжатый профиль со старта — reconfigure пересобирает статику.
+      profileCompressed: provider.profile.compress(),
     },
     workspace.toolRegistry,
   );
@@ -225,6 +228,7 @@ export async function bootstrap(
       logger,
       baseDir: workspace.baseDir,
       configDir: dir,
+      noAgentsMd: noAgentsMd === true,
       promptBlocks: modules.promptBlocks,
       envReport: workspace.envReport,
       lazyPromptBlocks: modules.lazyPromptBlocks,
@@ -242,6 +246,7 @@ export async function bootstrap(
       activeToolTags: session.activeToolTags,
       capabilitiesProbeRef: provider.capabilitiesRef,
       contextLogEnabled: session.contextLogger !== undefined,
+      profileCompressed: provider.profile.compress(),
     }),
   };
 }

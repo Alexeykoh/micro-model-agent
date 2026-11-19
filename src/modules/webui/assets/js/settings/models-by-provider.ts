@@ -29,8 +29,11 @@ export function modelOptionsFor(provider: string): string[] {
 export function hasModelsFor(provider: string): boolean {
   const name = String(provider || "").trim();
   // Inherit: список активного провайдера грузится отдельно (`loadModels`);
-  // до его прихода `settings.models` пуст и редактор должен дозагрузить.
-  if (!name || name === activeProviderName()) return settings.modelsReady;
+  // «уже грузится» тоже считается известным состоянием, иначе редактор на
+  // каждом ре-рендере дёргал бы `loadModels` заново (цикл рендер → загрузка).
+  if (!name || name === activeProviderName()) {
+    return settings.modelsReady || settings.modelsStatus === "loading";
+  }
   const entry = settings.modelsByProvider[name];
   return !!entry && !entry.loading;
 }
@@ -47,8 +50,14 @@ export function hasModelsFor(provider: string): boolean {
 export async function loadModelsFor(provider: string): Promise<boolean> {
   const name = String(provider || "").trim();
   if (!name || name === activeProviderName()) {
-    await loadModels();
-    return true;
+    // Активный список грузит boot/свитч; здесь — только если он ещё не
+    // начинался (`idle`) или упал (`error`), иначе был бы второй параллельный
+    // опрос на каждый ре-рендер настроек.
+    if (settings.modelsStatus === "idle" || settings.modelsStatus === "error") {
+      await loadModels();
+      return true;
+    }
+    return false;
   }
   if (inflight.has(name)) return false;
   inflight.add(name);

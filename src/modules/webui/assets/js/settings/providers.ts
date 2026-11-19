@@ -1,17 +1,15 @@
-// Provider add/edit form + the "Model & provider" settings panel.
-// Extracted from `settings.js`. Shared form primitives come from
-// `settings/form.js`, generic section helpers from `settings/panels.js`; the
-// write funnel from `settings/write.js`.
-import { el, icon, link } from "../dom.js";
+// Provider add/edit form. The "Model & provider" panel itself lives in
+// `settings/model-panel.ts` and receives this module's list helpers through
+// `initModelPanel` (keeps both files under the 300-line ceiling, no cycle).
+// Shared form primitives come from `settings/form.js`; writes go through
+// `settings/write.js`.
+import { el, link } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { settings } from "../store.js";
 import type { Dict } from "../core/store/types.js";
-import { contextLabel } from "../format.js";
 import { setIndicator } from "../dialog.js";
-import { PANEL_SECTIONS } from "./controls.js";
-import { postConfig, loadConfig } from "./write.js";
-import { settingsSection, chip, renderSections } from "./panels.js";
+import { loadConfig } from "./write.js";
 import { pfield, providerInput, providerSelect } from "./form.js";
 import { openSubDialog, closeSubDialog } from "./subdialog.js";
 import {
@@ -22,6 +20,7 @@ import {
   PROVIDER_TYPES,
 } from "./providers-form.js";
 import type { CacheFlag } from "./providers-form.js";
+import { initModelPanel, renderModelPanel } from "./model-panel.js";
 
 function providerEntries(): Dict[] {
   if (settings.providers && Array.isArray(settings.providers.entries) && settings.providers.entries.length) {
@@ -36,6 +35,7 @@ function providerEntries(): Dict[] {
       hasApiKey: !!e.apiKey,
       contextWindow: e.contextWindow,
       priority: e.priority,
+      unlistedModels: e.unlistedModels,
     }));
   }
   return [
@@ -60,7 +60,8 @@ function providerMeta(p: Dict): string {
   }
   return parts.join(" · ");
 }
-// Validate the field bag, POST it, and refresh the panels on success.
+
+// Validate the field bag, POST it, and refresh the panels on success.
 async function submitProviderForm(f: Dict, mode: string, editing: Dict): Promise<void> {
   const type = f.type.value.trim();
   const baseUrl = f.base.value.trim();
@@ -114,6 +115,10 @@ async function submitProviderForm(f: Dict, mode: string, editing: Dict): Promise
     if (box.checked !== (prevCache[key] === true)) cache[key] = box.checked;
   });
   if (Object.keys(cache).length) body.cache = cache;
+  body.unlistedModels = String(f.unlisted.value || "")
+    .split(",")
+    .map((s: string) => s.trim())
+    .filter(Boolean);
   const r = await api<Dict>("/api/providers", { method: "POST", body });
   if (r.ok && r.data && r.data.ok) {
     const persisted = r.data.persisted !== false;
@@ -161,103 +166,6 @@ function providerForm(): HTMLElement {
   return box;
 }
 
-export function renderModelPanel(): void {
-  const container = document.querySelector<HTMLElement>('[data-panel="model"]');
-  if (!container) return;
-  container.textContent = "";
-  const cfg: Dict = settings.config || {};
-
-  // --- Model section ---
-  const modelSec = settingsSection("web.settings.section_models");
-  const search = el("input", "searchbox");
-  search.placeholder = t("web.settings.search_models");
-  search.setAttribute("aria-label", t("web.settings.search_models"));
-  modelSec.body.appendChild(search);
-  const list = el("div", "model-list");
-  modelSec.body.appendChild(list);
-  const draw = () => {
-    list.textContent = "";
-    const q = search.value.trim().toLowerCase();
-    const models = settings.models.filter((m) => !q || String(m).toLowerCase().indexOf(q) !== -1);
-    if (!models.length) {
-      list.appendChild(el("div", "placeholder", settings.models.length ? t("web.settings.no_matches") : t("web.settings.no_models")));
-      return;
-    }
-    models.forEach((m) => {
-      const active = m === cfg.model;
-      const item = el("div", "model-item" + (active ? " active" : ""));
-      const nameEl = el("span", "m-name", String(m));
-      nameEl.title = String(m);
-      item.appendChild(nameEl);
-      if (active) {
-        item.appendChild(el("span", "m-meta", contextLabel() + " · " + t("web.settings.active_check")));
-      } else {
-        item.appendChild(chip(t("web.settings.use"), "", () => void postConfig("model", m, true)));
-      }
-      list.appendChild(item);
-    });
-  };
-  search.addEventListener("input", draw);
-  draw();
-  container.appendChild(modelSec.el);
-
-  // --- Providers section ---
-  const provSec = settingsSection("web.settings.section_providers");
-  const addBtn = el("button", "sec-add");
-  addBtn.type = "button";
-  addBtn.setAttribute("aria-haspopup", "dialog");
-  addBtn.appendChild(icon("plus"));
-  addBtn.appendChild(el("span", "", t("web.settings.add_provider")));
-  addBtn.addEventListener("click", () => openProviderForm("add", null));
-  provSec.head.appendChild(addBtn);
-
-  const entries = providerEntries().filter((e) => {
-    const n = providerName(e);
-    return n && n !== "—";
-  });
-  const activeName = (cfg.provider && (cfg.provider.active || cfg.provider.type)) || (settings.providers && settings.providers.active) || "—";
-  const provList = el("div", "provider-list");
-  entries.forEach((entry) => {
-    const name = providerName(entry);
-    const active = name === activeName;
-    const item = el("div", "provider-item" + (active ? " active" : ""));
-    const head = el("div", "p-head");
-    head.appendChild(el("span", "p-name", name));
-    if (active) head.appendChild(el("span", "badge on", t("web.settings.active")));
-    item.appendChild(head);
-    const meta = providerMeta(entry);
-    if (meta) item.appendChild(el("div", "p-meta", meta));
-    const actions = el("div", "p-actions");
-    if (!active) {
-      actions.appendChild(chip(t("web.settings.provider_make_active"), "", () => void postConfig("provider.active", name, true)));
-    }
-    actions.appendChild(
-      chip(t("web.settings.edit"), "", () => openProviderForm("edit", entry)),
-    );
-    if (!active) {
-      actions.appendChild(
-        chip(t("web.settings.delete"), "danger", async () => {
-          const r = await api<Dict>("/api/providers/" + encodeURIComponent(name), { method: "DELETE" });
-          if (r.ok && r.data && r.data.ok) {
-            setIndicator(t("web.settings.saved"));
-            await loadProviders();
-            await loadConfig();
-          } else {
-            const err = (r.data && r.data.error) || t("web.settings.delete_failed");
-            setIndicator(err === "active-provider" ? t("web.settings.provider_active_guard") : String(err), true);
-          }
-        }),
-      );
-    }
-    item.appendChild(actions);
-    provList.appendChild(item);
-  });
-  if (!entries.length) provList.appendChild(el("div", "placeholder", t("web.settings.providers_empty")));
-  provSec.body.appendChild(provList);
-  container.appendChild(provSec.el);
-  renderSections("model", PANEL_SECTIONS.model || []);
-}
-
 export async function loadProviders(): Promise<void> {
   const r = await api<Dict>("/api/providers");
   settings.providers = r.ok && r.data && Array.isArray(r.data.entries) ? r.data : undefined;
@@ -278,3 +186,24 @@ function closeProviderForm(): void {
   settings.providerForm = null;
   closeSubDialog();
 }
+
+async function deleteProvider(name: string): Promise<void> {
+  const r = await api<Dict>("/api/providers/" + encodeURIComponent(name), { method: "DELETE" });
+  if (r.ok && r.data && r.data.ok) {
+    setIndicator(t("web.settings.saved"));
+    await loadProviders();
+    await loadConfig();
+    return;
+  }
+  const err = (r.data && r.data.error) || t("web.settings.delete_failed");
+  setIndicator(err === "active-provider" ? t("web.settings.provider_active_guard") : String(err), true);
+}
+
+initModelPanel({
+  entries: providerEntries,
+  providerName,
+  providerMeta,
+  openForm: openProviderForm,
+  deleteProvider,
+});
+export { renderModelPanel };

@@ -67,16 +67,20 @@ export function pushState(
   sessionId?: string | null,
 ): void {
   const owner = sessionId ?? s.activeSessionId ?? null;
-  broadcast(
-    {
-      type: "state",
-      ts: Date.now(),
-      ...sessionStatus(s),
-      ...(owner ? { sessionId: owner } : {}),
-      state: s.bridge?.getState?.(owner ?? undefined) ?? null,
-    },
-    s,
-  );
+  const base = {
+    type: "state",
+    ts: Date.now(),
+    ...sessionStatus(s),
+    ...(owner ? { sessionId: owner } : {}),
+  };
+  // `getState` асинхронный с W1; тестовые стабы возвращают снимок синхронно —
+  // в этом случае порядок событий не меняем.
+  const maybe = s.bridge?.getState?.(owner ?? undefined) as unknown;
+  if (maybe instanceof Promise) {
+    void maybe.then((state) => broadcast({ ...base, state: state ?? null }, s));
+    return;
+  }
+  broadcast({ ...base, state: maybe ?? null }, s);
 }
 
 /**

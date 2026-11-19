@@ -17,7 +17,6 @@ import {
 import { clearBusy, flushRun, showBusy } from "./busy.js";
 import { buildRetractBlock } from "./retract-block.js";
 import type { ThinkState } from "../core/store/types.js";
-import { speedText, thinkRate } from "../speed.js";
 
 // Text chunks arrive in bursts (several SSE `text` events per frame); writing
 // and scrolling on every one thrashes layout and stacks overlapping `tkIn`
@@ -85,11 +84,9 @@ export function onText(chunk: string, sid?: string): void {
   scheduleText(feed);
 }
 
-/** Header text for a think block: duration + estimated tok/s when computable. */
-export function thinkDurText(chars: number, startedAt: number, now = Date.now()): string {
-  const sec = ((now - startedAt) / 1000).toFixed(1);
-  const rate = thinkRate(chars, now - startedAt);
-  return rate != null ? `· ${sec}s · ${speedText(rate, true)}` : `· ${sec}s`;
+/** Header text for a think block: duration only (tok/s lives in the footer chip). */
+export function thinkDurText(startedAt: number, now = Date.now()): string {
+  return `· ${((now - startedAt) / 1000).toFixed(1)}s`;
 }
 
 function updateThinkHeader(feed: HTMLElement): void {
@@ -103,7 +100,7 @@ function updateThinkHeader(feed: HTMLElement): void {
     return;
   }
   const dur = st.curThink.head.querySelector(".dur");
-  if (dur) dur.textContent = thinkDurText(st.curThink.chars ?? 0, st.curThink.startedAt, Date.now());
+  if (dur) dur.textContent = thinkDurText(st.curThink.startedAt, Date.now());
 }
 
 export function finishThink(feed?: HTMLElement | null): void {
@@ -116,7 +113,7 @@ export function finishThink(feed?: HTMLElement | null): void {
     }
     if (st.curThink.wrap) st.curThink.wrap.classList.remove("live");
     const dur = st.curThink.head.querySelector(".dur");
-    if (dur) dur.textContent = thinkDurText(st.curThink.chars ?? 0, st.curThink.startedAt, Date.now());
+    if (dur) dur.textContent = thinkDurText(st.curThink.startedAt, Date.now());
   }
   st.curThink = null;
 }

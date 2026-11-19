@@ -1,16 +1,7 @@
 // Типы рантайма: инструкции, сессии, тулы, MCP, UI, браузер, субагент, критик, плагины.
 import type { ProviderConfig } from "./types-provider";
 import type { ThemeMode, UiThemeId } from "./theme-ids";
-
-/**
- * Обработка промпт-блоков (AGENTS.md, карта проекта), превышающих бюджет
- * системного промпта. При включённом `summarize` переполненный блок суммаризирует
- * LLM в остаток бюджета (кеш в `<project>/.mma/cache/prompt-summaries`); при
- * неуспехе блок режется с маркером, а модели хинтится чтение полного файла.
- */
-export interface InstructionsConfig {
-  summarize: boolean;
-}
+import type { WebSearchProvider } from "./web-search-provider";
 
 export interface SessionConfig {
   autoSave: boolean;
@@ -151,6 +142,12 @@ export interface UiConfig {
    */
   fontSize?: "compact" | "comfortable" | "large";
   /**
+   * Когда показывать финальный ответ: `live` — стримить сразу (дефолт),
+   * `after-review` — держать в буфере до прохождения critic/audit. Отклонённый
+   * черновик тогда не попадает в ленту и историю.
+   */
+  draftMode?: "live" | "after-review";
+  /**
    * Скин веб-UI (`mma web`). Хранится в конфиге, а не только в браузере: тема
    * переживает перезапуск сервера. В браузере значение дублируется кэшем —
    * только для отрисовки до первого `GET /api/config`. Каталог id и подписи —
@@ -159,6 +156,11 @@ export interface UiConfig {
   theme?: UiThemeId;
   /** Режим оформления веб-UI: `dark` | `light` | системный `auto`. */
   themeMode?: ThemeMode;
+  /**
+   * Частицы/погода сезонных тем веб-UI (`winter`/`autumn`). `false` — тема
+   * остаётся, но падающее поле отключено. `prefers-reduced-motion` главнее.
+   */
+  themeEffects?: boolean;
   /** Звуки веб-UI: мастер и флаги событий (spec 2026-10-31-webui-sounds). */
   sounds?: { enabled?: boolean; done?: boolean; question?: boolean; failed?: boolean; volume?: number };
 }
@@ -166,6 +168,16 @@ export interface UiConfig {
 /** Мастер-выключатель веб-поиска: при false web_search отвечает "disabled". */
 export interface WebSearchConfig {
   enabled: boolean;
+  /** Источник выдачи: DuckDuckGo HTML (default), Tavily API, SearXNG. */
+  provider: WebSearchProvider;
+  /** Ключ провайдера (Tavily). Шифруется на диске, маскируется при показе. */
+  apiKey?: string;
+  /** База self-hosted SearXNG (`https://searx.example.org`). */
+  baseUrl?: string;
+  /** Скачивать картинки выдачи и показывать их в веб-ленте (default off). */
+  images?: boolean;
+  /** Потолок картинок на один запрос (2). */
+  maxImages?: number;
 }
 
 export interface ErrorWebSearchConfig {

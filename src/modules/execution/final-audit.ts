@@ -12,7 +12,7 @@ import type { Auditor } from "./auditor";
 import type { PlanTracker } from "./tracker";
 import type { PlanStore } from "./plan-store";
 import type { Plan, PlanStep } from "./planner";
-import { isBehaviorStep, parseCheck } from "./plan-checks";
+import { needsBehaviorEvidence, parseCheck } from "./plan-checks";
 
 /** Результат финального аудита. */
 export interface FinalAuditResult {
@@ -51,6 +51,9 @@ export function autoCloseEvidenceSteps(d: FinalAuditHost, plan: Plan): number {
   let closed = 0;
   for (const step of plan.steps) {
     if (step.status === "done" || step.status === "skipped") continue;
+    // Поведенческий шаг не закрывается по файлам: нужен реальный прогон,
+    // а не существование деливерабла (сессия ses_mwmeoln9).
+    if (needsBehaviorEvidence(step)) continue;
     const tokens = extractFileLikeTokens(stripUrls(step.description));
     if (tokens.length === 0) continue;
     const resolved = tokens.map((f) => findExistingFile(d.baseDir, f));
@@ -115,7 +118,7 @@ export function pendingStepsOf(plan: Plan | null): string[] {
 export function isUnconfirmed(s: PlanStep): boolean {
   if (s.status !== "done" && s.status !== "skipped") return true;
   if (s.status !== "done") return false;
-  if (!isBehaviorStep(String(s.description || ""))) return false;
+  if (!needsBehaviorEvidence(s)) return false;
   const parsed = s.check ? parseCheck(s.check) : null;
   return parsed?.kind === "manual" && !String(s.note || "").trim();
 }

@@ -49,6 +49,7 @@ export function buildWebCommand(program: Command): void {
     .option("--host <addr>", t("cli.web.host"))
     .option("--token <t>", t("cli.web.token"))
     .option("--no-open", t("cli.web.no_open"))
+    .option("--daemon-url <url>", t("cli.web.daemon"))
     .action(() => {
       /* Диспатчится из main.ts после program.parse(): веб-сервер долгоживущий,
          хук one-shot выхода его резать не должен. */
@@ -62,6 +63,7 @@ export function buildServeCommand(program: Command): void {
     .option("-p, --port <n>", t("cli.serve.port"))
     .option("--host <addr>", t("cli.serve.host"))
     .option("--token <t>", t("cli.serve.token"))
+    .option("--rotate-token", t("cli.serve.rotate_token"))
     .action(() => {
       /* Диспатчится из main.ts после program.parse(): сервис долгоживущий,
          хук one-shot выхода его резать не должен. */

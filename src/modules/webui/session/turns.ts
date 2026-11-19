@@ -6,53 +6,27 @@
 // однo-сессионного main-агента удалён. Главный агент обслуживает только CLI/REPL
 // (и хост-команды/плагины), не ходы браузера.
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { SessionStore, RuntimeState, ConfigStore, HttpTransport, SseTransport, WorkspaceStore, SseEvent } from "../state";
+import type {
+  SessionStore,
+  RuntimeState,
+  ConfigStore,
+  HttpTransport,
+  SseTransport,
+  WorkspaceStore,
+  SseEvent,
+} from "../state";
 import { broadcast } from "../state";
 import { pushState, releaseBusy, reserveBusy, syncBusy } from "./session-status";
 import { makeForwarder } from "./forward";
 import { makeRunAgent } from "./run-agent";
+import { activeSessionOf, extractSessionId, validatePost } from "./session-post";
+import type { HostBridgeSubmitOptions } from "../../types";
 import type { SessionRunner } from "../../../core/bootstrap/session-runner";
 import { beginEgressTurn, endEgressTurn } from "../../security/data-policy/turn-journal";
 import { attachEgressTurn } from "./egress-turn";
-import {
-  parseMessageBody,
-  readBody,
-  requestError,
-  scrubError,
-  sendJson,
-} from "../util";
+import { readBody, requestError, scrubError, sendJson, parseMessageBody } from "../util";
+import type { ClientTz } from "../../../core/prompt-facts";
 import { t } from "../../../i18n/index";
-
-/**
- * Достаёт `sessionId` из сырого JSON-тела (фронт шлёт вкладку-владельца).
- * Пусто/мусор → null (фолбэк — тогда-активная). Битый JSON отдаст
- * `parseMessageBody`, здесь не шумим. Прямой `JSON.parse`, а не `parseJsonBody`:
- * `body.ts` импортирует `readBody` из `util.ts`, обратный импорт дал бы цикл.
- */
-function extractSessionId(raw: string): string | null {
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed === "object" && parsed !== null) {
-      const id = (parsed as Record<string, unknown>).sessionId;
-      if (typeof id === "string" && id.trim()) return id.trim();
-    }
-  } catch {
-    /* invalid JSON — разберёт parseMessageBody */
-  }
-  return null;
-}
-
-/** Тогда-активная сессия (фолбэк, когда фронт sessionId не прислал). */
-function activeSessionOf(s: SessionStore & RuntimeState & ConfigStore & HttpTransport & SseTransport & WorkspaceStore): string | null {
-  try {
-    const manager = s.sessionManager as unknown as
-      | { getActive?: () => string | null; getActiveMeta?: () => { id: string } | null }
-      | undefined;
-    return manager?.getActive?.() ?? manager?.getActiveMeta?.()?.id ?? s.activeSessionId ?? null;
-  } catch {
-    return s.activeSessionId ?? null;
-  }
-}
 
 /**
  * Стартует ход в уже зарезервированном слоте сессии: спавн/подъём её раннера.
@@ -93,6 +67,13 @@ function runRunnerTurn(
 ): void {
   for (const url of images) {
     runner.contextManager.addPendingImage({ type: "image_url", image_url: { url } });
+  }
+  // B18b: часовой пояс клиента — в агента до хода (пересборка статики только
+  // при смене). Структурный тип вместо импорта core/agent (гейт INV-3);
+  // стаб-раннеры тестов без метода молча пропускают.
+  const setTz = (runner.agent as { setClientTz?: (tz: ClientTz | undefined) => void }).setClientTz;
+  if (typeof setTz === "function") {
+    setTz.call(runner.agent, s.pool.getClientTz(sessionId));
   }
   s.activeSessionId = sessionId;
   const dlpEnabled = s.config?.security?.dataPolicy?.enabled ?? true;
@@ -140,10 +121,15 @@ function runRunnerTurn(
  * Вызывается из форвардерного `onTurnEnd` (слот уже сброшен форвардером,
  * вызов синхронен, вклиниться некому). Возвращает, стартовал ли ход.
  */
-export function finishTurn(s: SessionStore & RuntimeState & ConfigStore & HttpTransport & SseTransport & WorkspaceStore, id: string | null): boolean {
+export function finishTurn(
+  s: SessionStore & RuntimeState & ConfigStore & HttpTransport & SseTransport & WorkspaceStore,
+  id: string | null,
+): boolean {
   s.pool.forceRelease(id);
   syncBusy(s);
   pushState(s, id);
+  // Ход разбудил модель — повторяем холодную пробу /props (INV-R2/R7).
+  if (s.providerReasoning?.().needsReprobe === true) void s.refreshProviderCapabilities?.();
   const next = s.pool.shift(id);
   if (!next) return false;
   if (next.sessionId && s.sessionManager && !s.sessionManager.get(next.sessionId)) {
@@ -157,10 +143,7 @@ export function finishTurn(s: SessionStore & RuntimeState & ConfigStore & HttpTr
   } catch {
     // Спавн упал после резерва (сессия испарилась): слот уже отпущен
     // в startTurn, запись дропнута — сообщаем владельцу в ленту.
-    broadcast(
-      { type: "error", ts: Date.now(), sessionId: id, error: "spawn_failed" },
-      s,
-    );
+    broadcast({ type: "error", ts: Date.now(), sessionId: id, error: "spawn_failed" }, s);
     return false;
   }
   return true;
@@ -178,98 +161,140 @@ export function finishTurn(s: SessionStore & RuntimeState & ConfigStore & HttpTr
  * (`202 {queued: n}`) и выполняется следующим ходом по завершении текущего.
  * Хвост сверх `MAX_QUEUE_LENGTH` — `429 queue_full`.
  */
-/** Разобранное тело `POST /api/message`: текст, картинки, сессия-владелец. */
-type ParsedPost =
-  | { text: string; images: string[]; target: string }
-  | { error: string; status: number };
-
 /**
- * Валидирует тело сообщения: формат, существование сессии, наличие раннера.
- * Чистая (без записи состояния) — решение о резерве/очереди принимает диспетчер.
+ * Итог диспатча хода. Транспорт сам решает, как его показать: HTTP — JSON,
+ * `Host.submit` — значение для плагинов/адаптеров (split W10).
  */
-function parsePost(s: SessionStore & RuntimeState & ConfigStore & HttpTransport & SseTransport & WorkspaceStore, raw: string): ParsedPost {
-  const body = parseMessageBody(raw);
-  if ("error" in body) return { error: body.error, status: 400 };
-  const target = extractSessionId(raw) ?? activeSessionOf(s);
-  if (!target) return { error: "no_session", status: 503 };
-  if (s.sessionManager && !s.sessionManager.get(target)) {
-    return { error: "not_found", status: 404 };
-  }
-  // Web всегда через раннер: без фабрики исполнителя нет.
-  if (!s.pool.hasFactory()) return { error: "no_runner", status: 503 };
-  return { text: body.text, images: body.images, target };
-}
+export type SubmitOutcome =
+  | {
+      ok: true;
+      sessionId: string;
+      queued?: number;
+      queuedForSession?: number;
+      id?: string;
+    }
+  | { ok: false; status: number; error: string };
 
 /**
  * Диспатчит валидное сообщение: в очередь занятого слота или сразу в ход.
  * Проверка занятости и резерв/постановка — синхронно, без await между:
  * иначе два конкурентных POST в одну сессию оба выиграют слот.
  */
-function dispatchPost(
+function dispatchTurn(
   s: SessionStore & RuntimeState & ConfigStore & HttpTransport & SseTransport & WorkspaceStore,
-  res: ServerResponse,
-  parsed: { text: string; images: string[]; target: string },
-): void {
-  const { text, images, target } = parsed;
+  parsed: { text: string; images: string[]; target: string; clientTz?: ClientTz },
+): SubmitOutcome {
+  const { text, images, target, clientTz } = parsed;
+  // Часовой пояс клиента — в пул до ветвления (B18b): и прямой ход, и дренаж
+  // очереди читают последний присланный; latest wins.
+  if (clientTz) s.pool.setClientTz(target, clientTz);
   // Слоты независимы: занятость — только по своему.
   const blocked = s.pool.isBusy(target);
   if (blocked) {
     // Слот занят: сообщение встаёт в очередь входящих вместо `409 busy`.
     const queued = s.pool.enqueue(target, text, images, target);
-    if (queued === null) {
-      sendJson(res, 429, { error: "queue_full" });
-      return;
-    }
+    if (queued === null) return { ok: false, status: 429, error: "queue_full" };
     pushState(s, target);
-    sendJson(res, 202, {
+    return {
       ok: true,
-      queued: s.pool.totalQueued(),      sessionId: target,
+      sessionId: target,
+      queued: s.pool.totalQueued(),
       queuedForSession: s.pool.queueLen(target),
       id: queued.id,
-    });
-    return;
+    };
   }
   const token = reserveBusy(s, target);
   pushState(s, target);
   try {
     startTurn(s, target, text, images, token);
   } catch {
-    sendJson(res, 500, { error: "spawn_failed" });
-    return;
+    return { ok: false, status: 500, error: "spawn_failed" };
   }
-  sendJson(res, 202, { ok: true, sessionId: target });
+  return { ok: true, sessionId: target };
 }
 
-export function handleMessagePost(req: IncomingMessage, res: ServerResponse, s: SessionStore & RuntimeState & ConfigStore & HttpTransport & SseTransport & WorkspaceStore): void {
-  if (s.setupRequired) {
-    sendJson(res, 409, { error: "setup_required" });
-    return;
-  }
+/**
+ * Единая точка входа хода (INV-S2): и `POST /api/message`, и `Host.submit`
+ * идут сюда — второй путь исполнения хода отсутствует.
+ */
+export async function submitTurnFromHost(
+  s: SessionStore & RuntimeState & ConfigStore & HttpTransport & SseTransport & WorkspaceStore,
+  text: string,
+  opts: HostBridgeSubmitOptions = {},
+): Promise<SubmitOutcome> {
+  const parsed = validatePost(s, {
+    text,
+    images: opts.images ?? [],
+    ...(opts.sessionId ? { sessionId: opts.sessionId } : {}),
+    ...(opts.clientTz ? { clientTz: opts.clientTz } : {}),
+  });
+  if ("error" in parsed) return { ok: false, status: parsed.status, error: parsed.error };
+  return dispatchTurn(s, parsed);
+}
+
+export function handleMessagePost(
+  req: IncomingMessage,
+  res: ServerResponse,
+  s: SessionStore & RuntimeState & ConfigStore & HttpTransport & SseTransport & WorkspaceStore,
+): void {
   readBody(req, s.maxBodyBytes)
-    .then((raw) => {
-      const parsed = parsePost(s, raw);
-      if ("error" in parsed) {
+    .then(async (raw) => {
+      const body = parseMessageBody(raw);
+      if ("error" in body) {
         // Пустой ввод — no-op с локализованной подсказкой, без LLM-вызова.
-        if (parsed.error === "empty") {
+        if (body.error === "empty") {
           sendJson(res, 200, { ok: true, noop: true, notice: t("web.message_empty") });
           return;
         }
-        sendJson(res, parsed.status, { error: parsed.error });
+        sendJson(res, 400, { error: body.error });
         return;
       }
       // Троттл — на сессию, а не на процесс: параллельные вкладки не должны
-      // отвергать друг друга (аудит §6.9).
-      if (s.minPostIntervalMs > 0) {
-        const last = s.lastPostTs.get(parsed.target) ?? 0;
+      // отвергать друг друга (аудит §6.9). Цель резолвится без записи
+      // состояния: точную проверку делает `validatePost` в хосте.
+      const target = extractSessionId(raw) ?? activeSessionOf(s) ?? "";
+      if (target && s.minPostIntervalMs > 0) {
+        const last = s.lastPostTs.get(target) ?? 0;
         if (Date.now() - last < s.minPostIntervalMs) {
           sendJson(res, 429, { error: "rate_limited" });
           return;
         }
-        s.lastPostTs.set(parsed.target, Date.now());
+        s.lastPostTs.set(target, Date.now());
       }
-      dispatchPost(s, res, parsed);
+      const opts = {
+        ...(body.images.length ? { images: body.images } : {}),
+        ...(target ? { sessionId: target } : {}),
+        ...(body.clientTz ? { clientTz: body.clientTz } : {}),
+      };
+      // Один и тот же вход хода: через `Host` (боевая поверхность) или
+      // напрямую в `submitTurnFromHost`, если хост не собран (тесты/стабы).
+      const outcome = s.bridge
+        ? ((await s.bridge.submit(body.text, opts)) as SubmitOutcome)
+        : await submitTurnFromHost(s, body.text, opts);
+      sendOutcome(res, outcome);
     })
     .catch((err: unknown) => {
       requestError(req, res, err);
     });
+}
+
+/** Единый маппинг исхода хода в HTTP (пустой ввод — no-op с подсказкой). */
+function sendOutcome(res: ServerResponse, outcome: SubmitOutcome): void {
+  if (outcome.ok) {
+    sendJson(res, 202, {
+      ok: true,
+      sessionId: outcome.sessionId,
+      ...(outcome.queued !== undefined ? { queued: outcome.queued } : {}),
+      ...(outcome.queuedForSession !== undefined
+        ? { queuedForSession: outcome.queuedForSession }
+        : {}),
+      ...(outcome.id ? { id: outcome.id } : {}),
+    });
+    return;
+  }
+  if (outcome.error === "empty") {
+    sendJson(res, 200, { ok: true, noop: true, notice: t("web.message_empty") });
+    return;
+  }
+  sendJson(res, outcome.status, { error: outcome.error });
 }

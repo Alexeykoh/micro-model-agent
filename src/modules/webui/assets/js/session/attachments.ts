@@ -5,6 +5,7 @@ import { inp, imgPicker, attachStrip, attachErr, el, icon } from "../dom.js";
 import { t } from "../i18n.js";
 import { tabs as tabState, MAX_IMAGES, MAX_IMAGE_BYTES } from "../store.js";
 import type { Dict } from "../core/store/types.js";
+import { isSwitching } from "./switch-state.js";
 
 let activeTabFn: () => Dict | null = () => null;
 let insertPathFn: (text: string) => void = () => {};
@@ -64,10 +65,13 @@ function readAsDataUrl(file: File): Promise<string> {
   });
 }
 
+/** Только растр: SVG и прочее векторное модель не декодирует — отсекаем до отправки. */
+const BITMAP_MIME_RE = /^image\/(png|jpe?g|webp|gif|bmp)$/i;
+
 async function addFiles(files: File[]): Promise<void> {
   let err = "";
   for (const file of files) {
-    if (!file || typeof file.type !== "string" || file.type.indexOf("image/") !== 0) {
+    if (!file || typeof file.type !== "string" || !BITMAP_MIME_RE.test(file.type)) {
       err = t("web.attach.only_images");
       continue;
     }
@@ -101,23 +105,34 @@ async function addFiles(files: File[]): Promise<void> {
 // --- input wiring: picker, paste and the drop zone -----------------------
 if (imgPicker) {
   imgPicker.addEventListener("change", () => {
+    if (isSwitching()) {
+      imgPicker.value = "";
+      return;
+    }
     addFiles(Array.from(imgPicker.files || []));
     imgPicker.value = "";
   });
 }
 const attachBtn = document.getElementById("attachBtn");
 if (attachBtn && imgPicker) {
-  attachBtn.addEventListener("click", () => imgPicker.click());
+  attachBtn.addEventListener("click", () => {
+    if (isSwitching()) return;
+    imgPicker.click();
+  });
 }
 // Guard по конвенции файла (imgPicker/attachBtn выше): без #inp (чужой
 // тестовый DOM) модуль обязан импортироваться, а не падать на top-level.
 if (inp) {
   inp.addEventListener("paste", (e) => {
+    if (isSwitching()) {
+      e.preventDefault();
+      return;
+    }
     const items = e.clipboardData && e.clipboardData.items;
     if (!items) return;
     const files: File[] = [];
     for (const it of items) {
-      if (it.kind === "file" && it.type && it.type.indexOf("image/") === 0) {
+      if (it.kind === "file" && it.type && BITMAP_MIME_RE.test(it.type)) {
         const f = it.getAsFile();
         if (f) files.push(f);
       }
@@ -145,6 +160,7 @@ if (inputArea) {
   inputArea.addEventListener("drop", (e) => {
     e.preventDefault();
     inputArea.classList.remove("dragover");
+    if (isSwitching()) return;
     const de = e as DragEvent;
     const dt = de.dataTransfer;
     if (!dt) return;

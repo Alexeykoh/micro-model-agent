@@ -30,6 +30,7 @@ export const CONFIG_DOMAINS: Record<string, (keyof AppConfig)[]> = {
     "maxToolIterations",
     "stuckThreshold",
     "autoPlan",
+    "promptProfile",
     "execution",
     "showReasoning",
     "logLevel",

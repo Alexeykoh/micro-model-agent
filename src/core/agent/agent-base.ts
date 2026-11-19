@@ -11,9 +11,10 @@ import type { ToolResult } from "../../tools/types";
 import type { ReasoningState } from "../../tools/set-thinking";
 import type { CostTracker } from "../../modules/pricing/index";
 import { CostTracker as CostTrackerCtor } from "../../modules/pricing/index";
+import { providerReasoningSnapshot, type ProviderReasoningSnapshot } from "./provider-snapshot";
 import { createPolicyState, type PolicyState } from "../../modules/reasoning/policy";
 import { ContextRenderer } from "./context-renderer";
-import type { PromptBlockKind, PromptProfile } from "../types";
+import type { PromptProfile } from "../types";
 import type { AgentDeps } from "./deps";
 import {
   getProviderFor as phaseGetProviderFor,
@@ -25,16 +26,21 @@ import {
   type ProviderPhaseHost,
   type ReconfigureOptions,
 } from "./provider-phase";
+import { discoverCapabilities } from "./provider-probes";
+import { retryReasoningDiscovery } from "./reasoning-reprobe";
 import {
   buildSystemPrompt as phaseBuildSystemPrompt,
-  getSystemPromptInfo as phaseGetSystemPromptInfo,
-  logContextStat as phaseLogContextStat,
   refreshSystemPrompt as phaseRefreshSystemPrompt,
   resolvePromptOverflowOnce as phaseResolvePromptOverflowOnce,
   type PromptPhaseHost,
-  type SystemPromptInfo,
 } from "./prompt-phase";
+import {
+  getSystemPromptInfo as phaseGetSystemPromptInfo,
+  logContextStat as phaseLogContextStat,
+  type SystemPromptInfo,
+} from "./prompt-info";
 import type { SessionLogger } from "../session-logger";
+import { applyClientTz } from "../system-prompt";
 import {
   applyReasoningLevel,
   callerProvenance,
@@ -42,6 +48,7 @@ import {
   optionalToolContext,
   promptBlocksForTest,
   pushPromptBlock,
+  reloadInstructionBlocks,
   removePromptBlock,
   requireToolContext,
   runToolByName,
@@ -66,9 +73,9 @@ export class AgentBase {
   protected _currentIteration = 0;
   /** Профиль системного промпта (S-04); job-ход ставит `service-job`. */
   promptProfile: PromptProfile = "full";
-  /** Kind → блок-замена для instructions/project-map сверх бюджета (резолв раз до первого LLM-вызова). */
+  /** Имя источника → блок-замена для сверхбюджетных инструкций/карты. */
   // biome-ignore lint/correctness/noUnusedPrivateClassMembers: читается через PromptPhaseHost
-  private promptOverrides = new Map<PromptBlockKind, PromptBlock>();
+  private promptOverrides = new Map<string, PromptBlock>();
   /** Идентичность, против которой гонялась проба. Сравнение ПО ЗНАЧЕНИЮ: все
    *  write-пути мутят живой конфиг in place и передают ТОТ ЖЕ объект в
    *  `reconfigure` — сравнение объектов изменения бы не увидело. Сидируется
@@ -134,19 +141,27 @@ export class AgentBase {
   }
 
   /** Стратегия reasoning, реально применённая к активному провайдеру. */
-  providerReasoningSnapshot(): {
-    strategy?: import("../../config/types").ReasoningStrategy;
-    levels?: string[] | null;
-    reasoningOff?: boolean;
-    reachable?: boolean;
-  } {
-    const ref = this.deps.capabilitiesProbeRef;
-    return {
-      strategy: ref?.reasoningStrategy,
-      levels: ref?.reasoningLevels ?? null,
-      reasoningOff: ref?.reasoningOff,
-      reachable: ref?.reachable,
-    };
+  providerReasoningSnapshot(): ProviderReasoningSnapshot {
+    return providerReasoningSnapshot(this.deps);
+  }
+
+  /**
+   * Переспрашивает бэкенд, если стартовая проба не узнала механизм reasoning
+   * у холодной модели. При успехе пересобирает провайдера, чтобы селектор и
+   * реальные запросы пользовались одним резолвом (INV-R8).
+   */
+  async refreshProviderCapabilities(onUpdated?: () => void): Promise<boolean> {
+    const updated = await retryReasoningDiscovery(
+      this.deps,
+      this.deps.config,
+      discoverCapabilities,
+    );
+    if (updated) {
+      if (this.deps.reasoningStrategy === "none") this.probePassed = false;
+      await this.reconfigure(this.deps.config, { probe: false });
+      onUpdated?.();
+    }
+    return updated;
   }
 
   /**
@@ -186,9 +201,28 @@ export class AgentBase {
     removePromptBlock(this.deps, block);
   }
 
+  /** Мягкий reload `AGENTS.md` без перезапуска (реализация — `surface.ts`). */
+  reloadInstructions(blocks: readonly PromptBlock[]): number {
+    return reloadInstructionBlocks(
+      this.deps,
+      this.promptOverrides,
+      () => this.refreshSystemPrompt(),
+      blocks,
+    );
+  }
+
   /** Тестовый вид текущих блоков промпта. */
   getPromptBlocksForTest(): PromptBlock[] {
     return promptBlocksForTest(this.deps);
+  }
+
+  /**
+   * Ставит часовой пояс клиента (B18b): веб-пул зовёт перед каждым ходом.
+   * Пересборка статики — только при смене (иначе рвём prefix-cache впустую).
+   * @returns true — статика пересобрана.
+   */
+  setClientTz(tz: import("../prompt-facts").ClientTz | undefined): boolean {
+    return applyClientTz(this.deps, tz);
   }
 
   /** Общий ToolContext (бросает, если bootstrap его не дал). */

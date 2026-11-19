@@ -100,6 +100,15 @@ describe("registry keys", () => {
     expect(cfg.ui.fontSize).toBe("large");
   });
 
+  it("defaults ui.draftMode to live and validates it", () => {
+    const cfg = freshCfg();
+    expect(cfg.ui.draftMode).toBe("live");
+    expect(setConfigValue(cfg, "ui.draftMode", "after-review").ok).toBe(true);
+    expect(cfg.ui.draftMode).toBe("after-review");
+    expect(setConfigValue(cfg, "ui.draftMode", "never").ok).toBe(false);
+    expect(cfg.ui.draftMode).toBe("after-review");
+  });
+
   it("defaults the web theme to console/auto and validates both keys", () => {
     const cfg = freshCfg();
     expect(cfg.ui.theme).toBe("console");

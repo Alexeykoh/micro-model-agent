@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { tmpdir } from "os";
 import { join } from "path";
 import { buildEvidencePack, isWorkMutation } from "../src/modules/critic/evidence";
+import { renderPack } from "../src/modules/critic/client-render";
 
 function gitAvailable(): boolean {
   try {
@@ -38,18 +39,21 @@ describe("critic evidence", () => {
     expect(pack.toolDigest.split("\n")).toHaveLength(3);
   });
 
-  it("attaches bash and failure outputs to digest and commands", () => {
+  it("attaches bash, failure and read_file outputs to digest", () => {
     const pack = buildEvidencePack({
       task: "run tests",
       toolEvents: [
         { tool: "bash", args: { command: "bun test" }, ok: false, output: "FAIL foo\n1 fail" },
         { tool: "read_file", args: { path: "src/a.ts" }, ok: true, output: "export const a = 1;" },
+        { tool: "write_file", args: { path: "src/b.ts" }, ok: true, output: "export const b = 2;" },
       ],
     });
     expect(pack.toolDigest).toContain("FAIL foo");
     expect(pack.commands[0].output).toContain("FAIL foo");
-    // Successful non-bash output stays out of the digest (budget).
-    expect(pack.toolDigest).not.toContain("export const a");
+    // read_file — единственный успешный не-bash вывод в дайджесте: без него
+    // критик не отличает «прочитано» от «файла нет».
+    expect(pack.toolDigest).toContain("export const a");
+    expect(pack.toolDigest).not.toContain("export const b");
   });
 
   describe("file excerpts", () => {
@@ -101,6 +105,16 @@ describe("critic evidence", () => {
     it("omits the excerpt without answer text", () => {
       const pack = buildEvidencePack({ task: "fix bug", toolEvents: [] });
       expect(pack.answerExcerpt).toBeUndefined();
+    });
+
+    it("marks CONFIG DIR as valid config evidence outside workspace", () => {
+      const pack = buildEvidencePack({
+        task: "show provider config",
+        configDir: "/config",
+        toolEvents: [{ tool: "read_file", args: { path: "/config/config/provider.json" }, ok: true, output: "{}" }],
+      });
+      expect(pack.configDir).toBe("/config");
+      expect(renderPack(pack)).toContain("CONFIG DIR: /config");
     });
 
     it("caps length and redacts recognizable secrets", () => {

@@ -9,7 +9,7 @@ import { t } from "../../i18n/index";
 import { extractFileLikeTokens, stripUrls } from "../../core/hallucination/js-identifiers";
 import { findExistingFile } from "./auditor";
 import { stepTypecheckGate } from "./plugin-plan";
-import { isBehaviorStep, parseCheck } from "./plan-checks";
+import { needsBehaviorEvidence, parseCheck } from "./plan-checks";
 import type { PlanStep } from "./planner";
 import type { PlanTracker } from "./tracker";
 import type { PlanStore } from "./plan-store";
@@ -85,7 +85,7 @@ function checkContractHolds(d: StepAdvanceDeps, step: PlanStep): boolean {
   if (parsed.kind === "manual") {
     // `manual:` требует наблюдения (INV-G2); без заметки шаг не подтверждён —
     // auto-advance не вправе закрывать его молча (дефект C, причина 2).
-    if (!isBehaviorStep(step.description)) return true;
+    if (!needsBehaviorEvidence(step)) return true;
     return String(step.note || "").trim().length > 0;
   }
   if (parsed.kind === "file") {

@@ -4,19 +4,24 @@
 // реэкспортированы ниже — внешние импорты не меняются.
 import type { Server, ServerResponse } from "node:http";
 import type { Host } from "../../core/host";
+import type { WebDaemonHost } from "./daemon-contracts";
 import type { UsageSnapshot } from "../../core/host-state";
-import { RunPool } from "./session/session-pool";
+import { RunPool } from "../../runtime/run-pool/run-pool";
 import type { SetupDisplay } from "../setup/answers";
 import { SubagentRunStore } from "./session/subagent-runs";
 import { MAX_BODY_BYTES } from "./limits";
 import { readEnv } from "../../config/env";
-import type { WebUiWiring } from "./state-contracts";
+import type { ToolOverrideSet, WebUiWiring } from "./state-contracts";
 
 export type { QueuedMessage, WebSessionManager } from "./state-session";
 export type {
+  ToolOverrideSet,
   WebPluginManager,
+  WebReloadReport,
   WebSkillInfo,
   WebSkillsModule,
+  WebToolInfo,
+  WebToolView,
   WebUiAssets,
   WebUiWiring,
 } from "./state-contracts";
@@ -38,6 +43,8 @@ export interface WebUiState extends WebUiWiring {
   token: string | null;
   clients: Set<ServerResponse>;
   bridge: Host | null;
+  /** Режим `mma web --daemon`: браузерный API проксируется в демон. */
+  daemon?: WebDaemonHost;
   /**
    * Агрегат занятости: true, пока бежит ХОТЬ ОДИН ход (владелец — пул).
    * Per-session busy — в пуле (`pool.isBusy`), бейджи вкладок — из
@@ -101,6 +108,11 @@ export interface WebUiState extends WebUiWiring {
    * `cancelPendingQuestions` дренирует мапу на interrupt/shutdown.
    */
   pendingQuestions: Map<string, import("./session/prompt-io").PendingQuestion>;
+  /**
+   * Ручные per-session on/off тулов (панель Tools). Живут в процессе: после
+   * перезапуска сбрасываются к базовому tag-набору.
+   */
+  toolOverrides: Map<string, ToolOverrideSet>;
   /**
    * True для virgin-конфига (`runWeb` вычислил `virgin`): сначала браузерный
    * визард, потом чат. Принуждается сервером — `/api/message` и `/api/command`
@@ -170,9 +182,12 @@ export type ConfigStore = Pick<
   | "saveConfig"
   | "reconfigure"
   | "knownModels"
+  | "knownModelsState"
+  | "knownModelsRefresh"
   | "knownModelsFor"
   | "providerReachable"
   | "providerReasoning"
+  | "refreshProviderCapabilities"
 >;
 
 /** Роль: рабочее окружение и настройки (workspace, память, скиллы, плагины, LSP, setup). */
@@ -196,6 +211,9 @@ export type WorkspaceStore = Pick<
   | "setup"
   | "setupRequired"
 >;
+
+/** Роль: панель Tools (сессионные on/off + каталог тулов). */
+export type ToolStore = Pick<WebUiState, "toolOverrides" | "toolCatalog">;
 
 /** Только положительный int; мусор даёт фолбэк 5. */
 export function parseMaxClients(raw: string | undefined): number {
@@ -223,6 +241,7 @@ export function createWebUiState(): WebUiState {
     maxBodyBytes: MAX_BODY_BYTES,
     maxClients: parseMaxClients(readEnv("WEBUI_MAX_CLIENTS")),
     pendingQuestions: new Map(),
+    toolOverrides: new Map(),
     setupRequired: false,
     sessionUsage: {},
     subagentRuns: new SubagentRunStore(),

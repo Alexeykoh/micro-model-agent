@@ -14,6 +14,7 @@ import { PluginLoader } from "../../modules/plugins/loader";
 import { plugin as angular11Plugin } from "../../modules/plugins/builtin/angular11";
 import { plugin as lintOnWritePlugin } from "../../modules/plugins/builtin/lint-on-write";
 import { plugin as notifyPlugin } from "../../modules/plugins/builtin/notify";
+import { plugin as telegramNotifyPlugin } from "../../modules/plugins/builtin/telegram-notify";
 import { ExecutionModule } from "../../modules/execution/module";
 import { SessionModule } from "../../modules/session/index";
 import { BrowserModule } from "../../modules/browser/index";
@@ -83,7 +84,7 @@ export async function setupModulesPhase(input: ModulesPhaseInput): Promise<Modul
   // shouldAutocreateSession — тот же гейт, что запрещает им создавать сессию
   // (A-01): он false только для подкоманд, которым не нужен диалог.
   if (shouldAutocreateSession()) {
-    dryRunStartupOverflow(input, promptBlocks);
+    dryRunStartupOverflow(input, promptBlocks, core.sessionModule);
   }
 
   // План-блок удалён: мутирует каждую итерацию (статусы шагов), инвалидируя
@@ -226,7 +227,7 @@ function registerModuleToolsAndPlugins(input: ModulesPhaseInput, moduleHost: Mod
     registerBuiltinPlugin(pluginManager, plugin);
   }
 
-  for (const builtin of [angular11Plugin, lintOnWritePlugin, notifyPlugin])
+  for (const builtin of [angular11Plugin, lintOnWritePlugin, notifyPlugin, telegramNotifyPlugin])
     pluginManager.register(builtin);
 
   const pluginLoader = new PluginLoader();

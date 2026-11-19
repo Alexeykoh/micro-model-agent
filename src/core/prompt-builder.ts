@@ -26,6 +26,13 @@ export interface BuildResult {
   excludedBlocks: PromptBlock[];
   /** Поблочная разбивка — логирует реальный состав системного промпта. */
   blocks: BlockBuildInfo[];
+  /** Сумма токенов essential-блоков (они включаются всегда, B3). */
+  essentialTokens: number;
+  /**
+   * Essential-блоки сами рвут бюджет: история будет зажата, а молчать
+   * нельзя — вызывающий обязан предупредить пользователя (B3).
+   */
+  essentialOverBudget: boolean;
 }
 
 const PRIORITY_ORDER: Record<string, number> = {
@@ -36,18 +43,36 @@ const PRIORITY_ORDER: Record<string, number> = {
 };
 
 /**
+ * Числовой ранг приоритета. Неизвестный (опечатка плагина/скилла) — как
+ * `normal`, а не `undefined`: иначе разность даёт NaN и порядок сортировки
+ * негарантирован (B15) — бюджет начинал выбрасывать случайные блоки.
+ */
+function priorityRank(priority: string): number {
+  return PRIORITY_ORDER[priority] ?? PRIORITY_ORDER.normal;
+}
+
+/**
  * Убирает блоки, которым нужен неактивный тег тулов (напр. `browser`).
  * Пустой/неизвестный набор — legacy-режим «все тулы», блоки не фильтруются.
+ * B12: при суженном наборе (allowlist) тег может быть «активен», но ни один
+ * его тул не попал в схему LLM — такие блоки тоже убираются. Передай
+ * `visibleTags` (теги тулов реальной схемы, напр. `executor.getVisibleTags()`),
+ * иначе проверка идёт только по `activeTags`.
  */
 export function filterBlocksForTags(
   blocks: PromptBlock[],
   activeTags: string[] | undefined,
+  visibleTags?: Set<string> | string[],
 ): PromptBlock[] {
   if (!activeTags || activeTags.length === 0) return blocks;
   const active = new Set(activeTags);
-  return blocks.filter(
-    (block) => !block.requiresTags?.length || block.requiresTags.some((tag) => active.has(tag)),
-  );
+  const visible = visibleTags ? new Set(visibleTags) : undefined;
+  return blocks.filter((block) => {
+    if (!block.requiresTags?.length) return true;
+    if (!block.requiresTags.some((tag) => active.has(tag))) return false;
+    if (visible) return block.requiresTags.some((tag) => visible.has(tag));
+    return true;
+  });
 }
 
 /**
@@ -66,26 +91,47 @@ function blockLabel(block: PromptBlock): string {
 /**
  * Заметка о блоках, выброшенных по бюджету (INV-6/17). `instructions` и
  * `project-map` обрабатывает резолвер переполнения отдельно — их не дублируем.
+ *
+ * B4: заметка — `essential`, т.е. влезает всегда; чтобы она не выталкивала
+ * историю сверх бюджета, вызывающий передаёт остаток (`remainingTokens`).
+ * Не помещается полный перечень — режем его до одной строки с количеством.
  * @param excludedBlocks блоки, не вошедшие в промпт.
+ * @param remainingTokens свободный остаток системного бюджета (undefined — без лимита).
  * @returns essential-блок с причиной или null, если сообщать нечего.
  */
-export function omittedBlocksNote(excludedBlocks: PromptBlock[]): PromptBlock | null {
+export function omittedBlocksNote(
+  excludedBlocks: PromptBlock[],
+  remainingTokens?: number,
+): PromptBlock | null {
   const relevant = excludedBlocks.filter((block) => !block.kind);
   if (relevant.length === 0) return null;
+
+  const build = (lines: string[]): PromptBlock => {
+    const content = lines.join("\n");
+    return {
+      source: "core",
+      label: "omitted blocks",
+      content,
+      priority: "high",
+      essential: true,
+      estimatedTokens: estimateTokens(content),
+    };
+  };
+
   const lines = [`[Prompt note] Omitted due to the system-prompt budget:`];
   for (const block of relevant.slice(0, 5)) {
     lines.push(`- ${blockLabel(block)}: ${block.estimatedTokens} tok`);
   }
   if (relevant.length > 5) lines.push(`- +${relevant.length - 5} more`);
-  const content = lines.join("\n");
-  return {
-    source: "core",
-    label: "omitted blocks",
-    content,
-    priority: "high",
-    essential: true,
-    estimatedTokens: estimateTokens(content),
-  };
+  const full = build(lines);
+
+  if (remainingTokens === undefined || full.estimatedTokens <= remainingTokens) return full;
+
+  // Не влезает: одна строка «сколько всего выброшено» вместо перечня.
+  const compact = build([
+    `[Prompt note] ${relevant.length} block(s) omitted due to the system-prompt budget.`,
+  ]);
+  return compact.estimatedTokens <= remainingTokens ? compact : null;
 }
 
 /**
@@ -127,7 +173,7 @@ export class PromptBuilder {
     const essential = this.blocks.filter((block) => block.essential);
     const nonEssential = this.blocks
       .filter((block) => !block.essential)
-      .sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]);
+      .sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority));
     // Стабильный префикс → per-turn → волатильный хвост. Essential-tail
     // (план) — последним: он меняется на каждом шаге.
     const ordered = [
@@ -142,6 +188,10 @@ export class PromptBuilder {
     const excluded: string[] = [];
     const excludedBlocks: PromptBlock[] = [];
     const blocks: BlockBuildInfo[] = [];
+    const essentialTokens = this.blocks
+      .filter((block) => block.essential)
+      .reduce((sum, block) => sum + block.estimatedTokens, 0);
+    const essentialOverBudget = essentialTokens > this.budget;
 
     for (const block of ordered) {
       const tokens = block.estimatedTokens;
@@ -150,6 +200,9 @@ export class PromptBuilder {
       if (fits) {
         included.push(block.content);
         usedTokens += tokens;
+        if (essentialOverBudget && block.essential && !reason) {
+          reason = `essential over budget: ${essentialTokens} tok > ${this.budget} tok`;
+        }
       } else {
         excluded.push(block.content);
         excludedBlocks.push(block);
@@ -171,6 +224,8 @@ export class PromptBuilder {
       excluded,
       excludedBlocks,
       blocks,
+      essentialTokens,
+      essentialOverBudget,
     };
   }
 }

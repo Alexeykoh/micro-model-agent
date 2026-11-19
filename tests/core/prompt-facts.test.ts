@@ -8,6 +8,7 @@ import {
   fallbackPromptFacts,
   localNow,
 } from "../../src/core/prompt-facts";
+import { buildSystemInfo } from "../../src/core/system-prompt-render";
 import { DEFAULTS } from "../../src/config/defaults";
 
 function tempDir(): string {
@@ -85,13 +86,34 @@ describe("prompt facts: safe fallback", () => {
   it("does not claim tools that were not probed", () => {
     const f = fallbackPromptFacts(structuredClone(DEFAULTS), "/tmp", "linux");
     expect(f.tools).toEqual({ bun: "unknown", git: "unknown", python: "unknown" });
-    expect(f.platform).toBe("linux");
-    expect(f.shell).toBe("sh");
+  });
+
+  it("derives platform from the machine, not the profile text (B7)", () => {
+    const f = fallbackPromptFacts(structuredClone(DEFAULTS), "/tmp", "definitely-win32-darwin");
+    const expected =
+      process.platform === "win32"
+        ? "win32"
+        : process.platform === "darwin"
+          ? "darwin"
+          : process.platform === "linux"
+            ? "linux"
+            : "unknown";
+    expect(f.platform).toBe(expected);
+    expect(f.shell).toBe(expected === "win32" ? "cmd" : expected === "unknown" ? "unknown" : "sh");
   });
 
   it("renders local time with an offset", () => {
     const now = localNow(new Date("2026-10-31T12:34:56Z"));
     expect(now.iso).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [+-]\d{2}:\d{2}/);
     expect(now.timeZone.length).toBeGreaterThan(0);
+  });
+
+  it("puts the config dir into the system prompt", () => {
+    const facts = {
+      ...fallbackPromptFacts(structuredClone(DEFAULTS), "/workspace", "linux"),
+      configDir: "/config",
+    };
+    const text = buildSystemInfo(structuredClone(DEFAULTS), "/workspace", "", facts);
+    expect(text).toContain("Config dir: /config (env MMA_CONFIG_DIR).");
   });
 });

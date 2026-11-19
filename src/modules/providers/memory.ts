@@ -35,7 +35,10 @@ export function syncProviderModelMemory(config: AppConfig, key: string, value: u
   }
   if (key === "provider.active") {
     const remembered = provider.models?.[String(value)];
-    if (remembered) config.model = remembered;
+    // INV-P1: активная модель принадлежит активному провайдеру. Нет памяти —
+    // модель не выбрана, а не «унаследована» от прошлого бэкенда (чужой id
+    // уезжал в запросы и рисовался в карточке как рабочая модель).
+    config.model = remembered ?? "";
     mirrorActiveEntryFields(provider, String(value));
   }
 }

@@ -1,6 +1,8 @@
 /** Тул shell-команд: автофон, редирект tool-call, хинты Windows, мемо read-only. */
 import type { ToolDefinition, ToolContext } from "./types";
 import { isCommandAllowed, sanitizeCommandForLog } from "../modules/security/command-validator";
+import { blockAlternativeHint } from "../modules/security/block-alternatives";
+import { sensitiveCommandReason } from "../modules/security/sensitive-paths";
 import { logBashCommand, logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
 import { assertWorkdirAllowed, echoWriteHint, posixWorkdirHint } from "./path-guards";
@@ -110,6 +112,23 @@ export const bashTool: ToolDefinition = {
 
     const command = adaptCommandForWindows(originalCommand);
 
+    // Секреты конфига и исходники агента не читаются и через shell: валидатор
+    // команд проверяет имена, но не абсолютные пути. Это мягкий барьер, не
+    // sandbox; настоящая граница — отдельный пользователь/контейнер.
+    const sensitive = sensitiveCommandReason(originalCommand, ctx.baseDir);
+    if (sensitive) {
+      logSecurityBlock(
+        ctx.sessionId,
+        "bash_command",
+        `Sensitive path: ${sensitive}`,
+        sanitizeCommandForLog(originalCommand),
+      );
+      return {
+        success: false,
+        output: `[SECURITY BLOCKED] ${sensitive} is not accessible from the agent shell.`,
+      };
+    }
+
     // Discovery скрытых тулов: при сужении набора process_* невидимы модели, и
     // прогон через cmd.exe даёт лишь "is not recognized" — указать на enable_tools.
     const baseCmd = originalCommand.trim().split(/\s+/)[0];
@@ -175,9 +194,10 @@ export const bashTool: ToolDefinition = {
         sanitizeCommandForLog(originalCommand),
       );
 
+      const alternative = blockAlternativeHint(validation.reason ?? "");
       return {
         success: false,
-        output: `[SECURITY BLOCKED] Command is not allowed: ${validation.reason}\nHint: run one plain command per tool call. For output redirection write the file with write_file; for chaining run separate calls; use the "workdir" parameter instead of "cd dir && cmd". Do NOT write a wrapper script (.bat/.cmd/.sh/.ps1) to bypass this — the same rule applies when that script runs.`,
+        output: `[SECURITY BLOCKED] Command is not allowed: ${validation.reason}\n${t("bash.block_hint_base")}${alternative ? `\nAlternative: ${alternative}` : ""}`,
       };
     }
 

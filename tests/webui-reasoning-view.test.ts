@@ -11,7 +11,7 @@ import {
   rememberReasoningMechanism,
 } from "../src/modules/reasoning/probe";
 import { createWebUiState } from "../src/modules/webui/state";
-import { withServer, doFetch } from "./helpers/webui-server";
+import { withServer, doFetch, postJson } from "./helpers/webui-server";
 
 process.env.MMA_REASONING_CACHE = join(tmpdir(), `mma-reasoning-test-${process.pid}.json`);
 
@@ -111,6 +111,20 @@ describe("buildReasoningView", () => {
     expect(view.levels).toEqual(["none"]);
   });
 
+  it("offers 'none' for template-kwarg without declared effort levels", () => {
+    const config = testConfig();
+    config.provider.type = "openai-compat";
+    config.provider.baseUrl = "http://host.docker.internal:8080/v1";
+    config.model = "toggle-only-model";
+    const view = buildReasoningView(config, {
+      reachable: true,
+      strategy: "template-kwarg",
+      reasoningOff: true,
+      levels: null,
+    });
+    expect(view.levels).toEqual(["none"]);
+  });
+
   it("hides reasoning options when the active endpoint is unreachable", () => {
     const config = testConfig();
     config.provider.type = "lmstudio";
@@ -157,6 +171,105 @@ describe("GET /api/models reasoning shape", () => {
         mode: "auto",
         levels: null,
       });
+    });
+  });
+
+  it("includes resolved vision/video/audio/pdf/tools capabilities for the chip", async () => {
+    const s = createWebUiState();
+    s.knownModels = () => ["qwen3.8-27b"];
+    const config = testConfig();
+    config.provider.type = "openai-compat";
+    config.provider.baseUrl = "http://host.docker.internal:8080/v1";
+    config.model = "qwen3.8-27b";
+    s.config = config;
+    s.providerReasoning = () => ({
+      strategy: "openai-effort",
+      reachable: true,
+      vision: true,
+      video: true,
+      audio: false,
+      pdf: false,
+      tools: true,
+    });
+    await withServer(s, async (base) => {
+      const res = await doFetch(`${base}/api/models`);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body.capabilities).toEqual({
+        vision: true,
+        video: true,
+        audio: false,
+        pdf: false,
+        tools: true,
+      });
+    });
+  });
+
+  it("returns the new model's capabilities right in the switch reply", async () => {
+    // Stale icons are a lie: the switch response itself must carry the pair's
+    // fresh capabilities, not leave the chip on the previous model until SSE.
+    const s = createWebUiState();
+    const config = testConfig();
+    config.provider.type = "openai-compat";
+    config.provider.baseUrl = "http://host.docker.internal:8080/v1";
+    config.model = "old-model";
+    s.config = config;
+    s.saveConfig = () => {};
+    s.providerReasoning = () => ({ vision: true, video: true, tools: true });
+    s.reconfigure = () => {
+      config.model = "new-model";
+    };
+
+    await withServer(s, async (base) => {
+      const res = await postJson(base, "/api/config", { key: "model", value: "new-model" });
+      expect(res.status).toBe(200);
+      expect(res.json.capabilities).toEqual({
+        vision: true,
+        video: true,
+        audio: false,
+        pdf: false,
+        tools: true,
+      });
+    });
+  });
+
+  it("retries cold-model capability discovery on a read", async () => {
+    const s = createWebUiState();
+    s.knownModels = () => ["deepseek-v4-pro-9b"];
+    s.knownModelsState = () => ({ models: ["deepseek-v4-pro-9b"], loading: false });
+    const config = testConfig();
+    config.provider.type = "openai-compat";
+    config.provider.baseUrl = "http://host.docker.internal:8080/v1";
+    config.model = "deepseek-v4-pro-9b";
+    s.config = config;
+    let refreshes = 0;
+    s.refreshProviderCapabilities = async () => {
+      refreshes++;
+      return false;
+    };
+    s.providerReasoning = () => ({
+      strategy: "prompt-tag",
+      reachable: true,
+      needsReprobe: true,
+    });
+
+    await withServer(s, async (base) => {
+      const res = await doFetch(`${base}/api/models`);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(refreshes).toBe(1);
+      expect(body.reasoning).toBeDefined();
+    });
+  });
+
+  it("does not invent capabilities when the probe is not wired", async () => {
+    const s = createWebUiState();
+    s.knownModels = () => ["m"];
+    const config = testConfig();
+    s.config = config;
+    await withServer(s, async (base) => {
+      const res = await doFetch(`${base}/api/models`);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body.capabilities).toBeUndefined();
     });
   });
 });

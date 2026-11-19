@@ -2,6 +2,7 @@
 // Единый источник правды: PluginManager отдаёт `PluginRecord[]`, а `mma plugins list`,
 // `/plugins` и веб-вкладка не собирают вид по полям сами (было — `enabled: true` хардкодом).
 import type { AgentPlugin, PluginPermission } from "../types";
+import { canHaveSettings, isBuiltinWithSettings, pluginSettingsDefs } from "./settings-store";
 
 export type { PluginPermission, PluginProvides } from "../types";
 
@@ -30,6 +31,8 @@ export interface PluginRecord {
   draft: boolean;
   /** Выключен пользователем (`config.plugins.disabled`). */
   enabled: boolean;
+  /** Есть подстраница настроек: валидная схема + файл рядом с плагином. */
+  hasSettings: boolean;
   /** Абсолютный путь к файлу плагина (для внешних). */
   path?: string;
   loadedAt?: number;
@@ -201,6 +204,9 @@ export function buildRecord(
     system: plugin.system === true,
     draft: isDraftPath(path),
     enabled: opts.enabled,
+    hasSettings:
+      (canHaveSettings(plugin) || isBuiltinWithSettings(plugin)) &&
+      pluginSettingsDefs(plugin).length > 0,
     path,
     loadedAt: opts.loadedAt,
     provides: {

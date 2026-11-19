@@ -66,7 +66,11 @@ function makeState(): { state: WebUiState; dir: string } {
     isBusy: () => false,
     submit: () => Promise.resolve(),
     interrupt: () => {},
-    getState: () => ({ busy: false }),
+    getState: async () => ({ busy: false }),
+    subscribeEvents: () => () => {},
+    getConfig: async () => ({ config: {}, version: 0 }),
+    listModels: async () => ({ models: [] }),
+    setConfig: async () => ({ ok: true, persisted: true }),
     executeCommand: () => Promise.resolve(),
   };
   state.bridge = bridge;

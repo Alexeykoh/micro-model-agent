@@ -1,8 +1,8 @@
-// Live generation speed for the composer rail (tok/s). The number is always an
-// estimate from streamed characters: exact per-call usage arrives only when the
-// call ends, and the final per-turn number lives in the `llmSpeed` snapshot
-// (chip above the input). Per-session: background tabs must not feed the active
-// tab's rail.
+// Generation speed for the composer chip (tok/s) — the only place the number is
+// rendered. While a turn streams the value is an estimate from streamed
+// characters; exact per-call usage arrives when the call ends and the final
+// per-turn number lives in the `llmSpeed` snapshot. Per-session: background tabs
+// must not feed the active tab's chip.
 import { t } from "./i18n.js";
 
 /** Rolling window for the live estimate. */
@@ -78,14 +78,6 @@ export function speedView(id: string | null | undefined, now = Date.now()): Spee
   const span = Math.max(now - e.samples[0].at, 250);
   const value = chars / CHARS_PER_TOKEN / (span / 1000);
   return value > 0 ? { value, estimated: true } : null;
-}
-
-/** tok/s for a reasoning block from its accumulated streamed chars. */
-export function thinkRate(chars: number, elapsedMs: number): number | null {
-  if (!chars || chars <= 0 || elapsedMs <= 0) return null;
-  const span = Math.max(elapsedMs, 250);
-  const value = chars / CHARS_PER_TOKEN / (span / 1000);
-  return value > 0 ? value : null;
 }
 
 /** One formatter for the rail and the final chip. */

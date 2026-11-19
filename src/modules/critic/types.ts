@@ -47,6 +47,8 @@ export type CriticRunCheck = (
 export interface EvidencePack {
   task: string;
   planSummary?: string;
+  /** Каталог конфига (вне workspace): валидная улика для config-задач. */
+  configDir?: string;
   /** Незакрытые шаги плана (кап 8; рендер добавляет «+N more»). */
   planPendingSteps?: string[];
   planPendingStepsTotal?: number;

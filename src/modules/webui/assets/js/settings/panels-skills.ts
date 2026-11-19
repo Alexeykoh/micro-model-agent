@@ -43,20 +43,65 @@ export function renderSkillsPanel(): void {
     return;
   }
   const isBuiltin = (s: Dict): boolean => s.kind === "builtin";
-  const groups = [
-    { title: t("web.settings.skills_section_builtin"), items: settings.skills.filter(isBuiltin) },
-    {
-      title: t("web.settings.skills_section_external"),
-      items: settings.skills.filter((s: Dict) => !isBuiltin(s)),
-    },
+  const all = settings.skills as Dict[];
+  const builtinCount = all.filter(isBuiltin).length;
+
+  const search = el("input", "searchbox");
+  search.placeholder = t("web.settings.search_skills");
+  search.setAttribute("aria-label", t("web.settings.search_skills"));
+  container.appendChild(search);
+
+  let filter = "all";
+  const filters = el("div", "mem-filters");
+  const filterDefs: Array<[string, string, number]> = [
+    ["all", t("web.settings.skills_filter_all"), all.length],
+    ["builtin", t("web.settings.skills_filter_builtin"), builtinCount],
+    ["external", t("web.settings.skills_filter_external"), all.length - builtinCount],
   ];
+  const filterButtons = new Map<string, HTMLElement>();
+  filterDefs.forEach(([key, label, count]) => {
+    const btn = el("button", "mem-filter", `${label} ${count}`);
+    btn.type = "button";
+    btn.classList.toggle("on", key === filter);
+    btn.addEventListener("click", () => {
+      filter = key;
+      filterButtons.forEach((b, k) => b.classList.toggle("on", k === key));
+      draw();
+    });
+    filters.appendChild(btn);
+    filterButtons.set(key, btn);
+  });
+  container.appendChild(filters);
+
   const list = el("div", "settings-list");
-  for (const group of groups) {
-    if (!group.items.length) continue;
-    list.appendChild(el("div", "skill-section", group.title));
-    for (const skill of group.items) list.appendChild(renderSkillItem(skill));
-  }
   container.appendChild(list);
+
+  const draw = (): void => {
+    list.textContent = "";
+    const q = search.value.trim().toLowerCase();
+    const matches = (s: Dict): boolean =>
+      (!q ||
+        String(s.name).toLowerCase().indexOf(q) !== -1 ||
+        String(s.source || "").toLowerCase().indexOf(q) !== -1) &&
+      (filter === "all" || (filter === "builtin" ? isBuiltin(s) : !isBuiltin(s)));
+    const groups = [
+      { title: t("web.settings.skills_section_builtin"), items: all.filter((s) => isBuiltin(s) && matches(s)) },
+      {
+        title: t("web.settings.skills_section_external"),
+        items: all.filter((s) => !isBuiltin(s) && matches(s)),
+      },
+    ];
+    let any = false;
+    for (const group of groups) {
+      if (!group.items.length) continue;
+      any = true;
+      list.appendChild(el("div", "skill-section", group.title));
+      for (const skill of group.items) list.appendChild(renderSkillItem(skill));
+    }
+    if (!any) list.appendChild(el("div", "placeholder", t("web.settings.no_matches")));
+  };
+  search.addEventListener("input", draw);
+  draw();
 }
 
 export async function loadSkills(): Promise<void> {

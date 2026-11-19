@@ -4,15 +4,21 @@ import { stopServer } from "../src/modules/webui/server";
 import { createWebUiState } from "../src/modules/webui/state";
 import { checkAuth } from "../src/modules/webui/util";
 import type { Host } from "../src/core/host";
+import { submitTurnFromHost } from "../src/modules/webui/session/turns";
 import { withServer, doFetch, postJson } from "./helpers/webui-server";
 
 
-function makeBridge(): Host {
+function makeBridge(s?: ReturnType<typeof createWebUiState>): Host {
   return {
     isBusy: () => false,
-    submit: () => Promise.resolve(),
+    submit: (text, opts) =>
+      s ? submitTurnFromHost(s, text, opts) : Promise.resolve(undefined),
     interrupt: () => {},
-    getState: () => ({ busy: false }),
+    getState: async () => ({ busy: false }),
+    subscribeEvents: () => () => {},
+    getConfig: async () => ({ config: {}, version: 0 }),
+    listModels: async () => ({ models: [] }),
+    setConfig: async () => ({ ok: true, persisted: true }),
     executeCommand: () => Promise.resolve(),
   };
 }
@@ -45,7 +51,7 @@ describe("webui auth + limits", () => {
   it("401 without a token on /api/state and /api/command; 200/202 via header or ?token=", async () => {
     const s = createWebUiState();
     s.token = "s3cret";
-    s.bridge = makeBridge();
+    s.bridge = makeBridge(s);
     await withServer(s, async (base) => {
       const stateDenied = await doFetch(`${base}/api/state`);
       expect(stateDenied.status).toBe(401);
@@ -77,7 +83,7 @@ describe("webui auth + limits", () => {
   it("403 on a cross-origin POST to /api/message", async () => {
     const s = createWebUiState();
     s.minPostIntervalMs = 0;
-    s.bridge = makeBridge();
+    s.bridge = makeBridge(s);
     await withServer(s, async (base) => {
       const res = await doFetch(`${base}/api/message`, {
         method: "POST",
@@ -103,7 +109,7 @@ describe("webui auth + limits", () => {
   it("queues /api/message when the session slot is already busy", async () => {
     const s = createWebUiState();
     s.minPostIntervalMs = 0;
-    s.bridge = makeBridge();
+    s.bridge = makeBridge(s);
     withRunner(s, ["A"]);
     s.pool.reserve("A");
     s.busy = true;
@@ -123,7 +129,7 @@ describe("webui auth + limits", () => {
   it("429 on a second /api/message within minPostIntervalMs", async () => {
     const s = createWebUiState();
     s.minPostIntervalMs = 60_000;
-    s.bridge = makeBridge();
+    s.bridge = makeBridge(s);
     withRunner(s, ["A"]);
     s.lastPostTs.set("A", Date.now());
     await withServer(s, async (base) => {
@@ -165,7 +171,11 @@ describe("webui auth + limits", () => {
       isBusy: () => false,
       submit: () => Promise.resolve(),
       interrupt: () => {},
-      getState: () => ({ busy: false }),
+      getState: async () => ({ busy: false }),
+    subscribeEvents: () => () => {},
+    getConfig: async () => ({ config: {}, version: 0 }),
+    listModels: async () => ({ models: [] }),
+    setConfig: async () => ({ ok: true, persisted: true }),
       executeCommand: (line) => {
         lines.push(line);
         return Promise.resolve();

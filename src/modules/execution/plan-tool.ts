@@ -2,7 +2,7 @@
 import type { ToolContext, ToolDefinition } from "../../tools/types";
 import type { NetworkSecurityConfig } from "../../config/types";
 import { t } from "../../i18n/index";
-import type { Plan, StepKind } from "./planner";
+import type { Plan, StepEvidence, StepKind } from "./planner";
 import type { PlanTracker } from "./tracker";
 import type { PlanStore } from "./plan-store";
 import type { StepVerifier } from "./verifier";
@@ -39,6 +39,12 @@ export interface PlanToolDeps {
     args: Record<string, unknown>,
     steps: string[],
   ): { checks: string[] | null; error: string | null; warnings: string[] };
+  /** Декларация класса доказательства (1:1 со steps). Необязательна для
+   *  back-compat тестов и старых планов: без неё шаги считаются static. */
+  parseEvidence?(
+    args: Record<string, unknown>,
+    steps: string[],
+  ): { evidence: StepEvidence[] | null; error: string | null };
   getTaskText(ctx: ToolContext | undefined): string;
   /** Модельно-видимое actionable-сообщение «нет активного плана». */
   noActivePlanMessage(): string;
@@ -67,7 +73,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
       icon: "📋",
       alwaysOn: true,
       description:
-        'Create, update, show, abort, list, switch, delete, purge, or re-plan multi-step plans.\n\nActions:\n- create: Start a new plan. Previous active plan is auto-preserved: incomplete → draft, complete → archive.\n- update: Mark step status (done/failed/skipped). To change the plan\'s steps use "re-plan" (keeps completed steps) or "create".\n- show: Print current plan checklist.\n- abort: Archive the current plan (or the plan given by id) and clear the active slot.\n- list: Show all plans (active, drafts, archived) with progress.\n- switch: Make a different plan active (by plan id).\n- re-plan: Iterative replanning: keep completed steps, replace remaining with new steps.\n- delete: Permanently delete a plan by id (plan delete id=plan_xxx).\n- purge: Delete ALL plans (active, drafts, archived).\n\nFor a new project, install dependencies before writing source and initialize the framework before app code.\n\nWrite CONCRETE steps with exact file paths and commands:\n- Specify WHICH files to create with exact paths (e.g. "create src/components/Header.tsx with navigation and logo")\n- Specify WHICH packages to install (e.g. "run npm install react react-dom")\n- Specify WHICH CLI commands to run with exact arguments\n- Each step should include at least one file extension (.ts, .tsx, .json, etc.) or a command verb (install, create, build, run, add, init)\n- Good: "Создать src/components/Header.tsx с навигацией и логотипом"\n- Bad: "Настройка проекта" (too vague — what exactly needs to be configured?)\n- Steps that REMOVE files need no extra flag: create/delete intent is detected automatically from what the agent actually does.\n- Every step may carry a verification contract: pass "checks" aligned 1:1 with "steps". Each check is "file-exists:<path>" (verified automatically on done), "file-modified:<path>" (verified automatically on done: content must differ from the snapshot at plan creation — use when editing an existing file), "command:<exact command>" (run it before done), "http:<url>[~marker]" or "browser:<url>[~marker]" (probe on done), "web-build:<dir>" (built CSS + non-empty index.html verified on done), or "manual:<what to check by eye>". Checks are RECOMMENDED, not required: omit them and each step self-certifies; a length mismatch is auto-repaired (missing steps get "manual:", extras are dropped). Example: steps ["Create src/a.ts with X"] + checks ["file-exists:src/a.ts"].',
+        'Create, update, show, abort, list, switch, delete, purge, or re-plan multi-step plans.\n\nActions:\n- create: Start a new plan. Previous active plan is auto-preserved: incomplete → draft, complete → archive.\n- update: Mark step status (done/failed/skipped). To change the plan\'s steps use "re-plan" (keeps completed steps) or "create".\n- show: Print current plan checklist.\n- abort: Archive the current plan (or the plan given by id) and clear the active slot.\n- list: Show all plans (active, drafts, archived) with progress.\n- switch: Make a different plan active (by plan id).\n- re-plan: Iterative replanning: keep completed steps, replace remaining with new steps.\n- delete: Permanently delete a plan by id (plan delete id=plan_xxx).\n- purge: Delete ALL plans (active, drafts, archived).\n\nFor a new project, install dependencies before writing source and initialize the framework before app code.\n\nWrite CONCRETE steps with exact file paths and commands:\n- Specify WHICH files to create with exact paths (e.g. "create src/components/Header.tsx with navigation and logo")\n- Specify WHICH packages to install (e.g. "run npm install react react-dom")\n- Specify WHICH CLI commands to run with exact arguments\n- Each step should include at least one file extension (.ts, .tsx, .json, etc.) or a command verb (install, create, build, run, add, init)\n- Good: "Создать src/components/Header.tsx с навигацией и логотипом"\n- Bad: "Настройка проекта" (too vague — what exactly needs to be configured?)\n- Steps that REMOVE files need no extra flag: create/delete intent is detected automatically from what the agent actually does.\n- Every step may carry a verification contract: pass "checks" aligned 1:1 with "steps". Also pass "evidence" aligned 1:1: "behavioral" for steps that change observable behavior/UI (static proof is rejected on done), "static" otherwise. Decide from what the step does, not from words in its description. Each check is "file-exists:<path>" (verified automatically on done), "file-modified:<path>" (verified automatically on done: content must differ from the snapshot at plan creation — use when editing an existing file), "command:<exact command>" (run it before done), "http:<url>[~marker]" or "browser:<url>[~marker]" (probe on done), "web-build:<dir>" (built CSS + non-empty index.html verified on done), or "manual:<what to check by eye>". Checks are RECOMMENDED, not required: omit them and each step self-certifies; a length mismatch is auto-repaired (missing steps get "manual:", extras are dropped). Example: steps ["Create src/a.ts with X"] + checks ["file-exists:src/a.ts"].',
       parameters: {
         type: "object",
         properties: {
@@ -92,6 +98,12 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
             items: { type: "string" },
             description:
               'Optional on create/re-plan, aligned 1:1 with steps. One contract per step: "file-exists:<path>", "file-modified:<path>" (content must differ from the snapshot at plan creation — use when editing an existing file), "command:<cmd>", "http:<url>[~marker]", "browser:<url>[~marker]", "web-build:<dir>" or "manual:<text>". Omit entirely to let each step self-certify; a length mismatch is auto-repaired.',
+          },
+          evidence: {
+            type: "array",
+            items: { type: "string", enum: ["static", "behavioral"] },
+            description:
+              'Optional on create/re-plan, aligned 1:1 with steps. Declare "behavioral" for a step that changes observable behavior/UI — static checks (file-exists/file-modified/build) will then be rejected on done. The model decides from the step itself, not from wording. Omit for static steps.',
           },
           step: { type: "number" },
           status: { type: "string", enum: ["done", "failed", "skipped"] },

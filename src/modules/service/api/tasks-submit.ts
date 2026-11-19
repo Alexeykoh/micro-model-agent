@@ -112,9 +112,10 @@ function createAndDispatch(
   sessionId: string,
   params: SubmitParams,
   tenant: TenantContext,
+  images: string[] = [],
 ): { ok: true; task: TaskRecord } | { ok: false } {
   if (queueFull(s, sessionId)) return { ok: false };
-  const task = s.tasks.create(createParams(sessionId, params, tenant));
+  const task = s.tasks.create(createParams(sessionId, params, tenant, images));
   if (s.pool.isBusy(sessionId)) {
     if (!enqueueTask(s, task)) return { ok: false };
   } else {
@@ -123,11 +124,17 @@ function createAndDispatch(
   return { ok: true, task };
 }
 
-function createParams(sessionId: string, p: SubmitParams, tenant: TenantContext): TaskCreateParams {
+function createParams(
+  sessionId: string,
+  p: SubmitParams,
+  tenant: TenantContext,
+  images: string[] = [],
+): TaskCreateParams {
   return {
     sessionId,
     mode: p.mode,
     input: p.input,
+    ...(images.length ? { images } : {}),
     ...(p.output ? { output: p.output } : {}),
     ...(p.toolAllowlist.length ? { toolAllowlist: p.toolAllowlist } : {}),
     ...(p.timeoutMs !== undefined ? { timeoutMs: p.timeoutMs } : {}),
@@ -155,6 +162,26 @@ function enqueueTask(s: AgentServiceState, task: TaskRecord): boolean {
 
 function queueFull(s: AgentServiceState, sessionId: string): boolean {
   return s.pool.isBusy(sessionId) && s.pool.queueLen(sessionId) >= s.config.service.maxQueueLength;
+}
+
+/**
+ * Интерактивный ход хоста (`POST /v1/host/sessions/:id/submit`): тот же
+ * single-flight/FIFO путь, что у task API, без output-спеки и allowlist.
+ */
+export function dispatchInteractive(
+  s: AgentServiceState,
+  sessionId: string,
+  text: string,
+  tenant: TenantContext,
+  images: string[] = [],
+): { ok: true; task: TaskRecord } | { ok: false } {
+  const params: SubmitParams = {
+    input: text,
+    mode: "interactive",
+    toolAllowlist: [],
+    wait: false,
+  };
+  return createAndDispatch(s, sessionId, params, tenant, images);
 }
 
 /** `wait:true` — ждём завершения до `syncWaitMs`, иначе 202 (таймер снимается). */

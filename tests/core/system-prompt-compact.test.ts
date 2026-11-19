@@ -24,8 +24,9 @@ function fixedPrompt(): string {
 
 describe("system prompt: compact core", () => {
   it("fits the compact-core budget", () => {
-    // Ядро без config-зависимого security: 896 токенов — цель 900 достигнута.
-    expect(estimateTokens(fixedPrompt())).toBeLessThanOrEqual(900);
+    // Ядро без config-зависимого security: 902 токена — цель 910 достигнута
+    // (896 + маркер provenance времени `(server local time)`, B18).
+    expect(estimateTokens(fixedPrompt())).toBeLessThanOrEqual(910);
   });
 
   it("matches the golden snapshot", () => {

@@ -8,10 +8,12 @@
 import type { AgentDeps } from "../agent";
 import type { AgentResult, OnMeta, OnPhase, PromptBlock, ToolEvent } from "../types";
 import type { SessionLogger } from "../session-logger";
+import type { SessionManager } from "../../modules/session/manager";
 import { SessionLogger as SessionLoggerCtor } from "../session-logger";
 import { seedToolTags } from "../../tools/auto-tags";
 import { deriveSessionName, generateSessionTitle, TITLE_MAX_TOKENS, type TitleChat } from "../../modules/session/auto-name";
 import { ensureSessionStart } from "./session-start";import type { SystemPromptBuild } from "./prompt-phase";
+import { refreshInstructionBlocks } from "../prompt-instructions";
 
 /** Мутабельный вид `Agent`, которым владеет координатор хода. */
 export interface TurnRunHost {
@@ -25,11 +27,18 @@ export interface TurnRunHost {
   systemPromptAdded: boolean;
   overflowResolved: boolean;
   probePassed: boolean;
+  /**
+   * Отпечаток входов последнего резолва переполнения (B16/B17): null/unknown —
+   * сверить заново. Сбрасывается только заменой (не per-turn).
+   */
+  overflowFingerprint: string | null;
   /** Снимок карты проекта на ход (имутабельный промпт внутри хода). */
   frozenMapBlock: PromptBlock | null;
   setScope(): void;
   buildSystemPrompt(): SystemPromptBuild;
   resolvePromptOverflowOnce(): Promise<void>;
+  /** Пересборка системного сообщения в живом контексте (resume-путь, B11). */
+  refreshSystemPrompt(): void;
   callerProvenance(): { provider: string; model: string };
   executeSingleAgentLoop(
     input: string,
@@ -78,6 +87,21 @@ export async function runTurn(
 
   const slog = new SessionLoggerCtor(sessionManager, logger, () => host.callerProvenance());
 
+  // AGENTS.md — живой источник: перечитываем на ГРАНИЦЕ ХОДА, внутри хода
+  // промпт имутабелен (KV-кеш). system заменяется на месте ниже, в
+  // ensureSessionStart → refreshSystemPrompt, без новой записи в историю.
+  const refreshed = refreshInstructionBlocks(
+    deps.baseDir,
+    deps.configDir,
+    deps.promptBlocks,
+    deps.config,
+    deps.noAgentsMd === true,
+  );
+  if (refreshed.changed) {
+    deps.promptBlocks = refreshed.blocks;
+    slog.logInstructions({ fingerprint: refreshed.fingerprint, changes: refreshed.changes });
+  }
+
   if (sessionManager && !sessionManager.getActive()) {
     sessionManager.create();
     logger.debug(`Session started: ${sessionManager.getActive()}`);
@@ -91,8 +115,10 @@ export async function runTurn(
       deps,
       systemPromptAdded: host.systemPromptAdded,
       overflowResolved: host.overflowResolved,
+      overflowFingerprint: host.overflowFingerprint,
       buildSystemPrompt: () => host.buildSystemPrompt(),
       resolvePromptOverflowOnce: () => host.resolvePromptOverflowOnce(),
+      refreshSystemPrompt: () => host.refreshSystemPrompt(),
     },
     slog,
   );
@@ -100,6 +126,7 @@ export async function runTurn(
     host.systemPromptAdded = start.systemPromptAdded;
     host.overflowResolved = start.overflowResolved;
     if (start.probePassed !== undefined) host.probePassed = start.probePassed;
+    if (start.overflowFingerprint !== undefined) host.overflowFingerprint = start.overflowFingerprint;
   }
 
   // Новое сообщение — новый интервал компакции: итерации прошлого хода не должны
@@ -209,5 +236,33 @@ export async function runTurn(
   } catch (err) {
     emitTurnEnd(null, err);
     throw err;
+  } finally {
+    invalidateTurnCheckpoint(sessionManager, deps);
+  }
+}
+
+/**
+ * Граница хода: чекпоинт описывает незавершённый ход (его читает resume после
+ * краша). Оставленный файл восстанавливал счётчики прошлого хода в следующий —
+ * стрик молчания, лимит итераций, duplicate-детектор: новый запрос пользователя
+ * умирал на первом же молчаливом пакете («Инструменты отключены», ses_mwc2p7hh).
+ *
+ * Fail-open: ошибка удаления не ломает ход, но обязана оставить след (INV-15).
+ */
+function invalidateTurnCheckpoint(
+  sessionManager: SessionManager | undefined,
+  deps: AgentDeps,
+): void {
+  const id = sessionManager?.getActiveMeta?.()?.id;
+  if (!id) return;
+  try {
+    sessionManager.deleteCheckpoint?.(id);
+  } catch (err) {
+    deps.onDiagnostic?.({
+      source: "core",
+      operation: "agent.checkpoint.delete",
+      kind: "failed",
+      cause: err instanceof Error ? err.message : String(err),
+    });
   }
 }

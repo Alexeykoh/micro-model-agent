@@ -1,0 +1,259 @@
+/**
+ * Thin-REPL `mma --daemon <url>` (split W3b): клиент без `Agent`/`SessionManager`.
+ *
+ * Ходы, сессии, команды и конфиг живут в демоне; здесь — редактор ввода,
+ * терминальный рендер событий и тонкая обвязка. Локальными остаются только
+ * `/clear` и `/exit`; всё остальное уходит по wire.
+ */
+import { pc } from "../ui/colors";
+import { t } from "../i18n/index";
+import { errMsg } from "../utils";
+import { getDefaultChannel } from "../output";
+import { Renderer, isRichTerminal } from "../ui/renderer";
+import { LineEditor } from "../ui/line-editor";
+import { Completer } from "./completer";
+import { createReplEditor } from "./repl-editor";
+import { readClipboardDataUrl, dataUrlSizeKb } from "./clipboard-image";
+import { RemoteHost } from "../modules/daemon/remote-host";
+import { readDaemonToken } from "../modules/daemon/protocol";
+import { resolveDaemonSession } from "./daemon-session";
+import { planLines, usageLine, retractLine, criticLine } from "./daemon-repl-render";
+
+/** Параметры подключения тонкого клиента. */
+export interface DaemonReplOptions {
+  url: string;
+  token?: string | null;
+}
+
+/** Висящий вопрос демона: следующая строка — ответ, а не ход. */
+interface PendingQuestion {
+  id: string;
+  kind: string;
+  options: string[];
+}
+
+/** Поднимает thin-REPL до закрытия редактора. */
+export async function runDaemonRepl(opts: DaemonReplOptions): Promise<void> {
+  const channel = getDefaultChannel();
+  const host = new RemoteHost({ baseUrl: opts.url, token: opts.token ?? readDaemonToken() });
+  const sessionId = await resolveDaemonSession(host);
+  channel.writeLine(pc.dim(t("daemon.connect", { url: opts.url, session: sessionId })));
+
+  const editor = createReplEditor({
+    completer: new Completer(),
+    history: [],
+    maxHistory: 200,
+    prompt: pc.green("› "),
+  });
+  const renderer = new Renderer({ rich: isRichTerminal(), channel });
+  let pending: PendingQuestion | null = null;
+  /** Картинка из клипборда: уедет с ближайшим ходом (split W9). */
+  let pendingImage: string | null = null;
+  let closed = false;
+  let exitRequested = false;
+  let lastPlan = "";
+
+  // Ctrl+V читает клипборд на клиенте: демону уходит готовый data-URL в submit.
+  if (editor instanceof LineEditor) {
+    editor.onKeyInput = (_str, rawKey) => {
+      const key = (rawKey ?? {}) as { name?: string; ctrl?: boolean };
+      if (!key.ctrl || key.name !== "v") return false;
+      void attachClipboard(editor, channel, (dataUrl) => {
+        pendingImage = dataUrl;
+      });
+      return true;
+    };
+  }
+
+  const unsubscribe = host.subscribeEvents((ev) => {
+    const data = (ev.data ?? {}) as Record<string, unknown>;
+    switch (ev.type) {
+      case "text.delta":
+        renderer.text(String(data.chunk ?? ""));
+        break;
+      case "reasoning.delta":
+        renderer.reasoning(String(data.chunk ?? ""));
+        break;
+      case "meta": {
+        const chunk = String(data.chunk ?? "");
+        if (chunk) renderer.meta(chunk);
+        break;
+      }
+      case "retract": {
+        const line = retractLine(data);
+        if (line) channel.writeLine(pc.dim(line));
+        break;
+      }
+      case "critic": {
+        const line = criticLine(data);
+        if (line) channel.writeLine(pc.dim(line));
+        break;
+      }
+      case "tool.start":
+        renderer.toolStart(
+          String(data.name ?? "tool"),
+          (data.args ?? {}) as Record<string, unknown>,
+        );
+        break;
+      case "tool.end":
+        renderer.toolEnd(
+          String(data.name ?? "tool"),
+          Number(data.durationMs ?? 0),
+          data.success === false,
+        );
+        break;
+      case "question": {
+        const options = Array.isArray(data.options) ? data.options.map(String) : [];
+        pending = { id: String(data.id ?? ""), kind: String(data.kind ?? "text"), options };
+        channel.writeLine(pc.cyan(t("daemon.question", { text: String(data.text ?? "") })));
+        if (options.length > 0) {
+          channel.writeLine(pc.dim(t("daemon.question_options", { options: options.join(" · ") })));
+        }
+        break;
+      }
+      case "plan": {
+        const lines = planLines(data);
+        const sig = lines.join("\n");
+        if (lines.length > 0 && sig !== lastPlan) {
+          lastPlan = sig;
+          renderer.planBlock(lines);
+        }
+        break;
+      }
+      case "task.finished": {
+        const line = usageLine(data);
+        if (line) channel.writeLine(pc.dim(line));
+        channel.writeLine("");
+        break;
+      }
+      case "task.failed":
+      case "task.cancelled":
+        channel.writeLine("");
+        break;
+    }
+  });
+
+  const onLine = async (line: string): Promise<void> => {
+    if (pending) {
+      const question = pending;
+      pending = null;
+      await answerQuestion(host, question, line, channel);
+      return;
+    }
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    if (trimmed === "/exit" || trimmed === "/quit") {
+      exitRequested = true;
+      return;
+    }
+    if (trimmed === "/clear") {
+      channel.clearScreen();
+      return;
+    }
+    if (trimmed.startsWith("/")) {
+      await runRemoteCommand(host, trimmed, channel);
+      return;
+    }
+    if (host.isBusy()) channel.writeLine(pc.dim(t("daemon.busy")));
+    const images = pendingImage ? [pendingImage] : undefined;
+    pendingImage = null;
+    host.submit(trimmed, images ? { images } : undefined).catch((err) => {
+      channel.writeLine(pc.red(t("daemon.submit_failed", { error: errMsg(err) })));
+    });
+  };
+
+  // Строки обрабатываются по очереди: вывод команды не перемешивается со
+  // следующим промптом, а `/exit` не обгоняет уже начатую команду.
+  let chain: Promise<void> = Promise.resolve();
+  editor.on("line", (line) => {
+    chain = chain
+      .then(() => onLine(line))
+      .then(() => {
+        if (exitRequested) {
+          closed = true;
+          editor.close();
+          return;
+        }
+        if (!closed) editor.prompt();
+      });
+  });
+  await new Promise<void>((resolve) => {
+    // Паiped stdin закрывается раньше, чем досохнет очередь строк: ждём её.
+    editor.on("close", () => {
+      void chain.then(() => resolve());
+    });
+    editor.prompt();
+  });
+
+  unsubscribe();
+  // Graceful exit: локальный REPL на Ctrl+D глушит агент, thin-клиент —
+  // кооперативно останавливает ход (detached-grace не должен держать его зря).
+  if (host.isBusy()) host.interrupt();
+  host.dispose();
+  channel.writeLine(pc.dim(t("daemon.disconnected", { url: opts.url })));
+}
+
+/** Команда демона; вывод печатается строками, ошибка — жёлтым. */
+async function runRemoteCommand(
+  host: RemoteHost,
+  line: string,
+  channel: ReturnType<typeof getDefaultChannel>,
+): Promise<void> {
+  const result = await host.executeCommand(line);
+  for (const out of result.output) channel.writeLine(out);
+  if (!result.ok) channel.writeLine(pc.yellow(result.error ?? "command failed"));
+}
+
+/** Ответ на вопрос: для choice — номер варианта, для text — строка. */
+async function answerQuestion(
+  host: RemoteHost,
+  question: PendingQuestion,
+  line: string,
+  channel: ReturnType<typeof getDefaultChannel>,
+): Promise<void> {
+  const value = question.kind === "choice" ? toChoiceIndexes(question.options, line.trim()) : line;
+  try {
+    await host.answer(question.id, value);
+  } catch (err) {
+    channel.writeLine(pc.red(t("daemon.answer_failed", { error: errMsg(err) })));
+  }
+}
+
+/**
+ * Ctrl+V в thin-клиенте (split W9): картинка читается локально и уходит в
+ * `submit` как data-URL — демону не нужен доступ к клипборду.
+ */
+async function attachClipboard(
+  editor: LineEditor,
+  channel: ReturnType<typeof getDefaultChannel>,
+  onAttached: (dataUrl: string) => void,
+): Promise<void> {
+  try {
+    const dataUrl = await readClipboardDataUrl();
+    if (dataUrl) {
+      onAttached(dataUrl);
+      channel.writeLine(
+        pc.green(
+          `\n${t("image.attached", { source: "clipboard", size: `${dataUrlSizeKb(dataUrl)} KB` })}`,
+        ),
+      );
+    } else {
+      channel.writeLine(pc.yellow(`\n${t("image.clipboard_empty")}`));
+    }
+  } catch {
+    // Клипборд недоступен — пусть терминал вставит текст штатно.
+  } finally {
+    editor.reset();
+    editor.prompt();
+  }
+}
+
+/** `1,3` → `[0,2]`; нераспознанное не превращается в ложный выбор. */
+function toChoiceIndexes(options: string[], raw: string): number[] {
+  const out: number[] = [];
+  for (const part of raw.split(/[,\s]+/).filter(Boolean)) {
+    const n = Number(part);
+    if (Number.isInteger(n) && n >= 1 && n <= options.length) out.push(n - 1);
+  }
+  return out;
+}

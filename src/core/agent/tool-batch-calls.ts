@@ -19,6 +19,7 @@ import { appendErrorMeta, summarizeToolArgs, truncateToolOutput } from "./tool-o
 import { queueToolImages } from "./tool-images";
 import { imageEventFields, renderToolResultMeta } from "./tool-result-meta";
 import { recordRepeatedToolFailure } from "./failure-memory";
+import { recordToolTargetFailure } from "./target-failures";
 import {
   bumpBudgetAfterWriteTooLarge,
   detectScriptWorkaround,
@@ -118,6 +119,23 @@ export class ToolCallRunner {
     // (subagent/mcp/pipeline тратят токены), а не накопленная за сессию.
     const costBeforeTool = costTracker.total;
     let result: ToolResult;
+    // Отключённый тул не исполняется вовсе. Раньше он лишь исчезал из списка
+    // схем, но вызов из истории всё равно доходил до executor'а — модель
+    // продолжала долбить мёртвый тул, а «используй другой тул» из директивы
+    // толкал её на обходы. Теперь ответ детерминированный и non-retryable.
+    if (this.init.state.disabledTools.has(call.name)) {
+      return {
+        result: {
+          success: false,
+          output: t("exec.tool_disabled_blocked", { tool: call.name }),
+          errorMeta: { code: "TOOL_DISABLED", retryable: false },
+        },
+        duration: 0,
+        tokensBeforeTool,
+        costBeforeTool,
+        shutdown: isShutdownRequested(),
+      };
+    }
     try {
       result = await executor.execute(call, getAbortSignal());
     } catch (err) {
@@ -236,6 +254,10 @@ export class ToolCallRunner {
     if (detectScriptWorkaround(this.init.state, call, result)) {
       summaries.push(t("exec.script_workaround_nudge"));
     }
+
+    // Три провала одной цели → директива перечитать файл (structural-сигнал).
+    const targetDirective = recordToolTargetFailure(this.init.state, call, result);
+    if (targetDirective) summaries.push(targetDirective);
 
     if (config.session.autoSave) {
       slog?.logToolResult(call, result, duration, iteration, result.imageRefs);

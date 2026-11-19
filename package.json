@@ -1,6 +1,6 @@
 {
   "name": "micro-models-agent",
-  "version": "0.25.4",
+  "version": "0.26.0",
   "description": "Micro Models Agent (MMA) — LLM agent harness for small models (Qwen3.5-9B, 32K-64K context) (beta)",
   "license": "MIT",
   "repository": {
@@ -34,6 +34,7 @@
     "build:sbom": "bun scripts/build-sbom.ts",
     "build:release-manifest": "bun scripts/build-release-manifest.ts",
     "sync:landing": "bun run scripts/sync-landing-version.ts",
+    "changelog:add": "bun run scripts/changelog-add.ts",
     "build:clean": "bun run scripts/clean.ts",
     "build:bundle": "bun build ./src/cli/main.ts --outfile ./dist/main.js --target node --format esm --packages external",
     "build:documents": "bun run scripts/build-documents.ts",

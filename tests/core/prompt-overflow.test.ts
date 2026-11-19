@@ -4,15 +4,14 @@ import { tmpdir } from "os";
 import { join } from "path";
 import {
   dryRunOverflow,
-  resolvePromptOverflow,
   resolveContextWindowSource,
   contextWindowHint,
   recommendContextSize,
   requiredContextWindow,
   requiredSystemFraction,
   overflowHint,
-  HINT_BLOCK_TOKENS,
 } from "../../src/core/prompt-overflow";
+import { HINT_BLOCK_TOKENS, resolvePromptOverflow } from "../../src/core/prompt-overflow-resolve";
 import type { PromptBlock } from "../../src/core/types";
 import type { Chunk, LLMProvider } from "../../src/llm/provider";
 import { recordingProvider, type RecordingProvider } from "../helpers/recording-provider";

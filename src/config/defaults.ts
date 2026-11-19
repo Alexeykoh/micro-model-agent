@@ -92,7 +92,11 @@ export const DEFAULTS: AppConfig = {
   // Авто-детект окна у провайдера включён: проба на старте/смене модели
   // уточняет настроенное значение (см. contextAuto в types.ts).
   contextAuto: true,
-  cost: { maxRunUsd: 0 },
+  // L7: потолочный лимит хода по умолчанию. Ноль (безлимит) на хостед-модели
+  // с maxToolIterations 200 — финансовая дыра: runaway-ход жжёт платные токены
+  // без остановки. Бесплатным моделям не мешает: без цены расход всегда 0,
+  // а 0 < любого положительного cap. Явный 0 — осознанный opt-out.
+  cost: { maxRunUsd: 5 },
   hitl: { killSwitch: false, autoApproveLow: false },
   compliance: { enabled: false, retentionDays: 180 },
   memory: {
@@ -122,6 +126,8 @@ export const DEFAULTS: AppConfig = {
   },
   instructions: {
     summarize: true,
+    sources: [],
+    fallback: "claude",
   },
   modelLoad: {
     autoLoad: false,
@@ -142,6 +148,7 @@ export const DEFAULTS: AppConfig = {
   maxToolIterations: 200,
   stuckThreshold: 6,
   autoPlan: true,
+  promptProfile: "auto",
   execution: {
     autoAdvance: true,
     profile: "local-trusted",
@@ -189,6 +196,9 @@ export const DEFAULTS: AppConfig = {
   },
   webSearch: {
     enabled: true,
+    provider: "duckduckgo",
+    images: false,
+    maxImages: 2,
   },
   errorWebSearch: {
     enabled: true,
@@ -210,8 +220,10 @@ export const DEFAULTS: AppConfig = {
     verbose: false,
     verbosity: "quiet",
     fontSize: "comfortable",
+    draftMode: "live",
     theme: "console",
     themeMode: "auto",
+    themeEffects: true,
     // Мастер выключен: звук не появляется сам после апгрейда (quiet by default).
     sounds: { enabled: true, done: true, question: true, failed: true, volume: 50 },
   },
@@ -225,9 +237,10 @@ export const DEFAULTS: AppConfig = {
     budget: 0.15,
   },
   plugins: {
-    // `angular11` — системный плагин, выключен по умолчанию: включается штатным
-    // контуром (`mma plugins enable angular11`, `/plugins`, тумблер в вебе).
-    disabled: ["angular11"],
+    // `angular11`, `telegram-notify` — встроенные плагины, выключены по
+    // умолчанию: включаются штатным контуром (`mma plugins enable`,
+    // `/plugins`, тумблер в вебе).
+    disabled: ["angular11", "telegram-notify"],
     maxDrafts: 10,
   },
   hallucination: {
@@ -268,8 +281,14 @@ export const DEFAULTS: AppConfig = {
     idempotencyTtlHours: 24,
     syncWaitMs: 10_000,
     maxQueueLength: 5,
+    detachedTurnGraceMs: 0,
     callbackTimeoutMs: 10_000,
     webhookSecret: undefined,
     webhookAllowHttp: false,
+    tls: {
+      cert: undefined,
+      key: undefined,
+      terminatedByProxy: false,
+    },
   },
 };

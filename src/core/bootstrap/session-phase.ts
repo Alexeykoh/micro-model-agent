@@ -13,6 +13,7 @@
  */
 import { join } from "path";
 import { createContextManager } from "./context-factory";
+import { resolvePromptProfile } from "../system-prompt";
 import type { ContextManager } from "../../core/context/manager";
 import { ToolExecutor } from "../../tools/executor";
 import { wrapExecutorWithOtel } from "../../modules/otel/decorate";
@@ -188,9 +189,12 @@ export async function setupSessionPhase(input: SessionPhaseInput): Promise<Sessi
 
   // Мутабельный набор активных тегов тулов — общий у цикла агента и тула
   // `enable_tools`. Цикл перечитывает его каждую итерацию для пересборки
-  // видимого модели набора; enable_tools дотолкивает теги внутрь. При выключенном
-  // on-demand набор пуст — легаси «все тулы» (getAllForLLM на пустых отдаёт всё).
-  const enableOnDemand = config.tools?.enableOnDemand !== false;
+  // видимого модели набора; enable_tools дотолкивает теги внутрь. Пустой
+  // набор — «все тулы» (getAllForLLM на пустых отдаёт всё).
+  // L4: large-профиль по умолчанию широкий — малая модель тонет в сотне тулов,
+  // большая держит всю схему; сужение ей только вредит (прячет возможности).
+  const wideByDefault = resolvePromptProfile(config.promptProfile ?? "auto", config) === "large";
+  const enableOnDemand = config.tools?.enableOnDemand !== false && !wideByDefault;
   const activeToolTags: string[] = enableOnDemand
     ? config.tools?.defaultTags
       ? [...config.tools.defaultTags]

@@ -16,6 +16,11 @@ import type { LLMProvider } from "../../llm/provider";
 import type { ContextProbeResult } from "../../llm/provider-context";
 import { activeProviderEndpoint } from "../../modules/providers/manager";
 import { BUILTIN_PROVIDERS } from "../../modules/providers/presets";
+import {
+  readCachedCapabilities,
+  writeCachedCapabilities,
+} from "../../modules/providers/capabilities-cache";
+import { markReasoningReprobe } from "./reasoning-reprobe";
 import { t } from "../../i18n/index";
 import { errMsg } from "../../utils";
 
@@ -53,7 +58,13 @@ export function sameProbeIdentity(a: ProbeIdentity, b: ProbeIdentity): boolean {
 export interface SwitchProbeHost {
   deps: Pick<
     AgentDeps,
-    "config" | "capabilitiesProbeRef" | "reasoningStrategy" | "reasoningProbe" | "logger" | "onDiagnostic"
+    | "config"
+    | "capabilitiesProbeRef"
+    | "reasoningStrategy"
+    | "reasoningLevels"
+    | "reasoningProbe"
+    | "logger"
+    | "onDiagnostic"
   >;
   probePassed: boolean;
 }
@@ -142,13 +153,37 @@ export async function refreshCapabilitiesProbe(
 ): Promise<void> {
   const ref = host.deps.capabilitiesProbeRef;
   if (!ref) return;
+  // Без модели нечего пробовать: пустой id даёт каталог/максимум, а не
+  // возможности выбранной модели.
+  if (!config.model.trim()) {
+    ref.probe = undefined;
+    ref.reachable = false;
+    return;
+  }
   try {
     const endpoint = activeProviderEndpoint(config.provider);
     const discovered = await discoverCapabilities(endpoint, config.model, {
       probeOffSwitch: config.reasoning?.mode !== "none",
     });
-    ref.probe = discovered.capabilities;
+    // Холодная модель не объявила reasoning, но он мог быть узнан ранее —
+    // держим последнее настоящее объявление из дискового кэша (INV-R7).
+    const cached = readCachedCapabilities(endpoint.baseUrl, config.model);
+    const fresh = discovered.capabilities;
+    const merged = fresh
+      ? fresh.reasoningStrategy === undefined && cached?.reasoningStrategy !== undefined
+        ? { ...cached, ...fresh }
+        : fresh
+      : discovered.reachable === true
+        ? cached
+        : undefined;
+    ref.probe = merged;
+    if (fresh && merged) writeCachedCapabilities(endpoint.baseUrl, config.model, merged);
     ref.reachable = discovered.reachable === true;
+    markReasoningReprobe(
+      ref,
+      { ...discovered, capabilities: ref.probe },
+      endpoint.type,
+    );
   } catch (err) {
     ref.probe = undefined;
     ref.reachable = false;

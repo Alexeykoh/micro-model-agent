@@ -3,7 +3,11 @@ import { mkdtempSync, readdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { createLoopState, type LoopState } from "../../src/core/agent/loop-state";
-import { snapshotLoopState, restoreLoopState, parseTurnCheckpoint } from "../../src/modules/session/checkpoint";
+import {
+  snapshotLoopState,
+  restoreLoopState,
+  parseTurnCheckpoint,
+} from "../../src/modules/session/checkpoint";
 import { SessionStore } from "../../src/modules/session/store";
 
 describe("checkpoint snapshot/restore", () => {
@@ -11,7 +15,7 @@ describe("checkpoint snapshot/restore", () => {
     const state = createLoopState();
     state.iteration = 7;
     state.pendingCompaction = true;
-    state.seenToolCalls.add("read_file:{\"path\":\"a\"}");
+    state.seenToolCalls.add('read_file:{"path":"a"}');
     state.disabledTools.add("browser");
     state.toolFailureCounts.set("bash", { count: 3, error: "boom", samples: ["s"] });
     state.toolTargetCounts.set("f.ts", 4);
@@ -28,7 +32,7 @@ describe("checkpoint snapshot/restore", () => {
     expect(restoreLoopState(fresh, JSON.parse(json) as never)).toBe(true);
     expect(fresh.iteration).toBe(7);
     expect(fresh.pendingCompaction).toBe(true);
-    expect(fresh.seenToolCalls.has("read_file:{\"path\":\"a\"}")).toBe(true);
+    expect(fresh.seenToolCalls.has('read_file:{"path":"a"}')).toBe(true);
     expect(fresh.disabledTools.has("browser")).toBe(true);
     expect(fresh.toolFailureCounts.get("bash")).toMatchObject({ count: 3 });
     expect(fresh.toolTargetCounts.get("f.ts")).toBe(4);
@@ -69,5 +73,21 @@ describe("checkpoint store (file)", () => {
     expect(store.loadCheckpoint("ses_1")).toBeNull();
     // Нет сессии → null.
     expect(store.loadCheckpoint("unknown")).toBeNull();
+  });
+
+  it("удаляет чекпоинт на границе хода (состояние хода не переживает ход)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "mma-checkpoint-del-"));
+    const store = new SessionStore(dir);
+    const state = createLoopState();
+    state.iteration = 13;
+    state.consecutiveSilentBatches = 13;
+    store.saveCheckpoint("ses_1", snapshotLoopState(state, "thr_0123456789abcdef"));
+    expect(store.loadCheckpoint("ses_1")?.consecutiveSilentBatches).toBe(13);
+
+    store.deleteCheckpoint("ses_1");
+    expect(store.loadCheckpoint("ses_1")).toBeNull();
+    // Повторное удаление — no-op (граница хода может прийти без чекпоинта).
+    store.deleteCheckpoint("ses_1");
+    expect(store.loadCheckpoint("ses_1")).toBeNull();
   });
 });

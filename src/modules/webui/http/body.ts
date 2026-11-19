@@ -1,32 +1,15 @@
-// Единый парсер JSON-тела для POST-хендлеров `mma web`.
-/**
- * Раньше каждая POST-точка повторяла тот же try/catch `JSON.parse` плюс сужение
- * до объекта (~12 мест). Контракт поведения, сохраняется точь-в-точь:
- * - битый JSON → `null` (вызывающий отвечает 400 `invalid JSON`);
- * - валидный JSON-не-объект (напр. `"str"`, `42`) → `{}`, чтобы собственная
- *   валидация точки отвергла его своей специфичной ошибкой;
- * - транспортные ошибки (переполнение, сокет) по-прежнему реджектятся и
- *   маппятся через `requestError`.
- */
+// Разбор JSON-тела POST-эндпоинтов `mma web`.
+// Разбор — в нейтральном runtime-слое; чтение идёт через web-хелпер, чтобы
+// сохранить кап маршрута (`bodyCapFor`).
 import type { IncomingMessage } from "node:http";
 import { readBody } from "../util";
+import { parseJsonBody } from "../../../runtime/http-body";
 
-/** Парсит сырое тело; `null` — битый JSON. Не бросает. */
-export function parseJsonBody(raw: string): Record<string, unknown> | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  return typeof parsed === "object" && parsed !== null
-    ? (parsed as Record<string, unknown>)
-    : {};
-}
+export { parseJsonBody } from "../../../runtime/http-body";
 
 /**
- * Читает тело запроса (до `cap`) и парсит как JSON.
- * Резолвится в `null` на битом JSON; транспортные ошибки реджектятся.
+ * Читает тело запроса (до `cap`) и разбирает его как JSON.
+ * `null` — не JSON.
  */
 export function readJsonBody(
   req: IncomingMessage,

@@ -85,6 +85,23 @@ export const HOST_CASTS: Record<string, string> = {
 
 /** Пустые `catch {}` / `.catch(() => {})` / `.catch(() => null)` на файл: бюджет, не список строк. */
 export const SILENT_CATCHES: Record<string, { count: number; reason: string }> = {
+  "src/modules/service/api/host-misc.ts": {
+    count: 1,
+    reason: "пересборка индекса fire-and-forget: статус 202 уже отдан, ошибка видна в следующем GET /v1/host/state",
+  },
+  "src/modules/webui/daemon-api-routes.ts": {
+    count: 2,
+    reason:
+      "best-effort state для иконки и fallback sessionId у queue-action: ошибка сети не должна ломать ответ адаптера",
+  },
+  "src/modules/webui/daemon-module.ts": {
+    count: 1,
+    reason: "демон недоступен: следующий запрос честно ответит 502, ошибку глотать в SSE незачем",
+  },
+  "src/modules/daemon/remote-host.ts": {
+    count: 1,
+    reason: "SSE-поток закрыт сетью/клиентом: следующий subscribe/submit откроет новый, ошибка не actionable",
+  },
   "src/cli/repl-start.ts": {
     count: 3,
     reason: "fire-and-forget фоновая запись/проба на старте REPL, ошибка не actionable",

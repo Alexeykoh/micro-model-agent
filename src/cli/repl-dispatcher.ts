@@ -16,7 +16,7 @@ export interface ReplDispatcherHost extends ReplPromptHost {
   historyPath: string;
   maxHistory: number;
   logger?: Logger;
-  executeCommand(line: string): Promise<void>;
+  executeCommand(line: string): Promise<unknown>;
   afterCommand(): void;
   runAgent(input: string): Promise<void>;
 }

@@ -6,6 +6,7 @@
 import type { Dict } from "./core/store/types.js";
 import type { SseDeps } from "./sse-deps.js";
 import { noteChunk as speedChunk } from "./speed.js";
+import { renderLiveSpeed } from "./feed/speed-chip.js";
 import { attachSidebarSse } from "./sse-sidebar.js";
 import { attachFaceSse } from "./sse-face.js";
 import { attachActivityStream } from "./core/activity-stream.js";
@@ -14,6 +15,8 @@ import { attachActivityStream } from "./core/activity-stream.js";
 // selector repaints without a second GET racing the refresh. Direct import
 // (not via `SseDeps`) keeps the composition root in `app.ts` untouched.
 import { loadModels } from "./settings/write.js";
+import { applySkillsEvent } from "./session/skills-indicator.js";
+import { railTurnEnd } from "./rail.js";
 export function connectSSE(deps: SseDeps): void {
   const {
     token,
@@ -117,6 +120,7 @@ export function connectSSE(deps: SseDeps): void {
       (d) => {
         onTurnEnd(d);
         drainQueuedTurn(d.sessionId);
+        railTurnEnd(d.sessionId);
         if (sidebarOwns(d)) {
           sidebarTurnEnd(d.turnSeq);
           sidebarBusy(false);
@@ -155,17 +159,22 @@ export function connectSSE(deps: SseDeps): void {
     es.addEventListener(ev, (e) => {
       const d = parse(e);
       if (!d) return;
-      if (ev === "text") speedChunk(d.sessionId, d.chunk || "");
-      if (ev === "plan") railPlan(d);
-      else railEvent(ev, d.name);
+      if (ev === "text") {
+        speedChunk(d.sessionId, d.chunk || "");
+        renderLiveSpeed(d.sessionId);
+      }
+      if (ev === "plan") railPlan(d, d.sessionId);
+      else railEvent(ev, d.name, d.sessionId);
     });
   }
-  // Live tok/s в рельсе: reasoning — тоже генерация, иначе во время фазы
+  // Live tok/s в чипе футера: reasoning — тоже генерация, иначе во время фазы
   // размышлений скорость пуста (до первого text). Счётчик событий рельса тут
   // не трогаем — только скорость.
   es.addEventListener("reasoning", (e) => {
     const d = parse(e);
-    if (d) speedChunk(d.sessionId, d.chunk || "");
+    if (!d) return;
+    speedChunk(d.sessionId, d.chunk || "");
+    renderLiveSpeed(d.sessionId);
   });
   // Composer face (MMART): one persistent mascot that reflects the live state
   // (`sse-face.ts`, чтобы этот файл оставался ≤300 строк).
@@ -213,6 +222,16 @@ export function connectSSE(deps: SseDeps): void {
     sidebarPluginsEvent();
     sidebarMcpEvent();
   });
+  // Загруженные скиллы — SSE-событие от модуля скилов (single source).
+  es.addEventListener("skills", (e) => {
+    const d = parse(e as MessageEvent);
+    if (d) applySkillsEvent(d);
+  });
+  // Загруженные скиллы — SSE-событие от модуля скилов (single source).
+  es.addEventListener("skills", (e) => {
+    const d = parse(e as MessageEvent);
+    if (d) applySkillsEvent(d);
+  });
   // Config changed anywhere (settings write or a slash command) — re-read it so
   // the open Settings panel and the composer selectors never show a stale value.
   // Sidebar usage is a projection too: a provider switch may change the live
@@ -233,7 +252,8 @@ export function connectSSE(deps: SseDeps): void {
   es.addEventListener("state", (e) => {
     const d = parse(e);
     if (!d) return;
-    sidebarBusy(!!d.busy);
+    // Индикатор Trace выставляет `renderActiveState` — только по ходу
+    // АКТИВНОЙ сессии (глобальный `busy` зажигал его чужой работой).
     applyState(d);
   });
   es.addEventListener("sessions", (e) => {

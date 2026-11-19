@@ -76,7 +76,7 @@ describe("EgressGuard.sanitizeChat", () => {
     const json = JSON.stringify(r.messages);
     expect(json).not.toContain("C:\\work\\proj");
     expect(json).not.toContain("DESKTOP-ABC123");
-    expect(json).toContain("<PATH:");
+    expect(json).toContain("src/a.ts");
     expect(r.changed).toBe(true);
   });
 
@@ -112,13 +112,24 @@ describe("EgressGuard.sanitizeChat", () => {
     expect(classify(secret?.preview ?? "", ctx).some((f) => f.dataClass === "secret")).toBe(false);
   });
 
-  it("ре-гидратация возвращает оригинал (INV-D5)", () => {
+  it("workspace-путь становится относительным (INV-DLP-P1)", () => {
     const g = external();
     const src = "open C:\\work\\proj\\src\\a.ts";
     const r = g.sanitizeChat([{ role: "user", content: src }]);
     const projected = String((r.messages as Array<{ content: string }>)[0].content);
-    expect(projected).not.toBe(src);
-    expect(g.rehydrateArgs(projected)).toBe(src);
+    expect(projected).toBe("open src/a.ts");
+    expect(projected).not.toContain("C:\\work\\proj");
+    expect(g.rehydrateArgs(projected)).toBe(projected);
+  });
+
+  it("не-workspace путь остаётся токеном и ре-гидратируется (INV-D5/P3)", () => {
+    const g = external();
+    const src = "open C:\\Users\\alex\\a.ts";
+    const r = g.sanitizeChat([{ role: "user", content: src }]);
+    const projected = String((r.messages as Array<{ content: string }>)[0].content);
+    const token = projected.match(/<PATH:[0-9a-f]+>/)?.[0] ?? "";
+    expect(token).not.toBe("");
+    expect(g.rehydrateArgs(token)).toBe("C:\\Users\\alex\\a.ts");
   });
 
   it("external редактирует и определения тулов", () => {

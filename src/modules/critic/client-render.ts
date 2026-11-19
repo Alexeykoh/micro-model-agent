@@ -26,6 +26,7 @@ export function renderPack(pack: EvidencePack): string {
   return [
     `TASK: ${pack.task}`,
     pack.planSummary ? `PLAN: ${pack.planSummary}` : "",
+    pack.configDir ? `CONFIG DIR: ${pack.configDir} (valid config evidence outside workspace)` : "",
     renderPendingSteps(pack),
     `CHANGED FILES: ${pack.changedFiles.join(", ") || "(none)"}`,
     `COMMANDS: ${cmdLines.join("; ") || "(none)"}`,

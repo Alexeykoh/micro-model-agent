@@ -8,6 +8,10 @@
 import { el } from "../../dom.js";
 import { t } from "../../i18n.js";
 import { renderMarkdown } from "../../../md.js";
+import { openLightbox } from "../../lightbox.js";
+import { formatJson } from "./json-format.js";
+
+export { mapLine } from "./json-format.js";
 
 export interface FetchedFile {
   ok: boolean;
@@ -43,13 +47,20 @@ export function paintError(body: HTMLElement | null): void {
   body.appendChild(el("div", "fdim wn", t("web.files.open_failed")));
 }
 
-/** Renders a fetched file; falls back to the localized error on failure. */
-export function paintFile(body: HTMLElement | null, path: string, file: FetchedFile): void {
-  if (!body) return;
-  if (!file.ok) return paintError(body);
+/**
+ * Renders a fetched file; falls back to the localized error on failure.
+ * Returns the display-line map (for LSP "open at line" after formatting).
+ */
+export function paintFile(body: HTMLElement | null, path: string, file: FetchedFile): number[] {
+  if (!body) return [];
+  if (!file.ok) {
+    paintError(body);
+    return [];
+  }
   body.textContent = "";
-  if (file.mime.indexOf("text/plain") === 0) paintText(body, path, file.text);
-  else paintMedia(body, path, file.mime);
+  if (file.mime.indexOf("text/plain") === 0) return paintText(body, path, file.text);
+  paintMedia(body, path, file.mime);
+  return [];
 }
 
 /** Предел для нумерации строк: выше — рендерим без жёлоба, чтобы не тормозить. */
@@ -78,28 +89,33 @@ function paintNumbered(body: HTMLElement, text: string, code: HTMLElement): void
 }
 
 /** Text files: markdown rendered, everything else in a highlighted <pre>. */
-function paintText(body: HTMLElement, path: string, text: string): void {
+function paintText(body: HTMLElement, path: string, text: string): number[] {
   const ext = extOf(path);
   if (ext === "md" || ext === "markdown") {
     const wrap = el("div", "fmd");
     renderMarkdown(wrap, text);
     body.appendChild(wrap);
-    return;
+    return [];
   }
+  // Минимизированный JSON нечитаем: разворачиваем с отступами прямо в вьюере.
+  // Исходный файл и /api/file не меняются — только то, что видит пользователь.
+  const formatted = ext === "json" || ext === "jsonc" ? formatJson(text) : null;
+  const viewText = formatted ? formatted.text : text;
   const code = el("code", "fcode");
-  code.textContent = text;
+  code.textContent = viewText;
   const hl = window.hljs;
   if (hl) {
     try {
       const res2 = hl.getLanguage(ext)
-        ? hl.highlight(text, { language: ext, ignoreIllegals: true })
-        : hl.highlightAuto(text);
+        ? hl.highlight(viewText, { language: ext, ignoreIllegals: true })
+        : hl.highlightAuto(viewText);
       code.replaceChildren(...nodesFromHtml(res2.value));
     } catch {
       /* подсветка best-effort */
     }
   }
-  paintNumbered(body, text, code);
+  paintNumbered(body, viewText, code);
+  return formatted ? formatted.lineMap : [];
 }
 
 /** Binary-but-viewable files: images/audio/video/PDF via native elements. */
@@ -109,7 +125,11 @@ function paintMedia(body: HTMLElement, path: string, mime: string): void {
     const img = document.createElement("img");
     img.className = "fimg";
     img.alt = path;
+    img.title = path;
     img.src = src;
+    // The sidebar is the quick look; a click opens the same full-screen
+    // lightbox as feed thumbnails (zoom, open-in-tab, copy link).
+    img.addEventListener("click", () => openLightbox(src, path));
     body.appendChild(img);
     return;
   }

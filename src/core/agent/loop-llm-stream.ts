@@ -61,6 +61,8 @@ export interface LlmStreamInput {
   isShutdownRequested(): boolean;
   getAbortSignal(): AbortSignal | undefined;
   onChunk?: (chunk: string) => void;
+  /** Текст ответа отдельно от служебных строк (`onChunk` остаётся для warning). */
+  onText?: (chunk: string) => void;
   onReasoning?: (reasoning: string) => void;
 }
 
@@ -75,7 +77,7 @@ export async function consumeLlmStream(
 ): Promise<LlmStreamResult> {
   const { deps, state, slog, tokenTracker, baseline } = inp;
   const { contextManager, pluginManager, logger, llmProvider, config } = deps;
-  const { onChunk, onReasoning } = inp;
+  const { onChunk, onText, onReasoning } = inp;
   let emittedReasoning = false;
 
   for await (const chunk of llmProvider.chat(inp.history, inp.tools, inp.getAbortSignal(), {
@@ -94,7 +96,7 @@ export async function consumeLlmStream(
         { iteration: state.iteration, logger, contextManager },
         chunk.content,
       );
-      onChunk?.(textOut);
+      onText?.(textOut);
     }
     if (chunk.type === "reasoning" && chunk.content) {
       if (!out.firstTokenAt) out.firstTokenAt = Date.now();

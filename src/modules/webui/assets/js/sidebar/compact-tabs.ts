@@ -56,9 +56,12 @@ export function initCompactTabs(root: HTMLElement): void {
   });
 
   // Вставка до кнопки настроек (в конце полосы): вкладки → стрелка → настройки.
-  const settings = bar.querySelector(".sb-settings");
-  if (settings) bar.insertBefore(btn, settings);
-  else bar.appendChild(btn);
+  // Keep the toggle in `.sb-tabs-bar`, not in the scrolling `.sb-tabs`:
+  // otherwise it needs horizontal scrolling on a narrow sidebar.
+  const container = bar.parentElement ?? bar;
+  const settings = container.querySelector<HTMLElement>(".sb-settings");
+  if (settings) container.insertBefore(btn, settings);
+  else container.appendChild(btn);
 
   paint();
 }

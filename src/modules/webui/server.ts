@@ -7,7 +7,9 @@
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createWebUiState, type WebUiState, type WebUiAssets } from "./state";
+import { handleDaemonApi } from "./daemon-api";
 import { sessionStatus } from "./session/session-status";
+import { skillsEventPayload } from "./skills-events";
 import {
   checkAuth,
   isLoopback,
@@ -35,7 +37,8 @@ import { handleSetupApi } from "./settings/setup-api";
 import { handleLspDoctorGet, handleLspCheckPost, handleLspCheckChangedPost, handleLspDoctorPost } from "./lsp/lsp-api";
 import { readJsonBody } from "./http/body";
 import { handleUpdatePost } from "./chat/update-api";
-import { apiGuardFor, filterResponse } from "./egress";
+import { handleToolsGet, handleToolsPost } from "./settings/tools-api";
+import { apiGuardFor, filterResponse } from "../../runtime/egress";
 import { serveStatic } from "./static-assets";
 import { handleFaviconGet } from "./favicon";
 import { readEnv } from "../../config/env";
@@ -66,6 +69,9 @@ function handleEvents(req: IncomingMessage, res: ServerResponse, s: WebUiState):
     res.end();
     return;
   }
+  if (s.skills) {
+    res.write(`event: skills\ndata: ${JSON.stringify(skillsEventPayload(s.skills))}\n\n`);
+  }
   s.clients.add(res);
   const hb = setInterval(() => {
     try {
@@ -94,7 +100,7 @@ function dropClient(res: ServerResponse, s: WebUiState): void {
 
 /** Точные роуты `METHOD путь` (правило #17: карта хендлеров, без `if`). */
 const API_ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse, s: WebUiState) => void> = {
-  "GET /api/state": (req, res, s) => {
+  "GET /api/state": async (req, res, s) => {
     // `?session=<id>` — сайдбар вкладки строится от ЕЁ сессии, не от
     // серверно-активной (иначе переключение вкладок показывает чужие данные).
     let sessionId: string | undefined;
@@ -106,7 +112,7 @@ const API_ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse, s: 
     }
     sendJson(res, 200, {
       ...sessionStatus(s),
-      state: s.bridge?.getState?.(sessionId) ?? null,
+      state: (await s.bridge?.getState?.(sessionId)) ?? null,
     });
   },
   "POST /api/message": (req, res, s) => handleMessagePost(req, res, s),
@@ -117,6 +123,8 @@ const API_ROUTES: Record<string, (req: IncomingMessage, res: ServerResponse, s: 
   "POST /api/config": (req, res, s) => handleConfigPost(req, res, s),
   "POST /api/answer": (req, res, s) => handleAnswerPost(req, res, s),
   "GET /api/i18n": (_req, res, s) => handleI18nGet(res, s),
+  "GET /api/tools": (req, res, s) => handleToolsGet(req, res, s),
+  "POST /api/tools": (req, res, s) => void handleToolsPost(req, res, s),
   "GET /api/commands": (_req, res) => {
     sendJson(res, 200, { commands: webCommandList() });
   },
@@ -150,6 +158,11 @@ const API_GROUPS: Array<(
 
 /** REST-хендлер `/api/*`; auth + same-origin уже проверены. */
 function handleApi(req: IncomingMessage, res: ServerResponse, reqUrl: URL, s: WebUiState): void {
+  // Daemon-режим: браузерные маршруты обслуживает адаптер (W4).
+  if (s.daemon) {
+    void handleDaemonApi(req, res, reqUrl, s);
+    return;
+  }
   const route = API_ROUTES[`${req.method} ${reqUrl.pathname}`];
   if (route) {
     route(req, res, s);

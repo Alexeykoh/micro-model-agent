@@ -55,6 +55,8 @@ export interface TaskRecord {
   mode: TaskMode;
   status: TaskStatus;
   input: string;
+  /** Data-URL картинки, приложенные к интерактивному ходу. */
+  images?: string[];
   output?: TaskOutputSpec;
   toolAllowlist?: string[];
   timeoutMs?: number;
@@ -73,6 +75,8 @@ export interface TaskRecord {
   expiresAt?: string;
   /** События задачи (для resume/наблюдаемости внутри процесса). */
   events: Envelope[];
+  /** Ход отвязан от клиента и ждёт reconnect в grace-окне (split W13). */
+  detached?: boolean;
   /** Резолверы синхронного ожидания завершения (`wait:true`). */
   waiters: Array<() => void>;
 }
@@ -82,6 +86,7 @@ export interface TaskCreateParams {
   sessionId: string;
   mode: TaskMode;
   input: string;
+  images?: string[];
   output?: TaskOutputSpec;
   toolAllowlist?: string[];
   timeoutMs?: number;
@@ -134,6 +139,7 @@ export class TaskRegistry {
       mode: params.mode,
       status: "queued",
       input: params.input,
+      ...(params.images?.length ? { images: [...params.images] } : {}),
       ...(params.output ? { output: params.output } : {}),
       ...(params.toolAllowlist ? { toolAllowlist: params.toolAllowlist } : {}),
       ...(params.timeoutMs !== undefined ? { timeoutMs: params.timeoutMs } : {}),

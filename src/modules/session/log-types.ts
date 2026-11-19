@@ -10,6 +10,12 @@ export type OnboardingEvent =
   | "onboarding_init_start"
   | "onboarding_init_done";
 
+/** Изменение одного источника инструкций (без содержимого файла). */
+export interface InstructionChangeEntry {
+  label: string;
+  action: "added" | "changed" | "removed";
+}
+
 /** Запись session-журнала (инструменты, usage, critic, пробы и т.д.). */
 export interface SessionLogEntry {
   ts: string;
@@ -46,6 +52,7 @@ export interface SessionLogEntry {
     | "llm_request"
     | "subagent"
     | "command"
+    | "instructions_updated"
     | OnboardingEvent;
   /** Источник записи (INV-13); `llm_usage` пишет origin отдельно (W11). */
   source: Source;
@@ -53,6 +60,10 @@ export interface SessionLogEntry {
    * Модуль-владелец записи (INV-13), без префикса `module:` — например `mcp`.
    */
   module?: string;
+  /** `instructions_updated`: отпечаток набора источников после обновления. */
+  fingerprint?: string;
+  /** `instructions_updated`: какие источники изменились (без содержимого). */
+  instructionChanges?: InstructionChangeEntry[];
   subagent?: string;
   tool?: string;
   tool_call_id?: string;

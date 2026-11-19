@@ -38,6 +38,15 @@ export interface ProviderProbesBox {
   reasoningLevels?: string[];
   /** Поддерживает ли выключатель reasoning. */
   reasoningOff?: boolean;
+  /**
+   * Холодная локальная модель не отдала `/props`: стратегия взята из пресета.
+   * Повторить discovery, когда бэкенд ответит (INV-R2/R7).
+   */
+  needsReasoningReprobe?: boolean;
+  /** Время последней попытки повтора — троттлинг частых чтений `/api/models`. */
+  lastReasoningReprobeAt?: number;
+  /** Защита от параллельных повторов. */
+  reasoningReprobeInflight?: boolean;
 }
 
 /** Живой итог context-probe: `undefined` — ещё не устоялась, `null` — не удалось. */
@@ -92,6 +101,19 @@ export interface AgentDeps {
   exitOnComplete?: boolean;
   envReport?: EnvironmentReport;
   /**
+   * Сжатый профиль пользователя на старт процесса (B14): по нему
+   * `refreshSystemInfoBlock` пересобирает статику при `reconfigure`.
+   * Опционально — старые поверхности и тесты живут без него (статика
+   * тогда не обновляется, как раньше).
+   */
+  profileCompressed?: string;
+  /**
+   * Часовой пояс клиента (B18b): ставит веб-пул перед ходом через
+   * `setClientTz`. `refreshSystemInfoBlock` учитывает его при пересборке
+   * статики; нет — серверное время с меткой.
+   */
+  clientTz?: import("../prompt-facts").ClientTz;
+  /**
    * Прошёл ли механизм reasoning-effort валидацию пробой. Только стартовое
    * значение — живой итог даёт `reasoningProbe` (B2), который агент лениво
    * ждёт перед первым LLM-вызовом.
@@ -116,6 +138,8 @@ export interface AgentDeps {
   contextProbeRef?: ContextProbeBox;
   /** Каталог конфига — для хинта «подними окно контекста» в варнингах. */
   configDir?: string;
+  /** `--no-agents-md`: инструкции не грузятся ни при старте, ни на границе хода. */
+  noAgentsMd?: boolean;
   /**
    * Компактная статус-строка плана для <system-summary>. Заменяет динамический
    * план-блок в системном промпте, чтобы промпт оставался иммутабельным

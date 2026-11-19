@@ -66,6 +66,13 @@ describe("seedToolTags (P5)", () => {
     expect(seedToolTags(undefined, "найди новости")).toEqual([]);
   });
 
+  it("never narrows the wide set: empty tags mean all tools are visible (L4)", () => {
+    const active: string[] = [];
+    expect(seedToolTags(active, "найди новости")).toEqual([]);
+    expect(seedToolTags(active, "сделай скриншот страницы через browser")).toEqual([]);
+    expect(active).toEqual([]);
+  });
+
   it("seeded tags unlock hidden tools via the tag filter", () => {
     const tools = [
       { name: "read_file", description: "r", parameters: {}, tags: ["file"] },

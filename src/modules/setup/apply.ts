@@ -51,59 +51,61 @@ export function applyAnswersToConfigWithWarnings(
   a: SetupAnswers,
 ): ApplyAnswersResult {
   const warnings: string[] = [];
-  config.provider = {
-    ...config.provider,
-    type: a.provider,
-    baseUrl: a.apiBase,
-    apiKey: a.apiKey,
-  };
-  config.model = a.model;
-  if (config.contextWindow !== a.contextWindow) {
-    config.contextWindow = a.contextWindow;
-    // Явное окно из визарда = ручной режим: авто-проба провайдера его не
-    // перетирает (аудит §7.11).
-    config.contextAuto = false;
-  }
-  config.maxToolIterations = a.maxToolIterations;
-  config.locale = a.locale;
-  // Звуки уведомлений веб-UI: ответ визарда пишется в ui.sounds.enabled, если
-  // шаг задан. Отсутствующее поле оставляет дефолт (`enabled: true`).
-  if (a.soundsEnabled !== undefined) {
-    const sounds = config.ui.sounds ?? structuredClone(DEFAULTS.ui.sounds!);
-    sounds.enabled = a.soundsEnabled;
-    config.ui.sounds = sounds;
-  }
-  // Мультиконфиги резолвят активный провайдер из `entries[]`, так что ответы
-  // пишутся на активную запись — без потери соседей и тюнинга записи
-  // (cache, retry, rateLimits). Осознанный кастомный label сохраняется,
-  // generic/дефолтный заменяется.
-  if ((config.provider.entries?.length ?? 0) > 0) {
-    const entries = config.provider.entries ?? [];
-    const activeName =
-      config.provider.active || entries[0]?.label || entries[0]?.type;
-    const idx = entries.findIndex((e) => e.label === activeName || e.type === activeName);
-    if (idx < 0) {
-      // Активная запись не найдена (устарела после правки конфига): писать
-      // ответы в ЧУЖУЮ запись (entries[0]) нельзя — перезаписались бы
-      // настройки другого провайдера (аудит §7.11).
-      warnings.push("provider.active does not match any entry; provider settings not applied");
-    } else {
-      const current = entries[idx];
-      const keepLabel = Boolean(current.label && current.label !== current.type);
-      const updated = {
-        ...current,
-        type: a.provider,
-        baseUrl: a.apiBase,
-        apiKey: a.apiKey,
-        contextWindow: a.contextWindow,
-        ...(keepLabel ? {} : { label: a.provider }),
-      };
-      const next = entries.slice();
-      next[idx] = updated;
-      config.provider.entries = next;
-      config.provider.active = updated.label || updated.type;
+  // Шаг 2.0 «Пропустить»: провайдер/модель/контекст остаются как в конфиге.
+  if (a.configureProvider !== false) {
+    config.provider = {
+      ...config.provider,
+      type: a.provider,
+      baseUrl: a.apiBase,
+      apiKey: a.apiKey,
+    };
+    config.model = a.model;
+    if (a.contextAuto === true) {
+      config.contextWindow = a.contextWindow;
+      // Авто-режим: проба провайдера может уточнять окно и дальше.
+      config.contextAuto = true;
+    } else if (config.contextWindow !== a.contextWindow) {
+      config.contextWindow = a.contextWindow;
+      // Явное окно из визарда = ручной режим: авто-проба провайдера его не
+      // перетирает (аудит §7.11).
+      config.contextAuto = false;
+    } else if (a.contextAuto === false) {
+      config.contextAuto = false;
+    }
+    config.maxToolIterations = a.maxToolIterations;
+    // Мультиконфиги резолвят активный провайдер из `entries[]`, так что ответы
+    // пишутся на активную запись — без потери соседей и тюнинга записи
+    // (cache, retry, rateLimits). Осознанный кастомный label сохраняется,
+    // generic/дефолтный заменяется.
+    if ((config.provider.entries?.length ?? 0) > 0) {
+      const entries = config.provider.entries ?? [];
+      const activeName = config.provider.active || entries[0]?.label || entries[0]?.type;
+      const idx = entries.findIndex((e) => e.label === activeName || e.type === activeName);
+      if (idx < 0) {
+        // Активная запись не найдена (устарела после правки конфига): писать
+        // ответы в ЧУЖУЮ запись (entries[0]) нельзя — перезаписались бы
+        // настройки другого провайдера (аудит §7.11).
+        warnings.push("provider.active does not match any entry; provider settings not applied");
+      } else {
+        const current = entries[idx];
+        const keepLabel = Boolean(current.label && current.label !== current.type);
+        const updated = {
+          ...current,
+          type: a.provider,
+          baseUrl: a.apiBase,
+          apiKey: a.apiKey,
+          contextWindow: a.contextWindow,
+          ...(keepLabel ? {} : { label: a.provider }),
+        };
+        const next = entries.slice();
+        next[idx] = updated;
+        config.provider.entries = next;
+        config.provider.active = updated.label || updated.type;
+      }
     }
   }
+  config.locale = a.locale;
+  applyAgentAndUiAnswers(config, a);
   applySecurityAnswers(config, a);
   return { config, warnings };
 }
@@ -111,6 +113,37 @@ export function applyAnswersToConfigWithWarnings(
 /** Применить ответы визарда (старый контракт — без предупреждений). */
 export function applyAnswersToConfig(config: AppConfig, a: SetupAnswers): AppConfig {
   return applyAnswersToConfigWithWarnings(config, a).config;
+}
+
+/**
+ * Критик, веб-поиск и оформление веб-UI. Эти ответы применяются и при
+ * `configureProvider === false`: шаг 2.0 пропускает только провайдера.
+ */
+function applyAgentAndUiAnswers(config: AppConfig, a: SetupAnswers): void {
+  if (typeof a.criticEnabled === "boolean") {
+    config.critic = { ...(config.critic ?? DEFAULTS.critic), enabled: a.criticEnabled };
+  }
+  if (typeof a.webSearchEnabled === "boolean") {
+    config.webSearch = {
+      ...(config.webSearch ?? DEFAULTS.webSearch!),
+      enabled: a.webSearchEnabled,
+    };
+  }
+  if (a.theme !== undefined) config.ui.theme = a.theme;
+  if (a.themeMode !== undefined) config.ui.themeMode = a.themeMode;
+  if (typeof a.themeEffects === "boolean") config.ui.themeEffects = a.themeEffects;
+
+  const sounds = a.sounds;
+  const enabled = typeof a.soundsEnabled === "boolean" ? a.soundsEnabled : sounds?.enabled;
+  if (enabled !== undefined || sounds) {
+    const next = config.ui.sounds ?? structuredClone(DEFAULTS.ui.sounds!);
+    if (typeof enabled === "boolean") next.enabled = enabled;
+    if (typeof sounds?.done === "boolean") next.done = sounds.done;
+    if (typeof sounds?.question === "boolean") next.question = sounds.question;
+    if (typeof sounds?.failed === "boolean") next.failed = sounds.failed;
+    if (typeof sounds?.volume === "number") next.volume = sounds.volume;
+    config.ui.sounds = next;
+  }
 }
 
 /**

@@ -10,20 +10,26 @@ i18n.I18N.dicts = {
     "web.speed.tps": "{n} tok/s",
     "web.speed.estimated": "≈ {n} tok/s",
     "web.speed.title": "generation speed",
-    "web.speed.total": "{tokens} tokens in {sec}s",
-    "web.speed.call": "#{n} · {tokens} tokens · {sec}s · {rate} tok/s",
-    "web.speed.estimate_note": "≈ estimated from streamed characters",
   },
 };
 const { resetSpeed, noteChunk, speedView, speedText } = await import(
   "../src/modules/webui/assets/js/speed.js"
 );
-const { renderSpeed } = await import("../src/modules/webui/assets/js/feed/speed-chip.js");
+const { renderSpeed, renderLiveSpeed, resetSpeedChip } = await import(
+  "../src/modules/webui/assets/js/feed/speed-chip.js"
+);
+const { session } = await import("../src/modules/webui/assets/js/store.js");
 
 const T0 = 1_000_000;
 
 describe("generation speed", () => {
-  beforeEach(() => resetSpeed("s"));
+  beforeEach(() => {
+    resetSpeed("s");
+    resetSpeed("a");
+    session.activeSessionId = null;
+    session.runningSessionIds = [];
+    session.busy = false;
+  });
 
   it("estimates live tok/s from a rolling window", () => {
     // 400 chars = 100 tokens per second over a 1 s span.
@@ -66,5 +72,48 @@ describe("generation speed", () => {
     renderSpeed({});
     expect(chip.hidden).toBe(true);
     expect(chip.textContent).toBe("");
+  });
+
+  it("has no per-call tooltip on the speed chip", () => {
+    document.body.innerHTML = '<span id="speedChip" hidden></span>';
+    renderSpeed({
+      llmSpeed: {
+        completionTokens: 100,
+        decodeMs: 2000,
+        calls: [{ completionTokens: 100, decodeMs: 2000, source: "api" }],
+      },
+    });
+    const chip = document.getElementById("speedChip") as HTMLElement;
+    chip.dispatchEvent(new Event("mouseenter"));
+    expect(document.querySelector(".ctip.show")).toBeNull();
+  });
+
+  it("renders the live estimate in the same footer chip", () => {
+    document.body.innerHTML = '<span id="speedChip" hidden></span>';
+    session.activeSessionId = "s";
+    session.runningSessionIds = ["s"];
+    const now = Date.now();
+    noteChunk("s", "x".repeat(400), now);
+    noteChunk("s", "x".repeat(200), now + 100);
+    renderLiveSpeed("s");
+    const chip = document.getElementById("speedChip") as HTMLElement;
+    expect(chip.hidden).toBe(false);
+    expect(chip.textContent).toContain("tok/s");
+  });
+
+  it("ignores a background session and clears on tab change", () => {
+    document.body.innerHTML = '<span id="speedChip" hidden></span>';
+    session.activeSessionId = "a";
+    session.runningSessionIds = ["a"];
+    const now = Date.now();
+    noteChunk("a", "x".repeat(400), now);
+    renderLiveSpeed("a");
+    const chip = document.getElementById("speedChip") as HTMLElement;
+    expect(chip.hidden).toBe(false);
+    // A chunk from another running session must not touch the active chip.
+    renderLiveSpeed("b");
+    expect(chip.hidden).toBe(false);
+    resetSpeedChip();
+    expect(chip.hidden).toBe(true);
   });
 });

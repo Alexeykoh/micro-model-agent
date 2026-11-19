@@ -7,7 +7,7 @@
 import { wsLine, el } from "../dom.js";
 import { t } from "../i18n.js";
 import { renderFooter, type FooterGit } from "../footer.js";
-import { hiddenText } from "../format.js";
+import { isHiddenText } from "../format.js";
 import { sidebarGitIndicator, openGitChangesTab } from "../sidebar.js";
 import type { Dict } from "../core/store/types.js";
 
@@ -46,10 +46,18 @@ export function paintGitChips(h: Dict): void {
   renderFooter(
     wsLine,
     {
-      workspace: typeof h.workspace === "string" ? hiddenText(h.workspace) : h.workspace,
+      // DLP hides the path entirely; the footer draws a lock + tooltip instead
+      // of a readable "hidden by data policy" string.
+      workspace: typeof h.workspace === "string" && !isHiddenText(h.workspace) ? h.workspace : "",
+      workspaceHidden: typeof h.workspace === "string" && isHiddenText(h.workspace),
+      workspaceTitle: t("web.egress.hidden_tip"),
       version: h.version,
       updateAvailable: h.updateAvailable || undefined,
       dev: h.dev === true,
+      devLabel:
+        typeof h.devBuildId === "string" && h.devBuildId
+          ? t("web.env.dev_label", { id: h.devBuildId })
+          : undefined,
       devTitle: t("web.env.dev_title"),
       dirLabel: t("web.env.dir"),
       updateTitle: t("web.update.chip_title", { latest: h.updateAvailable?.latest ?? "" }),

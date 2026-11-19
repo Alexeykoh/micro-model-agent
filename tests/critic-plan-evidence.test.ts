@@ -36,6 +36,8 @@ describe("critic plan evidence (S5)", () => {
     expect(CRITIC_SYSTEM_PROMPT).toContain("PLAN PENDING STEPS");
     expect(CRITIC_SYSTEM_PROMPT).toContain("shell unavailable");
     expect(CRITIC_SYSTEM_PROMPT).toContain("[SECURITY BLOCKED]");
+    expect(CRITIC_SYSTEM_PROMPT).toContain("blank line");
+    expect(CRITIC_SYSTEM_PROMPT).toContain("CONFIG DIR");
   });
 });
 
@@ -55,6 +57,7 @@ describe("ExecutionModule.getPlanPendingSteps (S5)", () => {
       title: "T",
       steps: ["Update src/ui.tsx"],
       checks: ["manual:verify the UI"],
+      evidence: ["behavioral"],
     });
     expect(res.success).toBe(true);
 
@@ -74,6 +77,7 @@ describe("ExecutionModule.getPlanPendingSteps (S5)", () => {
       title: "T",
       steps: ["Update src/ui.tsx"],
       checks: ["manual:verify the UI"],
+      evidence: ["behavioral"],
     });
     execModule.getTracker()!.updateStepStatus(1, "done");
     execModule.getTracker()!.addNote(1, "page renders 6 cards");

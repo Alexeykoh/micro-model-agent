@@ -59,7 +59,7 @@ export class OpenAICompatProvider implements LLMProvider {
     // Без capability всё равно читаем OpenAI-совместимые поля: это не меняет
     // запрос и работает для локальных/кастомных серверов.
     this.cacheReport = config.cache?.report ?? "openai";
-    this.tokenCounter = new TokenCounter();
+    this.tokenCounter = new TokenCounter(config.model);
     this.retryConfig = config.retry ?? {
       maxRetries: 3,
       baseDelay: 1000,
