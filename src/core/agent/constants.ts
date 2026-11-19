@@ -185,3 +185,8 @@ export const MAX_REPEATED_TOOL_CALLS_INTERACTIVE = 5;
  * 20+ итераций микроредактировала один файл (edit → build → read → edit…).
  */
 export const MUTATION_CYCLE_NUDGE_THRESHOLD = 5;
+/**
+ * Порог подряд провалов одной цели (тул + путь/команда), после которого
+ * модель получает директиву перечитать файл вместо правки по старому снимку.
+ */
+export const TARGET_FAILURE_NUDGE_THRESHOLD = 3;

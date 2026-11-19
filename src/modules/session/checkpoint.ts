@@ -53,6 +53,8 @@ export interface CheckpointCounters {
   toolFailureCounts: Map<string, { count: number; error: string; samples: string[] }>;
   memoryRuleRecorded: Set<string>;
   toolTargetCounts: Map<string, number>;
+  toolTargetFailures: Map<string, number>;
+  targetFailureNudged: Set<string>;
   cycleNudgedKeys: Set<string>;
   consecutiveSingleQuestions: number;
   questionBatchNudged: boolean;
@@ -117,6 +119,8 @@ export interface TurnCheckpoint {
   toolFailureCounts: Record<string, { count: number; error: string; samples: string[] }>;
   memoryRuleRecorded: string[];
   toolTargetCounts: Record<string, number>;
+  toolTargetFailures: Record<string, number>;
+  targetFailureNudged: string[];
   cycleNudgedKeys: string[];
   consecutiveSingleQuestions: number;
   questionBatchNudged: boolean;
@@ -180,6 +184,10 @@ export function snapshotLoopState(state: CheckpointCounters, threadId?: string):
     toolTargetCounts: Object.fromEntries(
       [...state.toolTargetCounts.entries()].slice(-CHECKPOINT_TARGET_CAP),
     ),
+    toolTargetFailures: Object.fromEntries(
+      [...state.toolTargetFailures.entries()].slice(-CHECKPOINT_TARGET_CAP),
+    ),
+    targetFailureNudged: [...state.targetFailureNudged],
     cycleNudgedKeys: [...state.cycleNudgedKeys],
     consecutiveSingleQuestions: state.consecutiveSingleQuestions,
     questionBatchNudged: state.questionBatchNudged,
@@ -238,6 +246,8 @@ export function restoreLoopState(state: CheckpointCounters, snap: TurnCheckpoint
   state.toolFailureCounts = new Map(Object.entries(snap.toolFailureCounts ?? {}));
   state.memoryRuleRecorded = new Set(snap.memoryRuleRecorded);
   state.toolTargetCounts = new Map(Object.entries(snap.toolTargetCounts ?? {}));
+  state.toolTargetFailures = new Map(Object.entries(snap.toolTargetFailures ?? {}));
+  state.targetFailureNudged = new Set(snap.targetFailureNudged ?? []);
   state.cycleNudgedKeys = new Set(snap.cycleNudgedKeys);
   state.consecutiveSingleQuestions = snap.consecutiveSingleQuestions;
   state.questionBatchNudged = snap.questionBatchNudged;

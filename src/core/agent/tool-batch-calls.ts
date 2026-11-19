@@ -19,6 +19,7 @@ import { appendErrorMeta, summarizeToolArgs, truncateToolOutput } from "./tool-o
 import { queueToolImages } from "./tool-images";
 import { imageEventFields, renderToolResultMeta } from "./tool-result-meta";
 import { recordRepeatedToolFailure } from "./failure-memory";
+import { recordToolTargetFailure } from "./target-failures";
 import {
   bumpBudgetAfterWriteTooLarge,
   detectScriptWorkaround,
@@ -253,6 +254,10 @@ export class ToolCallRunner {
     if (detectScriptWorkaround(this.init.state, call, result)) {
       summaries.push(t("exec.script_workaround_nudge"));
     }
+
+    // Три провала одной цели → директива перечитать файл (structural-сигнал).
+    const targetDirective = recordToolTargetFailure(this.init.state, call, result);
+    if (targetDirective) summaries.push(targetDirective);
 
     if (config.session.autoSave) {
       slog?.logToolResult(call, result, duration, iteration, result.imageRefs);
