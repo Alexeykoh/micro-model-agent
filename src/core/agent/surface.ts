@@ -94,6 +94,33 @@ export function promptBlocksForTest(deps: AgentDeps): PromptBlock[] {
   return deps.promptBlocks;
 }
 
+/**
+ * Мягкий reload `AGENTS.md` без перезапуска процесса: подменяет блоки
+ * инструкций на месте и обновляет системное сообщение живого контекста.
+ * Overflow-override инструкций сбрасывается — иначе старая версия осталась
+ * бы приоритетнее свежей.
+ *
+ * @param blocks свежие блоки `kind: "instructions"` (пусто — убрать).
+ * @returns сколько блоков пришло на замену.
+ */
+export function reloadInstructionBlocks(
+  deps: AgentDeps,
+  overrides: Map<string, PromptBlock>,
+  refresh: () => void,
+  blocks: readonly PromptBlock[],
+): number {
+  // Per-source ключи (`instructions`, `instructions (docs/)`, …): чистим все
+  // замены инструкций, иначе старый сжатый источник остался бы поверх свежего.
+  for (const [key, override] of overrides) {
+    if (override.kind === "instructions" || key === "instructions") {
+      overrides.delete(key);
+    }
+  }
+  const count = replaceInstructionBlocks(deps.promptBlocks, blocks);
+  refresh();
+  return count;
+}
+
 /** Общий ToolContext (бросает, если bootstrap его не дал). */
 export function requireToolContext(deps: AgentDeps): ToolContext {
   if (!deps.toolCtx) throw new Error("toolCtx not provided to Agent");

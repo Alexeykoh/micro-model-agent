@@ -48,8 +48,8 @@ import {
   optionalToolContext,
   promptBlocksForTest,
   pushPromptBlock,
+  reloadInstructionBlocks,
   removePromptBlock,
-  replaceInstructionBlocks,
   requireToolContext,
   runToolByName,
 } from "./surface";
@@ -201,26 +201,14 @@ export class AgentBase {
     removePromptBlock(this.deps, block);
   }
 
-  /**
-   * Мягкий reload `AGENTS.md` без перезапуска процесса: подменяет блоки
-   * инструкций на месте и обновляет системное сообщение живого контекста.
-   * Overflow-override инструкций сбрасывается — иначе старая версия осталась
-   * бы приоритетнее свежей.
-   *
-   * @param blocks свежие блоки `kind: "instructions"` (пусто — убрать).
-   * @returns сколько блоков пришло на замену.
-   */
+  /** Мягкий reload `AGENTS.md` без перезапуска (реализация — `surface.ts`). */
   reloadInstructions(blocks: readonly PromptBlock[]): number {
-    // Per-source ключи (`instructions`, `instructions (docs/)`, …): чистим все
-    // замены инструкций, иначе старый сжатый источник остался бы поверх свежего.
-    for (const [key, override] of this.promptOverrides) {
-      if (override.kind === "instructions" || key === "instructions") {
-        this.promptOverrides.delete(key);
-      }
-    }
-    const count = replaceInstructionBlocks(this.deps.promptBlocks, blocks);
-    this.refreshSystemPrompt();
-    return count;
+    return reloadInstructionBlocks(
+      this.deps,
+      this.promptOverrides,
+      () => this.refreshSystemPrompt(),
+      blocks,
+    );
   }
 
   /** Тестовый вид текущих блоков промпта. */

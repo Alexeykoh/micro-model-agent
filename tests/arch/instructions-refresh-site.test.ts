@@ -4,9 +4,10 @@ import { join, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * Инвариант (INV-1/INV-6): AGENTS.md — живой источник, но читается он только
- * в двух точках: при bootstrap и на границе хода. Прямое чтение из хендлера
- * или каждой итерации рвёт KV-кеш и делает системный промпт нестабильным.
+ * Инвариант (INV-1/INV-6): AGENTS.md читается только в трёх точках: при
+ * bootstrap, на границе хода и по явному `/reload` (daemon soft-reload).
+ * Прямое чтение из хендлера или каждой итерации рвёт KV-кеш и делает
+ * системный промпт нестабильным.
  */
 
 const ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
@@ -28,11 +29,12 @@ function callersOf(symbol: string): string[] {
 }
 
 describe("AGENTS.md: точки чтения и обновления", () => {
-  it("reads AGENTS.md only at bootstrap and at the turn boundary", () => {
+  it("reads AGENTS.md only at bootstrap, at the turn boundary, and on /reload", () => {
     const allowed = new Set([
       "src/core/bootstrap/instructions.ts", // определение loadAgentsMdBlocks
       "src/core/bootstrap/modules-prompt.ts", // стартовая сборка
       "src/core/prompt-instructions.ts", // граница хода
+      "src/core/sources-reload.ts", // явный /reload долгоживущего процесса
     ]);
     expect(callersOf("loadAgentsMdBlocks").every((p) => allowed.has(p))).toBe(true);
   });

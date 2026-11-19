@@ -3,20 +3,6 @@ import type { ProviderConfig } from "./types-provider";
 import type { ThemeMode, UiThemeId } from "./theme-ids";
 import type { WebSearchProvider } from "./web-search-provider";
 
-/**
- * Обработка промпт-блоков (AGENTS.md, карта проекта), превышающих бюджет
- * системного промпта. При включённом `summarize` переполненный блок суммаризирует
- * LLM в остаток бюджета (кеш в `<project>/.mma/cache/prompt-summaries`); при
- * неуспехе блок режется с маркером, а модели хинтится чтение полного файла.
- */
-export interface InstructionsConfig {
-  summarize: boolean;
-  /** Доп. файлы/glob'ы рядом с workspace (вне discover-обхода AGENTS.md). */
-  sources: string[];
-  /** Что читать, если в каталоге нет `AGENTS.md`: `claude` → `CLAUDE.md`. */
-  fallback: "claude" | "none";
-}
-
 export interface SessionConfig {
   autoSave: boolean;
   maxSessions: number;
