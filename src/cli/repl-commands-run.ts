@@ -82,10 +82,15 @@ export function registerRunCommands(ctx: ReplContext): void {
           pc.green(t("image.attached", { source: label, size: `${sizeKb} KB` })),
         );
       } catch (err: unknown) {
-        ctx.output.writeLine(
-          pc.red(t("image.error", { message: err instanceof Error ? err.message : String(err) })),
-          "stderr",
-        );
+        // Модуль импортируется динамически внутри try — проверяем по имени класса.
+        const format =
+          err instanceof Error && err.name === "UnsupportedImageError"
+            ? (err as Error & { format?: string }).format
+            : undefined;
+        const message = format
+          ? t("image.unsupported", { format })
+          : t("image.error", { message: err instanceof Error ? err.message : String(err) });
+        ctx.output.writeLine(pc.red(message), "stderr");
       }
     },
   });

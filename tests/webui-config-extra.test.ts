@@ -98,7 +98,15 @@ describe("web config registry extras", () => {
     // `model` / `provider.active` are rendered by the bespoke Model panel,
     // `ui.theme*` — by the bespoke theme card (`theme-panel.ts`) above the
     // generated UI sections.
-    const bespoke = new Set(["model", "provider.active", "ui.theme", "ui.themeMode"]);
+    // `version` is rendered by the bespoke General "about" card.
+    const bespoke = new Set([
+      "model",
+      "provider.active",
+      "ui.theme",
+      "ui.themeMode",
+      "ui.themeEffects",
+      "version",
+    ]);
     const unplaced = buildConfigRegistry()
       .map((e) => e.key)
       .filter((k) => !seen.has(k) && !bespoke.has(k));

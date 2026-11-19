@@ -137,6 +137,8 @@ export interface PromptIOAgent {
 export interface PromptIORegistry {
   has(name: string): boolean;
   register(tool: ToolDefinition, owner?: string): void;
+  /** Полный каталог для панели Tools; у настоящего `ToolRegistry` есть. */
+  getAll?(): ToolDefinition[];
 }
 
 /**

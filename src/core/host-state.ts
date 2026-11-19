@@ -16,7 +16,7 @@ import type { GitSnapshot } from "../tools/git-core";
 import type { SessionManager } from "../modules/session/manager";
 import type { ExecutionModule } from "../modules/execution/module";
 import { planSnapshotFromModule, adaptActivePlan } from "./host-plan";
-import { isDevBuild, readMmaVersion } from "./version";
+import { isDevBuild, readDevBuildId, readMmaVersion } from "./version";
 
 /**
  * Метрики usage последнего хода из `AgentResult` для `HostStateSnapshot`.
@@ -193,6 +193,7 @@ export function buildHostState(deps: HostStateInput, busy: boolean): HostStateSn
     workspace: deps.workspace,
     version: readMmaVersion(),
     dev: isDevBuild(),
+    devBuildId: readDevBuildId(),
     updateAvailable: deps.updateAvailable,
     instructions: deps.instructions,
     projectMap: deps.projectMap ?? undefined,

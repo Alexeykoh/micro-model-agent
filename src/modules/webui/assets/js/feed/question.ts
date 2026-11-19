@@ -2,6 +2,7 @@
 // Extracted from `feed.js`; re-exported there.
 import { el, link } from "../dom.js";
 import { t } from "../i18n.js";
+import { hiddenText } from "../format.js";
 import { api } from "../api.js";
 import type { Dict } from "../core/store/types.js";
 import { feedForEvent, clearEmpty, appendTo, activeFeed, scroll } from "./core.js";
@@ -76,7 +77,7 @@ function questionChoice(q: QuestionBlock, data: Dict, options: unknown[]): void 
   const multiple = !!data.multiple;
   const allowCustom = !!data.allowCustom;
   const entries: Array<{ label: string; raw: number | null }> = options.map((label) => ({
-    label: String(label),
+    label: hiddenText(String(label)),
     raw: null,
   }));
   if (allowCustom) entries.push({ label: t("web.question.custom"), raw: -1 });
@@ -129,7 +130,7 @@ export function onQuestion(data: Dict): void {
   const feed = feedForEvent(data.sessionId);
   if (!feed) return;
   clearEmpty(feed);
-  const q = makeQuestionBlock(feed, questionLabel(data.text), data.id);
+  const q = makeQuestionBlock(feed, hiddenText(questionLabel(data.text)), data.id);
   const options = Array.isArray(data.options) ? data.options : [];
   if (data.kind === "choice" && options.length) questionChoice(q, data, options);
   else q.block.appendChild(questionTextInput(q, t("web.question.placeholder")));

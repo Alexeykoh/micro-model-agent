@@ -46,6 +46,12 @@ export interface CacheCapability {
 export interface ModelCapabilities {
   /** Модель принимает изображения (image парты в сообщениях). */
   vision?: boolean;
+  /** Модель принимает видео (video-парты в сообщениях). */
+  video?: boolean;
+  /** Модель принимает аудио (audio-парты в сообщениях). */
+  audio?: boolean;
+  /** Модель принимает PDF как документ-парт, а не только через извлечение текста. */
+  pdf?: boolean;
   /** Модель умеет вызывать инструменты. */
   tools?: boolean;
   /** Механизм reasoning (INV-R2): 3 слоя, как vision/tools — оверрайд → проба → пресет. */
@@ -74,6 +80,12 @@ export interface ProviderEntry {
   priority?: number;
   /** Переопределения кеша для записи, накладываются на пресет провайдера. */
   cache?: Partial<CacheCapability>;
+  /**
+   * Модели/алиасы, которые провайдер принимает, но не отдаёт в `/models`.
+   * INV-P1 не очищает их: без списка отличить алиас от удалённой модели
+   * невозможно, поэтому разрешение задаётся явно.
+   */
+  unlistedModels?: string[];
 }
 
 export interface ProviderConfig {

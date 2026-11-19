@@ -14,6 +14,31 @@ const POSIX_ROOTS =
 const WIN_ABS = /[A-Za-z]:[\\/][\w.@+~ -]*/g;
 const UNC = /\\\\[\w.-]+\\[\w.$@+-]+/g;
 
+/** Символ, который продолжает путь: `src` в `/app/src/config` — не новый корень. */
+const PATH_CHAR = /[A-Za-z0-9._~@+\-\\/]/;
+
+/**
+ * Корень начинается на границе пути: начало строки, пробел, кавычка, скобка,
+ * `=`. Двоеточие намеренно не считается границей: `C:/config` — не `/config`.
+ */
+function startsAtBoundary(text: string, start: number): boolean {
+  if (start === 0) return true;
+  return /[\s"'([{<>=,;]/.test(text[start - 1]);
+}
+
+/**
+ * Корень заканчивается на границе: `/`, `\`, конец строки, пунктуация.
+ * Точка — особый случай: `/workspace.` в конце предложения — граница,
+ * `/config.json` — продолжение имени, не граница.
+ */
+function endsAtBoundary(text: string, end: number): boolean {
+  if (end >= text.length) return true;
+  const ch = text[end];
+  if (ch === "/" || ch === "\\") return true;
+  if (!PATH_CHAR.test(ch)) return true;
+  return ch === "." && (end + 1 >= text.length || /\s/.test(text[end + 1]));
+}
+
 /** Value-based: реальные префиксы машины в тексте (workspace/home/доп. корни). */
 function valueBasedFindings(text: string, ctx: PolicyContext, excluded: readonly Range[]): Finding[] {
   const needles = [ctx.baseDir, ctx.home, ...(ctx.workspaceRoots ?? [])]
@@ -28,6 +53,7 @@ function valueBasedFindings(text: string, ctx: PolicyContext, excluded: readonly
     const ranges = findAll(norm, needle);
     for (const [start, end] of ranges) {
       if (overlapsAny(start, end, excluded)) continue;
+      if (!startsAtBoundary(norm, start) || !endsAtBoundary(norm, end)) continue;
       findings.push({ dataClass: "path", kind: "value", start, end, confidence: 1, redact: true });
     }
   }
@@ -46,6 +72,7 @@ export function detectPaths(text: string, ctx: PolicyContext): Finding[] {
       const start = m.index;
       const end = start + m[0].length;
       if (overlapsAny(start, end, excluded)) continue;
+      if (!startsAtBoundary(text, start)) continue;
       // Trim trailing whitespace/punctuation captured by the greedy class.
       const raw = text.slice(start, end).replace(/[ ,.;:)\]}'"]+$/, "");
       findings.push({
@@ -66,6 +93,7 @@ export function detectPaths(text: string, ctx: PolicyContext): Finding[] {
     const start = p.index;
     const end = start + p[0].length;
     if (overlapsAny(start, end, excluded)) continue;
+    if (!startsAtBoundary(text, start)) continue;
     findings.push({
       dataClass: "path",
       kind: "posix-abs",

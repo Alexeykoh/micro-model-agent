@@ -1,6 +1,6 @@
 # Agent Service API v1
 
-Запуск: `mma serve [-p <port>] [--host <addr>] [--token <t>]`. Рантайм —
+Запуск: `mma serve [-p <port>] [--host <addr>] [--token <t>] [--rotate-token]`. Рантайм —
 `src/modules/service/` — поднимает тот же агент, что CLI/REPL/web, но отдаёт
 формальный HTTP-контракт для внешних систем (боты, бэкенды, cron).
 
@@ -46,7 +46,7 @@ guard-тест `tests/service/openapi.test.ts`, который падает, е�
 | Ключ | Дефолт | Смысл |
 |---|---|---|
 | `service.port` | `7331` | порт (флаг `-p` важнее) |
-| `service.host` | `127.0.0.1` | адрес; не-loopback требует токен |
+| `service.host` | `127.0.0.1` | адрес; не-loopback требует токен и TLS |
 | `service.token` | — | `Authorization: Bearer` (control plane → runtime) |
 | `service.tenant` | — | тенант процесса (silo); `X-Mma-Tenant` сверяется с ним |
 | `service.resultRetentionDays` | `7` | хранение терминальных результатов |
@@ -56,9 +56,13 @@ guard-тест `tests/service/openapi.test.ts`, который падает, е�
 | `service.callbackTimeoutMs` | `10000` | таймаут webhook-доставки |
 | `service.webhookSecret` | — | секрет HMAC подписи вебхуков |
 | `service.webhookAllowHttp` | `false` | `http`-callback только для loopback |
+| `service.tls.cert`, `.key` | — | PEM-пути; оба заданы — HTTPS |
+| `service.tls.terminatedByProxy` | `false` | HTTP на не-loopback, TLS терминирует ingress |
 
 Env: `MMA_SERVICE_PORT`, `MMA_SERVICE_HOST`, `MMA_SERVICE_TOKEN`,
-`MMA_SERVICE_TENANT` (важнее конфига). Доступно в `/config` и web Settings →
+`MMA_SERVICE_TENANT`, `MMA_SERVICE_TLS_CERT`, `MMA_SERVICE_TLS_KEY`,
+`MMA_SERVICE_TLS_PROXY` (важнее конфига). Токен также читается из
+`~/.mma/daemon.token`; `--rotate-token` перегенерирует его при старте. Доступно в `/config` и web Settings →
 Network → Agent Service API.
 
 ## Endpoints
@@ -163,14 +167,17 @@ data: { "v":1, "seq", "ts", "type", "sessionId", "taskId", "data" }
 
 Типы: `task.accepted/started/finished/failed/cancelled/waiting_input`,
 `text.delta`, `reasoning.delta`, `phase`, `tool.start`, `tool.end`, `question`,
-`plan`, `error`. `seq` монотонный на сессию; resume —
+`plan`, `meta`, `retract`, `critic`, `log`, `subagent`, `lsp`, `setup_done`,
+`update`. `seq` монотонный на сессию; resume —
 `Last-Event-ID` или `?since=<seq>` из in-memory буфера (best-effort между
 рестартами; статус всегда доступен pull'ом). Keep-alive `: ping` каждые 20 с;
 `X-Accel-Buffering: no`. Список событий задачи ограничен 2000 (старые
 вытесняются). Не больше 32 конкурентных потоков на процесс (иначе `503`),
 backpressure разрывает соединение, поток без событий 120 с закрывается сам.
 Закрытие потока отменяет **только** интерактивную задачу и только если у сессии
-не осталось других подписчиков; `job` продолжается.
+не осталось других подписчиков; `job` продолжается. Окно `service.detachedTurnGraceMs`
+(дефолт `0`) позволяет переподключиться: ход помечается `detached`, события
+`task.detached`/`task.attached`, по истечении окна — отмена с `task.detached_timeout`.
 
 ## Ошибки (RFC 9457)
 
@@ -216,3 +223,69 @@ timestamp, windowMs?})`: сравнение за константное врем
 
 `session.jsonl` — журнал сессии (как в других режимах); `usage` per task;
 тенант — из auth-заголовков (`X-Mma-Principal` и т.п.), не из тела/prompt.
+
+---
+
+## Host wire (split W2)
+
+Тонкий UI-клиент (`RemoteHost`, `src/modules/daemon/remote-host.ts`) говорит с демоном
+через отдельное семейство путей. Это не второй рантайм: submit идёт тем же
+`RunPool`/`SessionRunner`-путём, что `POST /v1/sessions/:id/tasks` с `mode: interactive`,
+а stream — тот же SSE-envelope, что `/v1/sessions/:id/events`.
+
+| Метод | Путь | Назначение |
+|---|---|---|
+| GET | `/v1/host/providers` | провайдеры: список/создание-правка/удаление |
+| GET/POST/PUT/DELETE | `/v1/host/mcp[/:id]` | MCP-серверы: список и CRUD (restartRequired) |
+| GET/POST/DELETE | `/v1/host/memory[/:category/:n]` | память: чтение, запись, забывание |
+| GET/POST/PUT | `/v1/host/plugins[/:name[/settings]]`, `/v1/host/reload/plugins` | плагины: список, тумблер, настройки, reload |
+| GET/PUT | `/v1/host/lsp[/:lang]` | таблица LSP-серверов и правка |
+| GET/POST | `/v1/host/lsp/doctor` | кэш диагностики / запуск (результат — SSE `lsp`) |
+| POST | `/v1/host/lsp/check`, `/check-changed` | диагностика файла/изменённых |
+| GET/POST | `/v1/host/setup`, `/setup/{scan,models,test,context,locale}` | визард первого запуска |
+| GET | `/v1/host/state?session=` | `HostStateSnapshot` + `workspace`/`version`/`protocol` |
+| GET/POST | `/v1/host/sessions` | список / создание сессии |
+| DELETE | `/v1/host/sessions/:id` | удаление простаивающей сессии (409 при busy) |
+| GET | `/v1/host/sessions/:id/history` | история диалога |
+| GET | `/v1/host/sessions/:id/log?since=&limit=` | хвост `session.jsonl` |
+| GET/POST | `/v1/host/config` | отредактированный конфиг + реестр ключей / запись ключа |
+| GET | `/v1/host/models?provider=` | модели активного/указанного провайдера |
+| GET | `/v1/host/commands` | каталог команд с признаком доступности на проводе |
+| GET | `/v1/host/files?path=` | листинг директории workspace (панель Files) |
+| GET | `/v1/host/file?path=&download=` | вьюер файла (тот же джейл/кап, что `/api/file`) |
+| GET | `/v1/host/search?q=&names=1` | поиск по workspace (Files, `@`-mentions) |
+| GET | `/v1/host/sessions/:id/images/:name` | сохранённая картинка тула (байты) |
+| GET | `/v1/host/sessions/:id/system-prompt` | системный промпт активного раннера |
+| GET | `/v1/host/sessions/:id/security?limit=` | журнал защиты сессии |
+| GET | `/v1/host/sessions/:id/subagents` | снимки прогонов субагентов |
+| POST | `/v1/host/sessions/:id/subagents/:runId/interrupt` | остановить прогон |
+| GET | `/v1/host/sessions/:id/queue` | id сообщений очереди (FIFO) |
+| POST | `/v1/host/sessions/:id/queue/cancel|edit|start` | управление очередью |
+| GET | `/v1/host/git`, `/git/changes`, `/git/diff` | read-only git для панели Changes |
+| GET | `/v1/host/memory` | преференции и записи памяти |
+| GET | `/v1/host/skills` | доступные скиллы |
+| GET | `/v1/host/setup` | display-данные визарда |
+| POST | `/v1/host/index` | пересборка карты проекта |
+| GET | `/v1/host/lsp`, `/lsp/doctor` | флаги и диагностика LSP |
+| GET | `/v1/host/plugins` | плагины, failures, MCP-серверы |
+| GET/POST | `/v1/host/update` | версия/апдейт и установка |
+| POST | `/v1/host/sessions/:id/submit` | `{text, images?}` → `202 {turnId}` (data-URL, ≤10) |
+| GET | `/v1/host/sessions/:id/stream` | SSE, resume по `Last-Event-ID`/`?since=` |
+| POST | `/v1/host/sessions/:id/interrupt` | идемпотентная отмена хода: `{interrupted}` |
+| POST | `/v1/host/sessions/:id/pause` / `resume` | durable-пауза агента (409 без раннера) |
+| POST | `/v1/host/sessions/:id/answer` | `{id, answer}` на висящий вопрос |
+| POST | `/v1/host/sessions/:id/command` | `{line}` → `{ok, output[]}`; каталог команд (интерактивные — `terminal-only`) |
+
+`images` в submit — data-URL (≤10, ≤70 МБ): клиент читает клипборд сам (Ctrl+V в
+thin-REPL), демон не имеет доступа к буферу. `X-Mma-Locale` — локаль клиента на
+каждом запросе; сервер исполняет обработчик в ALS-скоупе (`runWithLocale`) и не
+меняет локаль процесса, поэтому разные клиенты видят свои строки (спека §13).
+Мета-канал (`meta`, `retract`, `critic`) едет тем же SSE: thin-клиент печатает
+те же статусы, отзывы черновика и итоги критика, что локальный REPL.
+
+### Web-адаптер
+
+`mma web --daemon-url <url>` не поднимает локальный рантайм: браузерный `/api/*`
+проксируется в `/v1/host/*`, события демона переводятся в веб-SSE. Покрыты
+чат, сессии, история/лог, конфиг, модели, команды, files/git/lsp/memory/skills/
+plugins/setup/index/update.

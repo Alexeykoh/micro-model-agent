@@ -4,9 +4,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { setupHappyDom } from "./helpers/happy-dom";
 
 const win = setupHappyDom();
-const { applyThemeWeather } = await import("../src/modules/webui/assets/js/settings/weather.js");
+const { applyThemeWeather, hasThemeWeather } = await import(
+  "../src/modules/webui/assets/js/settings/weather.js"
+);
 
 beforeEach(() => {
+  // Сброс модульного состояния: DOM чистится, а `current/built` живут между тестами.
+  applyThemeWeather("console");
   document.body.innerHTML = "";
 });
 
@@ -40,5 +44,30 @@ describe("theme weather", () => {
     const first = layer()?.querySelector(".wx-p");
     applyThemeWeather("winter");
     expect(layer()?.querySelector(".wx-p")).toBe(first);
+  });
+
+  it("knows which themes have particles", () => {
+    expect(hasThemeWeather("winter")).toBe(true);
+    expect(hasThemeWeather("autumn")).toBe(true);
+    expect(hasThemeWeather("metallica")).toBe(false);
+    expect(hasThemeWeather("console")).toBe(false);
+  });
+
+  it("hides and reveals the field without losing particles", () => {
+    applyThemeWeather("winter");
+    const first = layer()?.querySelector(".wx-p");
+    applyThemeWeather("winter", false);
+    expect(layer()?.hidden).toBe(true);
+    expect(layer()?.querySelectorAll(".wx-p").length).toBe(28);
+
+    applyThemeWeather("winter", true);
+    expect(layer()?.hidden).toBe(false);
+    expect(layer()?.querySelector(".wx-p")).toBe(first);
+  });
+
+  it("does not create particles when effects are disabled from the start", () => {
+    applyThemeWeather("autumn", false);
+    expect(layer()?.hidden).toBe(true);
+    expect(layer()?.querySelectorAll(".wx-p").length).toBe(0);
   });
 });

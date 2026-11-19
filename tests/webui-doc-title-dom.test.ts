@@ -13,7 +13,6 @@ const win = setupHappyDom(
     `<div class="composer"><div class="composer-main">` +
     `<button class="attach-btn" id="attachBtn" type="button"></button>` +
     `<textarea id="inp"></textarea>` +
-    `<button class="pause-btn" id="pauseBtn" hidden></button>` +
     `<button class="send-btn" id="sendBtn" type="button"></button>` +
     `</div></div><input type="file" id="imgPicker" hidden>`,
 );

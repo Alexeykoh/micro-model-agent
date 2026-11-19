@@ -11,6 +11,7 @@ import type { ToolResult } from "../../tools/types";
 import type { ReasoningState } from "../../tools/set-thinking";
 import type { CostTracker } from "../../modules/pricing/index";
 import { CostTracker as CostTrackerCtor } from "../../modules/pricing/index";
+import { providerReasoningSnapshot, type ProviderReasoningSnapshot } from "./provider-snapshot";
 import { createPolicyState, type PolicyState } from "../../modules/reasoning/policy";
 import { ContextRenderer } from "./context-renderer";
 import type { PromptProfile } from "../types";
@@ -25,6 +26,8 @@ import {
   type ProviderPhaseHost,
   type ReconfigureOptions,
 } from "./provider-phase";
+import { discoverCapabilities } from "./provider-probes";
+import { retryReasoningDiscovery } from "./reasoning-reprobe";
 import {
   buildSystemPrompt as phaseBuildSystemPrompt,
   refreshSystemPrompt as phaseRefreshSystemPrompt,
@@ -46,6 +49,7 @@ import {
   promptBlocksForTest,
   pushPromptBlock,
   removePromptBlock,
+  replaceInstructionBlocks,
   requireToolContext,
   runToolByName,
 } from "./surface";
@@ -137,19 +141,27 @@ export class AgentBase {
   }
 
   /** Стратегия reasoning, реально применённая к активному провайдеру. */
-  providerReasoningSnapshot(): {
-    strategy?: import("../../config/types").ReasoningStrategy;
-    levels?: string[] | null;
-    reasoningOff?: boolean;
-    reachable?: boolean;
-  } {
-    const ref = this.deps.capabilitiesProbeRef;
-    return {
-      strategy: ref?.reasoningStrategy,
-      levels: ref?.reasoningLevels ?? null,
-      reasoningOff: ref?.reasoningOff,
-      reachable: ref?.reachable,
-    };
+  providerReasoningSnapshot(): ProviderReasoningSnapshot {
+    return providerReasoningSnapshot(this.deps);
+  }
+
+  /**
+   * Переспрашивает бэкенд, если стартовая проба не узнала механизм reasoning
+   * у холодной модели. При успехе пересобирает провайдера, чтобы селектор и
+   * реальные запросы пользовались одним резолвом (INV-R8).
+   */
+  async refreshProviderCapabilities(onUpdated?: () => void): Promise<boolean> {
+    const updated = await retryReasoningDiscovery(
+      this.deps,
+      this.deps.config,
+      discoverCapabilities,
+    );
+    if (updated) {
+      if (this.deps.reasoningStrategy === "none") this.probePassed = false;
+      await this.reconfigure(this.deps.config, { probe: false });
+      onUpdated?.();
+    }
+    return updated;
   }
 
   /**
@@ -187,6 +199,28 @@ export class AgentBase {
   /** Убирает ранее запушенный блок (по ссылке). */
   removePromptBlock(block: PromptBlock): void {
     removePromptBlock(this.deps, block);
+  }
+
+  /**
+   * Мягкий reload `AGENTS.md` без перезапуска процесса: подменяет блоки
+   * инструкций на месте и обновляет системное сообщение живого контекста.
+   * Overflow-override инструкций сбрасывается — иначе старая версия осталась
+   * бы приоритетнее свежей.
+   *
+   * @param blocks свежие блоки `kind: "instructions"` (пусто — убрать).
+   * @returns сколько блоков пришло на замену.
+   */
+  reloadInstructions(blocks: readonly PromptBlock[]): number {
+    // Per-source ключи (`instructions`, `instructions (docs/)`, …): чистим все
+    // замены инструкций, иначе старый сжатый источник остался бы поверх свежего.
+    for (const [key, override] of this.promptOverrides) {
+      if (override.kind === "instructions" || key === "instructions") {
+        this.promptOverrides.delete(key);
+      }
+    }
+    const count = replaceInstructionBlocks(this.deps.promptBlocks, blocks);
+    this.refreshSystemPrompt();
+    return count;
   }
 
   /** Тестовый вид текущих блоков промпта. */

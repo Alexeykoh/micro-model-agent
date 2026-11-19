@@ -27,12 +27,16 @@ export function initComposerDraft(d: Partial<ComposerDraftDeps>): void {
   deps = { ...deps, ...d };
 }
 
-// Grow the composer with its content up to a max, then scroll.
+// Grow the composer with its content up to a max, then scroll. Keep the
+// scrollbar hidden for short drafts: scrollHeight can be a fraction larger than
+// the rounded line box, which showed a nearly full-height thumb on one line.
 const INPUT_MAX_PX = 200;
 export function autogrow(): void {
   if (!inp) return;
   inp.style.height = "auto";
-  inp.style.height = Math.min(inp.scrollHeight, INPUT_MAX_PX) + "px";
+  const full = inp.scrollHeight;
+  inp.style.height = Math.min(full, INPUT_MAX_PX) + "px";
+  inp.style.overflowY = full > INPUT_MAX_PX ? "auto" : "hidden";
   renderMentionMarks();
 }
 

@@ -4,8 +4,8 @@
  */
 import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { isLoopback, BodyTooLargeError, readBody } from "../../webui/util";
-import { parseJsonBody } from "../../webui/http/body";
+import { BodyTooLargeError, parseJsonBody, readBody } from "../../../runtime/http-body";
+import { isLoopback } from "../../../runtime/net";
 import type { ProblemDetails } from "../runtime/problem";
 import { problem } from "../runtime/problem";
 

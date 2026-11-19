@@ -88,7 +88,7 @@ function configControl(def: Dict, key: string): HTMLElement {
 // then its setting rows. Titles come from PANEL_SECTIONS so a section name can
 // never drift from the keys under it.
 function sectionCard(section: Dict): HTMLElement {
-  const card = el("div", "settings-section");
+  const card = el("div", "settings-section" + (section.master ? " master-card" : ""));
   const head = el("div", "sec-head");
   head.appendChild(el("span", "sec-title", t(section.titleKey)));
   card.appendChild(head);
@@ -100,7 +100,17 @@ function sectionCard(section: Dict): HTMLElement {
   section.keys.forEach((key: string) => {
     const def = defFor(key);
     if (!def) return;
-    body.appendChild(row(configLabel(def), configControl(def, key), descFor(def.key)));
+    const r = row(configLabel(def), configControl(def, key), descFor(def.key));
+    // The security master switches disable everything below them — give each a
+    // visually distinct "master" treatment instead of a normal list row.
+    if (
+      key === "security.enabled" ||
+      key === "security.bash.enabled" ||
+      key === "security.network.enabled"
+    ) {
+      r.classList.add("row-master");
+    }
+    body.appendChild(r);
   });
   card.appendChild(body);
   return card;
@@ -111,6 +121,11 @@ function sectionCard(section: Dict): HTMLElement {
 export function renderSections(panel: string, sections: Dict[]): void {
   const container = document.querySelector('[data-panel="' + panel + '"]');
   if (!container) return;
+  renderSectionsInto(container, sections);
+}
+
+/** Same as `renderSections`, but into an explicit node (tab panes, sub-cards). */
+export function renderSectionsInto(container: Element, sections: Dict[]): void {
   sections.forEach((section) => container.appendChild(sectionCard(section)));
 }
 

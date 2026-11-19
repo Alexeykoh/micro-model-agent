@@ -49,6 +49,16 @@ describe("tab switch: guard and blocking (INV-W8)", () => {
     expect(tabs).toContain("if (!tab.state) setSessionLoading(true);");
   });
 
+  it("focuses the composer after opening a new chat", () => {
+    expect(newChat).toContain("inp.focus()");
+    expect(newChat).toMatch(/deps\.openTab\([\s\S]*?focusComposer\(\)/);
+  });
+
+  it("resets the speed chip on tab switch (no stale number from another session)", () => {
+    // resetSpeedChip runs both in openTab and closeTab's next-tab branch.
+    expect(tabs.split("resetSpeedChip()").length - 1).toBeGreaterThanOrEqual(2);
+  });
+
   it("new chat sets the skeleton before openTab, never after (no stuck switching)", () => {
     // Регрессия: `newChatTab` ставил setSessionLoading(true) ПОСЛЕ openTab.
     // openTab уже успевал снять загрузку, а поздний вызов оставлял composer

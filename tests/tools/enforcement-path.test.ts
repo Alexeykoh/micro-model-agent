@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "fs";
-import { join } from "path";
+import { join, resolve } from "path";
 import { tmpdir } from "os";
 import { ToolExecutor } from "../../src/tools/executor";
 import { ToolRegistry } from "../../src/tools/registry";
@@ -66,8 +66,42 @@ describe("ToolExecutor path enforcement (W2.2)", () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it("security.paths.enabled=false lifts the jail for read and write (A10)", async () => {
-    const outside = join(baseDir, "..", "outside.txt");
+  it("blocks config secrets and /app source even with the path jail off", async () => {
+    const cfg = mkdtempSync(join(tmpdir(), "mma-cfg-"));
+    const saved = process.env.MMA_CONFIG_DIR;
+    process.env.MMA_CONFIG_DIR = cfg;
+    try {
+      const handler = vi.fn(async () => ({ success: true, output: "ok" }));
+      register({ caps: [{ fs: "read" }], pathArgs: ["path"] }, handler);
+      const executor = makeExecutor(undefined, {
+        security: { paths: { enabled: false, denied: [], allowed: [] } },
+      });
+
+      const key = await executor.execute({
+        id: "k",
+        name: "t",
+        arguments: { path: join(cfg, ".encryption-key") },
+      });
+      expect(key.blocked).toBe(true);
+
+      const appFile = resolve("/app/src/x.ts");
+      const app = await executor.execute({ id: "a", name: "t", arguments: { path: appFile } });
+      expect(app.blocked).toBe(true);
+
+      const provider = await executor.execute({
+        id: "p",
+        name: "t",
+        arguments: { path: join(cfg, "config", "provider.json") },
+      });
+      expect(provider.success).toBe(true);
+    } finally {
+      if (saved === undefined) delete process.env.MMA_CONFIG_DIR;
+      else process.env.MMA_CONFIG_DIR = saved;
+      rmSync(cfg, { recursive: true, force: true });
+    }
+  });
+
+  it("security.paths.enabled=false lifts the jail for read and write (A10)", async () => {    const outside = join(baseDir, "..", "outside.txt");
     const disabled = { security: { paths: { enabled: false, denied: [], allowed: [] } } };
 
     const readHandler = vi.fn(async () => ({ success: true, output: "ok" }));

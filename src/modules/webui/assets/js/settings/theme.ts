@@ -9,6 +9,15 @@ import type { Dict } from "../core/store/types.js";
 import { UI_THEME_IDS } from "./themes.js";
 import { applyThemeWeather } from "./weather.js";
 import {
+  applyOmarchyVars,
+  clearOmarchyVars,
+  osThemeKnown,
+  osThemesAvailable,
+  setOsThemeInfo,
+  type OsThemeInfo,
+} from "./os-theme.js";
+import { api } from "../api.js";
+import {
   DEFAULT_THEME_MODE,
   DEFAULT_THEME_SKIN,
   THEME_MODE_KEY,
@@ -26,6 +35,8 @@ import {
 // локальный оверрайд и вернуться к серверной правде.
 let appliedMode: string | null = null;
 let appliedSkin: string | null = null;
+// Локальный оверрайд тумблера эффектов до ответа сервера (как у темы).
+let appliedEffects: boolean | null = null;
 // Миграция кэша — один раз за загрузку страницы (INV-T5).
 let migrated = false;
 
@@ -60,6 +71,11 @@ export function currentUiTheme(): string {
   return appliedSkin ?? resolveThemeSkin(configUi().theme, cacheGet(THEME_SKIN_KEY));
 }
 
+/** Включены ли частицы сезонной темы (`ui.themeEffects`, дефолт — да). */
+export function themeEffectsEnabled(): boolean {
+  return appliedEffects ?? configUi().themeEffects !== false;
+}
+
 /** Тёмный ли фон для режима (системная настройка читается только для `auto`). */
 function isLight(mode: string): boolean {
   if (mode === "light") return true;
@@ -87,11 +103,35 @@ export function applyTheme(theme: string): void {
 
 /** Применяет скин и зеркалит его в кэш. Невалидный id → дефолт. */
 export function applyUiTheme(theme: string): void {
-  const skin = isThemeSkin(theme) ? theme : DEFAULT_THEME_SKIN;
+  let skin = isThemeSkin(theme) ? theme : DEFAULT_THEME_SKIN;
+  // `omarchy` — тема ОС: на не-Linux её просто нет (пока платформа не известна,
+  // не блокируем, чтобы не мигать консолью из кэша).
+  if (skin === "omarchy" && osThemeKnown() && !osThemesAvailable()) skin = DEFAULT_THEME_SKIN;
   appliedSkin = skin;
   cacheSet(THEME_SKIN_KEY, skin);
   for (const id of UI_THEME_IDS) document.body.classList.toggle(id, id === skin);
-  applyThemeWeather(skin);
+  if (skin === "omarchy") applyOmarchyVars();
+  else clearOmarchyVars();
+  applyThemeWeather(skin, themeEffectsEnabled());
+}
+
+/** Загружает снимок ОС: платформа + активная тема Omarchy. */
+export async function loadOsTheme(): Promise<void> {
+  const r = await api<OsThemeInfo>("/api/os-theme");
+  if (!r.ok || !r.data) return;
+  setOsThemeInfo(r.data);
+  // Repaint through the normal path: on a non-Linux host this also drops a
+  // cached `omarchy` skin back to the default.
+  if (currentUiTheme() === "omarchy") applyUiTheme("omarchy");
+}
+
+/**
+ * Включает/выключает частицы сезонной темы. Локальный оверрайд нужен, чтобы
+ * тумблер сработал мгновенно, не дожидаясь `POST /api/config`.
+ */
+export function applyThemeEffects(enabled: boolean): void {
+  appliedEffects = enabled;
+  applyThemeWeather(currentUiTheme(), enabled);
 }
 
 /**
@@ -102,6 +142,7 @@ export function applyUiTheme(theme: string): void {
 export function syncThemeFromConfig(): void {
   appliedMode = null;
   appliedSkin = null;
+  appliedEffects = null;
   applyTheme(currentTheme());
   applyUiTheme(currentUiTheme());
 }
@@ -122,7 +163,8 @@ export async function migrateThemeCache(
   const mode = themeModeMigration(ui.themeMode, cacheGet(THEME_MODE_KEY));
   if (mode) writes.push({ key: "ui.themeMode", value: mode, apply: applyTheme });
   const skin = themeSkinMigration(ui.theme, cacheGet(THEME_SKIN_KEY));
-  if (skin) writes.push({ key: "ui.theme", value: skin, apply: applyUiTheme });
+  if (skin && (skin !== "omarchy" || osThemesAvailable()))
+    writes.push({ key: "ui.theme", value: skin, apply: applyUiTheme });
   if (!writes.length) return false;
   let changed = false;
   for (const write of writes) {

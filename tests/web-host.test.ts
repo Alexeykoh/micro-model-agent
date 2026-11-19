@@ -1,36 +1,43 @@
 import { describe, it, expect } from "vitest";
 import { WebHost } from "../src/core/web-host";
+import type { HostBridgeSubmitOptions } from "../src/modules/types";
 
-describe("WebHost", () => {
-  it("delegates submit to runAgent and guards busy", async () => {
-    let busy = false;
-    const ran: string[] = [];
+describe("WebHost (W10)", () => {
+  it("delegates submit to the single turn entry point and passes the options", async () => {
+    const calls: Array<{ text: string; opts?: HostBridgeSubmitOptions }> = [];
     const host = new WebHost({
-      runAgent: async (t) => {
-        ran.push(t);
-        return "ok";
+      submitTurn: async (text, opts) => {
+        calls.push({ text, opts });
+        return { ok: true, sessionId: "S1" };
       },
-      isBusy: () => busy,
-      interrupt: () => {
-        busy = false;
-      },
-      executeCommand: async () => {},
-      getState: () => ({ busy }),
+      isBusy: () => false,
+      interrupt: () => {},
+      executeCommand: async () => ({ ok: true, output: [] }),
+      getState: () => ({ busy: false }),
     });
-    expect(await host.submit("hi")).toBe("ok");
-    expect(ran).toEqual(["hi"]);
-    busy = true;
-    await expect(host.submit("again")).rejects.toThrow("agent is busy");
+
+    const out = await host.submit("hi", {
+      sessionId: "S1",
+      images: ["data:image/png;base64,AA=="],
+    });
+    expect(out).toMatchObject({ ok: true, sessionId: "S1" });
+    expect(calls).toEqual([
+      {
+        text: "hi",
+        opts: { sessionId: "S1", images: ["data:image/png;base64,AA=="] },
+      },
+    ]);
   });
 
   it("executeCommand ignores non-slash input", async () => {
     let called = 0;
     const host = new WebHost({
-      runAgent: async () => "x",
+      submitTurn: async () => "x",
       isBusy: () => false,
       interrupt: () => {},
       executeCommand: async () => {
         called++;
+        return { ok: true, output: [] };
       },
       getState: () => ({ busy: false }),
     });

@@ -2,7 +2,7 @@
 import type { ToolResult, ToolContext } from "../../tools/types";
 import { t } from "../../i18n/index";
 import { getPlanProgress } from "./planner";
-import { isBehaviorStep, parseCheck } from "./plan-checks";
+import { needsBehaviorEvidence, parseCheck } from "./plan-checks";
 import type { PlanToolDeps } from "./plan-tool";
 import { STEP_GUARDS, type StepGuardCtx, type StepUpdateStatus } from "./step-guards";
 
@@ -13,7 +13,7 @@ import { STEP_GUARDS, type StepGuardCtx, type StepUpdateStatus } from "./step-gu
  */
 function requireManualEvidence(c: StepGuardCtx, note: string): ToolResult | null {
   if (c.status !== "done" || !c.target.check) return null;
-  if (!isBehaviorStep(String(c.target.description || ""))) return null;
+  if (!needsBehaviorEvidence(c.target)) return null;
   const parsed = parseCheck(c.target.check);
   if (parsed?.kind !== "manual") return null;
   if (note.trim() || String(c.target.note || "").trim()) return null;

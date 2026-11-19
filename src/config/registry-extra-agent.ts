@@ -72,6 +72,12 @@ export const AGENT_EXTRA_DEFS: ConfigKeyDef[] = [
   enumOf("ui.fontSize", "ui", ["compact", "comfortable", "large"] as const, false,
     (c) => c.ui.fontSize ?? "comfortable",
     (c, v) => { c.ui.fontSize = v as "compact" | "comfortable" | "large"; }),
+  // `live` — токены идут в UI сразу (текущее поведение). `after-review` —
+  // финальный кандидат держится в буфере до прохождения critic/audit, а
+  // отклонённый черновик не попадает ни в ленту, ни в историю.
+  enumOf("ui.draftMode", "ui", ["live", "after-review"] as const, false,
+    (c) => c.ui.draftMode ?? "live",
+    (c, v) => { c.ui.draftMode = v as "live" | "after-review"; }),
   // Тема — серверная настройка веб-UI (см. docs/specs/2026-10-30-webui-theme-
   // persistence-design.md): `localStorage` держит только кэш для pre-paint.
   // Эффектов нет, поэтому ключи правятся и во время хода (INV-T3).
@@ -81,6 +87,9 @@ export const AGENT_EXTRA_DEFS: ConfigKeyDef[] = [
   enumOf("ui.themeMode", "ui", THEME_MODES, false,
     (c) => c.ui.themeMode ?? "auto",
     (c, v) => { c.ui.themeMode = v as ThemeMode; }),
+  bool("ui.themeEffects", "ui", false,
+    (c) => c.ui.themeEffects ?? true,
+    (c, v) => { c.ui.themeEffects = v as boolean; }),
 
   int("retry.maxRetries", "agent", 0, 10, 1, false,
     (c) => c.retry.maxRetries,

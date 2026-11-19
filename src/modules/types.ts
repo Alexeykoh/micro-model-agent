@@ -3,6 +3,7 @@
  * мост для управления прогоном из хоста (REPL/веб).
  */
 import type { PromptBlock, AgentPhase, LLMResponse } from "../core/types";
+import type { ClientTz } from "../core/prompt-facts";
 import type { ToolDefinition, ToolCall, ToolResult } from "../tools/types";
 import type { OutputEvent } from "../output/types";
 
@@ -16,6 +17,13 @@ export interface AgentModule {
 export interface HostBridgeSubmitOptions {
   /** Data URL картинок к сообщению (`data:image/png;base64,...`). */
   images?: string[];
+  /**
+   * Сессия-владелец хода (split W10). `undefined` — активная сессия хоста.
+   * Нужен вебу: вкладки шлют ходы параллельно, «активная» — понятие вкладки.
+   */
+  sessionId?: string;
+  /** Часовой пояс клиента (B18b): доезжает до агента до хода. */
+  clientTz?: ClientTz;
 }
 
 /**

@@ -5,8 +5,9 @@
 import type { SessionRunner } from "../../../core/bootstrap/session-runner";
 import { defaultOutputBus } from "../../../output";
 import { errMsg } from "../../../utils/error";
-import { apiGuard } from "../../webui/egress";
+import { apiGuard } from "../../../runtime/egress";
 import { emitEvent } from "../runtime/emit";
+import { attachSubagentSink } from "../runtime/subagent-events";
 import { makeServiceForwarder } from "../runtime/event-bridge";
 import { newEventId } from "../runtime/ids";
 import { problem, type ProblemDetails } from "../runtime/problem";
@@ -36,7 +37,16 @@ async function startTask(s: AgentServiceState, task: TaskRecord): Promise<void> 
   }
 
   if (task.mode === "interactive") installServicePromptIO(s, task, runner);
+  for (const url of task.images ?? []) {
+    (runner.contextManager as { addPendingImage?: (img: unknown) => void } | undefined)?.addPendingImage?.({
+      type: "image_url",
+      image_url: { url },
+    });
+  }
   logTaskContext(runner, task);
+
+  // Прогоны субагентов: живой снимок для панели и события `subagent` (split W10).
+  attachSubagentSink(s, task.sessionId, runner);
 
   const forwarder = makeServiceForwarder({
     emit: (type, data, attempt) => emitEvent(s, task, type, data, attempt),

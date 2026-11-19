@@ -43,13 +43,13 @@ function buildTooltip(): Node {
   head.appendChild(el("span", "ctip-label", t("web.composer.skills_title")));
   head.appendChild(el("span", "ctip-pct", String(loaded.length)));
   frag.appendChild(head);
-  const note = el("div", "qtip-row");
+  const note = el("div", "qtip-row qtip-note");
   note.appendChild(el("span", "ctip-label", t("web.composer.skills_note")));
   frag.appendChild(note);
   for (const s of loaded) {
-    const row = el("div", "qtip-row");
-    row.appendChild(el("span", "ctip-label", s.name));
-    row.appendChild(el("span", "ctip-pct", kindLabel(s.kind)));
+    const row = el("div", "qtip-row qtip-skill");
+    row.appendChild(el("span", "ctip-skill-name", s.name));
+    row.appendChild(el("span", "ctip-skill-kind", kindLabel(s.kind)));
     frag.appendChild(row);
   }
   return frag;

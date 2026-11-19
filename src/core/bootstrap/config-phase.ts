@@ -85,7 +85,7 @@ export async function initConfigPhase(
       });
     }
     // E2: webhook-нотификации — внешний egress, payload проходит ту же DLP.
-    const { apiGuard } = await import("../../modules/webui/egress");
+    const { apiGuard } = await import("../../runtime/egress");
     setAuditEgressGuard(apiGuard({ config, workspace: projectDir }));
   } catch (err) {
     // Logger ещё не создан — запомним и залогируем после его инициализации.

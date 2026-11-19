@@ -3,7 +3,7 @@ import {
   RunPool,
   RUNNER_IDLE_MS,
   RUNNER_LRU_MAX,
-} from "../src/modules/webui/session/session-pool";
+} from "../src/runtime/run-pool/run-pool";
 import type { SessionRunner } from "../src/core/bootstrap/session-runner";
 
 /**

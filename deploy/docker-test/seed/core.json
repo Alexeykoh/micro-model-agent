@@ -1,0 +1,16 @@
+{
+  "version": "2.0.0",
+  "model": "qwen3.8-27b",
+  "contextWindow": 86016,
+  "contextAuto": true,
+  "showReasoning": true,
+  "locale": "ru",
+  "logLevel": "info",
+  "execution": {
+    "autoAdvance": true,
+    "profile": "local-trusted"
+  },
+  "session": {
+    "autoSave": true
+  }
+}

@@ -24,6 +24,10 @@ export interface FooterGit {
 export interface FooterInput {
   /** Каталог workspace агента (абсолютный). */
   workspace?: string;
+  /** Путь скрыт политикой данных (DLP): рисовать замок вместо текста. */
+  workspaceHidden?: boolean;
+  /** Подсказка замка (локализованное «скрыто политикой данных»). */
+  workspaceTitle?: string;
   /** Версия установленного пакета. */
   version?: string;
   /** Доступный апдейт (`current` → `latest`); чип с подсказкой-командой. */
@@ -32,6 +36,8 @@ export interface FooterInput {
   dev?: boolean;
   /** Локализованный title для метки dev. */
   devTitle?: string;
+  /** Подпись метки dev с коротким ID сборки (`dev #a1b2c`). */
+  devLabel?: string;
   /** Локализованная подпись «dir». */
   dirLabel: string;
   /** Локализованный title чипа апдейта. */
@@ -43,6 +49,32 @@ export interface FooterInput {
   git?: FooterGit | null;
   /** Локализованные подписи git-чипов (готовые строки, без t() внутри). */
   gitLabels?: { changes: string; detached: string };
+}
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/** Lucide lock (same table as the rest of the chrome), built without dom.js. */
+function lockIcon(): SVGElement {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "2");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  svg.setAttribute("class", "svg-icon");
+  const parts: Array<[string, Record<string, string | number>]> = [
+    ["rect", { width: 18, height: 11, x: 3, y: 11, rx: 2, ry: 2 }],
+    ["path", { d: "M7 11V7a5 5 0 0 1 10 0v4" }],
+  ];
+  parts.forEach(([tag, attrs]) => {
+    const child = document.createElementNS(SVG_NS, tag);
+    Object.keys(attrs).forEach((k) => child.setAttribute(k, String(attrs[k])));
+    svg.appendChild(child);
+  });
+  return svg;
 }
 
 /**
@@ -58,9 +90,12 @@ export function renderFooter(
 ): void {
   const {
     workspace = "",
+    workspaceHidden = false,
+    workspaceTitle = "",
     version = "",
     updateAvailable = undefined,
     dev = false,
+    devLabel = "dev",
     dirLabel,
     updateTitle = "",
     devTitle = "",
@@ -69,23 +104,38 @@ export function renderFooter(
   } = input;
   const chips = buildGitChips(git, gitLabels);
   const key = JSON.stringify([
-    workspace, version, dev, updateAvailable?.latest ?? "", dirLabel, chips,
+    workspace, workspaceHidden, workspaceTitle, version, dev, devLabel,
+    updateAvailable?.latest ?? "", dirLabel, chips,
   ]);
   // Перестраиваем только на смену входа: `renderState` дёргает рендер на каждый
   // снимок состояния (план/usage/фаза), а DOM-трогать там нечего.
   if (el.dataset.key === key) return;
   el.dataset.key = key;
   el.textContent = "";
-  el.hidden = !workspace && !version && !updateAvailable && !dev && chips.length === 0;
-  if (workspace) {
+  el.hidden =
+    !workspace && !workspaceHidden && !version && !updateAvailable && !dev && chips.length === 0;
+  if (workspace || workspaceHidden) {
     el.appendChild(make("span", "ws-k", dirLabel));
-    const v = make("span", "ws-v", workspace);
-    v.title = workspace;
-    el.appendChild(v);
+    if (workspaceHidden) {
+      // DLP: the path itself must not leak, but the footer still has to say
+      // "there is a workspace" — a gray lock icon plus the explanation on hover.
+      const lock = make("span", "ws-lock dlp-lock", "");
+      lock.appendChild(lockIcon());
+      lock.title = workspaceTitle;
+      lock.setAttribute("aria-label", workspaceTitle);
+      el.appendChild(lock);
+    } else {
+      const v = make("span", "ws-v", workspace);
+      v.title = workspace;
+      el.appendChild(v);
+    }
   }
   // Git — сразу после пути, в той же строке: одна строка вместо двух.
   for (const chip of chips) {
-    const node = make("span", chip.cls, chip.text);
+    const node = make("span", chip.cls, "");
+    // Text goes into its own span: `text-overflow: ellipsis` does not apply to
+    // an anonymous flex item, so a long branch chain used to be hard-clipped.
+    node.appendChild(make("span", "gchip-text", chip.text));
     if (chip.title) node.title = chip.title;
     el.appendChild(node);
   }
@@ -103,7 +153,7 @@ export function renderFooter(
     el.appendChild(v);
   }
   if (dev) {
-    const d = make("span", "ws-dev", "dev");
+    const d = make("span", "ws-dev", devLabel);
     d.title = devTitle;
     el.appendChild(d);
   }

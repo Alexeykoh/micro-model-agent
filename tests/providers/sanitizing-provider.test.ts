@@ -80,7 +80,7 @@ describe("SanitizingProvider (E1)", () => {
     const json = JSON.stringify(inner.seen);
     expect(json).not.toContain("C:\\work\\proj");
     expect(json).not.toContain("DESKTOP-ABC123");
-    expect(json).toContain("<PATH:");
+    expect(json).toContain("src/a.ts");
   });
 
   it("loopback-провайдеру пути остаются (локальная работа)", async () => {
@@ -103,13 +103,12 @@ describe("SanitizingProvider (E1)", () => {
   });
 
   it("ре-гидратирует аргументы тула JSON-safe (backslash не ломает JSON)", async () => {
-    // baseDir = весь путь: value-based finding покрывает его целиком (prefix-режим
-    // иначе заменил бы только корень и сохранил остаток).
-    const fullCtx: PolicyContext = { ...ctx, baseDir: "C:\\work\\proj\\src\\a.ts" };
+    // Не-workspace путь (home) остаётся токеном всего пути; это и проверяем.
+    const homeCtx: PolicyContext = { ...ctx, home: "C:\\Users\\alex\\a.ts" };
     const guard = createGuard({
       config: DEFAULT_DATA_POLICY,
       target: { kind: "provider", trusted: false, host: "api.openai.com" },
-      ctx: fullCtx,
+      ctx: homeCtx,
     });
     const inner = new FakeProvider((seen) => {
       const token = String(seen[0].content).match(/<PATH:[0-9a-f]+>/)?.[0] ?? "";
@@ -123,12 +122,12 @@ describe("SanitizingProvider (E1)", () => {
     });
     const provider = new SanitizingProvider(inner, guard);
     const chunks = await collect(
-      provider.chat([{ role: "user", content: "open C:\\work\\proj\\src\\a.ts" }]),
+      provider.chat([{ role: "user", content: "open C:\\Users\\alex\\a.ts" }]),
     );
     const call = chunks.find((c) => c.type === "tool_call");
     expect(call?.toolCall).toBeDefined();
     const args = JSON.parse(call!.toolCall!.arguments) as { path: string };
-    expect(args.path).toBe("C:\\work\\proj\\src\\a.ts");
+    expect(args.path).toBe("C:\\Users\\alex\\a.ts");
   });
 
   it("чужой токен остаётся как есть (ре-гидратация только по своей карте)", async () => {

@@ -6,6 +6,7 @@ import type { Dict } from "./core/store/types.js";
 import type { SseDeps } from "./sse-deps.js";
 import { activityPhase } from "./core/activity.js";
 import { activityKey } from "./core/activity-stream.js";
+import { ownsActiveSession } from "./store.js";
 
 /** Всё, что нужно маскоту от потока: разбор и подписка на состояние лица. */
 export interface FaceSseDeps {
@@ -43,7 +44,8 @@ export function attachFaceSse(es: EventSource, deps: FaceSseDeps): void {
   for (const [ev, type] of FACE_TYPES) {
     es.addEventListener(ev, (e) => {
       const d = parse(e);
-      if (!d) return;
+      // Маскот — оконный хром: ход чужой (фоновой) сессии его не двигает.
+      if (!d || !ownsActiveSession(d.sessionId)) return;
       faceEvent(
         loaderStateFor({
           type,
@@ -57,14 +59,24 @@ export function attachFaceSse(es: EventSource, deps: FaceSseDeps): void {
   }
   es.addEventListener("phase", (e) => {
     const d = parse(e);
+    if (d && !ownsActiveSession(d.sessionId)) return;
     // Маскот смотрит на ту же фазу, что и рельс: пишет — «печатает», тул — «бежит».
     const phase = d ? activityPhase(activityKey(d)) : "thinking";
     faceEvent(phase === "composing" ? "type" : phase === "tool" ? "run" : "think");
   });
-  es.addEventListener("reasoning", () => faceEvent("think"));
-  es.addEventListener("plan", () => faceEvent("plan"));
+  es.addEventListener("reasoning", (e) => {
+    const d = parse(e);
+    if (d && !ownsActiveSession(d.sessionId)) return;
+    faceEvent("think");
+  });
+  es.addEventListener("plan", (e) => {
+    const d = parse(e);
+    if (d && !ownsActiveSession(d.sessionId)) return;
+    faceEvent("plan");
+  });
   es.addEventListener("turn_end", (e) => {
     const d = parse(e);
+    if (d && !ownsActiveSession(d.sessionId)) return;
     // An interrupted turn (`success:false, interrupted:true`) is a user stop, not
     // a failure — settle the face to "done", never "error".
     faceEvent(d && d.success === false && !d.interrupted ? "error" : "done");
@@ -75,10 +87,15 @@ export function attachFaceSse(es: EventSource, deps: FaceSseDeps): void {
   });
   // A retracted draft is a normal re-check (the gate asked the model to rewrite),
   // re-indexing as workspace search, first-run completion as done.
-  es.addEventListener("retract", () => faceEvent(loaderStateFor({ type: "retract" })));
+  es.addEventListener("retract", (e) => {
+    const d = parse(e);
+    if (d && !ownsActiveSession(d.sessionId)) return;
+    faceEvent(loaderStateFor({ type: "retract" }));
+  });
   // Гейт проверяет готовый ответ: своё состояние, не think/error.
   es.addEventListener("meta", (e) => {
     const d = parse(e);
+    if (d && !ownsActiveSession(d.sessionId)) return;
     if (d?.kind === "progress") faceEvent(loaderStateFor({ type: "verify" }));
   });
   es.addEventListener("index", () => faceEvent("find"));

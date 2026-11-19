@@ -365,16 +365,22 @@ describe("webui assets", () => {
     expect(a.css).toContain(".msg-actions");
   });
 
-  it("groups the model/provider settings into sections with an add affordance", () => {
+  it("splits model/provider settings into an active card plus four tabs", () => {
     const a = loadAssets();
     expect(js(a)).toContain("settingsSection(");
-    expect(js(a)).toContain("web.settings.section_providers");
+    expect(js(a)).toContain("web.settings.active_model");
+    expect(js(a)).toContain("web.settings.tab_providers");
+    expect(js(a)).toContain("web.settings.tab_models");
+    expect(js(a)).toContain("web.settings.tab_performance");
+    expect(js(a)).toContain("web.settings.tab_capabilities");
     expect(js(a)).toContain("provider_make_active");
     expect(js(a)).toContain("provider_advanced");
     expect(a.html).toContain('data-panel="model"');
     expect(a.css).toContain(".settings-section");
     expect(a.css).toContain(".provider-item");
     expect(a.css).toContain(".sec-add");
+    expect(a.css).toContain(".model-tabs");
+    expect(a.css).toContain(".model-pane");
     expect(a.css).toContain(".pform-adv");
   });
 
@@ -425,7 +431,11 @@ describe("webui assets", () => {
     expect(js(a)).toContain("railEvent(");
     expect(js(a)).toContain('["tool_start", "tool_end", "text", "plan"]');
     expect(js(a)).toContain('"ui.activityRail"');
-    expect(js(a)).toContain("setBusy(session.busy)");
+    // Рельс — оконный хром одной вкладки: видимость по ЕЁ ходу, а счётчики
+    // чужой (фоновой) сессии его не двигают.
+    expect(js(a)).toContain("setBusy(own)");
+    expect(js(a)).toContain("key !== railKey()");
+    expect(js(a)).toContain("railPlan(d, d.sessionId)");
   });
 
   it("pins queued messages above the composer instead of into the stream", () => {
@@ -686,8 +696,8 @@ describe("webui assets", () => {
     expect(a.css).toContain(".rail-wrap.l-line .rail-l1, .rail-wrap.l-line .rail-l2 {");
     expect(a.css).toContain("flex-wrap: nowrap; white-space: nowrap;");
     // An empty `last:` must not leave a dangling separator or em dash.
-    expect(a.jsModules?.["js/rail.js"] || "").toContain("lastSepEl.hidden = !lastTool");
-    expect(a.jsModules?.["js/rail.js"] || "").toContain("lastEl.hidden = !lastTool");
+    expect(a.jsModules?.["js/rail.js"] || "").toContain("lastSepEl.hidden = !st.lastTool");
+    expect(a.jsModules?.["js/rail.js"] || "").toContain("lastEl.hidden = !st.lastTool");
   });
 
   it("toggles a plugin immediately without opening its popup", () => {
@@ -777,7 +787,7 @@ describe("webui assets", () => {
     expect(core).toContain("hooks.openSettingsAt?.");
     // LSP/MCP land on their group inside the shared Plugins panel, not at its top.
     expect(core).toContain('mcp: "settings-mcp"');
-    expect(a.jsModules?.["js/settings/panels-plugins.js"] || "").toContain('id: "settings-mcp"');
+    expect(a.jsModules?.["js/settings/panels-plugins-mcp.js"] || "").toContain('id = "settings-mcp"');
     expect(a.css).toContain(".sb-settings");
     // MCP is the one tab whose primary action (add/edit a server) lives in
     // settings — give it an explicit CTA, not only the title-row icon.
@@ -787,15 +797,17 @@ describe("webui assets", () => {
     expect(a.css).toContain(".mcp-settings");
   });
 
-  it("shows generation speed in the rail and a final chip", () => {
+  it("shows generation speed only in the footer chip", () => {
     const a = loadAssets();
-    // Live value lives in the activity rail; the final per-turn number is a
-    // chip in the composer selectors row (both above the input field).
-    expect(a.html).toContain('id="railSpeed"');
+    // One readout: the chip in the composer selectors row. The rail and the
+    // think-block header must not repeat tok/s.
+    expect(a.html).not.toContain('id="railSpeed"');
     expect(a.html).toContain('id="speedChip"');
     expect(a.jsModules?.["js/speed.js"] || "").toContain("SPEED_WINDOW_MS");
     expect(a.jsModules?.["js/speed.js"] || "").toContain("speedView");
-    expect(a.jsModules?.["js/rail.js"] || "").toContain("speedView");
+    expect(a.jsModules?.["js/rail.js"] || "").not.toContain("speedView");
+    expect(a.jsModules?.["js/feed/speed-chip.js"] || "").toContain("renderLiveSpeed");
+    expect(a.jsModules?.["js/feed/speed-chip.js"] || "").toContain("speedView");
     expect(a.jsModules?.["js/sse.js"] || "").toContain("speedChunk");
     expect(a.jsModules?.["js/feed/speed-chip.js"] || "").toContain("renderSpeed");
     expect(a.css).toContain(".speed-chip");

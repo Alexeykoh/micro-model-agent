@@ -1,27 +1,11 @@
-/** Картинки: MIME, буфер обмена, загрузка файла/URL в data URL. */
+/** Картинки: буфер обмена, загрузка файла/URL в data URL. MIME-политика — `image-mime` */
 import { readFileSync } from "fs";
-import { extname } from "path";
 import { fetchValidated } from "../modules/security/network-validator";
 import type { NetworkSecurityConfig } from "../config/types";
+import { rawRasterDataUrl } from "./image-mime";
 
-const MIME_MAP: Record<string, string> = {
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".bmp": "image/bmp",
-  ".svg": "image/svg+xml",
-};
-
-/**
- * Определяет MIME-тип по расширению файла.
- * @param filePath путь к файлу; @returns MIME-тип (дефолт image/png).
- */
-export function detectMime(filePath: string): string {
-  const ext = extname(filePath).toLowerCase();
-  return MIME_MAP[ext] ?? "image/png";
-}
+// Публичный фасад: исторические импорты `image-utils` продолжают работать.
+export { UnsupportedImageError, sniffImageMime, detectMime } from "./image-mime";
 
 /** Токенов на один тайл 512×512 (конвенция провайдеров vision). */
 const IMAGE_TILE_TOKENS = 130;
@@ -195,12 +179,8 @@ export async function loadFileAsDataUrl(filePath: string): Promise<{ dataUrl: st
   const resized = await resizeToJpegDataUrl(buf);
   if (resized) return { dataUrl: resized };
 
-  // Фолбэк: сырой base64 (без ресайза)
-  const b64 = buf.toString("base64");
-  const ext = filePath.split(".").pop()?.toLowerCase();
-  const mime =
-    ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext === "webp" ? "image/webp" : "image/png";
-  return { dataUrl: `data:${mime};base64,${b64}` };
+  // Фолбэк: сырой base64 (без ресайза) — только для растровых байтов.
+  return { dataUrl: rawRasterDataUrl(buf, filePath) };
 }
 
 /** Потолок загрузки картинки по URL (аудит §2.5): больше — ошибка, а не память. */
@@ -268,8 +248,7 @@ export async function loadUrlAsDataUrl(
   const resized = await resizeToJpegDataUrl(buf);
   if (resized) return { dataUrl: resized };
 
-  const b64 = buf.toString("base64");
-  return { dataUrl: `data:image/png;base64,${b64}` };
+  return { dataUrl: rawRasterDataUrl(buf, url) };
 }
 
 /**
@@ -280,6 +259,5 @@ export async function bufferToDataUrl(buf: Buffer): Promise<{ dataUrl: string }>
   const resized = await resizeToJpegDataUrl(buf);
   if (resized) return { dataUrl: resized };
 
-  const b64 = buf.toString("base64");
-  return { dataUrl: `data:image/png;base64,${b64}` };
+  return { dataUrl: rawRasterDataUrl(buf, "clipboard") };
 }

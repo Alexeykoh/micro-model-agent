@@ -174,6 +174,11 @@ export function providerAdvancedFields(editing: Dict) {
     rpm: providerInput(editing.rpm, "number", "60"),
     par: providerInput(editing.parallel, "number", "1"),
     maxTokens: providerInput(editing.maxCompletionTokens, "number", "8192"),
+    unlisted: providerInput(
+      Array.isArray(editing.unlistedModels) ? editing.unlistedModels.join(", ") : "",
+      "text",
+      "alias-a, alias-b",
+    ),
     cacheMech: providerSelect(["auto", "explicit", "local", "none"], cache.mechanism),
     cacheReport: providerSelect(["openai", "deepseek", "anthropic", "ollama", "none"], cache.report),
     retryMax: providerInput(retry.maxRetries, "number", "3"),
@@ -198,6 +203,7 @@ export function providerAdvancedFields(editing: Dict) {
   advGrid.appendChild(pfield("web.settings.provider_rpm", f.rpm));
   advGrid.appendChild(pfield("web.settings.provider_parallel", f.par));
   advGrid.appendChild(pfield("web.settings.provider_max_tokens", f.maxTokens));
+  advGrid.appendChild(pfield("web.settings.provider_unlisted_models", f.unlisted));
   advGrid.appendChild(pfield("web.settings.provider_cache_mechanism", f.cacheMech));
   advGrid.appendChild(pfield("web.settings.provider_cache_report", f.cacheReport));
   adv.appendChild(advGrid);

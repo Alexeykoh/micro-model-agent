@@ -117,13 +117,6 @@ export const ICONS: Record<string, IconSpec> = {
     ["line", { x1: 9, y1: 3, x2: 9, y2: 21 }],
   ],
   square: [["rect", { width: 14, height: 14, x: 5, y: 5, rx: 2 }]],
-  // Пауза/возобновление хода (кнопка рядом со стоп в композере). Lucide-форма:
-  // штриховые фигуры, currentColor — как у остальной таблицы.
-  pause: [
-    ["rect", { x: 6, y: 4, width: 4, height: 16, rx: 1 }],
-    ["rect", { x: 14, y: 4, width: 4, height: 16, rx: 1 }],
-  ],
-  play: [["polygon", { points: "6 4 18 12 6 20" }]],
   copy: [
     ["rect", { width: 14, height: 14, x: 8, y: 8, rx: 2, ry: 2 }],
     ["path", { d: "M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" }],
@@ -154,6 +147,11 @@ export const ICONS: Record<string, IconSpec> = {
     ["path", { d: "M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" }],
     ["path", { d: "M14 2v4a2 2 0 0 0 2 2h4" }],
   ],
+  // DLP marker: the value is withheld from this (external) client.
+  lock: [
+    ["rect", { width: 18, height: 11, x: 3, y: 11, rx: 2, ry: 2 }],
+    ["path", { d: "M7 11V7a5 5 0 0 1 10 0v4" }],
+  ],
   paperclip: [
     ["path", { d: "m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" }],
   ],
@@ -181,6 +179,41 @@ export const ICONS: Record<string, IconSpec> = {
   // LSP "fix" affordance: a wrench reads as repair, not as another refresh.
   wrench: [
     ["path",{d:"M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"}],
+  ],
+  // Model capability chip (composer): vision / video / audio / pdf / tools / reasoning.
+  eye: [
+    ["path", { d: "M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" }],
+    ["circle", { cx: "12", cy: "12", r: "3" }],
+  ],
+  video: [
+    ["path", { d: "m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5" }],
+    ["rect", { x: 2, y: 6, width: 14, height: 12, rx: 2 }],
+  ],
+  "audio-lines": [
+    ["path", { d: "M2 10v3" }],
+    ["path", { d: "M6 6v11" }],
+    ["path", { d: "M10 3v18" }],
+    ["path", { d: "M14 8v7" }],
+    ["path", { d: "M18 5v13" }],
+    ["path", { d: "M22 10v3" }],
+  ],
+  "file-text": [
+    ["path", { d: "M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" }],
+    ["path", { d: "M14 2v5a1 1 0 0 0 1 1h5" }],
+    ["path", { d: "M10 9H8" }],
+    ["path", { d: "M16 13H8" }],
+    ["path", { d: "M16 17H8" }],
+  ],
+  brain: [
+    ["path", { d: "M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" }],
+    ["path", { d: "M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" }],
+    ["path", { d: "M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4" }],
+    ["path", { d: "M17.599 6.5a3 3 0 0 0 .399-1.375" }],
+    ["path", { d: "M6.003 5.125A3 3 0 0 0 6.401 6.5" }],
+    ["path", { d: "M3.477 10.896a4 4 0 0 1 .585-.396" }],
+    ["path", { d: "M19.938 10.5a4 4 0 0 1 .585.396" }],
+    ["path", { d: "M6 18a4 4 0 0 1-1.967-.516" }],
+    ["path", { d: "M19.967 17.484A4 4 0 0 1 18 18" }],
   ],
   // Lucide `biceps-flexed` — индикатор загруженных скиллов (композер).
   "biceps-flexed": [

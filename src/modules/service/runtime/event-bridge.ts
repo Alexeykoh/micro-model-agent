@@ -8,13 +8,20 @@
  */
 import { stripAnsi } from "../../../ui/line-math";
 import { redactContextSecrets } from "../../../core/api";
-import { scrubToolArgs, clipToolOutput } from "../../webui/session/forward";
+import type { MetaKind, RetractInfo } from "../../../core/types";
+import { scrubToolArgs } from "../../../runtime/scrub";
+import { clipToolOutput } from "../../../runtime/tool-output";
 import type { ToolCall, ToolResult } from "../../../tools/types";
 
 /** Передаёт готовые типы событий без `v`/`seq`/`ts` — их добавляет `emit`. */
 export interface ServiceForwarder {
   onText(chunk: string): void;
   onReasoning(chunk: string): void;
+  /**
+   * Мета-канал: статусы, тела тулов, отзыв черновика и итог критика.
+   * Без него thin-клиент терял всю не-текстовую ленту (split W9).
+   */
+  onMeta(chunk: string, kind?: MetaKind, info?: RetractInfo): void;
   onPhase(phase: string): void;
   onToolStart(call: ToolCall): void;
   onToolEnd(call: ToolCall, result: ToolResult, durationMs: number): void;
@@ -41,7 +48,7 @@ const DEFAULT_FLUSH_MS = 250;
 /** Строит буферизирующий мост колбэков агента в типизированные события. */
 export function makeServiceForwarder(opts: ServiceForwarderOptions): ServiceForwarder {
   const flushMs = opts.flushMs ?? DEFAULT_FLUSH_MS;
-  const buf = { text: "", reasoning: "" };
+  const buf = { text: "", reasoning: "", meta: "", metaKind: undefined as MetaKind | undefined };
   let timer: ReturnType<typeof setTimeout> | null = null;
   let attempt = 1;
   /** Непустой массив — события придержаны до `release`/`discard`. */
@@ -66,6 +73,14 @@ export function makeServiceForwarder(opts: ServiceForwarderOptions): ServiceForw
       emit("text.delta", { chunk: stripAnsi(buf.text) });
       buf.text = "";
     }
+    if (buf.meta) {
+      emit("meta", {
+        chunk: stripAnsi(buf.meta),
+        ...(buf.metaKind ? { kind: buf.metaKind } : {}),
+      });
+      buf.meta = "";
+      buf.metaKind = undefined;
+    }
   };
   const schedule = (): void => {
     if (!timer) timer = setTimeout(flush, flushMs);
@@ -78,6 +93,44 @@ export function makeServiceForwarder(opts: ServiceForwarderOptions): ServiceForw
     },
     onReasoning(chunk) {
       buf.reasoning += chunk;
+      schedule();
+    },
+    onMeta(chunk, kind, info) {
+      // `retract` и `critic` — дискретные события со структурой: терминал
+      // печатает `label`, лента/Trace получают детали (как в web-форвардере).
+      if (kind === "retract") {
+        flush();
+        const label = stripAnsi(chunk);
+        emit("retract", {
+          label,
+          reason: info?.reason ? stripAnsi(info.reason) : label,
+          ...(info?.source ? { source: info.source } : {}),
+          ...(info?.iteration !== undefined ? { iteration: info.iteration } : {}),
+          ...(info?.verdict ? { verdict: info.verdict } : {}),
+        });
+        return;
+      }
+      if (kind === "critic" && info?.critic) {
+        flush();
+        const report = info.critic;
+        emit("critic", {
+          label: stripAnsi(chunk),
+          status: report.status,
+          durationMs: report.durationMs,
+          passes: report.passes,
+          issues: report.issues,
+          checks: report.checks,
+          ...(report.summary ? { summary: stripAnsi(report.summary) } : {}),
+          ...(report.timedOut ? { timedOut: true } : {}),
+          ...(info.verdict ? { verdict: info.verdict } : {}),
+        });
+        return;
+      }
+      // Смена вида (тело тула ↔ статус) — отдельное событие, иначе потребитель
+      // не отличит quiet-скрываемое от всегда видимого.
+      if (buf.meta && buf.metaKind !== kind) flush();
+      buf.meta += chunk;
+      buf.metaKind = kind;
       schedule();
     },
     onPhase(phase) {
@@ -94,12 +147,18 @@ export function makeServiceForwarder(opts: ServiceForwarderOptions): ServiceForw
     },
     onToolEnd(call, result, durationMs) {
       flush();
+      const images = (result.images ?? [])
+        .map((part) => part.image_url?.url)
+        .filter((url): url is string => typeof url === "string" && url.length > 0);
+      const imageRefs = (result.imageRefs ?? []).map((ref) => ref.file);
       emit("tool.end", {
         toolCallId: call.id,
         name: call.name,
         success: result.success,
         durationMs,
         output: stripAnsi(redactContextSecrets(clipToolOutput(call.name, result.output || ""))),
+        ...(images.length ? { images } : {}),
+        ...(imageRefs.length ? { imageRefs } : {}),
       });
     },
     flush,
@@ -121,6 +180,8 @@ export function makeServiceForwarder(opts: ServiceForwarderOptions): ServiceForw
       }
       buf.text = "";
       buf.reasoning = "";
+      buf.meta = "";
+      buf.metaKind = undefined;
     },
     setAttempt(next) {
       attempt = next;

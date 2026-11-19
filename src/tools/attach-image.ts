@@ -9,6 +9,7 @@ import {
   readClipboardImage,
   bufferToDataUrl,
   ImageDownloadError,
+  UnsupportedImageError,
 } from "../llm/image-utils";
 import { logSecurityBlock } from "../modules/security/audit-log";
 
@@ -25,7 +26,7 @@ export const attachImageTool: ToolDefinition = {
   },
   icon: "🖼️",
   description:
-    "Attach an image to the conversation from a file path, URL, or clipboard. The image will be included in the next message sent to the model. Supports PNG, JPEG, GIF, WebP.",
+    "Attach an image to the conversation from a file path, URL, or clipboard. The image will be included in the next message sent to the model. Supports PNG, JPEG, GIF, WebP, BMP. SVG is not a model image - convert it to PNG first.",
   tags: ["vision", "image"],
   parameters: {
     type: "object",
@@ -130,6 +131,13 @@ export const attachImageTool: ToolDefinition = {
         images: [{ type: "image_url", image_url: { url: dataUrl } }],
       };
     } catch (err: unknown) {
+      if (err instanceof UnsupportedImageError) {
+        return {
+          success: false,
+          output: t("image.unsupported", { format: err.format }),
+          errorMeta: { code: "unsupported_image", retryable: false },
+        };
+      }
       const code = err instanceof ImageDownloadError ? err.code : undefined;
       const message = err instanceof Error ? err.message : String(err);
       return {

@@ -13,8 +13,10 @@ export const CRITIC_SYSTEM_PROMPT = `You are a strict but fair verifier ("counte
 Rules:
 - Flag ONLY issues that can be verified from the evidence provided. Do not speculate or invent.
 - Do not nitpick style, wording, or preferences unless the user's task demanded it.
+- "First N lines" includes blank lines: a blank line visibly present in a code block counts; do not claim it is missing or demand numbering.
 - If the evidence is insufficient to judge, return status "ok" (prefer silence over noise).
 - A chat-delivered answer (ANSWER section) can fully satisfy the task without any files or commands; absence of changed files is NOT itself an issue when ANSWER contains the requested result.
+- CONFIG DIR is outside the workspace by design: a file read under CONFIG DIR is valid config evidence; do not report it as a missing workspace file.
 - Numeric/price/model claims presented as facts require WEB GROUNDING: verified=true (a web_fetch returned substantive content and the stated figures appear in it). If the work asserts such facts while web grounding is absent, unverified, or lists unverifiedClaims, that is a "concern" (fabricated data).
 - "critical" = the task's stated result is demonstrably not delivered. "concern" = a concrete, checkable gap. "info" = minor.
 - If PLAN PENDING STEPS is non-empty and the TOOL TRAIL shows no work that closes them, that is "critical": honestly saying "I could not do it" does not satisfy the task while the tools to do it were available.
@@ -113,8 +115,23 @@ export class CriticClient {
         { role: "user", content: renderPack(pack) },
       ];
       this.stage({ stage: "verdict", pass: 1 });
-      const firstRaw = await this.chat(messages, signal);
-      const first = this.parseVerdictChecked(firstRaw, "pass-1");
+      let firstRaw = await this.chat(messages, signal);
+      let first = this.parseVerdictChecked(firstRaw, "pass-1");
+      // Малая модель иногда отвечает tool-call XML вместо JSON. Один
+      // корректирующий повтор дешевле, чем потерять критика на весь ход.
+      if (!first && !signal?.aborted) {
+        const retryMessages: Message[] = [
+          ...messages,
+          {
+            role: "user",
+            content:
+              "Your previous reply was not valid JSON. Reply with JSON ONLY, matching the schema; no prose and no tool calls.",
+          },
+        ];
+        this.stage({ stage: "verdict", pass: 1 });
+        firstRaw = await this.chat(retryMessages, signal);
+        first = this.parseVerdictChecked(firstRaw, "pass-1-retry");
+      }
       this.stage({ stage: "verdict", pass: 1, verdict: first ?? undefined });
       if (!first || first.status === "ok" || !opts?.runCheck) return first;
       return await verifyWithChecks(

@@ -162,6 +162,24 @@ describe("Agent in-loop critic", () => {
     expect(summaries.length).toBe(3);
   });
 
+  it("with after-review shows only the answer accepted by the critic", async () => {
+    let verdict = 0;
+    const verify = vi.fn(async () => {
+      verdict++;
+      return verdict === 1
+        ? { status: "critical" as const, summary: "broken", issues: [] }
+        : { status: "ok" as const, summary: "fine", issues: [] };
+    });
+    const t = createMockDeps({ criticOverride: { verify } } as any);
+    t.deps.config.ui = { draftMode: "after-review" };
+    const agent = new Agent(t.deps);
+    const chunks: string[] = [];
+    const result = await agent.run("do work", (chunk) => chunks.push(chunk));
+
+    expect(result.success).toBe(true);
+    expect(chunks.join("")).toBe("final answer");
+  });
+
   it("accepts normally when the critic returns ok", async () => {
     const verify = vi.fn(async () => ({ status: "ok" as const, summary: "fine", issues: [] }));
     const t = createMockDeps({ criticOverride: { verify } } as any);

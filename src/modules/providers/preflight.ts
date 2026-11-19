@@ -7,6 +7,8 @@ export interface PreflightConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
+  /** Тип провайдера: opencode-go/zen требуют `x-opencode-session`. */
+  providerType?: string;
 }
 
 /** Итог пробы: ok / недоступен / нет модели / таймаут. */
@@ -82,15 +84,21 @@ export const PROBE_ANSWERED = "ok";
 /** Минимальная дешёвая chat-проба: подтверждает, что модель загружена. */
 export async function probeChat(cfg: PreflightConfig, timeoutMs: number): Promise<string> {
   const url = `${cfg.baseUrl.replace(/\/+$/, "")}/chat/completions`;
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${cfg.apiKey}`,
+    "Content-Type": "application/json",
+  };
+  // OpenCode Zen/Go маршрутизируют запрос по sticky-сессии и без заголовка
+  // отвечают 400 MissingSessionID — как и основной провайдер.
+  if (cfg.providerType === "opencode-zen" || cfg.providerType === "opencode-go") {
+    headers["x-opencode-session"] = `mma-probe-${process.pid}-${Date.now()}`;
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const resp = await fetch(url, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${cfg.apiKey}`,
-        "Content-Type": "application/json",
-      },
+      headers,
       body: JSON.stringify({
         model: cfg.model,
         messages: [{ role: "user", content: "ok" }],
@@ -98,7 +106,17 @@ export async function probeChat(cfg: PreflightConfig, timeoutMs: number): Promis
       }),
       signal: controller.signal,
     });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    if (!resp.ok) {
+      // Тело ошибки (401/400) объясняет причину лучше, чем голый статус:
+      // «requires an API key», «invalid model» и т.п.
+      let detail = "";
+      try {
+        detail = (await resp.text()).replace(/\s+/g, " ").trim().slice(0, 300);
+      } catch {
+        /* тело недоступно — остаётся статус */
+      }
+      throw new Error(detail ? `HTTP ${resp.status}: ${detail}` : `HTTP ${resp.status}`);
+    }
     const data = (await resp.json()) as {
       choices?: Array<{ message?: { content?: string; reasoning_content?: string } }>;
     };

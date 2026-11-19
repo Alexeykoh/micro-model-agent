@@ -215,6 +215,8 @@ const TECH_NAMES = new Set([
   "qwik.js",
   "svelte.js",
   "jquery.js",
+  "llama.cpp",
+  "whisper.cpp",
 ]);
 
 // Лидирующий `\b` убран осознанно: он не матчится перед точкой dotfile'а

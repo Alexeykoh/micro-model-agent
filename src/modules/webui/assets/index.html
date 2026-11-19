@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/console.css">
   <link rel="stylesheet" href="/groovebox.css">
   <link rel="stylesheet" href="/metallica.css">
+  <link rel="stylesheet" href="/omarchy.css">
   <link rel="stylesheet" href="/themes.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -38,7 +39,7 @@
       var locale = localStorage.getItem("mma-locale");
       if (locale === "en" || locale === "ru") document.documentElement.lang = locale;
       var ui = localStorage.getItem("mma-ui-theme") || "console";
-      var uiThemes = ["console", "groovebox", "neon", "paper", "contrast", "winter", "spring", "summer", "autumn", "metallica"];
+      var uiThemes = ["console", "groovebox", "neon", "paper", "contrast", "winter", "spring", "summer", "autumn", "metallica", "omarchy"];
       if (uiThemes.indexOf(ui) >= 0) document.body.classList.add(ui);
     } catch (e) { /* ignore */ }
   })();
@@ -81,8 +82,8 @@
       <div id="sessRecentList"></div>
       <div class="sess-prune" id="sessPrune" hidden></div>
       <div class="sep"></div>
-      <button class="act" type="button" id="sessNew">+ new session</button>
-      <button class="act" type="button" id="sessRefresh">↻ refresh</button>
+      <button class="act" type="button" id="sessNew">new session</button>
+      <button class="act" type="button" id="sessRefresh">refresh</button>
     </div>
   </div>
   <div class="tabstrip" id="tabstrip"></div>
@@ -102,13 +103,6 @@
 
 <div class="layout">
   <main class="chat" id="main">
-    <div class="main-preview" id="mainPreview" hidden>
-      <div class="mp-head">
-        <span class="mp-path" id="mainPreviewPath"></span>
-        <button class="fbtn mp-close" type="button" id="mainPreviewClose" aria-label="close preview"></button>
-      </div>
-      <div class="mp-body" id="mainPreviewBody"></div>
-    </div>
     <div class="msgs" id="msgs" role="log" aria-label="conversation" tabindex="-1"></div>
     <div class="visually-hidden" id="live" role="status" aria-live="polite" aria-atomic="true"></div>
 
@@ -117,7 +111,6 @@
         <div class="rail-l1">
           <span class="lab" id="railPhase">✦ thinking</span>
           <span class="s" aria-hidden="true">·</span><span class="time" id="railTime" aria-hidden="true">0.0s</span>
-          <span class="speed" id="railSpeed" aria-hidden="true"></span>
           <span class="s" aria-hidden="true">·</span><span class="st" id="railSteps" aria-hidden="true">no plan</span>
           <span class="right" id="railEsc" aria-hidden="true">Esc — stop</span>
         </div>
@@ -133,7 +126,7 @@
         </div>
       </div>
       <div class="selectors">
-        <span class="composer-face" id="composerFace" aria-hidden="true"></span>
+        <span class="composer-face" id="composerFace"></span>
         <div class="sel" data-sel="provider">
           <button id="selProviderBtn">provider: <b>—</b> ▾</button>
           <div class="menu" id="selProviderMenu"></div>
@@ -142,6 +135,7 @@
           <button id="selModelBtn">model: <b>—</b> ▾</button>
           <div class="menu" id="selModelMenu"></div>
         </div>
+        <span class="caps-chip" id="capsChip" hidden></span>
         <div class="sel" data-sel="context">
           <button id="selContextBtn">context: <b>—</b> ▾</button>
           <div class="menu" id="selContextMenu"></div>
@@ -151,6 +145,7 @@
           <div class="menu" id="selReasoningMenu"></div>
         </div>
         <span class="speed-chip" id="speedChip" hidden></span>
+        <button class="tools-btn" id="toolsBtn" type="button" hidden aria-haspopup="dialog" title="Tools"></button>
       </div>
       <input type="file" id="imgPicker" accept="image/*" multiple hidden>
       <div class="attach-strip" id="attachStrip" hidden></div>
@@ -164,7 +159,6 @@
             <textarea class="inp" id="inp" rows="1" placeholder="message… (@ for files, / for commands)"></textarea>
           </div>
           <button class="skills-btn" id="skillsBtn" type="button" hidden aria-label="Loaded skills"></button>
-          <button class="pause-btn" id="pauseBtn" type="button" hidden aria-label="pause"></button>
           <button class="send-btn" id="sendBtn" type="button" aria-label="send">↑</button>
         </div>
         <div class="inp-meta"><span id="hintEnter">Enter — send</span><span id="hintShift">Shift+Enter — newline</span><span id="hintEsc" hidden>Esc — stop</span><span id="hintAttach">Ctrl+V — attach</span><span id="hintShort">Ctrl+K — sessions · Ctrl+P — files</span><span id="hintTouch">tap ↑ — send</span></div>
@@ -349,6 +343,7 @@
           <div class="mi" data-p="reasoning">Reasoning</div>
           <div class="mi" data-p="agent">Agent</div>
           <div class="mi" data-p="network">Network</div>
+          <div class="mi" data-p="service">Service</div>
           <div class="mi" data-p="browser">Browser</div>
           <div class="mi" data-p="sessions">Sessions</div>
           <div class="mi" data-p="ui">UI &amp; Theme</div>
@@ -367,6 +362,7 @@
         <div class="panel" id="p-reasoning"><h3>Reasoning</h3><div class="rows" data-panel="reasoning"></div></div>
         <div class="panel" id="p-agent"><h3>Agent</h3><div class="rows" data-panel="agent"></div></div>
         <div class="panel" id="p-network"><h3>Network</h3><div class="rows" data-panel="network"></div></div>
+        <div class="panel" id="p-service"><h3>Service</h3><div class="rows" data-panel="service"></div></div>
         <div class="panel" id="p-browser"><h3>Browser</h3><div class="rows" data-panel="browser"></div></div>
         <div class="panel" id="p-sessions"><h3>Sessions</h3><div class="rows" data-panel="sessions"></div></div>
         <div class="panel" id="p-ui"><h3>UI &amp; Theme</h3><div class="rows" data-panel="ui"></div></div>

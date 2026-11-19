@@ -9,11 +9,10 @@
 import { t, pluralCount } from "./i18n.js";
 import { labelOf } from "./format.js";
 import { session } from "./store.js";
-import { resetSpeed, speedText, speedView } from "./speed.js";
+import { resetSpeed } from "./speed.js";
+import { renderLiveSpeed } from "./feed/speed-chip.js";
 import {
-  activityCurrentKey,
   activityLabel,
-  activityLookup,
   activityPhase,
   activitySubscribeAll,
   activityTimeText,
@@ -28,7 +27,6 @@ let fillEl: HTMLElement | null = null;
 let notchesEl: HTMLElement | null = null;
 let labEl: HTMLElement | null = null;
 let timeEl: HTMLElement | null = null;
-let speedEl: HTMLElement | null = null;
 let stepsEl: HTMLElement | null = null;
 let escEl: HTMLElement | null = null;
 let toolsEl: HTMLElement | null = null;
@@ -37,10 +35,28 @@ let lastEl: HTMLElement | null = null;
 let lastSepEl: HTMLElement | null = null;
 let layout = "line";
 let busy = false;
-let tools = 0;
-let events = 0;
-let lastTool = "";
-let plan: Dict | null = null;
+
+/**
+ * Счётчики и план — по сессиям. Рельс один на окно и рисует только активную
+ * вкладку; фоновая работа копится в своей записи (и появится при возврате),
+ * но чужие числа на экран не попадают.
+ */
+interface RailSession {
+  tools: number;
+  events: number;
+  lastTool: string;
+  plan: Dict | null;
+}
+const railSessions = new Map<string, RailSession>();
+
+function railSession(key: string): RailSession {
+  let st = railSessions.get(key);
+  if (!st) {
+    st = { tools: 0, events: 0, lastTool: "", plan: null };
+    railSessions.set(key, st);
+  }
+  return st;
+}
 // biome-ignore lint/suspicious/noExplicitAny: opaque timer handle.
 let timer: any = null;
 let unsubActivity: (() => void) | null = null;
@@ -60,16 +76,12 @@ function renderNotches(total: number): void {
 }
 
 /**
- * Чью фазу показывает рельс. Он один на окно, а ходы могут идти параллельно:
- * берём активную вкладку, если её ход идёт, иначе — последнюю активную
- * сессию. Фаза и время — те же, что видит строка «думаю» в ленте.
+ * Чью работу показывает рельс. Он один на окно, а ходы могут идти
+ * параллельно — значит только активная вкладка. Фолбэк «последняя активная
+ * сессия» показывал «думаю» чужого чата в свежем (аудит многозадачности).
  */
 function railKey(): string {
-  const active = session.activeSessionId || "";
-  const current = activityCurrentKey();
-  if (active && activityLookup(active)?.busy) return active;
-  if (current && activityLookup(current)?.busy) return current;
-  return active || current;
+  return session.activeSessionId || "";
 }
 
 function render(): void {
@@ -87,19 +99,18 @@ function render(): void {
   ) {
     return;
   }
-  root.hidden = layout === "off" || !busy;
-  if (root.hidden) return;
   const key = railKey();
+  root.hidden = layout === "off" || !busy || !key;
+  if (root.hidden) return;
+  const st = railSession(key);
   const phase = activityPhase(key);
   root.classList.toggle("phase-tool", phase === "tool");
   root.classList.toggle("phase-compose", phase === "composing");
   labEl.textContent = "✦ " + activityLabel(key);
   timeEl.textContent = activityTimeText(key);
-  if (speedEl) {
-    const sp = speedView(session.activeSessionId);
-    speedEl.textContent = sp ? speedText(sp.value, sp.estimated) : "";
-  }
-  const steps = plan && Array.isArray(plan.steps) ? plan.steps : [];
+  // Live tok/s живёт только в чипе футера (без дубля в рельсе).
+  renderLiveSpeed(key);
+  const steps = st.plan && Array.isArray(st.plan.steps) ? st.plan.steps : [];
   if (steps.length > 0) {
     const done = steps.filter((s: Dict) => s && s.status === "done").length;
     trackEl.dataset.mode = "plan";
@@ -113,12 +124,12 @@ function render(): void {
     trackEl.dataset.mode = "scan";
     stepsEl.textContent = t("web.rail.no_plan");
   }
-  toolsEl.textContent = pluralCount("web.rail.tools", tools);
-  eventsEl.textContent = pluralCount("web.rail.events", events);
+  toolsEl.textContent = pluralCount("web.rail.tools", st.tools);
+  eventsEl.textContent = pluralCount("web.rail.events", st.events);
   // Без последнего тула не оставляем висящий разделитель и «—»: строка короче.
-  if (lastSepEl) lastSepEl.hidden = !lastTool;
-  lastEl.hidden = !lastTool;
-  lastEl.textContent = lastTool ? t("web.rail.last") + " " + lastTool : "";
+  if (lastSepEl) lastSepEl.hidden = !st.lastTool;
+  lastEl.hidden = !st.lastTool;
+  lastEl.textContent = st.lastTool ? t("web.rail.last") + " " + st.lastTool : "";
   escEl.textContent = t("web.input.esc");
 }
 
@@ -138,7 +149,6 @@ export function initRail(cfgLayout?: unknown): void {
   notchesFor = 0;
   labEl = root.querySelector<HTMLElement>(".lab");
   timeEl = root.querySelector<HTMLElement>(".time");
-  speedEl = root.querySelector<HTMLElement>(".speed");
   stepsEl = root.querySelector<HTMLElement>(".st");
   escEl = root.querySelector<HTMLElement>(".right");
   toolsEl = root.querySelector<HTMLElement>(".tools");
@@ -184,13 +194,7 @@ export function setLayout(next: unknown): void {
 
 export function setBusy(on: unknown): void {
   const next = !!on;
-  if (next && !busy) {
-    tools = 0;
-    events = 0;
-    lastTool = "";
-    plan = null;
-    resetSpeed(session.activeSessionId);
-  }
+  if (next && !busy) resetSpeed(railKey() || null);
   busy = next;
   // Таймер живёт только пока идёт ход (и рельс включён) — фоновая висящая
   // петля шла и после конца хода (аудит §6.14).
@@ -199,21 +203,49 @@ export function setBusy(on: unknown): void {
   render();
 }
 
-export function setPlan(p: Dict | null): void {
-  plan = p && Array.isArray(p.steps) && p.steps.length > 0 ? p : null;
+/**
+ * План в рельсе. `sessionId` — владелец события `plan`; без него план
+ * относится к активной вкладке (снапшот `state` из `renderActiveState`).
+ */
+export function setPlan(p: Dict | null, sessionId?: string | null): void {
+  const key = sessionId ? String(sessionId) : railKey();
+  if (!key) return;
+  railSession(key).plan = p && Array.isArray(p.steps) && p.steps.length > 0 ? p : null;
   render();
 }
 
-// Счётчики рельса (тулы/события/последний тул) — его собственные; фаза и
-// время хода живут в `core/activity.ts`, чтобы лента и рельс не расходились.
-export function railEvent(kind: string, name: string): void {
-  events += 1;
+/**
+ * Ход сессии закончился: её счётчики и план больше не про текущую работу.
+ * Событие есть у каждой сессии, поэтому фоновая вкладка тоже обнуляется —
+ * при возврате в неё рельс показывает новый ход, а не прошлый.
+ */
+export function railTurnEnd(sessionId?: string | null): void {
+  const key = sessionId ? String(sessionId) : railKey();
+  if (!key) return;
+  const st = railSession(key);
+  st.tools = 0;
+  st.events = 0;
+  st.lastTool = "";
+  st.plan = null;
+  render();
+}
+
+// Счётчики рельса (тулы/события/последний тул) — по сессиям; фаза и время
+// хода живут в `core/activity.ts`, чтобы лента и рельс не расходились.
+// Фоновые события копятся в своей сессии, но рельс не рисуют: он — хром
+// вкладки на экране.
+export function railEvent(kind: string, name: string, sessionId?: string | null): void {
+  const key = sessionId ? String(sessionId) : railKey();
+  if (!key) return;
+  const st = railSession(key);
+  st.events += 1;
   if (kind === "tool_start") {
-    lastTool = labelOf(name);
+    st.lastTool = labelOf(name);
   } else if (kind === "tool_end") {
-    tools += 1;
-    lastTool = labelOf(name);
+    st.tools += 1;
+    st.lastTool = labelOf(name);
   }
+  if (key !== railKey()) return;
   flash();
   render();
 }

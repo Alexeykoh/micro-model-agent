@@ -23,6 +23,9 @@ export function tableEditor(value: unknown, ctx: Dict, editor: Dict): HTMLElemen
   const columns: Dict[] = editor.columns || [];
   const keyCol = columns[0];
   const rest = columns.slice(1);
+  // Wide records (experts: name/provider/model/tags/attempts/description) do
+  // not fit the settings column as a grid; stack their fields vertically.
+  const stacked = editor.layout === "stack";
   const source: Dict =
     value && typeof value === "object" && !Array.isArray(value) ? (value as Dict) : {};
   const rows: TableRow[] = Object.entries(source).map(([name, val]) => ({
@@ -30,11 +33,26 @@ export function tableEditor(value: unknown, ctx: Dict, editor: Dict): HTMLElemen
     val: val && typeof val === "object" ? { ...(val as Dict) } : {},
     error: "",
   }));
-  const wrap = el("div", "tablectl ctl-block");
+  const wrap = el("div", "tablectl ctl-block" + (stacked ? " table-stack" : ""));
   // Одна автоматическая догрузка моделей на провайдера за жизнь редактора:
   // без этого «список ещё грузится» зацикливал бы перерисовку.
   const autoLoadTried = new Set<string>();
+  const fieldWrap = (label: string, control: HTMLElement): HTMLElement => {
+    const field = el("label", "table-field");
+    field.appendChild(el("span", "table-field-label", label));
+    field.appendChild(control);
+    return field;
+  };
+
   const head = el("div", "table-head");
+  // One explicit track per column: `repeat(auto-fit, …)` left extra columns to
+  // implicit (content-sized) tracks, which clipped model/provider values.
+  const trackTemplate = [
+    "minmax(150px, 1.3fr)",
+    ...rest.map(() => "minmax(120px, 1fr)"),
+    "28px",
+  ].join(" ");
+  head.style.gridTemplateColumns = trackTemplate;
   columns.forEach((c) => head.appendChild(el("span", "table-th", ctx.fieldLabel(c.key))));
   wrap.appendChild(head);
   const body = el("div", "table-body");
@@ -184,7 +202,8 @@ export function tableEditor(value: unknown, ctx: Dict, editor: Dict): HTMLElemen
   const draw = () => {
     body.textContent = "";
     rows.forEach((row) => {
-      const elRow = el("div", "table-row");
+      const elRow = el("div", "table-row" + (stacked ? " table-row-stack" : ""));
+      if (!stacked) elRow.style.gridTemplateColumns = trackTemplate;
       elRow.dataset.key = row.name;
       const keyInput = el("input");
       keyInput.type = "text";
@@ -197,8 +216,13 @@ export function tableEditor(value: unknown, ctx: Dict, editor: Dict): HTMLElemen
           elRow.dataset.key = row.name;
         }
       });
-      elRow.appendChild(keyInput);
-      rest.forEach((col) => elRow.appendChild(inputFor(row, col)));
+      if (stacked) {
+        elRow.appendChild(fieldWrap(ctx.fieldLabel(keyCol.key), keyInput));
+        rest.forEach((col) => elRow.appendChild(fieldWrap(ctx.fieldLabel(col.key), inputFor(row, col))));
+      } else {
+        elRow.appendChild(keyInput);
+        rest.forEach((col) => elRow.appendChild(inputFor(row, col)));
+      }
       const rm = el("button", "table-rm linkbtn", "✕");
       rm.type = "button";
       rm.setAttribute("aria-label", `${ctx.label}: remove ${row.name}`);

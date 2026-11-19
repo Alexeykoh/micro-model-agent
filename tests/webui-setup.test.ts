@@ -50,6 +50,7 @@ function virginState(): WebUiState {
   s.config = structuredClone(DEFAULTS);
   s.setupRequired = true;
   s.setup = buildSetupDisplay();
+  s.workspace = process.cwd();
   return s;
 }
 
@@ -96,6 +97,49 @@ describe("parseSetupAnswers", () => {
   ])("rejects %s", (_label, over) => {
     expect(parseSetupAnswers(validAnswers(over))).toBeNull();
   });
+
+  it("accepts a skipped provider without provider/model/context fields", () => {
+    const a = parseSetupAnswers(
+      validAnswers({
+        configureProvider: false,
+        provider: "",
+        apiBase: "",
+        model: "",
+        contextWindow: undefined,
+        maxToolIterations: undefined,
+      }),
+    );
+    expect(a).not.toBeNull();
+    expect(a?.configureProvider).toBe(false);
+  });
+
+  it("keeps valid new fields and drops an unknown theme/mode", () => {
+    const a = parseSetupAnswers(
+      validAnswers({
+        contextAuto: true,
+        criticEnabled: false,
+        webSearchEnabled: false,
+        theme: "neon",
+        themeMode: "light",
+        themeEffects: false,
+        sounds: { enabled: false, done: false, volume: 30, question: "yes" },
+      }),
+    );
+    expect(a?.contextAuto).toBe(true);
+    expect(a?.criticEnabled).toBe(false);
+    expect(a?.webSearchEnabled).toBe(false);
+    expect(a?.theme).toBe("neon");
+    expect(a?.themeMode).toBe("light");
+    expect(a?.themeEffects).toBe(false);
+    expect(a?.sounds).toEqual({ enabled: false, done: false, volume: 30 });
+
+    const bad = parseSetupAnswers(
+      validAnswers({ theme: "nope", themeMode: "sepia", sounds: { volume: 300 } }),
+    );
+    expect(bad?.theme).toBeUndefined();
+    expect(bad?.themeMode).toBeUndefined();
+    expect(bad?.sounds).toBeUndefined();
+  });
 });
 
 describe("security detail", () => {
@@ -130,7 +174,10 @@ describe("security detail", () => {
 
   it("applies only provided fields, leaving the rest of the config intact", () => {
     const security = structuredClone(DEFAULTS.security);
-    applySecurityDetail(security, { paths: { denied: ["secret.md"] }, advanced: { maxRecursionDepth: 9 } });
+    applySecurityDetail(security, {
+      paths: { denied: ["secret.md"] },
+      advanced: { maxRecursionDepth: 9 },
+    });
     expect(security.paths.denied).toEqual(["secret.md"]);
     expect(security.maxRecursionDepth).toBe(9);
     // Untouched groups keep their defaults.
@@ -156,16 +203,37 @@ describe("webui setup REST", () => {
         defaults: {
           contextWindow: number;
           maxToolIterations: number;
+          contextAuto?: boolean;
           security?: { paths?: { denied?: string[] } };
+        };
+        workspace?: string;
+        current?: {
+          provider?: string;
+          model?: string;
+          criticEnabled?: boolean;
+          webSearchEnabled?: boolean;
+          ui?: { theme?: string };
         };
       };
       expect(body.required).toBe(true);
       expect(body.languages.map((l) => l.value)).toContain("ru");
       expect(body.providers.some((p) => p.type === "openai-compat")).toBe(true);
-      expect(body.providers.find((p) => p.type === "openrouter")?.baseUrl).toContain("openrouter.ai");
+      expect(body.providers.find((p) => p.type === "openrouter")?.baseUrl).toContain(
+        "openrouter.ai",
+      );
+      expect(
+        (body.providers as Array<{ type: string; requiresKey?: boolean }>).find(
+          (p) => p.type === "opencode-go",
+        )?.requiresKey,
+      ).toBe(true);
       expect(body.defaults.contextWindow).toBe(32768);
       expect(body.defaults.maxToolIterations).toBe(200);
+      expect(body.defaults.contextAuto).toBe(true);
       expect(body.defaults.security?.paths?.denied).toContain(".env");
+      expect(body.workspace).toBeTruthy();
+      expect(body.current?.provider).toBe("openai-compat");
+      expect(body.current?.criticEnabled).toBe(true);
+      expect(body.current?.ui?.theme).toBe("console");
     });
   });
 
@@ -266,6 +334,55 @@ describe("webui setup REST", () => {
       expect(res.json.persisted).toBe(false);
       expect(typeof res.json.warning).toBe("string");
       expect(s.setupRequired).toBe(false);
+    });
+  });
+
+  it("POST /api/setup skips provider settings when 2.0 chose defaults", async () => {
+    const s = virginState();
+    s.config!.provider.type = "lmstudio";
+    s.config!.provider.baseUrl = "http://localhost:1234/v1";
+    s.config!.model = "keep/me";
+    s.config!.contextWindow = 16384;
+    s.config!.contextAuto = false;
+    s.config!.maxToolIterations = 42;
+    s.saveConfig = () => {};
+    s.reconfigure = () => {};
+    await withServer(s, async (base) => {
+      const res = await postJson(
+        base,
+        "/api/setup",
+        validAnswers({
+          configureProvider: false,
+          provider: "",
+          apiBase: "",
+          model: "",
+          contextWindow: 0,
+          maxToolIterations: 0,
+          criticEnabled: false,
+          theme: "neon",
+        }),
+      );
+      expect(res.status).toBe(200);
+      expect(s.config?.provider.type).toBe("lmstudio");
+      expect(s.config?.model).toBe("keep/me");
+      expect(s.config?.contextWindow).toBe(16384);
+      expect(s.config?.contextAuto).toBe(false);
+      expect(s.config?.maxToolIterations).toBe(42);
+      expect(s.config?.critic?.enabled).toBe(false);
+      expect(s.config?.ui.theme).toBe("neon");
+    });
+  });
+
+  it("POST /api/setup/test reports latency even when the provider is unreachable", async () => {
+    const s = virginState();
+    await withServer(s, async (base) => {
+      const res = await postJson(base, "/api/setup/test", {
+        baseUrl: "http://127.0.0.1:1/v1",
+        model: "no-such-model",
+      });
+      expect(res.status).toBe(200);
+      expect(res.json.ok).toBe(false);
+      expect(typeof res.json.latencyMs).toBe("number");
     });
   });
 

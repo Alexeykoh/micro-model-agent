@@ -6,7 +6,7 @@
  * по строке на каждый мост, а отписка была одна и симметричная установке.
  */
 import type { SseTransport } from "./state";
-import type { RunPool } from "./session/session-pool";
+import type { RunPool } from "../../runtime/run-pool/run-pool";
 import { installOutputForwarding } from "./log-forward";
 import { installRequestForwarding } from "./session/request-forward";
 import { installSecurityForwarding } from "./session/security-forward";

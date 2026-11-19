@@ -1,8 +1,8 @@
 // Нативные пробы контекста бэкендов (Ollama / llama.cpp / OpenAI-compat
 // /models / models.dev) — вынесено из `provider-context.ts` (правило ≤300).
 import { lookupModelsDevContext } from "./models-dev";
-import { asPositiveInt, matchesModel, pickContextField } from "./openai-compat-models";
-import type { ReasoningStrategy } from "../config/types";
+import { asPositiveInt, declaredMediaCapabilities, matchesModel, pickContextField } from "./openai-compat-models";
+import type { ModelCapabilities, ReasoningStrategy } from "../config/types";
 
 // `/models`-часть (context-поля, декларативные capabilities, достижимость)
 // живёт в `openai-compat-models.ts`; реэкспорт — публичный API прежнего места.
@@ -52,16 +52,12 @@ function contextFromModelInfo(bag: Record<string, unknown>): number | null {
   return pickContextField(bag);
 }
 
-/** Ollama `/api/show`: детали модели, пробуем полное и короткое имя. */
-async function probeOllamaShow(
-  origin: string,
-  model: string,
-  timeoutMs: number,
-): Promise<number | null> {
+/** Ответы Ollama `/api/show` для полного и короткого имени (приоритет — полное). */
+function fetchOllamaShows(origin: string, model: string, timeoutMs: number): Promise<unknown[]> {
   const short = model.split(":")[0];
   // Оба имени — параллельно: порядок имён задаёт приоритет ответа.
   const names = short === model || short === "" ? [model] : [model, short];
-  const shows = await Promise.all(
+  return Promise.all(
     names.map((name) =>
       fetchJson(`${origin}/api/show`, timeoutMs, {
         method: "POST",
@@ -70,6 +66,15 @@ async function probeOllamaShow(
       }),
     ),
   );
+}
+
+/** Ollama `/api/show`: детали модели, пробуем полное и короткое имя. */
+async function probeOllamaShow(
+  origin: string,
+  model: string,
+  timeoutMs: number,
+): Promise<number | null> {
+  const shows = await fetchOllamaShows(origin, model, timeoutMs);
   for (const show of shows) {
     const info = show as {
       model_info?: Record<string, unknown>;
@@ -80,6 +85,26 @@ async function probeOllamaShow(
       const n = contextFromModelInfo(bag as Record<string, unknown>);
       if (n !== null) return n;
     }
+  }
+  return null;
+}
+
+/**
+ * Ollama `/api/show.capabilities` — декларация вида `["completion","tools",
+ * "vision","thinking"]`. Положительные флаги только: молчание эндпоинта не
+ * должно затирать preset/override.
+ */
+export async function probeOllamaCapabilities(
+  origin: string,
+  model: string,
+  timeoutMs: number,
+): Promise<ModelCapabilities | null> {
+  const shows = await fetchOllamaShows(origin, model, timeoutMs);
+  for (const show of shows) {
+    const caps = (show as { capabilities?: unknown } | null)?.capabilities;
+    if (!Array.isArray(caps)) continue;
+    const declared = declaredMediaCapabilities({ capabilities: caps });
+    if (Object.keys(declared).length > 0) return declared;
   }
   return null;
 }
@@ -101,11 +126,40 @@ export async function probeOllama(
   return ps ?? show;
 }
 
+/**
+ * `/props` локального бэкенда. Голый путь понимает llama-server, но llama-swap
+ * (один порт на несколько моделей) отвечает на него 404 «no model id could be
+ * identified»: id модели приходит query-параметром. Второй адрес —
+ * `/props?model=…&autoload=false`: llama-swap проксирует props загруженного
+ * инстанса, но не имеет права поднимать холодную модель ради пробы
+ * (на незагруженную он вернёт 409, и мы честно остаёмся без данных).
+ */
+async function fetchLlamaProps(
+  origin: string,
+  timeoutMs: number,
+  model?: string,
+): Promise<Record<string, unknown> | null> {
+  const urls = [`${origin}/props`];
+  if (model) {
+    urls.push(`${origin}/props?model=${encodeURIComponent(model)}&autoload=false`);
+  }
+  for (const url of urls) {
+    const props = await fetchJson(url, timeoutMs);
+    if (props && typeof props === "object" && !Array.isArray(props)) {
+      return props as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
 /** Сервер llama.cpp: одномодельный `/props` несёт загруженный `n_ctx`. */
-export async function probeLlamaCpp(origin: string, timeoutMs: number): Promise<number | null> {
-  const props = await fetchJson(`${origin}/props`, timeoutMs);
-  if (!props || typeof props !== "object") return null;
-  const bag = props as Record<string, unknown>;
+export async function probeLlamaCpp(
+  origin: string,
+  timeoutMs: number,
+  model?: string,
+): Promise<number | null> {
+  const bag = await fetchLlamaProps(origin, timeoutMs, model);
+  if (!bag) return null;
   const direct = pickContextField(bag);
   if (direct !== null) return direct;
   const gen = bag.default_generation_settings;
@@ -113,6 +167,32 @@ export async function probeLlamaCpp(origin: string, timeoutMs: number): Promise<
     return pickContextField(gen as Record<string, unknown>);
   }
   return null;
+}
+
+/** Media-возможности, объявленные llama.cpp в `/props.modalities`. */
+export type LlamaCppModalities = Pick<ModelCapabilities, "vision" | "video" | "audio">;
+
+/**
+ * llama.cpp `/props.modalities: {vision, video, audio}` — булевы флаги
+ * загруженного mmproj. `true` — принимает; `false` здесь не возвращаем, чтобы
+ * не затирать preset/override при отсутствии проектора (модель может уметь
+ * vision сама). Null — сервер не декларирует.
+ */
+export async function probeLlamaCppModalities(
+  origin: string,
+  timeoutMs: number,
+  model?: string,
+): Promise<LlamaCppModalities | null> {
+  const props = await fetchLlamaProps(origin, timeoutMs, model);
+  if (!props) return null;
+  const mods = props.modalities;
+  if (!mods || typeof mods !== "object" || Array.isArray(mods)) return null;
+  const bag = mods as Record<string, unknown>;
+  const out: LlamaCppModalities = {};
+  for (const key of ["vision", "video", "audio"] as const) {
+    if (bag[key] === true) out[key] = true;
+  }
+  return Object.keys(out).length > 0 ? out : null;
 }
 
 /** Механизм reasoning, объявленный llama.cpp в `/props` (INV-R6). */
@@ -131,10 +211,10 @@ export interface LlamaCppReasoningCaps {
 export async function probeLlamaCppReasoning(
   origin: string,
   timeoutMs: number,
+  model?: string,
 ): Promise<LlamaCppReasoningCaps | null> {
-  const props = await fetchJson(`${origin}/props`, timeoutMs);
-  if (!props || typeof props !== "object") return null;
-  const bag = props as Record<string, unknown>;
+  const bag = await fetchLlamaProps(origin, timeoutMs, model);
+  if (!bag) return null;
   const caps = bag.chat_template_caps;
   if (caps && typeof caps === "object") {
     const c = caps as Record<string, unknown>;

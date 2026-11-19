@@ -24,7 +24,9 @@ afterEach(() => {
 
 describe("probeChat: reasoning-модель", () => {
   it("200 с пустым content считается ответом модели", async () => {
-    stubFetch({ choices: [{ message: { content: "", reasoning_content: "" }, finish_reason: "length" }] });
+    stubFetch({
+      choices: [{ message: { content: "", reasoning_content: "" }, finish_reason: "length" }],
+    });
 
     const text = await probeChat(cfg, 1000);
     expect(text).not.toBe("");
@@ -55,5 +57,29 @@ describe("probeChat: reasoning-модель", () => {
     const res = await preflightProvider(cfg, { probe: (c, t) => probeChat(c, t) });
     expect(res.ok).toBe(false);
     expect(res.reason).toBe("unreachable");
+  });
+
+  it("opencode-go получает x-opencode-session", async () => {
+    let headers: Record<string, string> = {};
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      headers = (init?.headers ?? {}) as Record<string, string>;
+      return new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    await probeChat({ ...cfg, providerType: "opencode-go" }, 1000);
+    expect(headers["x-opencode-session"]).toBeTruthy();
+  });
+
+  it("показывает тело ошибки провайдера", async () => {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ error: { message: "requires an API key" } }), {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      })) as typeof fetch;
+
+    await expect(probeChat(cfg, 1000)).rejects.toThrow("requires an API key");
   });
 });

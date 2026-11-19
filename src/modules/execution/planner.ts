@@ -12,6 +12,9 @@ export interface Subtask {
 /** Вид шага: создание файлов или их удаление (инвертирует deliverable-gate). */
 export type StepKind = "create" | "delete";
 
+/** Класс доказательства шага: объявляется моделью, не выводится из описания. */
+export type StepEvidence = "static" | "behavioral";
+
 /** Шаг плана: описание, статус, kind, контракт проверки, заметка, подзадачи. */
 export interface PlanStep {
   id: number;
@@ -28,6 +31,10 @@ export interface PlanStep {
    *  (self-certified).
    *  Отсутствует только у планов, созданных до checks (back-compat). */
   check?: string;
+  /** Декларированный класс доказательства. "behavioral" запрещает закрывать
+   *  шаг статикой (file-*:, build) и требует поведенческую проверку. Отсутствие поля
+   *  = "static" (back-compat с планами до 2026-11-19). */
+  evidence?: StepEvidence;
   /** Снапшот контента для "file-modified:": sha256 на create/re-plan.
    *  null — файла не было; undefined — легаси-план без снапшота (done блокируется). */
   checkBaseline?: string | null;
@@ -84,6 +91,7 @@ export class PlanCreator {
     kinds?: StepKind[],
     checks?: (string | undefined)[],
     baselines?: (string | null | undefined)[],
+    evidence?: (StepEvidence | undefined)[],
   ): Plan {
     const stepCount = stepDescriptions.length;
     return {
@@ -96,6 +104,7 @@ export class PlanCreator {
         kind: kinds?.[i] ?? "create",
         ...(checks?.[i] ? { check: checks[i] } : {}),
         ...(baselines?.[i] !== undefined ? { checkBaseline: baselines[i] ?? null } : {}),
+        ...(evidence?.[i] ? { evidence: evidence[i] } : {}),
       })),
       createdAt: new Date().toISOString(),
       baseDir,
@@ -103,7 +112,14 @@ export class PlanCreator {
   }
 
   /** Re-plan: сохраняет done/skipped шаги, заменяет остальные новыми. */
-  static replan(plan: Plan, newSteps: string[], title?: string, newChecks?: (string | undefined)[], newBaselines?: (string | null | undefined)[]): Plan {
+  static replan(
+    plan: Plan,
+    newSteps: string[],
+    title?: string,
+    newChecks?: (string | undefined)[],
+    newBaselines?: (string | null | undefined)[],
+    newEvidence?: (StepEvidence | undefined)[],
+  ): Plan {
     const kept = plan.steps.filter((s) => s.status === "done" || s.status === "skipped");
     const baseTitle = plan.title.replace(/^\[\d+[^]]*\]\s*/, "");
     const newTitle = title || baseTitle;
@@ -115,6 +131,7 @@ export class PlanCreator {
       kind: "create",
       ...(newChecks?.[i] ? { check: newChecks[i] } : {}),
       ...(newBaselines?.[i] !== undefined ? { checkBaseline: newBaselines[i] ?? null } : {}),
+      ...(newEvidence?.[i] ? { evidence: newEvidence[i] } : {}),
     }));
     // Перенумеровываем все шаги (сохранённые + новые) подряд. Сохранённые держат
     // статус и kind, но их id могут коллизить с новыми, если исходный план
@@ -159,7 +176,8 @@ export class PlanCreator {
       const note = step.note ? ` — ${step.note}` : "";
       lines.push(`${icon} ${step.id}. ${step.description}${note}`);
       if (step.check) {
-        lines.push(`    ↳ check: ${step.check}`);
+        const evidence = step.evidence === "behavioral" ? " (behavioral evidence required)" : "";
+        lines.push(`    ↳ check: ${step.check}${evidence}`);
       }
       for (const sub of step.subtasks ?? []) {
         lines.push(`    [${sub.id}] ${sub.done ? "[x]" : "[ ]"} ${sub.text}`);

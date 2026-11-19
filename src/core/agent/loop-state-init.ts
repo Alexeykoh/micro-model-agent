@@ -60,6 +60,8 @@ export function createLoopState(): LoopState {
     disabledTools: new Set(),
     toolDisabledNudged: new Set(),
     toolTargetCounts: new Map(),
+    toolTargetFailures: new Map(),
+    targetFailureNudged: new Set(),
     cycleNudgedKeys: new Set(),
     artifactChurn: createArtifactChurnState(),
     consecutiveSingleQuestions: 0,

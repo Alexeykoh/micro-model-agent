@@ -24,8 +24,10 @@ export interface WebUiAssets {
    * палитрой. Опциональна по той же причине, что и `cssConsole`.
    */
   cssGroovebox?: string;
-  /** Тема «Metallica» (`/metallica.css`) — альбомный скин Master of Puppets. */
+  /** Тема <Metallica> (`/metallica.css`) — альбомный скин Master of Puppets. */
   cssMetallica?: string;
+  /** Тема <Omarchy> (`/omarchy.css`) — палитра из активной темы Omarchy Linux. */
+  cssOmarchy?: string;
   /** Обложка-оммаж для фона темы Metallica (`/metallica-cover.svg`). */
   metallicaCover?: string;
   /** Логотип Metallica для хэдера темы (`/metallica-logo.svg`). */
@@ -105,6 +107,35 @@ export interface WebPluginManager {
   getPlugin?(name: string): AgentPlugin | null;
 }
 
+/** Минимальный вид тула для панели Tools (реестр ядра удовлетворяет структурно). */
+export interface WebToolInfo {
+  name: string;
+  description: string;
+  tags?: string[];
+  alwaysOn?: boolean;
+}
+
+/** Тул в ответе `/api/tools`: базовое состояние + ручной override. */
+export interface WebToolView extends WebToolInfo {
+  enabled: boolean;
+  override: "on" | "off" | null;
+}
+
+/** Ручные переопределения видимости тулов для одной сессии. */
+export interface ToolOverrideSet {
+  enabled: string[];
+  disabled: string[];
+}
+
+/**
+ * Итог мягкого reload источников: какие `AGENTS.md` перечитаны и сколько
+ * блоков инструкций пришло на замену. Плагины/скиллы отчитываются отдельно.
+ */
+export interface WebReloadReport {
+  files: string[];
+  instructions: number;
+}
+
 /**
  * Коллабораторы bootstrap для REST конфига/сессий/моделей. Вяжет `module.ts`;
  * опциональны, чтобы тесты гоняли точки изолированно (отсутствующий даёт 503,
@@ -130,8 +161,29 @@ export interface WebUiWiring {
   saveConfig?: (config: AppConfig, key?: string) => void;
   reconfigure?: (config: AppConfig) => void | Promise<void>;
   knownModels?: () => string[];
-  /** Стратегия reasoning и уровни активного эндпоинта (честность UI). */
-  providerReasoning?: () => { strategy?: string; levels?: string[] | null; reasoningOff?: boolean; reachable?: boolean };
+  /** Активный провайдер: список + `loading`/`error` (честные состояния UI). */
+  knownModelsState?: () => { models: string[]; loading: boolean; error?: boolean };
+  /** Повторить загрузку списка активного провайдера (кнопка «повторить»). */
+  knownModelsRefresh?: () => Promise<void>;
+  /** Стратегия reasoning и возможности активного эндпоинта (честность UI). */
+  providerReasoning?: () => {
+    strategy?: string;
+    levels?: string[] | null;
+    reasoningOff?: boolean;
+    reachable?: boolean;
+    /** Холодная модель не отдала /props — есть смысл повторить пробу. */
+    needsReprobe?: boolean;
+    vision?: boolean;
+    video?: boolean;
+    audio?: boolean;
+    pdf?: boolean;
+    tools?: boolean;
+  };
+  /**
+   * Повторить capability-пробу холодной модели. Возвращает true, если уровень
+   * рассуждений наконец получен и живой снимок обновлён.
+   */
+  refreshProviderCapabilities?: () => Promise<boolean>;
   /** Доступен ли активный эндпоинт по последней probe (для честного reasoning view). */
   providerReachable?: () => boolean | undefined;
   /**
@@ -154,8 +206,16 @@ export interface WebUiWiring {
   assetEtag?: () => string | undefined;
   /** Рабочий каталог агента (`-d`) для секции «окружение» сайдбара и `/status`. */
   workspace?: string;
+  /** Каталог всех тулов ядра для панели Tools (без сессионного фильтра). */
+  toolCatalog?: () => WebToolInfo[];
   /** Загруженные источники AGENTS.md (проект + глобальный) или `disabled` через `--no-agents-md`. */
   agentsMd?: { files: string[]; disabled: boolean };
+  /**
+   * Мягкий reload источников (`/reload`): перечитать конфиг и `AGENTS.md` с
+   * диска, не гася процесс. Вяжет CLI (`runWeb`); `undefined` — режим не умеет
+   * (например, daemon-адаптер без локального рантайма).
+   */
+  reload?: () => Promise<WebReloadReport>;
   /** Статистика карты проекта (`null`, пока обход индекса не кончился). */
   projectMapStats?: () => { files: number; symbols: number; tokens: number } | null;
   /**

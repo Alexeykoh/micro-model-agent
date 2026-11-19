@@ -196,6 +196,9 @@ export const DEFAULTS: AppConfig = {
   },
   webSearch: {
     enabled: true,
+    provider: "duckduckgo",
+    images: false,
+    maxImages: 2,
   },
   errorWebSearch: {
     enabled: true,
@@ -217,8 +220,10 @@ export const DEFAULTS: AppConfig = {
     verbose: false,
     verbosity: "quiet",
     fontSize: "comfortable",
+    draftMode: "live",
     theme: "console",
     themeMode: "auto",
+    themeEffects: true,
     // Мастер выключен: звук не появляется сам после апгрейда (quiet by default).
     sounds: { enabled: true, done: true, question: true, failed: true, volume: 50 },
   },
@@ -276,8 +281,14 @@ export const DEFAULTS: AppConfig = {
     idempotencyTtlHours: 24,
     syncWaitMs: 10_000,
     maxQueueLength: 5,
+    detachedTurnGraceMs: 0,
     callbackTimeoutMs: 10_000,
     webhookSecret: undefined,
     webhookAllowHttp: false,
+    tls: {
+      cert: undefined,
+      key: undefined,
+      terminatedByProxy: false,
+    },
   },
 };

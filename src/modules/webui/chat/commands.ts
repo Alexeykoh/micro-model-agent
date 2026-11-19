@@ -16,6 +16,7 @@ import { redactContextSecrets } from "../../../core/api";
 import { errMsg } from "../../../utils/error";
 import { memoryLines } from "./memory-commands";
 import { makeSettingsHandlers } from "../settings/commands-settings";
+import { makeReloadHandler } from "./reload-command";
 import { activeMeta, applyConfigWrite, withConfig, type Handler, type Out } from "./commands-shared";
 import { appendCommandLog } from "./command-log";
 import { broadcast, type SessionStore, type ConfigStore, type WorkspaceStore, type SseTransport, type RuntimeState } from "../state";
@@ -38,6 +39,7 @@ const HELP: Array<{ usage: string; descKey: string }> = [
   { usage: "/session list | /session use <id>", descKey: "web.command.session" },
   { usage: "/export [md|json|jsonl]", descKey: "web.command.export" },
   { usage: "/memory [get|set|unset|find|forget]", descKey: "web.command.memory" },
+  { usage: "/reload", descKey: "web.command.reload" },
   { usage: "/clear", descKey: "web.command.clear" },
   { usage: "/new", descKey: "web.command.new" },
 ];
@@ -81,6 +83,7 @@ export function makeWebCommands(deps: WebCommandDeps): (line: string) => Promise
     model: (args, o) => withConfig(state, o, (cfg) => modelCmd(cfg, args, o, state)),
     provider: (args, o) => withConfig(state, o, (cfg) => providerCmd(cfg, args, o, state)),
     memory: (args, o) => memoryCmd(state, args, o),
+    reload: makeReloadHandler(state),
     ...makeSettingsHandlers(state),
   };
 

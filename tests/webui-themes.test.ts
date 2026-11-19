@@ -10,7 +10,7 @@ import { resolveConfigKey } from "../src/config/registry";
 const root = join(import.meta.dirname, "..");
 const asset = (name: string): string =>
   readFileSync(join(root, "src/modules/webui/assets", name), "utf8");
-const css = ["console.css", "groovebox.css", "metallica.css", "themes.css"].map(asset).join("\n");
+const css = ["console.css", "groovebox.css", "metallica.css", "omarchy.css", "themes.css"].map(asset).join("\n");
 const html = asset("index.html");
 const en = JSON.parse(readFileSync(join(root, "src/i18n/en.json"), "utf8")) as Record<
   string,
@@ -22,13 +22,14 @@ const ru = JSON.parse(readFileSync(join(root, "src/i18n/ru.json"), "utf8")) as R
 >;
 
 describe("webui themes", () => {
-  it("registers eleven themes with three swatches each", () => {
-    expect(UI_THEMES).toHaveLength(11);
-    expect(new Set(UI_THEMES.map((t) => t.id)).size).toBe(11);
+  it("registers twelve themes with three swatches each", () => {
+    expect(UI_THEMES).toHaveLength(12);
+    expect(new Set(UI_THEMES.map((t) => t.id)).size).toBe(12);
     for (const theme of UI_THEMES) expect(theme.colors).toHaveLength(3);
     expect(UI_THEMES.filter((t) => t.group === "seasonal")).toHaveLength(4);
     expect(UI_THEMES.filter((t) => t.group === "color")).toHaveLength(6);
     expect(UI_THEMES.filter((t) => t.group === "themed")).toHaveLength(1);
+    expect(UI_THEMES.filter((t) => t.group === "os")).toHaveLength(1);
   });
 
   it("every themed id has a body selector and a pre-paint entry", () => {
@@ -63,6 +64,29 @@ describe("webui themes", () => {
     expect(css).toContain("body.metallica::after");
     expect(css).toContain("animation: metallica-horizon-pulse");
     expect(css).toContain("@keyframes metallica-horizon-pulse");
+  });
+
+  it("Omarchy theme lives in the OS section and has a fallback stylesheet", () => {
+    const theme = UI_THEMES.find((t) => t.id === "omarchy");
+    expect(theme?.group).toBe("os");
+    expect(css).toContain("body.omarchy");
+    expect(html).toContain("/omarchy.css");
+    expect(html).toContain('"omarchy"');
+  });
+
+  it("Omarchy squares UI corners, including the mascot", () => {
+    expect(css).toContain("body.omarchy *,");
+    expect(css).toContain("body.omarchy *::before,");
+    expect(css).toContain("body.omarchy *::after {");
+    expect(css).toContain("border-radius: 0;");
+    expect(css).not.toContain("body.omarchy .mdl {");
+    expect(css).not.toContain("border-radius: 32%");
+    expect(css).toContain("body.omarchy .mdl.xs {");
+    expect(css).toContain("body.omarchy ::-webkit-scrollbar-thumb {");
+    // The canvas face reads the wrapper radius, so it must also refresh on
+    // resize — otherwise the first detached draw keeps the squircle.
+    const mascot = asset("js/mascot-canvas.ts");
+    expect(mascot.match(/this\.radius = radiusFraction\(this\.canvas\)/g) ?? []).toHaveLength(2);
   });
 
   it("config registry lists exactly the picker themes (INV-T4)", () => {

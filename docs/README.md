@@ -12,6 +12,7 @@
 | Работает с агентом/кодом  | [AGENTS.md](../AGENTS.md) — правила, инварианты, карта кода                                                                 |
 | Меняет архитектуру        | [architecture v2](./specs/2026-10-12-architecture-v2-design.md) + [схемы](./specs/2026-10-12-architecture-v2-schematics.md) |
 | Разбирается с API сервиса | [service-api.md](./agents/service-api.md) → [serve mode](./serve-mode.md)                                                   |
+| Поднимает демон/тонкий клиент | [monolith split](./specs/2026-11-10-monolith-split-design.md) → [service-api.md](./agents/service-api.md)                     |
 | Хочет понять enterprise   | [MMA Enterprise: идея](./ideas/2026-11-05-mma-enterprise.md) → [отдельная версия](./ideas/2026-11-09-mma-enterprise-separate-version.md) |
 | Проверяет стиль вывода    | [STYLE.md](./design/ui/STYLE.md)                                                                                            |
 
@@ -23,11 +24,13 @@
 | [`ideas/`](./ideas)                                        | Идеи и картины продукта без нормативных контрактов                      | Черновик  |
 | [`archive/specs/`](./archive/specs)                        | Завершённые спеки, сгруппированные по году                              | История   |
 | [`plans/`](./plans)                                        | Планы активных работ                                                    | Рабочее   |
+| [`development/`](./development)                            | Развитие: что позаимствовать у других harness'ов, приоритеты и гейты    | Рабочее   |
 | [`archive/plans/`](./archive/plans)                        | Закрытые планы и планы из старых воркфлоу                               | История   |
 | [`agents/`](./agents)                                      | Описание текущего состояния подсистем                                   | **Живое** |
 | [`agents/architecture.md`](./agents/architecture.md)       | Текущее устройство: Output, Host-seam, Security, контракт `LLMProvider` | **Живое** |
 | [`agents/gates.md`](./agents/gates.md)                     | Инвариант → гейт, ворота CI                                             | **Живое** |
 | [`agents/debt.md`](./agents/debt.md)                       | Реестр долгов (pay-once)                                                | **Живое** |
+| [`agents/i18n-locale.md`](./agents/i18n-locale.md)         | Локаль: запрос/ALS, boot-fallback, запрет модульного кэша                 | **Живое** |
 | [`agents/feature-history.md`](./agents/feature-history.md) | Как реализовывались фичи                                                | История   |
 | [`analysis/`](./analysis)                                  | Аудиты и разовые исследования                                           | История   |
 | [`design/ui/`](./design/ui)                                | Стиль чата и макеты                                                     | **Живое** |

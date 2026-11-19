@@ -25,6 +25,7 @@ export type PackageManager = "bun" | "npm" | "pnpm" | "yarn";
 /** Факты, от которых зависит текст системного промпта. */
 export interface PromptEnvironmentFacts {
   baseDir: string;
+  configDir?: string;
   platform: PromptPlatform;
   shell: PromptShell;
   runtime: "bun" | "node" | "unknown";
@@ -69,10 +70,25 @@ export interface ClientTz {
   utcOffset: string;
 }
 
+/**
+ * Валидирует часовой пояс клиента из недоверенного JSON (split W10): берём
+ * только известную форму, остальное — undefined, чтобы не портить промпт.
+ */
+export function parseClientTz(value: unknown): ClientTz | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const rec = value as Record<string, unknown>;
+  if (typeof rec.timeZone !== "string" || !rec.timeZone) return undefined;
+  if (typeof rec.utcOffset !== "string" || !/^[-+]\d{2}:\d{2}$/.test(rec.utcOffset)) {
+    return undefined;
+  }
+  return { timeZone: rec.timeZone, utcOffset: rec.utcOffset };
+}
+
 /** Вход сборки фактов: отчёт окружения уже собран фазой workspace. */
 export interface PromptFactsInput {
   config: AppConfig;
   baseDir: string;
+  configDir?: string;
   envReport: EnvironmentReport;
   activeToolTags?: string[];
   /** Часовой пояс клиента (веб); нет — серверное время с меткой (B18). */
@@ -210,6 +226,7 @@ export function collectPromptFacts(input: PromptFactsInput): PromptEnvironmentFa
 
   return {
     baseDir,
+    configDir: input.configDir,
     platform,
     shell,
     runtime: envReport.runtime.runtime,

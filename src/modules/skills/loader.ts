@@ -4,6 +4,20 @@ import { join } from "path";
 import { createHash, verify as cryptoVerify } from "node:crypto";
 
 /**
+ * Каталог встроенных скиллов для текущей формы запуска: собранный бандл
+ * (`dist/main.js` → `dist/skills/builtin`) или исходники через Bun
+ * (`src/core/bootstrap` → `src/modules/skills/builtin`). Без фолбэка на
+ * source-путь Docker/дев-прогон молча оставался без built-in скиллов.
+ */
+export function resolveBuiltinSkillsDir(fromDir: string): string {
+  const candidates = [
+    join(fromDir, "skills", "builtin"),
+    join(fromDir, "../../modules/skills/builtin"),
+  ];
+  return candidates.find((p) => existsSync(p)) ?? candidates[0];
+}
+
+/**
  * Подписанный манифест (P1 supply-chain): `skills-manifest.sig.json` —
  * `{manifestSha256, sig}` (Ed25519 по сырым байтам манифеста),
  * публичный ключ — `skills-manifest.pubkey` (PEM). Нет sig-файла — только

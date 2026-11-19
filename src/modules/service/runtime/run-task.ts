@@ -13,8 +13,8 @@ import type { AgentResult, PromptProfile, ToolEvent } from "../../../core/types"
 import type { SessionRunner } from "../../../core/bootstrap/session-runner";
 import type { ToolCall, ToolResult } from "../../../tools/types";
 import { errMsg } from "../../../utils/error";
-import { planEventFor } from "../../webui/host-state";
-import type { PlanSnapshot } from "../../webui/session/forward";
+import { planEventFor } from "../../../core/host-state";
+import type { PlanSnapshot } from "../../../core/host";
 import { buildOutputInstruction, parseStructured } from "./output";
 import type { TaskRecord, TaskUsage } from "./task-registry";
 import type { ServiceForwarder } from "./event-bridge";
@@ -98,7 +98,7 @@ export async function runTask(opts: RunTaskOptions): Promise<RunTaskResult> {
     runner.agent.run(
       text,
       (chunk) => forwarder.onText(chunk),
-      () => {},
+      (meta, kind, info) => forwarder.onMeta(meta, kind, info),
       (ev: ToolEvent) => {
         if (ev.type === "start") {
           forwarder.onToolStart(callFor(ev, startId(ev.tool)));

@@ -11,7 +11,7 @@ import { t } from "../i18n.js";
 import { el } from "../dom.js";
 import type { Dict } from "../core/store/types.js";
 import { sb, type FileEntry } from "./state.js";
-import { initSplit, applySplit, toggleViewerFull, setViewerFull } from "./files/split.js";
+import { initSplit, applySplit, toggleViewerFull, setViewerFull, autoViewerForImage } from "./files/split.js";
 import {
   createHistory, push as pushHistory, goBack, goForward, resetHistory, type ViewerHistory,
 } from "./files/history.js";
@@ -21,7 +21,7 @@ import {
 } from "./files/tree.js";
 import { initCrumbDeps, renderCrumbs, clearCrumbs } from "./files/crumbs.js";
 import { syncChrome, localizeChrome, iconize } from "./files/chrome.js";
-import { fetchFile, paintFile, paintLoading } from "./files/view.js";
+import { fetchFile, paintFile, paintLoading, mapLine } from "./files/view.js";
 import { markAndScrollToLine } from "./files/line-mark.js";
 import { initSearch, resetSearch, renderSearch } from "./files/search.js";
 export { lineScrollTop } from "./files/line-mark.js";
@@ -226,8 +226,12 @@ export async function openFile(path: string, line?: number): Promise<void> {
   syncChrome(history);
   markDirty();
   renderFilesTree();
-  paintFile(f.detailBodyEl, path, await fetchFile(path));
-  if (typeof line === "number" && line > 0) markAndScrollToLine(f.detailBodyEl, line);
+  const file = await fetchFile(path);
+  const lineMap = paintFile(f.detailBodyEl, path, file);
+  // Images take the whole sidebar: the tree is useless next to a screenshot,
+  // and the wide viewer is the intended "look at this picture" mode.
+  autoViewerForImage(file.ok && file.mime.indexOf("image/") === 0);
+  if (typeof line === "number" && line > 0) markAndScrollToLine(f.detailBodyEl, mapLine(lineMap, line));
 }
 
 /**

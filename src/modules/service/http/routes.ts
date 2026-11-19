@@ -9,6 +9,7 @@ import { handleHealth, handleReady } from "../api/health";
 import { handleApiDocs, handleOpenApiDocument } from "../api/docs-api";
 import { handleOversight } from "../api/oversight";
 import { handleEventsApi } from "../api/events-api";
+import { handleHostApi } from "../api/host-api";
 import { handleSessionsApi } from "../api/sessions-api";
 import { handleTasksApi } from "../api/tasks-api";
 import { problem } from "../runtime/problem";
@@ -41,7 +42,7 @@ const API_ROUTES: Record<string, RouteHandler> = {
   "GET /v1/oversight": (req, res, _url, s) => handleOversight(req, res, s),
 };
 
-const API_GROUPS: RouteGroup[] = [handleSessionsApi, handleTasksApi, handleEventsApi];
+const API_GROUPS: RouteGroup[] = [handleSessionsApi, handleTasksApi, handleEventsApi, handleHostApi];
 
 /** Диспатч `/v1/*`: точное совпадение → группы → 404 problem. */
 export async function handleApi(

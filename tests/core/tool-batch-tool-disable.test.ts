@@ -15,17 +15,22 @@ import { makeToolBatchDeps } from "../helpers/tool-batch-deps";
 // test interleaves a successful read_file batch to keep that streak at zero.
 function runFailing(name: string) {
   const added: string[] = [];
+  const executed: string[] = [];
   const ex = new ToolBatchExecutor(
     makeToolBatchDeps({
-      execute: async (call) =>
-        call.name === name ? { success: false, output: `${name} boom` } : { success: true, output: "ok" },
+      execute: async (call) => {
+        executed.push(call.name);
+        return call.name === name
+          ? { success: false, output: `${name} boom` }
+          : { success: true, output: "ok" };
+      },
       added,
     }),
   );
   const state = createLoopState();
   const run = (callName: string) =>
     ex.execute(state, [{ id: "1", name: callName, arguments: { x: 1 } }], new Set(), "", "", "task");
-  return { added, state, ex, run };
+  return { added, executed, state, ex, run };
 }
 
 describe("ToolBatchExecutor per-turn tool disable", () => {
@@ -56,13 +61,30 @@ describe("ToolBatchExecutor per-turn tool disable", () => {
     expect(added.some((m) => m.toLowerCase().includes("disabled"))).toBe(false);
   });
 
+  it("refuses calls to a disabled tool instead of executing them", async () => {
+    const { added, executed, state, run } = runFailing("browser");
+    for (let n = 0; n < MAX_TOOL_FAILURES_PER_TURN; n++) {
+      await run("browser");
+      await run("read_file");
+    }
+    expect(state.disabledTools.has("browser")).toBe(true);
+    const before = executed.filter((n) => n === "browser").length;
+
+    await run("browser");
+    expect(executed.filter((n) => n === "browser").length).toBe(before);
+    const blocked = added.find((m) => m.includes("browser") && m.includes("NOT executed"));
+    expect(blocked).toBeTruthy();
+    expect(blocked).not.toContain("different tool");
+  });
+
   it("emits the disable directive only once", async () => {
     const { added, run } = runFailing("browser");
     for (let n = 0; n < MAX_TOOL_FAILURES_PER_TURN + 2; n++) {
       await run("browser");
       await run("read_file");
     }
-    const directives = added.filter((m) => m.includes("browser") && m.toLowerCase().includes("disabled"));
+    // Only the standing directive, not the per-call "not executed" tool results.
+    const directives = added.filter((m) => m.includes("browser") && m.includes("Stop and tell"));
     expect(directives).toHaveLength(1);
   });
 });

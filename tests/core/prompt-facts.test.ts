@@ -8,6 +8,7 @@ import {
   fallbackPromptFacts,
   localNow,
 } from "../../src/core/prompt-facts";
+import { buildSystemInfo } from "../../src/core/system-prompt-render";
 import { DEFAULTS } from "../../src/config/defaults";
 
 function tempDir(): string {
@@ -105,5 +106,14 @@ describe("prompt facts: safe fallback", () => {
     const now = localNow(new Date("2026-10-31T12:34:56Z"));
     expect(now.iso).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [+-]\d{2}:\d{2}/);
     expect(now.timeZone.length).toBeGreaterThan(0);
+  });
+
+  it("puts the config dir into the system prompt", () => {
+    const facts = {
+      ...fallbackPromptFacts(structuredClone(DEFAULTS), "/workspace", "linux"),
+      configDir: "/config",
+    };
+    const text = buildSystemInfo(structuredClone(DEFAULTS), "/workspace", "", facts);
+    expect(text).toContain("Config dir: /config (env MMA_CONFIG_DIR).");
   });
 });

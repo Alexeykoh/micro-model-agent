@@ -6,7 +6,7 @@
 import { t } from "../../i18n/index";
 import { extractFileLikeTokens, stripUrls } from "../../core/hallucination/js-identifiers";
 import { isValidCheck, parseCheck } from "./plan-checks";
-import type { StepKind } from "./planner";
+import type { StepEvidence, StepKind } from "./planner";
 
 export interface ParsedChecks {
   checks: string[] | null;
@@ -36,6 +36,29 @@ export function parseKinds(
     return { kinds: null, error: t("plan.kinds_invalid", { kinds: invalid.join(", ") }) };
   }
   return { kinds: kindsRaw as StepKind[], error: null };
+}
+
+/**
+ * Валидирует опциональный `evidence` для create/re-plan. Класс доказательства
+ * объявляет модель (правило №10: никакой классификации по словам описания).
+ */
+export function parseEvidence(
+  args: Record<string, unknown>,
+  steps: string[],
+): { evidence: StepEvidence[] | null; error: string | null } {
+  if (args.evidence === undefined) return { evidence: null, error: null };
+  if (!Array.isArray(args.evidence)) {
+    return { evidence: null, error: t("plan.evidence_not_array") };
+  }
+  if (args.evidence.length !== steps.length) {
+    return { evidence: null, error: t("plan.evidence_mismatch") };
+  }
+  const raw = args.evidence.map(String);
+  const invalid = raw.filter((e) => e !== "static" && e !== "behavioral");
+  if (invalid.length > 0) {
+    return { evidence: null, error: t("plan.evidence_invalid", { values: invalid.join(", ") }) };
+  }
+  return { evidence: raw as StepEvidence[], error: null };
 }
 
 /**

@@ -3,6 +3,7 @@
 import type { ToolContext, ToolResult, ToolSecurityDecl } from "./types";
 import { isPathInScope, isPathWritable } from "../modules/security/path-validator";
 import { matchProtectedPath, protectedPathBlock } from "../modules/security/protected-paths";
+import { sensitivePathReason } from "../modules/security/sensitive-paths";
 import { logSecurityApproval } from "../modules/security/audit-log";
 import { safeResolvePath } from "./path-utils";
 import { t } from "../i18n/index";
@@ -50,6 +51,20 @@ export function checkToolPath(
   value: string,
   toolCallId: string,
 ): ToolResult | null {
+  // Ключи, чужие сессии и исходники агента не читаются и не пишутся ни одним
+  // файловым тулом — независимо от `security.paths.enabled`.
+  const sensitive = sensitivePathReason(value, ctx.baseDir);
+  if (sensitive) {
+    return {
+      success: false,
+      blocked: true,
+      output: `[SECURITY BLOCKED] ${t("tool.path_blocked", {
+        path: value,
+        reason: ` — ${sensitive}`,
+      })}`,
+      toolCallId,
+    };
+  }
   const writable = isWritableTool(security);
   if (writable) {
     const prot = protectedWriteBlock(ctx, value, toolCallId);

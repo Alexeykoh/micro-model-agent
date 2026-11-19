@@ -3,7 +3,7 @@
 // (промпт не строим ради GET — это создало бы агента как побочный эффект).
 import type { ServerResponse } from "node:http";
 import { sendJson } from "../util";
-import type { RunPool } from "./session-pool";
+import type { RunPool } from "../../../runtime/run-pool/run-pool";
 
 export function handleSystemPromptGet(res: ServerResponse, id: string, pool: RunPool): void {
   const runner = pool.getRunner(id);

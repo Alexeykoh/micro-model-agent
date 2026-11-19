@@ -11,8 +11,16 @@ import type { SessionRunner } from "../../core/bootstrap/session-runner";
 import type { AppConfig } from "../../config/types";
 import { readEnv } from "../../config/env";
 import type { SessionManager } from "../session/manager";
+import type { MemoryStore } from "../memory/store";
+import type { SkillsModule } from "../skills/module";
+import type { IndexerModule } from "../indexer/module";
+import type { LspModule } from "../lsp/module";
+import type { PluginManager } from "../plugins/manager";
+import type { UpdaterModule } from "../updater/module";
 import type { ExecutionModule } from "../execution/module";
-import { RunPool } from "../webui/session/session-pool";
+import { RunPool } from "../../runtime/run-pool/run-pool";
+import { makeModelCache, type ModelCache } from "../../runtime/model-cache";
+import { SubagentRunStore } from "../../runtime/subagent-runs";
 import { TaskRegistry, type TenantContext } from "./runtime/task-registry";
 import { EnvelopeLog } from "./runtime/envelope";
 
@@ -24,6 +32,18 @@ export interface ServiceDeps {
   config: AppConfig;
   sessionManager?: SessionManager;
   execModule?: ExecutionModule;
+  /** Долговременная память (панель Memory в daemon-web). */
+  memory?: MemoryStore;
+  /** Скиллы (панель Skills). */
+  skills?: SkillsModule;
+  /** Карта проекта (кнопка Index). */
+  indexer?: IndexerModule;
+  /** LSP-панель. */
+  lsp?: LspModule;
+  /** Плагины (панель Plugins). */
+  plugins?: PluginManager;
+  /** Самообновление (панель update). */
+  updater?: UpdaterModule;
   configDir?: string;
   baseDir?: string;
   /** Фабрика per-session раннеров из bootstrap (параллелизм слотов). */
@@ -32,6 +52,15 @@ export interface ServiceDeps {
   host?: string;
   /** Оверрайд порта (иначе env `MMA_SERVICE_PORT`, затем `service.port`). */
   port?: number;
+  /** Хук персиста конфига (CLI подключает `persistConfigChange`). */
+  saveConfig?: (config: AppConfig, key?: string) => void;
+  /** Хук пересборки живого агента после записи ключа. */
+  reconfigure?: (config: AppConfig) => void | Promise<void>;
+  /**
+   * Мягкий reload источников (`/reload`): перечитать конфиг и `AGENTS.md` с
+   * диска, не гася процесс. Вяжет CLI; `undefined` — только плагины/скиллы.
+   */
+  reloadSources?: () => Promise<import("../../core/api").ReloadSourcesResult>;
   /** Оверрайд bearer-токена (иначе env `MMA_SERVICE_TOKEN`, затем `service.token`). */
   token?: string;
   /** Тестовый шов: fetch для webhook-доставки (дефолт — глобальный `fetch`). */
@@ -66,6 +95,8 @@ export interface AgentServiceState {
   deps: ServiceDeps;
   config: AppConfig;
   pool: RunPool;
+  /** Кеш моделей активного провайдера (host wire `/v1/host/models`). */
+  models: ModelCache;
   tasks: TaskRegistry;
   envelopes: EnvelopeLog;
   busy: boolean;
@@ -101,6 +132,8 @@ export interface AgentServiceState {
   host: string;
   port: number;
   token?: string;
+  /** Доступный апдейт; заполняет `publishUpdateNotice` апдейтера. */
+  updateAvailable?: { current: string; latest: string };
   /**
    * Тенант процесса (silo): авторитетный источник для authz. Заголовок
    * `X-Mma-Tenant` только сверяется с ним (см. `tenantOk` в server).
@@ -108,6 +141,14 @@ export interface AgentServiceState {
   tenant: TenantContext;
   /** Интервал SSE keep-alive (мс). */
   keepaliveMs: number;
+  /** Прогоны субагентов: снимки и живые события (split W10). */
+  subagentRuns: SubagentRunStore;
+  /** Кэш последней диагностики LSP (split W11, панель LSP). */
+  lspDoctor?: unknown;
+  /** Идёт диагностика LSP (single-flight). */
+  lspProbing: boolean;
+  /** Таймеры окна переподключения отвязанных interactive-ходов (split W13). */
+  detachedTimers: Map<string, ReturnType<typeof setTimeout>>;
   startedAt: number;
 }
 
@@ -135,10 +176,14 @@ export function createServiceState(deps: ServiceDeps): AgentServiceState {
   const sg = deps.config.service;
   const pool = new RunPool(undefined, sg.maxQueueLength);
   if (deps.spawnRunner) pool.setFactory(deps.spawnRunner);
+  const models = makeModelCache(deps.agent, deps.config);
+  // Best-effort прогрев: офлайн-провайдер оставит пустой список, не роняя старт.
+  void models.refresh();
   const state: AgentServiceState = {
     deps,
     config: deps.config,
     pool,
+    models,
     tasks: new TaskRegistry({
       retentionDays: sg.resultRetentionDays,
       idempotencyTtlHours: sg.idempotencyTtlHours,
@@ -149,6 +194,9 @@ export function createServiceState(deps: ServiceDeps): AgentServiceState {
     turnSeq: 0,
     clients: new Set(),
     pendingQuestions: new Map(),
+    subagentRuns: new SubagentRunStore(),
+    lspProbing: false,
+    detachedTimers: new Map(),
     readyRate: new Map(),
     maxSseClients: deps.maxSseClients ?? 32,
     sseIdleMs: deps.sseIdleMs ?? 120_000,

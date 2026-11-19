@@ -5,9 +5,9 @@
  *
  * Спека `2026-11-01-experts-model-selection-design`, §2.5.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { makeModelCache } from "../src/modules/webui/settings/model-cache";
+import { makeModelCache, PROVIDER_MODELS_RETRY_MS } from "../src/modules/webui/settings/model-cache";
 import { handleModelsGet } from "../src/modules/webui/settings/config-api";
 import { DEFAULTS } from "../src/config/defaults";
 import type { AppConfig } from "../src/config/types";
@@ -82,7 +82,107 @@ describe("model cache per provider", () => {
     );
     expect(cache.getFor("remote").loading).toBe(true);
     await flush();
-    expect(cache.getFor("remote")).toEqual({ models: [], loading: false });
+    expect(cache.getFor("remote")).toEqual({ models: [], loading: false, error: true });
+  });
+
+  it("retries a failed provider only after the cooldown", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+    try {
+      let calls = 0;
+      const cache = makeModelCache(
+        {
+          getProviderFor: () => ({
+            listModels: async () => {
+              calls++;
+              throw new Error("offline");
+            },
+          }),
+        } as never,
+        config(),
+      );
+      expect(cache.getFor("remote").loading).toBe(true);
+      await flush();
+      expect(cache.getFor("remote")).toEqual({ models: [], loading: false, error: true });
+      expect(calls).toBe(1);
+      // Пауза: страница экспертов не должна запускать мёртвый провайдер на
+      // каждый рендер.
+      expect(cache.getFor("remote")).toEqual({ models: [], loading: false, error: true });
+      expect(calls).toBe(1);
+      now.mockReturnValue(1_000 + PROVIDER_MODELS_RETRY_MS + 1);
+      expect(cache.getFor("remote").loading).toBe(true);
+      await flush();
+      expect(calls).toBe(2);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it("reports the active provider's loading/error state", async () => {
+    const cache = makeModelCache(agentStub(), config());
+    expect(cache.getActiveState()).toEqual({ models: [], loading: true });
+    await cache.refresh();
+    expect(cache.getActiveState()).toEqual({
+      models: ["local-a", "local-b"],
+      loading: false,
+    });
+  });
+
+  it("marks an offline active provider as an error, not as an empty list", async () => {
+    const cache = makeModelCache(
+      {
+        getProviderFor: () => ({
+          listModels: async () => {
+            throw new Error("offline");
+          },
+        }),
+      } as never,
+      config(),
+    );
+    await cache.refresh();
+    expect(cache.getActiveState()).toEqual({ models: [], loading: false, error: true });
+  });
+
+  it("keeps a known list ready while a background refresh is in flight", async () => {
+    let release: (models: string[]) => void = () => {};
+    const pending = new Promise<string[]>((r) => {
+      release = r;
+    });
+    let calls = 0;
+    const cache = makeModelCache(
+      {
+        getProviderFor: () => ({
+          listModels: () => (++calls === 1 ? Promise.resolve(["a", "b"]) : pending),
+        }),
+      } as never,
+      config(),
+    );
+    await cache.refresh();
+    expect(cache.getActiveState()).toEqual({ models: ["a", "b"], loading: false });
+    const second = cache.refresh();
+    await flush();
+    // Обновление идёт, но список уже есть: панель не должна уходить в «загрузку».
+    expect(cache.getActiveState()).toEqual({ models: ["a", "b"], loading: false });
+    release(["a", "b", "c"]);
+    await second;
+    expect(cache.getActiveState()).toEqual({ models: ["a", "b", "c"], loading: false });
+  });
+
+  it("keeps the previous list when a later refresh fails", async () => {
+    let calls = 0;
+    const cache = makeModelCache(
+      {
+        getProviderFor: () => ({
+          listModels: async () => {
+            if (++calls === 1) return ["a"];
+            throw new Error("offline");
+          },
+        }),
+      } as never,
+      config(),
+    );
+    await cache.refresh();
+    await cache.refresh();
+    expect(cache.getActiveState()).toEqual({ models: ["a"], loading: false });
   });
 });
 
@@ -110,5 +210,32 @@ describe("GET /api/models?provider=", () => {
       clients: new Set(),
     } as never);
     expect(body()).toMatchObject({ models: ["active-a"] });
+  });
+
+  it("passes the active loading/error status through the wire", () => {
+    const { res, body } = resStub();
+    const req = { url: "/api/models" } as IncomingMessage;
+    handleModelsGet(req, res, {
+      knownModels: () => [],
+      knownModelsState: () => ({ models: [], loading: false, error: true }),
+      config: config(),
+      clients: new Set(),
+    } as never);
+    expect(body()).toMatchObject({ models: [], loading: false, error: true });
+  });
+
+  it("retries a failed active list on the next GET", () => {
+    const { res, body } = resStub();
+    const refresh = vi.fn(async () => {});
+    const req = { url: "/api/models" } as IncomingMessage;
+    handleModelsGet(req, res, {
+      knownModels: () => [],
+      knownModelsState: () => ({ models: [], loading: false, error: true }),
+      knownModelsRefresh: refresh,
+      config: config(),
+      clients: new Set(),
+    } as never);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(body()).toMatchObject({ models: [], loading: true, error: false });
   });
 });

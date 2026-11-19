@@ -15,3 +15,24 @@ export function filterToolsByTags(tools: ToolDefinition[], toolTags: string[]): 
     return t.tags.some((tag) => tagSet.has(tag));
   });
 }
+
+/**
+ * Tag-фильтр с ручными per-session переопределениями (`mma web` → Tools).
+ * `disabled` убирает имя даже из `alwaysOn`; `enabled` добавляет имя, даже если
+ * его тег не активен. Поле `toolOverrides` не ослабляет security-allowlist —
+ * его проверяет вызывающий до/после (executor).
+ */
+export function filterToolsWithOverrides(
+  tools: ToolDefinition[],
+  toolTags: string[],
+  overrides?: { enabled?: string[]; disabled?: string[] },
+): ToolDefinition[] {
+  const base = new Set(filterToolsByTags(tools, toolTags).map((t) => t.name));
+  const enabled = new Set(overrides?.enabled ?? []);
+  const disabled = new Set(overrides?.disabled ?? []);
+  return tools.filter((t) => {
+    if (disabled.has(t.name)) return false;
+    if (enabled.has(t.name)) return true;
+    return base.has(t.name);
+  });
+}

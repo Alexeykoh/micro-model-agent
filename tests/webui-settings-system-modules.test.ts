@@ -36,7 +36,7 @@ beforeEach(() => {
 describe("settings: system modules are not switchable", () => {
   it("shows a static badge instead of a disabled toggle for harness modules", () => {
     panels.renderPluginsPanel();
-    const rows = [...win.document.querySelectorAll(".list-line")];
+    const rows = [...win.document.querySelectorAll(".plugin-card")];
     const systemRow = rows.find((r) => r.textContent?.includes("core.agent"));
     const userRow = rows.find((r) => r.textContent?.includes("demo-plugin"));
     expect(systemRow).toBeTruthy();

@@ -40,6 +40,35 @@ CI (`.github/workflows/quality.yml`) строже локали: coverage-пор�
 
 **CLI:** `bun run mma setup` · `mma meet` · `mma agents init` · `mma session list|show|delete`.
 
+### Docker-стенд
+
+Живой стенд для UI и агентских прогонов: `deploy/docker-test` (образ `deploy/Dockerfile.web`,
+контейнер `mma-web-test`, тег `mma-web-test:0.26.0`).
+
+```bash
+docker compose -f deploy/docker-test/compose.yml up -d --build
+```
+
+- UI: `http://<host>:7334/?token=docker-test-hamachi-2026` (внутри контейнера `7333`,
+  опубликован `0.0.0.0:7334`).
+- `/config` — volume `mma-web-test-config` (конфиг, сессии, ключи, логи) переживает пересборку;
+  workspace — bind-mount `${MMA_TEST_WORKSPACE:-E:/mma-docker-test/workspace}` → `/workspace`.
+- Playwright Chromium с системными зависимостями уже в образе
+  (`bunx playwright install --with-deps chromium`, `/root/.cache/ms-playwright`) — после
+  `--build` браузер агента доступен сразу.
+- `security.network.allowLoopback=true` включён в конфиге стенда: агент может проверять
+  `http://localhost:<port>` (dev-серверы). Это настройка стенда, не дефолт продукта.
+- Vite/dev-сервер — не сервис: после рестарта контейнера его нужно поднять заново.
+  Порты `3000-3010`, `5173-5183`, `8000-8010`, `8080-8090` опубликованы наружу
+  (список — `ports` в `compose.yml`), поэтому поднятое внутри видно снаружи как
+  `http://<host>:<порт>`. Условие — сервис слушает `0.0.0.0`, а не `localhost`:
+  `docker exec -d mma-web-test sh -c 'cd /workspace && nohup bun run dev -- --host 0.0.0.0 >/tmp/vite.log 2>&1 &'`.
+  Vite 5.4+ вдобавок проверяет заголовок `Host`: для доступа по Hamachi-адресу нужен
+  `server.allowedHosts` в конфиге проекта стенда (например `true`).
+- Конфиг стенда меняется через web UI/API (`/api/config`), не ручной правкой `/config`;
+  проверка API: `curl "http://127.0.0.1:7334/api/models?token=docker-test-hamachi-2026"`.
+- Данные стенда тестовые (`MMA_CONFIG_DIR=/config`); не production.
+
 |                 |                                                                                                             |
 | --------------- | ----------------------------------------------------------------------------------------------------------- |
 | **Runtime**     | Bun + TypeScript (strict, NodeNext)                                                                         |

@@ -13,7 +13,7 @@ import { collectEnvironment, logEnvironment } from "../environment";
 import type { EnvironmentReport } from "../environment";
 import { IndexerModule, effectiveMapTokenBudget } from "../../modules/indexer/index";
 import { DEFAULTS } from "../../config/defaults";
-import { SkillsLoader, SkillsModule, SkillUsage, LARGE_CATALOG_LIMIT } from "../../modules/skills/index";
+import { SkillsLoader, SkillsModule, SkillUsage, LARGE_CATALOG_LIMIT, resolveBuiltinSkillsDir } from "../../modules/skills/index";
 import { ToolRegistry, registerAllTools } from "../../tools/index";
 import { PluginManager } from "../../modules/plugins/manager";
 import {
@@ -139,7 +139,7 @@ export async function setupWorkspacePhase(
   }
 
   const skillsLoader = new SkillsLoader();
-  const builtinDir = join(import.meta.dirname, "skills", "builtin");
+  const builtinDir = resolveBuiltinSkillsDir(import.meta.dirname);
   const globalDir = join(homedir(), ".agents", "skills");
   const projectSkillsDir = join(projectMmaDir(baseDir), "skills");
   const availableSkills = skillsLoader.loadFromAllSources(builtinDir, globalDir, projectSkillsDir);
@@ -195,6 +195,7 @@ export async function setupWorkspacePhase(
     collectPromptFacts({
       config,
       baseDir,
+      configDir: dir,
       envReport,
       activeToolTags: config.tools?.defaultTags,
       languages,

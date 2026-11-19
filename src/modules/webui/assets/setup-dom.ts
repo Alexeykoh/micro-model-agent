@@ -61,6 +61,8 @@ export function clearMsg(): void {
 
 export function messageEl(): HTMLElement {
   const el = h("div", "setup-msg");
+  el.setAttribute("role", "status");
+  el.setAttribute("aria-live", "polite");
   if (msg) {
     el.className = "setup-msg " + msg.kind;
     el.textContent = msg.text;

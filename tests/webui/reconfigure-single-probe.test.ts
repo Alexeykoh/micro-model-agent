@@ -6,7 +6,7 @@ import { describe, it, expect } from "vitest";
 import type { AppConfig } from "../../src/config/types";
 import { createWebUiState } from "../../src/modules/webui/state";
 import { makeReconfigure } from "../../src/modules/webui/settings/reconfigure";
-import { RUNNER_LRU_MAX } from "../../src/modules/webui/session/session-pool";
+import { RUNNER_LRU_MAX } from "../../src/runtime/run-pool/run-pool";
 
 describe("webui reconfigure single probe", () => {
   it("probes once (main agent); every pooled runner reconfigures with probe:false", async () => {

@@ -1,10 +1,29 @@
 // i18n: плоские словари en/ru, t(key, params) с фолбэком на английский.
+import { AsyncLocalStorage } from "node:async_hooks";
 import en from "./en.json";
 import ru from "./ru.json";
 
 const locales: Record<string, Record<string, unknown>> = { en, ru };
 
 let currentLocale = "en";
+
+/**
+ * Локаль запроса (split W9): клиент присылает `X-Mma-Locale`, сервер
+ * исполняет обработчик в этом скоупе. Процесс-глобальная локаль остаётся
+ * дефолтом для CLI и фоновых путей.
+ */
+const localeScope = new AsyncLocalStorage<string>();
+
+/** Выполняет `fn` под локалью запроса; неизвестная локаль — без изменений. */
+export function runWithLocale<T>(locale: string | undefined, fn: () => T): T {
+  if (!locale || !flat[locale]) return fn();
+  return localeScope.run(locale, fn);
+}
+
+/** Действующая локаль: скоуп запроса, иначе процесс-глобальная. */
+export function getLocale(): string {
+  return localeScope.getStore() ?? currentLocale;
+}
 
 function flatten(obj: Record<string, unknown>, prefix = ""): Record<string, string> {
   let result: Record<string, string> = {};
@@ -70,7 +89,8 @@ export function setMissingKeyReporter(reporter?: (key: string) => void): void {
  * @param key точечный ключ; @param params значения подстановок.
  */
 export function t(key: string, params?: Record<string, string | number>): string {
-  const localeDict = flat[currentLocale];
+  const locale = getLocale();
+  const localeDict = flat[locale];
   const enDict = flat.en;
   const template = localeDict?.[key] ?? enDict?.[key];
 

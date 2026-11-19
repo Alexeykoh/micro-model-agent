@@ -63,8 +63,9 @@ describe("lsp_check: холодный старт", () => {
       expect(Date.now() - started).toBeLessThan(2000);
       expect(warmupCalls).toBe(1);
       expect(result.success).toBe(false);
-      // Причина названа: сервер ещё стартует, а не «ошибок нет».
-      expect(result.output).toContain("still starting");
+      // Причина названа дефинитивно + конкретная замена, а не «ошибок нет».
+      expect(result.output).toContain("cold-start budget is exhausted");
+      expect(result.output).toContain("tsc --noEmit");
       expect(result.output).not.toContain("No errors or warnings");
     } finally {
       rmSync(dir, { recursive: true, force: true });

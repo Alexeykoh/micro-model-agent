@@ -41,7 +41,7 @@ describe("context-log DLP projection (E1)", () => {
     const json = JSON.stringify({ messages: result.messages, tools: result.tools });
     expect(json).not.toContain("C:\\work\\proj");
     expect(json).not.toContain("DESKTOP-ABC123");
-    expect(json).toContain("<PATH:");
+    expect(json).toContain("src/a.ts");
   });
 
   it("без регистрации guard'а snapshot не редактируется", () => {

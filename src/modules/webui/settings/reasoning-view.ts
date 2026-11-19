@@ -45,11 +45,13 @@ function visibleLevels(
   strategy: ReasoningStrategy,
   reasoningOff: boolean,
 ): string[] | null {
-  if (declared === undefined) return null;
   const canOff = reasoningOff || strategy === "prompt-tag" || strategy === "template-kwarg";
+  if (declared === undefined && !canOff) return null;
   const offered: string[] = [];
   if (canOff) offered.push("none");
-  for (const value of declared) {
+  // Необъявленный список приравниваем к пустому: если выключатель выразим,
+  // `none` всё равно честен. Ранний `return null` здесь прятал даже его.
+  for (const value of declared ?? []) {
     if (EFFORT_NAMES.has(value) && !offered.includes(value)) offered.push(value);
   }
   // Пустой массив — declared but no granular effort levels (LM Studio off/on).

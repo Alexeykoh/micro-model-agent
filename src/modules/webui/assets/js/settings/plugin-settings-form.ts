@@ -111,10 +111,11 @@ export function pluginSettingsForm(name: string, data: Dict): HTMLElement {
 
 /** Иконка-кнопка «настройки» для строки плагина (тихая, как остальные chips). */
 export function settingsChip(name: string, onOpen: (name: string) => void): HTMLElement {
-  const b = el("button", "chip icon-btn", "");
+  const b = el("button", "plugin-btn", "");
   b.type = "button";
   b.appendChild(icon("settings"));
   const label = t("web.settings.plugin_settings_open");
+  b.appendChild(el("span", "", label));
   b.title = label;
   b.setAttribute("aria-label", label + ": " + name);
   b.addEventListener("click", (e) => {

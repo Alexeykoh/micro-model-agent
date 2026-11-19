@@ -51,11 +51,15 @@ export const OUTBOUND_FETCH_ALLOWLIST: Record<string, string> = {
   "src/modules/mcp/oauth.ts": "IdP token URL from user MCP server config (oauth.tokenUrl)",
   "src/modules/daemon/protocol.ts":
     "Thin UI client talks only to the local daemon (127.0.0.1, token file)",
+  "src/modules/daemon/remote-host-panels.ts":
+    "Thin UI client: only the configured daemon URL (token from env/file)",
   "src/modules/service/runtime/webhook.ts":
     "Validated by checkCallbackUrl (https/SSRF) before fetch; redirect: manual",
   "src/modules/setup/discovery.ts":
     "local setup probe: localhost ports and provider URLs from config",
   "src/tools/web-search.ts": "search API URL from config; ToolExecutor validates urlArgs (INV-10)",
+  "src/tools/search-images.ts":
+    "search result image URL from provider response; isUrlAllowed (SSRF) checked before fetch",
   "src/modules/security/network-validator.ts":
     "the policy itself: fetchValidated revalidates every hop",
   "src/modules/webui/assets/js/api.ts": "same-origin relative path in the browser",

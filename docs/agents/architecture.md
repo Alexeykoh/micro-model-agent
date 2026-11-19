@@ -58,27 +58,47 @@ terminal (streaming / modal / quiet) and every machine surface see the same data
   `process.stdout/stderr.write`, except the documented allowlist (crash-handler,
   `output/machine.ts`, browser bridge child process, non-TTY REPL fallback).
 
-### Host Seam (REPL / Web)
+### Host Seam (local / remote)
 
-> **Source:** `src/core/host.ts`, `src/core/web-host.ts`, `src/modules/webui/`. Design: [docs/archive/specs/2026/2026-09-23-mma-web/design.md](../archive/specs/2026/2026-09-23-mma-web/design.md).
+> **Source:** `src/core/host.ts`, `src/core/local-host.ts`, `src/modules/daemon/`, `src/modules/service/`. Design: [monolith split](../specs/2026-11-10-monolith-split-design.md).
 
 `Host` (`src/core/host.ts`) extends the plugin-facing `HostBridge`
-(`{isBusy, submit(text,{images}), interrupt, subscribeOutput}`) with
-`executeCommand(line)` + `getState(): HostStateSnapshot` — the extra surface web
-mode needs (slash commands, sidebar/topbar snapshot).
+(`{isBusy, submit(text,{images}), interrupt, subscribeOutput}`) with an async
+`getState()`, transport-neutral `subscribeEvents`, session/config/models reads
+and `executeCommand(line)`.
 
-- **Two implementations over one `Agent`:** `Repl` (terminal, owns `LineEditor`)
-  and `WebHost` (`src/core/web-host.ts`, no TTY). Both submit through the SAME
-  `runAgent` path as terminal input — rendering, session logging and the
-  single-flight guard are shared, never duplicated.
-- **WebUi module** (`src/modules/webui/`): `state.ts` (shared mutable state +
-  single-flight reservation), `server.ts` (SSE `/events` + REST routing +
-  static assets), `forward.ts` (agent callbacks → SSE), `module.ts` (the only
-  place that knows about `Agent`; builds `WebHost`), `commands.ts` +
-  `memory-commands.ts` (browser slash-command handler map), `config-api.ts`,
-  `settings-api.ts` (memory/skills/plugins), `sessions-api.ts`, `history-api.ts`
-  (REST route handlers), `assets.ts`, `util.ts`.
-  App creation is separated from `listen()` (rule #13), so tests bind no port.
+- **Two transport implementations, one contract:** `LocalHost`
+  (`src/core/local-host.ts`, in-process) and `RemoteHost`
+  (`src/modules/daemon/remote-host.ts`, HTTP+SSE `/v1/host/*`). REPL, web and
+  one-shot consume the same interface; a remote host never constructs `Agent`
+  or `SessionManager`.
+- **Daemon (`mma serve`)** owns the runtime: `RunPool`, sessions, config, tools.
+  `/v1/host/*` is the UI wire; the job API `/v1/tasks/*` remains the automation
+  contract. `src/modules/daemon/remote-tasks.ts` drives one-shot jobs.
+- **Thin clients:** `mma --daemon <url>` (REPL), `mma web --daemon-url <url>`
+  (browser adapter), `mma "prompt" --daemon <url>` (one-shot job). They own only
+  input/rendering; state is event-sourced from the daemon. Parity (W9): the
+  `meta`/`retract`/`critic` channel rides the same SSE, clipboard images are
+  read on the client and sent as data-URLs, and `X-Mma-Locale` is resolved per
+  request via `runWithLocale` without touching the process locale.
+- **One turn path (W10):** `mma web` no longer starts turns itself —
+  `POST /api/message` calls `Host.submit`, which shares `submitTurnFromHost`
+  with the local host (INV-S2). The host wire also carries `log`, `subagent`,
+  tool images, the file viewer, search, system prompt, security journal,
+  subagent snapshots and the message queue.
+- **Settings parity (W11):** providers, MCP, memory, plugins, LSP and the setup
+  wizard are served by `/v1/host/*` and proxied by the web adapter; pure
+  validation/CRUD lives in `src/runtime/` so the browser surface and the daemon
+  cannot drift. The end-to-end guard is `tests/e2e-separation.test.ts`.
+- **Command catalog (W12):** one catalog (`src/core/commands/spec.ts`) is
+  executed by the daemon registry (`modules/service/runtime/commands*.ts`).
+  Thin-REPL `/help` and web `/api/commands` read `/v1/host/commands`; commands
+  that need an interactive terminal answer `terminal-only` instead of failing
+  silently.
+- **WebUi module** (`src/modules/webui/`): statics, REST/SSE and settings; in
+  daemon mode it proxies `/api/*` to `/v1/host/*` (`daemon-api.ts`) and maps
+  events (`daemon-events.ts`). Unsupported panels return `501`, never an empty
+  success.
 
 ### Frontend Seams (what a new frontend must implement)
 

@@ -368,25 +368,38 @@ describe("webui config/session/model REST", () => {
     }
   });
 
-  it("POST /api/config {model} re-probes the provider window while auto is on", async () => {
+  it("POST /api/config {model} lets reconfigure probe the window — no second HTTP probe", async () => {
     const s = createWebUiState();
     s.config = autoConfig();
     s.config.contextAuto = true;
     s.config.model = "old-model";
     s.saveConfig = () => {};
-    s.reconfigure = () => {};
-    const restore = stubProviderFetch();
+    let reconfigured = 0;
+    s.reconfigure = async (cfg) => {
+      reconfigured++;
+      // The live agent's reconfigure probes the provider once and applies it.
+      cfg.contextWindow = 65536;
+    };
+    const original = globalThis.fetch;
+    let providerFetches = 0;
+    globalThis.fetch = (async (url: unknown) => {
+      if (String(url).includes("/api/v1/models")) providerFetches++;
+      return { ok: false, status: 404, json: async () => ({}) } as Response;
+    }) as typeof fetch;
     try {
       await withServer(s, async (base) => {
         const res = await postJson(base, "/api/config", { key: "model", value: "stub-model" });
         expect(res.status).toBe(200);
-        expect(res.json.probed).toBe(true);
+        // Окно применено reconfigure'ом — хендлер его не перепрашивает.
         expect(res.json.contextWindow).toBe(65536);
+        expect(res.json.probed).toBeUndefined();
+        expect(reconfigured).toBe(1);
+        expect(providerFetches).toBe(0);
         expect(s.config?.model).toBe("stub-model");
         expect(s.config?.contextWindow).toBe(65536);
       });
     } finally {
-      restore();
+      globalThis.fetch = original;
     }
   });
 

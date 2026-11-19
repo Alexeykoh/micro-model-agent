@@ -69,9 +69,9 @@ describe("Repl Host surface", () => {
     expect(seen).toHaveLength(1);
   });
 
-  it("getState returns a HostStateSnapshot-shaped object without modules", () => {
+  it("getState returns a HostStateSnapshot-shaped object without modules", async () => {
     const { repl } = makeRepl();
-    const state = repl.getState() as HostStateSnapshot;
+    const state = (await repl.getState()) as HostStateSnapshot;
     expect(typeof state.busy).toBe("boolean");
     expect(state.busy).toBe(false);
     expect(state.sessionId).toBeUndefined();

@@ -28,6 +28,16 @@ const MAX_KEPT_PROCESSES = 20;
 
 let seq = 0;
 
+/**
+ * Непрозрачный id процесса: `proc_<time36>_<seq36>`. Цифровой timestamp здесь
+ * недопустим — checksum-правила PII (OGRN/SNILS/card) случайно принимают его
+ * за паспорт и заменяют часть id псевдонимом в ответах внешнему клиенту.
+ * Старые id `proc_<digits>_<n>` остаются валидными — id не разбирается.
+ */
+export function newProcessId(now = Date.now()): string {
+  return `proc_${now.toString(36)}_${(++seq).toString(36)}`;
+}
+
 /** Реэкспорт килла дерева для потребителей реестра. */
 export { killTree, type KillableProcess } from "./kill-tree";
 
@@ -58,7 +68,7 @@ class ProcessRegistry {
       const existing = findRunning(this.procs.values(), command, cwd, sessionId);
       if (existing) return existing;
     }
-    const id = `proc_${Date.now()}_${++seq}`;
+    const id = newProcessId();
     const entry: ManagedProcess = {
       id,
       pid: 0,

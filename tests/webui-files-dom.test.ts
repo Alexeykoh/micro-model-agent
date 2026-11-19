@@ -3,7 +3,13 @@
 // apply vitest's environment docblock, so happy-dom is wired manually and the
 // fetch/API layer is stubbed.
 import { describe, it, expect, beforeEach } from "vitest";
+import { readFileSync } from "node:fs";
 import { Window } from "happy-dom";
+
+const VIEW_SRC = readFileSync(
+  new URL("../src/modules/webui/assets/js/sidebar/files/view.ts", import.meta.url),
+  "utf-8",
+);
 
 const HTML = `
   <div class="sb">
@@ -112,6 +118,12 @@ g.fetch = async (url: string): Promise<Response> => {
   }
   if (url.startsWith("/api/file")) {
     const p = decodeURIComponent(url.split("path=")[1] || "");
+    if (p.endsWith(".png")) {
+      return new Response(new Uint8Array([137, 80, 78, 71]), {
+        status: 200,
+        headers: { "content-type": "image/png" },
+      });
+    }
     return new Response(fileTexts[p] ?? fileText, {
       status: 200,
       headers: { "content-type": "text/plain; charset=utf-8" },
@@ -175,6 +187,20 @@ describe("files tab DOM", () => {
     expect(doc("filesDetail").hidden).toBe(false);
     expect(crumbs()).toEqual(["src", "index.ts"]);
     expect(doc("filesBody").textContent).toContain("export const x = 1");
+  });
+
+  it("wires an image click to the shared lightbox", () => {
+    expect(VIEW_SRC).toContain("openLightbox(src, path)");
+    expect(VIEW_SRC).toContain('img.addEventListener("click"');
+  });
+
+  it("shows an image in the full sidebar", async () => {
+    await sidebar.openFile("cat.png");
+    await flush();
+    const img = doc("filesBody").querySelector<HTMLImageElement>("img.fimg");
+    expect(img).toBeTruthy();
+    expect(doc("pane-files").classList.contains("f-full")).toBe(true);
+    expect(doc("filesSide").hidden).toBe(true);
   });
 
   it("reveals and opens a workspace file from a chat link", async () => {
