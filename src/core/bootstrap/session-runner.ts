@@ -227,6 +227,7 @@ export function createSessionRunnerFactory(
       logger: runnerLogger,
       baseDir,
       configDir,
+      noAgentsMd: template.noAgentsMd === true,
       runnerTags,
       promptBlocks,
       envReport: runnerEnvReport(envReport, config),

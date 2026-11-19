@@ -46,6 +46,8 @@ export interface SessionRunnerTemplate {
   logger: Logger;
   baseDir: string;
   configDir: string;
+  /** `--no-agents-md` — раннер не должен подгружать инструкции на ходу. */
+  noAgentsMd?: boolean;
   /** Шаблон статичных промпт-блоков (раннер берёт копию). */
   promptBlocks: PromptBlock[];
   envReport: EnvironmentReport;
@@ -115,6 +117,7 @@ interface AssembleRunnerAgentInput {
   logger: Logger;
   baseDir: string;
   configDir: string;
+  noAgentsMd?: boolean;
   runnerTags: string[];
   promptBlocks: PromptBlock[];
   envReport: EnvironmentReport;
@@ -181,6 +184,7 @@ export function assembleRunnerAgent(input: AssembleRunnerAgentInput): Agent {
     logger,
     baseDir,
     configDir,
+    noAgentsMd: input.noAgentsMd === true,
     toolTags: runnerTags,
     promptBlocks: [...promptBlocks],
     envReport,

@@ -78,15 +78,14 @@ export function refreshInstructionBlocks(
   configDir: string | undefined,
   blocks: PromptBlock[],
   config?: AppConfig,
+  skip = false,
 ): InstructionRefreshResult {
-  // `--no-agents-md`: инструкций нет, обновлять нечего.
-  if (!blocks.some((b) => b.kind === "instructions")) return unchanged(blocks);
-  if (!configDir) return unchanged(blocks);
+  if (skip || !configDir) return unchanged(blocks);
 
   const fresh = loadAgentsMdBlocks(
     baseDir,
     configDir,
-    false,
+    skip,
     config?.instructions?.sources ?? [],
     config?.instructions?.fallback ?? "none",
   );

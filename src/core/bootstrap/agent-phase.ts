@@ -55,6 +55,8 @@ export interface AgentPhaseInput {
   baseDir: string;
   /** Каталог конфига. */
   configDir: string;
+  /** `--no-agents-md`: запрет подгрузки инструкций на границе хода. */
+  noAgentsMd?: boolean;
   /** Активные теги тулов (мутабельный набор цикла). */
   activeToolTags: string[];
   /** Статичные промпт-блоки первой сборки. */
@@ -118,6 +120,7 @@ export async function assembleAgent(
     logger,
     baseDir,
     configDir,
+    noAgentsMd,
     activeToolTags,
     promptBlocks,
     envReport,
@@ -168,6 +171,7 @@ export async function assembleAgent(
     logger,
     baseDir,
     configDir,
+    noAgentsMd: noAgentsMd === true,
     toolTags: activeToolTags,
     promptBlocks,
     envReport,

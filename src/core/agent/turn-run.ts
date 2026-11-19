@@ -95,6 +95,7 @@ export async function runTurn(
     deps.configDir,
     deps.promptBlocks,
     deps.config,
+    deps.noAgentsMd === true,
   );
   if (refreshed.changed) {
     deps.promptBlocks = refreshed.blocks;

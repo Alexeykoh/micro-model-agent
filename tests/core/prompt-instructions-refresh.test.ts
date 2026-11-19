@@ -143,6 +143,29 @@ describe("AGENTS.md: обновление на границе хода", () => {
     expect(JSON.stringify(entry)).not.toContain("Marker: v2");
   });
 
+  it("picks up an AGENTS.md created after bootstrap (and honours --no-agents-md)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "mma-agents-md-"));
+    dirs.push(dir);
+    const { deps } = hostWith(dir);
+    expect(deps.promptBlocks.some((b) => b.kind === "instructions")).toBe(false);
+
+    writeAgents(dir, "late");
+    expect(
+      refreshInstructionBlocks(deps.baseDir, deps.configDir, deps.promptBlocks, deps.config, true)
+        .changed,
+    ).toBe(false);
+
+    const refreshed = refreshInstructionBlocks(
+      deps.baseDir,
+      deps.configDir,
+      deps.promptBlocks,
+      deps.config,
+    );
+    expect(refreshed.changed).toBe(true);
+    expect(refreshed.changes).toEqual([{ label: "instructions", action: "added" }]);
+    expect(refreshed.blocks.some((b) => b.content.includes("Marker: late"))).toBe(true);
+  });
+
   it("reports no change when AGENTS.md is untouched", () => {
     const dir = mkdtempSync(join(tmpdir(), "mma-agents-md-"));
     dirs.push(dir);
