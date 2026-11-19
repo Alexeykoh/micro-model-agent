@@ -1582,6 +1582,7 @@
   "web.sidebar.detail_provenance_count": "assistant-сообщений в логе: {n}",
   "web.env.dir": "директория",
   "web.env.dev_title": "локальная dev-сборка (запуск из src/)",
+  "web.env.dev_label": "dev #{id}",
   "web.egress.hidden": "скрыто политикой данных",
   "web.egress.hidden_short": "‹{kind}›",
   "web.egress.hidden_tip": "Путь скрыт политикой данных (DLP): он не передаётся внешним клиентам.",

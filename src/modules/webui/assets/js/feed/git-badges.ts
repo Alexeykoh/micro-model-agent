@@ -54,6 +54,10 @@ export function paintGitChips(h: Dict): void {
       version: h.version,
       updateAvailable: h.updateAvailable || undefined,
       dev: h.dev === true,
+      devLabel:
+        typeof h.devBuildId === "string" && h.devBuildId
+          ? t("web.env.dev_label", { id: h.devBuildId })
+          : undefined,
       devTitle: t("web.env.dev_title"),
       dirLabel: t("web.env.dir"),
       updateTitle: t("web.update.chip_title", { latest: h.updateAvailable?.latest ?? "" }),

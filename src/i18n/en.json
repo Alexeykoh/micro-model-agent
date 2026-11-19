@@ -1582,6 +1582,7 @@
   "web.sidebar.detail_provenance_count": "{n} assistant messages in log",
   "web.env.dir": "dir",
   "web.env.dev_title": "local dev build (running from src/)",
+  "web.env.dev_label": "dev #{id}",
   "web.egress.hidden": "hidden by data policy",
   "web.egress.hidden_short": "‹{kind}›",
   "web.egress.hidden_tip": "Path hidden by the data policy (DLP): it is not sent to external clients.",

@@ -36,6 +36,8 @@ export interface FooterInput {
   dev?: boolean;
   /** Локализованный title для метки dev. */
   devTitle?: string;
+  /** Подпись метки dev с коротким ID сборки (`dev #a1b2c`). */
+  devLabel?: string;
   /** Локализованная подпись «dir». */
   dirLabel: string;
   /** Локализованный title чипа апдейта. */
@@ -93,6 +95,7 @@ export function renderFooter(
     version = "",
     updateAvailable = undefined,
     dev = false,
+    devLabel = "dev",
     dirLabel,
     updateTitle = "",
     devTitle = "",
@@ -101,7 +104,7 @@ export function renderFooter(
   } = input;
   const chips = buildGitChips(git, gitLabels);
   const key = JSON.stringify([
-    workspace, workspaceHidden, workspaceTitle, version, dev,
+    workspace, workspaceHidden, workspaceTitle, version, dev, devLabel,
     updateAvailable?.latest ?? "", dirLabel, chips,
   ]);
   // Перестраиваем только на смену входа: `renderState` дёргает рендер на каждый
@@ -150,7 +153,7 @@ export function renderFooter(
     el.appendChild(v);
   }
   if (dev) {
-    const d = make("span", "ws-dev", "dev");
+    const d = make("span", "ws-dev", devLabel);
     d.title = devTitle;
     el.appendChild(d);
   }
