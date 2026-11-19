@@ -51,6 +51,28 @@ describe("переполнение инструкций: замена по ис�
     expect(applied[0]?.content).not.toContain("RULE-B");
   });
 
+  it("marks starved sources as dropped with a hint instead of losing them silently", async () => {
+    const cacheRoot = mkdtempSync(join(tmpdir(), "mma-ovf-drop-"));
+    dirs.push(cacheRoot);
+    const a = block("instructions (a/)", "SMALL-A");
+    const b = block("instructions (b/)", "SMALL-B");
+    const warnings: string[] = [];
+    const res = await resolvePromptOverflow({
+      overflow: [a, b],
+      includedTokens: 395,
+      systemBudget: 400,
+      provider: null,
+      cacheDir: join(cacheRoot, "cache"),
+      logger: { warn: (m: string) => warnings.push(m) } as never,
+      model: "test",
+    });
+    expect(res.replacements).toHaveLength(0);
+    expect(res.warnings.map((w) => w.mode)).toEqual(["dropped", "dropped"]);
+    expect(res.hintBlock).not.toBeNull();
+    expect(res.hintBlock!.content).toContain("did not fit at all");
+    expect(warnings.length).toBeGreaterThan(0);
+  });
+
   it("root AGENTS.md is essential, nested ones are compressible", () => {
     const dir = mkdtempSync(join(tmpdir(), "mma-agents-essential-"));
     dirs.push(dir);

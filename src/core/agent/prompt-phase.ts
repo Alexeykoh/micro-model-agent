@@ -207,9 +207,10 @@ export async function resolvePromptOverflowOnce(host: PromptPhaseHost): Promise<
   for (const r of res.replacements) {
     if (r.kind) host.promptOverrides.set(r.label ?? r.kind, r);
   }
-  // Truncate без summary — notice без обрубка не имеет смысла, но back-reference
-  // не нужен: весь срез уже лежит в подмене.
-  host.overflowHintBlock = res.warnings.some((w) => w.mode === "summary") ? res.hintBlock : null;
+  // Hint оставляем, когда модели нужно знать о потере: summary (читать полный
+  // файл при нехватке деталей) или dropped (источника в промпте нет вообще).
+  // Чистый truncate самодостаточен — весь срез уже лежит в подмене.
+  host.overflowHintBlock = res.warnings.some((w) => w.mode !== "truncate") ? res.hintBlock : null;
 
   const needed =
     dry.blocks.filter((b) => b.included).reduce((s, b) => s + b.tokens, 0) +
@@ -217,6 +218,7 @@ export async function resolvePromptOverflowOnce(host: PromptPhaseHost): Promise<
     HINT_BLOCK_TOKENS;
   const hint = overflowHint(cfg, deps.configDir, needed);
   for (const w of res.warnings) {
+    if (w.mode === "dropped") continue; // уже предупреждены внутри резолва.
     deps.logger.warn(
       t("prompt.overflow.exceeded", {
         label: w.label,

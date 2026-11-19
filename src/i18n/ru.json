@@ -1322,6 +1322,7 @@
   "prompt.overflow.compressing": "Переполнение системного промпта: сжимаю {count} блок(ов) перед первым запуском — на локальной модели это может занять время.",
   "prompt.overflow.summarizing": "Переполнение системного промпта: суммаризирую \"{label}\" ({original} токенов → бюджет {budget} токенов) моделью…",
   "prompt.overflow.truncating": "Переполнение системного промпта: обрезаю \"{label}\" ({original} токенов) — суммаризация недоступна.",
+  "prompt.overflow.dropped": "Переполнение системного промпта: \"{label}\" ({original} токенов) не влез в остаток {budget} токенов и отброшен целиком — прочитайте полный файл при нехватке деталей.",
   "prompt.overflow.summarize_failed": "Переполнение системного промпта: не удалось суммаризировать \"{label}\": {error} — перехожу к обрезке.",
   "prompt.overflow.hint_needed": "промпту нужно ~{needed} токенов системного бюджета (сейчас: {window} × {fraction} = {budget})",
   "prompt.overflow.hint_window": "подними contextWindow минимум до {required} (стандартный размер {recommended}) — {how}",

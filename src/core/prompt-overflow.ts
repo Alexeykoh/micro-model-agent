@@ -14,7 +14,8 @@ export interface OverflowWarning {
   label: string;
   originalTokens: number;
   resolvedTokens: number;
-  mode: "summary" | "truncate";
+  /** `dropped` — не влез даже обрезанным (остаток <100 токенов): блок потерян. */
+  mode: "summary" | "truncate" | "dropped";
 }
 
 /** Итог резолвинга переполнения: замены, hint-блок, варнинги. */

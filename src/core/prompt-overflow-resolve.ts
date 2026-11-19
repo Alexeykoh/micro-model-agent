@@ -139,7 +139,22 @@ export async function resolvePromptOverflow(opts: {
     const kind = block.kind as PromptBlockKind;
     const maxTokens = systemBudget - used - HINT_BLOCK_TOKENS;
     if (maxTokens < 100) {
+      // INV-6: потерянный блок не молчит — warning + hint с back-reference.
       unresolved.push(kind);
+      warnings.push({
+        kind,
+        label: blockLabel(block.content),
+        originalTokens: block.estimatedTokens,
+        resolvedTokens: 0,
+        mode: "dropped",
+      });
+      logger?.warn(
+        t("prompt.overflow.dropped", {
+          label: blockLabel(block.content),
+          original: String(block.estimatedTokens),
+          budget: String(maxTokens),
+        }),
+      );
       continue;
     }
 
@@ -264,7 +279,7 @@ export async function resolvePromptOverflow(opts: {
   }
 
   const hintContent =
-    replacements.length > 0
+    replacements.length > 0 || unresolved.length > 0
       ? [
           `[Instructions note] Some project blocks exceeded the system-prompt budget and were compressed:`,
           ...warnings.map(
