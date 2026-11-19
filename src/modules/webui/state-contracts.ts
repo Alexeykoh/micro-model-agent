@@ -171,12 +171,19 @@ export interface WebUiWiring {
     levels?: string[] | null;
     reasoningOff?: boolean;
     reachable?: boolean;
+    /** Холодная модель не отдала /props — есть смысл повторить пробу. */
+    needsReprobe?: boolean;
     vision?: boolean;
     video?: boolean;
     audio?: boolean;
     pdf?: boolean;
     tools?: boolean;
   };
+  /**
+   * Повторить capability-пробу холодной модели. Возвращает true, если уровень
+   * рассуждений наконец получен и живой снимок обновлён.
+   */
+  refreshProviderCapabilities?: () => Promise<boolean>;
   /** Доступен ли активный эндпоинт по последней probe (для честного reasoning view). */
   providerReachable?: () => boolean | undefined;
   /**

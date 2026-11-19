@@ -111,6 +111,20 @@ describe("buildReasoningView", () => {
     expect(view.levels).toEqual(["none"]);
   });
 
+  it("offers 'none' for template-kwarg without declared effort levels", () => {
+    const config = testConfig();
+    config.provider.type = "openai-compat";
+    config.provider.baseUrl = "http://host.docker.internal:8080/v1";
+    config.model = "toggle-only-model";
+    const view = buildReasoningView(config, {
+      reachable: true,
+      strategy: "template-kwarg",
+      reasoningOff: true,
+      levels: null,
+    });
+    expect(view.levels).toEqual(["none"]);
+  });
+
   it("hides reasoning options when the active endpoint is unreachable", () => {
     const config = testConfig();
     config.provider.type = "lmstudio";
@@ -216,6 +230,34 @@ describe("GET /api/models reasoning shape", () => {
         pdf: false,
         tools: true,
       });
+    });
+  });
+
+  it("retries cold-model capability discovery on a read", async () => {
+    const s = createWebUiState();
+    s.knownModels = () => ["deepseek-v4-pro-9b"];
+    s.knownModelsState = () => ({ models: ["deepseek-v4-pro-9b"], loading: false });
+    const config = testConfig();
+    config.provider.type = "openai-compat";
+    config.provider.baseUrl = "http://host.docker.internal:8080/v1";
+    config.model = "deepseek-v4-pro-9b";
+    s.config = config;
+    let refreshes = 0;
+    s.refreshProviderCapabilities = async () => {
+      refreshes++;
+      return false;
+    };
+    s.providerReasoning = () => ({
+      strategy: "prompt-tag",
+      reachable: true,
+      needsReprobe: true,
+    });
+
+    await withServer(s, async (base) => {
+      const res = await doFetch(`${base}/api/models`);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(refreshes).toBe(1);
+      expect(body.reasoning).toBeDefined();
     });
   });
 

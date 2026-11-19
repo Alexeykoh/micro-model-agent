@@ -187,6 +187,7 @@ export type ConfigStore = Pick<
   | "knownModelsFor"
   | "providerReachable"
   | "providerReasoning"
+  | "refreshProviderCapabilities"
 >;
 
 /** Роль: рабочее окружение и настройки (workspace, память, скиллы, плагины, LSP, setup). */

@@ -268,6 +268,12 @@ export function handleModelsGet(
   }
   if (s.config) {
     const probe = s.providerReasoning?.();
+    // Холодная llama-swap-модель не отдала /props на старте — стратегия осталась
+    // из пресета. Читающий запрос даёт бэкенду ещё один шанс; успех публикует
+    // SSE `models`, и клиент перечитает снимок (INV-R2/R7).
+    if (probe?.needsReprobe === true && s.refreshProviderCapabilities) {
+      void s.refreshProviderCapabilities();
+    }
     body.reasoning = buildReasoningView(s.config, {
       reachable: s.providerReachable?.(),
       strategy: probe?.strategy as never,

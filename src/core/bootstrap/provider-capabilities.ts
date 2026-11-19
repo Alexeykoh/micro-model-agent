@@ -10,6 +10,8 @@ import {
   readCachedCapabilities,
   writeCachedCapabilities,
 } from "../../modules/providers/capabilities-cache";
+import { markReasoningReprobe } from "../agent/reasoning-reprobe";
+import type { ProviderProbesBox } from "../agent/deps";
 
 /** Эндпоинт активной записи (тот же вид, что `activeProviderEndpoint`). */
 export interface CapabilitiesEndpoint {
@@ -27,14 +29,17 @@ export async function probeStartupCapabilities(
   endpoint: CapabilitiesEndpoint,
   model: string,
   opts: { probeOffSwitch?: boolean } = {},
+  ref?: ProviderProbesBox,
 ): Promise<DiscoveredCapabilities> {
   const native = await discoverCapabilities(endpoint, model, opts);
-  if (native.capabilities) {
-    writeCachedCapabilities(endpoint.baseUrl, model, native.capabilities);
-    return native;
-  }
-  return {
-    ...native,
-    capabilities: native.reachable === true ? readCachedCapabilities(endpoint.baseUrl, model) : undefined,
-  };
+  const result: DiscoveredCapabilities = native.capabilities
+    ? native
+    : {
+        ...native,
+        capabilities:
+          native.reachable === true ? readCachedCapabilities(endpoint.baseUrl, model) : undefined,
+      };
+  if (native.capabilities) writeCachedCapabilities(endpoint.baseUrl, model, native.capabilities);
+  markReasoningReprobe(ref, result, endpoint.type);
+  return result;
 }

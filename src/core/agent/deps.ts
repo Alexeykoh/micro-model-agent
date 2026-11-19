@@ -38,6 +38,15 @@ export interface ProviderProbesBox {
   reasoningLevels?: string[];
   /** Поддерживает ли выключатель reasoning. */
   reasoningOff?: boolean;
+  /**
+   * Холодная локальная модель не отдала `/props`: стратегия взята из пресета.
+   * Повторить discovery, когда бэкенд ответит (INV-R2/R7).
+   */
+  needsReasoningReprobe?: boolean;
+  /** Время последней попытки повтора — троттлинг частых чтений `/api/models`. */
+  lastReasoningReprobeAt?: number;
+  /** Защита от параллельных повторов. */
+  reasoningReprobeInflight?: boolean;
 }
 
 /** Живой итог context-probe: `undefined` — ещё не устоялась, `null` — не удалось. */

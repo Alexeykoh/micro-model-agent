@@ -17,6 +17,8 @@ export interface ProviderReasoningSnapshot {
   levels?: string[] | null;
   reasoningOff?: boolean;
   reachable?: boolean;
+  /** Холодная модель не отдала /props — поверхность может повторить пробу. */
+  needsReprobe?: boolean;
   /** Разрешённые возможности активной пары (preset → probe → override). */
   vision?: boolean;
   video?: boolean;
@@ -36,6 +38,7 @@ export function providerReasoningSnapshot(deps: ProviderSnapshotDeps): ProviderR
   return {
     strategy: ref?.reasoningStrategy,
     levels: ref?.reasoningLevels ?? null,
+    needsReprobe: ref?.needsReasoningReprobe === true,
     reasoningOff: ref?.reasoningOff,
     reachable: ref?.reachable,
     vision: caps.vision,
