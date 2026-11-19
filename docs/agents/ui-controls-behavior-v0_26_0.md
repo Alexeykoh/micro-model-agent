@@ -799,3 +799,7 @@
 - INPUT — no observable change (состояния: set-security::Аудит)
 - Re-index — no observable change (состояния: set-model, set-agent, set-agent::Инструменты, set-security::Shell и пути, set-plugins::Плагины, set-advanced, set-agent::Критик)
 - URL аудит-вебхука — no observable change (состояния: set-security::Аудит)
+
+## Post-fix note (2026-11-19)
+
+Отчёт описывает непатченный тег `v0_26_0`. Секция `security.scan` и четыре ключа HITL/compliance, признанные недоступными, исправлены в ветке `fix/settings-ia-gaps`: секция подключена к вкладке «Shell и пути», ключи получили дефы реестра и локализацию. Регрессионные тесты — в `tests/webui-settings-ia.test.ts`.

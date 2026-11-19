@@ -315,3 +315,12 @@
 | `ui.theme` | тема | enum | `console` |  |  | OK | клик по карточке темы, конфиг обновлён |
 | `ui.themeMode` | режим темы | enum | `auto` |  |  | OK |  |
 | `ui.themeEffects` | эффекты темы | bool | `true` |  |  | N/A | ключ не имеет контрола в веб-панели (только API/CLI) |
+
+## Post-fix note (2026-11-19)
+
+Этот документ — снимок непатченного тега `v0_26_0`. Два `N/A`-finding ниже устранены в ветке `fix/settings-ia-gaps`:
+
+- `security.contentScan.dangerousPatterns` — секция `security.scan` добавлена во вкладку «Shell и пути» (`src/modules/webui/assets/js/settings/panels-security.ts`);
+- `security.approvals` — четыре ключа `hitl.*` / `compliance.*` получили дефы в `src/config/registry-extra-security.ts` и локализацию, поэтому секция больше не пустая.
+
+Счётчики ключей выше (199 в локальном реестре, 200 в API-реестре стенда) описаны до правки; после неё центральный реестр содержит 203 ключа.
