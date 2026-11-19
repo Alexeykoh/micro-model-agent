@@ -79,6 +79,8 @@ describe("final audit summary consistency (C)", () => {
       baseDir,
       undefined,
       ["manual:verify the UI"],
+      undefined,
+      ["behavioral"],
     );
     plan.steps[0].status = "done";
 
@@ -127,6 +129,7 @@ describe("auto-advance manual guard (C)", () => {
       title: "T",
       steps: ["Update src/ui.tsx"],
       checks: ["manual:verify the UI"],
+      evidence: ["behavioral"],
     });
     expect(res.success).toBe(true);
 

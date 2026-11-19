@@ -57,6 +57,7 @@ describe("ExecutionModule.getPlanPendingSteps (S5)", () => {
       title: "T",
       steps: ["Update src/ui.tsx"],
       checks: ["manual:verify the UI"],
+      evidence: ["behavioral"],
     });
     expect(res.success).toBe(true);
 
@@ -76,6 +77,7 @@ describe("ExecutionModule.getPlanPendingSteps (S5)", () => {
       title: "T",
       steps: ["Update src/ui.tsx"],
       checks: ["manual:verify the UI"],
+      evidence: ["behavioral"],
     });
     execModule.getTracker()!.updateStepStatus(1, "done");
     execModule.getTracker()!.addNote(1, "page renders 6 cards");

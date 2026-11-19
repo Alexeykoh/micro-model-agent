@@ -31,6 +31,7 @@ describe("manual-проверка: наблюдение обязательно",
       title: "T",
       steps: ["Открой страницу каталога и проверь карточки"],
       checks: ["manual:видны 6 карточек и поиск работает"],
+      evidence: ["behavioral"],
     });
     expect(res.success, String(res.output)).toBe(true);
   }
@@ -73,11 +74,11 @@ describe("manual-проверка: наблюдение обязательно",
   });
 
   it("аудит считает manual-шаг без note незакрытым", () => {
-    expect(isUnconfirmed({ status: "done", description: "Открой страницу", check: "manual:x", note: "" } as never)).toBe(true);
-    expect(isUnconfirmed({ status: "done", description: "Открой страницу", check: "manual:x", note: "видел" } as never)).toBe(false);
+    expect(isUnconfirmed({ status: "done", description: "Открой страницу", check: "manual:x", note: "", evidence: "behavioral" } as never)).toBe(true);
+    expect(isUnconfirmed({ status: "done", description: "Открой страницу", check: "manual:x", note: "видел", evidence: "behavioral" } as never)).toBe(false);
     expect(isUnconfirmed({ status: "done", check: "file-exists:src/a.ts", note: "" } as never)).toBe(
       false,
     );
-    expect(isUnconfirmed({ status: "failed", description: "Открой страницу", check: "manual:x", note: "видел" } as never)).toBe(true);
+    expect(isUnconfirmed({ status: "failed", description: "Открой страницу", check: "manual:x", note: "видел", evidence: "behavioral" } as never)).toBe(true);
   });
 });
