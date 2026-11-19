@@ -225,6 +225,11 @@ export function getSystemPromptInfo(host: PromptPhaseHost): SystemPromptInfo {
 export async function resolvePromptOverflowOnce(host: PromptPhaseHost): Promise<void> {
   const { deps } = host;
   const cfg = deps.config;
+  // Пере-резолв после правки AGENTS.md: старые замены описывают прежний текст.
+  // Чистим ДО вычисления dry и до раннего return — иначе укороченный файл
+  // остался бы сжатым по прошлой версии (INV-6: деградация не молча).
+  host.promptOverrides.clear();
+  host.overflowHintBlock = null;
   const dry = buildSystemPrompt(host);
   // B3: essential-блоки рвут бюджет — единственная точка предупреждения для
   // всех поверхностей (main + раннеры + one-shot): bootstrap dry-run молчит

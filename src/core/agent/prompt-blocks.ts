@@ -11,7 +11,7 @@ import type { PromptBlock } from "../types";
 import type { AgentDeps } from "./deps";
 
 /** Хеш контента kind-блока для отпечатка (B16: ловит правки любой длины). */
-function kindHash(content: string): string {
+export function kindHash(content: string): string {
   return createHash("sha256").update(content).digest("hex").slice(0, 16);
 }
 
