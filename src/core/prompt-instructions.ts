@@ -8,6 +8,7 @@
  * новое system-сообщение в историю не добавляется.
  */
 import type { InstructionSourceChange, PromptBlock } from "./types";
+import type { AppConfig } from "../config/types";
 import { loadAgentsMdBlocks } from "./bootstrap/state";
 import { kindHash } from "./agent/prompt-blocks";
 
@@ -76,12 +77,19 @@ export function refreshInstructionBlocks(
   baseDir: string,
   configDir: string | undefined,
   blocks: PromptBlock[],
+  config?: AppConfig,
 ): InstructionRefreshResult {
   // `--no-agents-md`: инструкций нет, обновлять нечего.
   if (!blocks.some((b) => b.kind === "instructions")) return unchanged(blocks);
   if (!configDir) return unchanged(blocks);
 
-  const fresh = loadAgentsMdBlocks(baseDir, configDir, false);
+  const fresh = loadAgentsMdBlocks(
+    baseDir,
+    configDir,
+    false,
+    config?.instructions?.sources ?? [],
+    config?.instructions?.fallback ?? "none",
+  );
   if (instructionFingerprint(blocks) === instructionFingerprint(fresh)) return unchanged(blocks);
 
   const byLabel = new Map(fresh.map((b) => [b.label, b]));

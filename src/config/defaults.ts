@@ -126,6 +126,8 @@ export const DEFAULTS: AppConfig = {
   },
   instructions: {
     summarize: true,
+    sources: [],
+    fallback: "claude",
   },
   modelLoad: {
     autoLoad: false,

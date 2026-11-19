@@ -90,7 +90,12 @@ export async function runTurn(
   // AGENTS.md — живой источник: перечитываем на ГРАНИЦЕ ХОДА, внутри хода
   // промпт имутабелен (KV-кеш). system заменяется на месте ниже, в
   // ensureSessionStart → refreshSystemPrompt, без новой записи в историю.
-  const refreshed = refreshInstructionBlocks(deps.baseDir, deps.configDir, deps.promptBlocks);
+  const refreshed = refreshInstructionBlocks(
+    deps.baseDir,
+    deps.configDir,
+    deps.promptBlocks,
+    deps.config,
+  );
   if (refreshed.changed) {
     deps.promptBlocks = refreshed.blocks;
     slog.logInstructions({ fingerprint: refreshed.fingerprint, changes: refreshed.changes });

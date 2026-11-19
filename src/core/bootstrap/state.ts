@@ -7,8 +7,9 @@
  * разделяемые примитивы, чтобы фазы не дублировали их друг у друга.
  */
 import { estimateTokens } from "../../llm/token-counter";
-import { existsSync, readFileSync, readdirSync } from "fs";
-import { join, relative, sep } from "path";
+import { existsSync, globSync, readFileSync, readdirSync, statSync } from "fs";
+import { homedir } from "os";
+import { dirname, isAbsolute, join, relative, sep } from "path";
 import type { Logger, LogLevel } from "../../logger/app-logger";
 import type { AgentPlugin } from "../../modules/types";
 import type { PromptBlock } from "../types";
@@ -124,7 +125,7 @@ const AGENTS_MAX_NESTED = 5;
  * скип служебных каталогов. Не падает на нечитаемых каталогах.
  * @param baseDir workspace; @returns найденные пути, отсортированные по пути.
  */
-export function nestedAgentsMdPaths(baseDir: string): string[] {
+function nestedInstructionPaths(baseDir: string, fileName: string): string[] {
   const found: Array<{ path: string; depth: number }> = [];
   const walk = (dir: string, depth: number): void => {
     let entries: string[];
@@ -136,7 +137,7 @@ export function nestedAgentsMdPaths(baseDir: string): string[] {
     for (const entry of entries) {
       if (AGENTS_SKIP_DIRS.has(entry)) continue;
       const full = join(dir, entry);
-      if (entry === "AGENTS.md") {
+      if (entry === fileName) {
         if (depth < AGENTS_MAX_DEPTH) found.push({ path: full, depth });
         continue;
       }
@@ -148,11 +149,20 @@ export function nestedAgentsMdPaths(baseDir: string): string[] {
   return found.slice(0, AGENTS_MAX_NESTED).map((f) => f.path);
 }
 
+/** Вложенные `AGENTS.md` (публичный враппер для тестов и фазы workspace). */
+export function nestedAgentsMdPaths(baseDir: string): string[] {
+  return nestedInstructionPaths(baseDir, "AGENTS.md");
+}
+
 /**
- * Кандидаты AGENTS.md по приоритету: проект, проектный `.mma`, вложенные,
- * глобальный. Вложенные (F-01) — до 5 шт, от корня к глубине.
+ * Кандидаты инструкций по приоритету: проект, проектный `.mma`, вложенные,
+ * глобальный. При `fallback: "claude"` каталог без `AGENTS.md` даёт `CLAUDE.md`.
  */
-export function agentsMdPaths(baseDir: string, configDir: string): string[] {
+export function agentsMdPaths(
+  baseDir: string,
+  configDir: string,
+  fallback: "claude" | "none" = "none",
+): string[] {
   const explicit: string[] = [
     join(baseDir, "AGENTS.md"),
     join(projectMmaDir(baseDir), "AGENTS.md"),
@@ -161,7 +171,49 @@ export function agentsMdPaths(baseDir: string, configDir: string): string[] {
   // попадался в промпт дважды (2× токены, дубль варнингов dry-run).
   const explicitSet = new Set(explicit);
   const nested = nestedAgentsMdPaths(baseDir).filter((p) => !explicitSet.has(p));
-  return [...explicit, ...nested, join(configDir, "AGENTS.md")];
+  const global = join(configDir, "AGENTS.md");
+  const candidates = [...explicit, ...nested, global];
+  if (fallback !== "claude") return candidates;
+
+  const withFallback = candidates.map((p) => {
+    if (existsSync(p)) return p;
+    if (p === global) return join(homedir(), ".claude", "CLAUDE.md");
+    return join(dirname(p), "CLAUDE.md");
+  });
+  const claudeNested = nestedInstructionPaths(baseDir, "CLAUDE.md").filter(
+    (p) => !withFallback.some((x) => dirname(x) === dirname(p)),
+  );
+  return [
+    ...new Set([
+      ...withFallback,
+      ...claudeNested,
+      join(homedir(), ".claude", "CLAUDE.md"),
+    ]),
+  ];
+}
+
+/**
+ * Разрешает один законфигурированный источник: `~/`, абсолютный путь или glob.
+ * Отсутствующие файлы молча пропускаются; пустые строки игнорируются.
+ * HTTPS-источники пока не поддерживаются (синхронный загрузчик) — DEBT(ins-url-sources).
+ */
+function resolveSourcePattern(baseDir: string, raw: string): string[] {
+  const source = raw.trim();
+  if (!source || source.startsWith("http://") || source.startsWith("https://")) return [];
+  const expanded = source.startsWith("~/") ? join(homedir(), source.slice(2)) : source;
+  const absolute = isAbsolute(expanded) ? expanded : join(baseDir, expanded);
+  const pattern = absolute.split(sep).join("/");
+  try {
+    return globSync(pattern).filter((p) => {
+      try {
+        return statSync(p).isFile();
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return existsSync(absolute) ? [absolute] : [];
+  }
 }
 
 /**
@@ -174,11 +226,16 @@ export function loadAgentsMdBlocks(
   baseDir: string,
   dir: string,
   skip: boolean,
+  extraSources: string[] = [],
+  fallback: "claude" | "none" = "none",
 ): PromptBlock[] {
   if (skip) return [];
   const blocks: PromptBlock[] = [];
+  const configured = extraSources.flatMap((raw) => resolveSourcePattern(baseDir, raw));
   // Дедпу: один файл — один блок, даже если каталог Союза путей его повторил.
-  const candidates = [...new Set(agentsMdPaths(baseDir, dir))];
+  const candidates = [
+    ...new Set([...agentsMdPaths(baseDir, dir, fallback), ...configured]),
+  ];
   for (const p of candidates) {
     if (existsSync(p)) {
       const content = readFileSync(p, "utf-8").trim();

@@ -48,7 +48,13 @@ export function buildStaticPromptBlocks(
   // итерацией, где старый план ещё был виден).
   contextManager.setPlanSummaryProvider(() => execModule.getPlanSummary());
 
-  const agentsMdBlocks = loadAgentsMdBlocks(baseDir, dir, noAgentsMd === true);
+  const agentsMdBlocks = loadAgentsMdBlocks(
+    baseDir,
+    dir,
+    noAgentsMd === true,
+    config.instructions?.sources ?? [],
+    config.instructions?.fallback ?? "none",
+  );
 
   return [
     systemInfoPrompt,
