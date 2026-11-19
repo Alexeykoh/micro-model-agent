@@ -148,7 +148,8 @@ describe("lsp_check: прогрев упал", () => {
       const paused = await handler(ctxFor(dir), { path: "src/a.ts" });
       expect(warmups).toBe(attempts);
       expect(paused.output).toContain("cooldown");
-      expect(paused.output).toContain("next attempt");
+      expect(paused.output).toContain("static checks are unavailable");
+      expect(paused.output).toContain("tsc --noEmit");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -194,7 +195,7 @@ describe("lsp_check: прогрев упал", () => {
       const module = new LspModule(CONFIG, client);
       const result = await module.getToolDefinitions()[0].handler(ctxFor(dir), { path: "src/a.ts" });
 
-      expect(result.output).toContain("still starting");
+      expect(result.output).toContain("cold-start budget is exhausted");
       expect(result.output).not.toContain("[LSP check failed for");
     } finally {
       rmSync(dir, { recursive: true, force: true });
