@@ -1,6 +1,0 @@
-dist/
-node_modules/
-.mma/
-_testing/
-bun.lock
-*.jsonl
