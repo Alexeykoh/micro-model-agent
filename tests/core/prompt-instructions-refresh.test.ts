@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULTS } from "../../src/config/defaults";
@@ -33,6 +33,7 @@ function hostWith(baseDir: string): { host: PromptPhaseHost; deps: AgentDeps } {
     baseDir,
     configDir: baseDir,
     promptBlocks: loadAgentsMdBlocks(baseDir, baseDir, false),
+    logger: { warn: () => undefined, debug: () => undefined },
     llmProvider: { countTokens: (s: string) => Math.ceil(s.length / 4) },
     pluginManager: { runOnBuildPrompt: () => [] },
   } as unknown as AgentDeps;
@@ -164,6 +165,29 @@ describe("AGENTS.md: обновление на границе хода", () => {
     expect(refreshed.changed).toBe(true);
     expect(refreshed.changes).toEqual([{ label: "instructions", action: "added" }]);
     expect(refreshed.blocks.some((b) => b.content.includes("Marker: late"))).toBe(true);
+  });
+
+  it("substitutes each over-budget source with a truncated view, not a full copy", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mma-agents-md-"));
+    dirs.push(dir);
+    mkdirSync(join(dir, "docs"), { recursive: true });
+    const big =
+      `# docs\n\nMARKER_DOCS_BIGFILE\n\nПовтори этот блок текста много раз для проверки: ` +
+      "пример кириллицы и правило переполнения. ".repeat(1200);
+    writeFileSync(join(dir, "AGENTS.md"), "# Root\n", "utf-8");
+    writeFileSync(join(dir, "docs", "AGENTS.md"), big, "utf-8");
+    const { host, deps } = hostWith(dir);
+
+    await resolvePromptOverflowOnce(host);
+
+    const label = "instructions (docs/)";
+    expect(host.promptOverrides.has(label)).toBe(true);
+    const view = host.promptOverrides.get(label)!;
+    expect(view.estimatedTokens).toBeLessThan(
+      Math.floor(deps.config.contextWindow * deps.config.contextBudget.systemPrompt),
+    );
+    expect(view.content).toContain("MARKER_DOCS_BIGFILE");
+    expect(view.content.length).toBeLessThan(big.length);
   });
 
   it("reports no change when AGENTS.md is untouched", () => {

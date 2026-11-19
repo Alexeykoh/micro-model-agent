@@ -29,8 +29,7 @@ export function overflowFingerprint(systemBudget: number, blocks: PromptBlock[])
   return `${systemBudget}|${kinds}`;
 }
 
-/** Применяет сжатые резолвом замены по kind (B-overflow). */
-/** Ключ замены: имя источника (per-source), а не общий `kind`. */
+/** Применяет сжатые резолвом замены (W5: ключ — имя источника). */
 function overrideKey(block: PromptBlock): string | undefined {
   return block.kind ? block.label ?? block.kind : undefined;
 }

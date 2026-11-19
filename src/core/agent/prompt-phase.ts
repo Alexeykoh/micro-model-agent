@@ -222,6 +222,12 @@ export function getSystemPromptInfo(host: PromptPhaseHost): SystemPromptInfo {
  * LLM суммаризирует в остаток (диск-кэш) или усекает; малый hint-блок говорит
  * модели, что случилось и как читать полный источник.
  */
+/**
+ * Помечает внебюджетные источники trunc-выжимкой перед LLM-вызовом (W5).
+ * Каждый источник хранит собственную замену по имени, а не shared `kind`.
+ * Замена — `{короткое уведомление} + marker`, model-facing: обрезанный блок
+ * не лежит в промпте дважды — целиком он сидит в `promptOverrides`.
+ */
 export async function resolvePromptOverflowOnce(host: PromptPhaseHost): Promise<void> {
   const { deps } = host;
   const cfg = deps.config;
@@ -263,7 +269,10 @@ export async function resolvePromptOverflowOnce(host: PromptPhaseHost): Promise<
   for (const r of res.replacements) {
     if (r.kind) host.promptOverrides.set(r.label ?? r.kind, r);
   }
-  host.overflowHintBlock = res.hintBlock;
+  // W5: truncate-подмены — это весь текст источника обрубком; их видимая часть
+  // уже под бюджетом, поэтому back-reference из промпта не нужен. Hint-блок
+  // оставляем только для LLM-суммаризаций.
+  host.overflowHintBlock = res.warnings.some((w) => w.mode === "summary") ? res.hintBlock : null;
 
   const needed =
     dry.blocks.filter((b) => b.included).reduce((s, b) => s + b.tokens, 0) +
