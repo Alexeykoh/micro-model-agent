@@ -1,9 +1,6 @@
 import { describe, it, expect } from "bun:test";
-import {
-  buildSystemPrompt,
-  getSystemPromptInfo,
-  type PromptPhaseHost,
-} from "../../src/core/agent/prompt-phase";
+import { buildSystemPrompt, type PromptPhaseHost } from "../../src/core/agent/prompt-phase";
+import { getSystemPromptInfo } from "../../src/core/agent/prompt-info";
 import { estimateTokens } from "../../src/llm/token-counter";
 
 /**

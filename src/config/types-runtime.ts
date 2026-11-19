@@ -10,6 +10,10 @@ import type { ThemeMode, UiThemeId } from "./theme-ids";
  */
 export interface InstructionsConfig {
   summarize: boolean;
+  /** Доп. файлы/glob'ы рядом с workspace (вне discover-обхода AGENTS.md). */
+  sources: string[];
+  /** Что читать, если в каталоге нет `AGENTS.md`: `claude` → `CLAUDE.md`. */
+  fallback: "claude" | "none";
 }
 
 export interface SessionConfig {

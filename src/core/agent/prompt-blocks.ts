@@ -11,7 +11,7 @@ import type { PromptBlock } from "../types";
 import type { AgentDeps } from "./deps";
 
 /** Хеш контента kind-блока для отпечатка (B16: ловит правки любой длины). */
-function kindHash(content: string): string {
+export function kindHash(content: string): string {
   return createHash("sha256").update(content).digest("hex").slice(0, 16);
 }
 
@@ -29,12 +29,19 @@ export function overflowFingerprint(systemBudget: number, blocks: PromptBlock[])
   return `${systemBudget}|${kinds}`;
 }
 
-/** Применяет сжатые резолвом замены по kind (B-overflow). */
+/** Применяет сжатые резолвом замены (W5: ключ — имя источника). */
+function overrideKey(block: PromptBlock): string | undefined {
+  return block.kind ? block.label ?? block.kind : undefined;
+}
+
 export function applyOverrides(
   blocks: PromptBlock[],
   overrides: Map<string, PromptBlock>,
 ): PromptBlock[] {
-  return blocks.map((b) => (b.kind && overrides.has(b.kind) ? overrides.get(b.kind)! : b));
+  return blocks.map((b) => {
+    const key = overrideKey(b);
+    return key && overrides.has(key) ? overrides.get(key)! : b;
+  });
 }
 
 /** Гейт блоков по активным и реально видимым тегам (B12, allowlist-aware). */

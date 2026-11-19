@@ -56,6 +56,18 @@ export interface PromptBlock {
   degraded?: { reason: string };
 }
 
+/** Изменение одного источника инструкций (для события в session.jsonl). */
+export interface InstructionSourceChange {
+  label: string;
+  action: "added" | "changed" | "removed";
+}
+
+/** Данные события `instructions_updated` (INV-IS-3, без содержимого файлов). */
+export interface InstructionLogInfo {
+  fingerprint: string;
+  changes: InstructionSourceChange[];
+}
+
 /** Статус вызова тула. */
 export type ToolCallStatus = "done" | "failed" | "skipped";
 

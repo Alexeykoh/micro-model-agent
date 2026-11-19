@@ -5,7 +5,7 @@ import type { SessionLogEntry } from "../modules/session/log-types";
 import type { ToolImageRef } from "../modules/session/image-store";
 import { redactContextSecrets } from "./agent/context-log";
 import { sanitizeLogMessageTargeted } from "../modules/security/data-sanitizer";
-import type { ToolCall } from "./types";
+import type { InstructionLogInfo, ToolCall } from "./types";
 
 type LogEntry = Omit<SessionLogEntry, "ts" | "source">;
 
@@ -18,6 +18,15 @@ export interface LogCaller {
 /** `system`: системное сообщение (секреты вырезаны). */
 export function systemEntry(content: string): LogEntry {
   return { type: "system", content: redactContextSecrets(content) };
+}
+
+/** `instructions_updated`: версия инструкций и имена изменившихся источников. */
+export function instructionsEntry(info: InstructionLogInfo): LogEntry {
+  return {
+    type: "instructions_updated",
+    fingerprint: info.fingerprint,
+    instructionChanges: info.changes,
+  };
 }
 
 /** `tool_defs`: состав тулов итерации для пост-анализа. */

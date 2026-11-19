@@ -3,7 +3,7 @@
 // группы — порядок `EXTRA_DEFS`.
 import type { ConfigKeyDef } from "./registry";
 import { DEFAULTS } from "./defaults";
-import { bool, enumOf, int, share, str } from "./registry-extra-factories";
+import { bool, enumOf, int, list, share, str } from "./registry-extra-factories";
 
 type ReasoningBound = "minimal" | "low" | "medium" | "high" | "xhigh";
 
@@ -64,6 +64,18 @@ export const PROVIDER_EXTRA_DEFS: ConfigKeyDef[] = [
     (c, v) => {
       c.instructions ??= structuredClone(DEFAULTS.instructions);
       c.instructions.summarize = v as boolean;
+    }),
+  list("instructions.sources", "budget",
+    (c) => c.instructions?.sources ?? DEFAULTS.instructions.sources,
+    (c, v) => {
+      c.instructions ??= structuredClone(DEFAULTS.instructions);
+      c.instructions.sources = v as string[];
+    }),
+  enumOf("instructions.fallback", "budget", ["claude", "none"], false,
+    (c) => c.instructions?.fallback ?? DEFAULTS.instructions.fallback,
+    (c, v) => {
+      c.instructions ??= structuredClone(DEFAULTS.instructions);
+      c.instructions.fallback = v as "claude" | "none";
     }),
 
   bool("contextLog.enabled", "budget", false,

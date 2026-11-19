@@ -10,7 +10,8 @@
 import { join } from "path";
 import { projectMmaDir } from "../../config/paths";
 import { PromptBuilder, omittedBlocksNote } from "../prompt-builder";
-import { resolvePromptOverflow, overflowHint, HINT_BLOCK_TOKENS } from "../prompt-overflow";
+import { overflowHint } from "../prompt-overflow";
+import { HINT_BLOCK_TOKENS, resolvePromptOverflow } from "../prompt-overflow-resolve";
 import { buildServiceJobPrompt } from "../system-prompt";
 import { estimateTokens } from "../../llm/token-counter";
 import {
@@ -19,8 +20,7 @@ import {
   overflowFingerprint,
   pluginPromptBlocks,
 } from "./prompt-blocks";
-import type { PromptBlock, PromptBlockKind, PromptProfile } from "../types";
-import type { SessionLogger } from "../session-logger";
+import type { PromptBlock, PromptProfile } from "../types";
 import type { AgentDeps } from "../agent";
 import { t } from "../../i18n/index";
 
@@ -29,8 +29,8 @@ export interface PromptPhaseHost {
   deps: AgentDeps;
   /** Профиль промпта на текущий ход (`service-job` — без блоков харнесса). */
   promptProfile: PromptProfile;
-  /** Замены переполнения по kind (сжатые instructions/project-map). */
-  promptOverrides: Map<PromptBlockKind, PromptBlock>;
+  /** Замены переполнения по имени источника (сжатые instructions/project-map). */
+  promptOverrides: Map<string, PromptBlock>;
   /** Малый всегда-включённый hint-блок о сжатии. */
   overflowHintBlock: PromptBlock | null;
   /**
@@ -154,77 +154,26 @@ function freezeProjectMap(host: PromptPhaseHost, blocks: PromptBlock[]): PromptB
   return next;
 }
 
-/**
- * Пишет состояние контекста в лог сессии (полный таймлайн роста/компакции);
- * `start`-снимок дополнительно несёт разбивку системных блоков.
- */
-export function logContextStat(
-  host: PromptPhaseHost,
-  kind: "start" | "iteration",
-  iteration: number,
-  slog: SessionLogger,
-  blocks?: Array<{ label: string; priority: string; tokens: number; included: boolean }>,
-): void {
-  const { deps } = host;
-  const cm = deps.contextManager;
-  if (typeof cm.getSnapshot !== "function") return;
-  const snap = cm.getSnapshot();
-  const diag = typeof cm.getEstimateDiagnostics === "function" ? cm.getEstimateDiagnostics() : undefined;
-  const history = cm.getActiveHistory();
-  const systemMsg = history.find((m) => m.role === "system");
-  slog.logContext({
-    kind,
-    iteration,
-    window: snap.window,
-    systemBudget: snap.budget.systemPrompt,
-    reserveBudget: snap.budget.responseReserve,
-    historyBudget: snap.budget.history,
-    systemTokens:
-      kind === "start" && systemMsg && typeof systemMsg.content === "string"
-        ? estimateTokens(systemMsg.content)
-        : undefined,
-    toolTokens: snap.toolTokens,
-    tokens: snap.tokens,
-    estimatedTokensRaw: diag?.raw,
-    contextTokens: diag?.calibrated,
-    calibrationRatio: diag?.ratio,
-    calibrationState: diag?.state,
-    quality: snap.quality,
-    messageCount: snap.messageCount,
-    compactionCount: snap.compactionCount,
-    iterationsSinceCompaction: snap.iterationsSinceCompaction,
-    blocks,
-  });
-}
-
-/** Текущий системный промпт с подсчётом токенов (для /sysprompt, диагностики). */
-export interface SystemPromptInfo {
-  text: string;
-  /** Размер в той же линейке, что бюджет (`estimateTokens`, см. B2 выше). */
-  tokenCount: number;
-  /** Бюджет системного промпта (contextWindow × contextBudget.systemPrompt). */
-  budget: number;
-  excluded: string[];
-  blocks: SystemPromptBuild["blocks"];
-}
-
-export function getSystemPromptInfo(host: PromptPhaseHost): SystemPromptInfo {
-  const { prompt, excluded, blocks } = buildSystemPrompt(host);
-  const tokenCount = estimateTokens(prompt);
-  const budget = Math.floor(
-    host.deps.config.contextWindow * host.deps.config.contextBudget.systemPrompt,
-  );
-  return { text: prompt, tokenCount, budget, excluded, blocks };
-}
+/** Диагностика промпта (`/sysprompt`, лог контекста) — в `prompt-info.ts`. */
 
 /**
  * Одноразовая (первый прогон) обработка instructions/project-map сверх бюджета:
  * LLM суммаризирует в остаток (диск-кэш) или усекает; малый hint-блок говорит
  * модели, что случилось и как читать полный источник.
  */
+/**
+ * Втаскивает переполненные источники в бюджет (W5): truncate-выжимки.
+ * Без `truncate` блок не влезет в следующий `buildSystemPrompt`, и модель его не увидит.
+ * Каждая выжимка живёт по имени, а не shared `kind`; hint — только для summary.
+ */
 export async function resolvePromptOverflowOnce(host: PromptPhaseHost): Promise<void> {
   const { deps } = host;
   const cfg = deps.config;
+  // Пере-резолв после правки AGENTS.md: старые замены описывают прежний текст.
+  // Чистим ДО вычисления dry и до раннего return — иначе укороченный файл
+  // остался бы сжатым по прошлой версии (INV-6: деградация не молча).
+  host.promptOverrides.clear();
+  host.overflowHintBlock = null;
   const dry = buildSystemPrompt(host);
   // B3: essential-блоки рвут бюджет — единственная точка предупреждения для
   // всех поверхностей (main + раннеры + one-shot): bootstrap dry-run молчит
@@ -256,9 +205,12 @@ export async function resolvePromptOverflowOnce(host: PromptPhaseHost): Promise<
     contextWindow: cfg.contextWindow,
   });
   for (const r of res.replacements) {
-    if (r.kind) host.promptOverrides.set(r.kind, r);
+    if (r.kind) host.promptOverrides.set(r.label ?? r.kind, r);
   }
-  host.overflowHintBlock = res.hintBlock;
+  // Hint оставляем, когда модели нужно знать о потере: summary (читать полный
+  // файл при нехватке деталей) или dropped (источника в промпте нет вообще).
+  // Чистый truncate самодостаточен — весь срез уже лежит в подмене.
+  host.overflowHintBlock = res.warnings.some((w) => w.mode !== "truncate") ? res.hintBlock : null;
 
   const needed =
     dry.blocks.filter((b) => b.included).reduce((s, b) => s + b.tokens, 0) +
@@ -266,6 +218,7 @@ export async function resolvePromptOverflowOnce(host: PromptPhaseHost): Promise<
     HINT_BLOCK_TOKENS;
   const hint = overflowHint(cfg, deps.configDir, needed);
   for (const w of res.warnings) {
+    if (w.mode === "dropped") continue; // уже предупреждены внутри резолва.
     deps.logger.warn(
       t("prompt.overflow.exceeded", {
         label: w.label,
@@ -281,10 +234,9 @@ export async function resolvePromptOverflowOnce(host: PromptPhaseHost): Promise<
 }
 
 /** Обновляет системное сообщение в контексте, если промпт изменился. */
+/** Обновляет системное сообщение в контексте, если промпт изменился. */
 export function refreshSystemPrompt(host: PromptPhaseHost): void {
   const { prompt } = buildSystemPrompt(host);
   const current = host.deps.contextManager.getActiveHistory().find((m) => m.role === "system");
-  if (!current || current.content !== prompt) {
-    host.deps.contextManager.updateSystemPrompt?.(prompt);
-  }
+  if (!current || current.content !== prompt) host.deps.contextManager.updateSystemPrompt?.(prompt);
 }
