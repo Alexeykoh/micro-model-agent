@@ -14,7 +14,7 @@
 
 - `src/modules/webui/assets/js/settings/panels-security.ts` — subtab → section mapping; add `security.scan` to the `shell` tab list.
 - `src/config/registry-extra-security.ts` — Security group of config key definitions; add four defs (`bool` × 3? no: `bool` × 3, `int` × 1).
-- `src/i18n/en.json`, `src/i18n/ru.json` — add three missing `config.key.*` labels (`hitl.autoApproveLow`, `compliance.enabled`, `compliance.retentionDays`); `hitl.killSwitch` label/description already exist.
+- `src/i18n/en.json`, `src/i18n/ru.json` — add three missing `config.key.*` labels **and `config.desc.*` descriptions** (`hitl.autoApproveLow`, `compliance.enabled`, `compliance.retentionDays`); `hitl.killSwitch` label/description already exist. `tests/i18n.test.ts` requires both for every registry key.
 - `tests/webui-settings-ia.test.ts` — two regression guards: every Security section id is reachable from a subtab, and every Security panel key has a registry definition.
 - `docs/agents/settings-inventory-v0_26_0.md` — append a short post-fix note (the report is a snapshot of the unpatched tag).
 
@@ -155,24 +155,30 @@ Append four entries at the end of the `SECURITY_EXTRA_DEFS` array (before the cl
 
 `bool` and `int` are already imported from `./registry-extra-factories`; no new imports besides `DEFAULTS`.
 
-- [ ] **Step 4: Add i18n labels**
+- [ ] **Step 4: Add i18n labels and descriptions**
 
-In `src/i18n/en.json` and `src/i18n/ru.json`, insert these lines next to the existing `"config.key.hitl.killSwitch"` entries (both files, same key set — `tests/i18n.test.ts` enforces parity).
+In `src/i18n/en.json` and `src/i18n/ru.json`, insert these lines next to the existing `"config.key.hitl.killSwitch"` entries (both files, same key set — `tests/i18n.test.ts` enforces parity and requires both `config.key.*` and `config.desc.*` for every registry key).
 
 `en.json`:
 
 ```json
   "config.key.hitl.autoApproveLow": "auto-approve low-impact actions",
+  "config.desc.hitl.autoApproveLow": "Allow low-impact tool calls without waiting for human approval.",
   "config.key.compliance.enabled": "compliance trail",
+  "config.desc.compliance.enabled": "Record high-risk actions in the tamper-evident compliance trail.",
   "config.key.compliance.retentionDays": "compliance retention, days",
+  "config.desc.compliance.retentionDays": "How long compliance records are kept before pruning.",
 ```
 
 `ru.json`:
 
 ```json
   "config.key.hitl.autoApproveLow": "авто-одобрение действий низкого риска",
+  "config.desc.hitl.autoApproveLow": "Разрешать вызовы низкого риска без ожидания одобрения человеком.",
   "config.key.compliance.enabled": "журнал соответствия",
+  "config.desc.compliance.enabled": "Записывать действия высокого риска в защищённый от подмены журнал.",
   "config.key.compliance.retentionDays": "хранение журнала, дней",
+  "config.desc.compliance.retentionDays": "Сколько дней хранить записи журнала перед очисткой.",
 ```
 
 - [ ] **Step 5: Run the test to verify it passes**

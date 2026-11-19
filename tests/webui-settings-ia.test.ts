@@ -8,9 +8,14 @@ setupHappyDom("");
 const { PANEL_SECTIONS, keyToPanel } = await import(
   "../src/modules/webui/assets/js/settings/controls.js"
 );
+const { resolveConfigKey } = await import("../src/config/registry.ts");
 const i18n = await import("../src/modules/webui/assets/js/i18n.js");
 const readDict = (name: string): Record<string, string> =>
   JSON.parse(readFileSync(new URL(`../src/i18n/${name}.json`, import.meta.url), "utf8"));
+const securityPanel = readFileSync(
+  new URL("../src/modules/webui/assets/js/settings/panels-security.ts", import.meta.url),
+  "utf8",
+);
 i18n.I18N.locale = "en";
 i18n.I18N.dicts = { en: readDict("en"), ru: readDict("ru") };
 const { t } = i18n;
@@ -91,5 +96,24 @@ describe("settings IA", () => {
     expect(critic?.keys).toEqual(["critic.enabled"]);
     expect(agent.find((s) => s.id === "agent.critic.tuning")?.keys).toContain("critic.model");
     expect(keysOf("agent")).toContain("critic.enabled");
+  });
+
+  it("renders every Security section in at least one subtab", () => {
+    const tabBlock = securityPanel.match(/const TABS[\s\S]*?\];/)?.[0] ?? "";
+    const listed = new Set(
+      [...tabBlock.matchAll(/"(security\.[a-zA-Z.]+)"/g)].map((m) => m[1]),
+    );
+    const sections = (PANEL_SECTIONS.security as Array<{ id: string }>).map(
+      (s) => s.id,
+    );
+    const orphaned = sections.filter((id) => !listed.has(id));
+    expect(orphaned).toEqual([]);
+  });
+
+  it("has a registry definition for every Security panel key", () => {
+    const missing = keysOf("security").filter(
+      (key) => resolveConfigKey(key) === null,
+    );
+    expect(missing).toEqual([]);
   });
 });
