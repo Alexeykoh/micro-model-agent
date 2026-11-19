@@ -30,7 +30,7 @@ bun test tests/arch         # один набор
 | Платформенные скипы объявлены | `tests/arch/platform-skips.test.ts` |
 | Провенанс сессии/событий | `tests/arch/session-provenance.test.ts` |
 | Fail-open оставляет сигнал (INV-15) | `tests/arch/observability-coverage.test.ts` |
-| Подсказки модели не расходятся с enforcement | `tests/arch/guidance-enforcement.test.ts` |
+| Подсказки модели не расходятся с enforcement | `tests/arch/guidance-enforcement.test.ts`, `tests/tools/bash-block-alternative.test.ts` |
 | Опции LLM-вызова задаются в одном месте | `tests/arch/llm-call-options.test.ts` |
 | Каталог команд и handler-map | `tests/core/command-catalog.test.ts` |
 | Стратегия reasoning резолвится провайдером (INV-R) | `tests/core/reasoning-strategy-resolve.test.ts` |
