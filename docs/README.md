@@ -23,6 +23,7 @@
 | [`ideas/`](./ideas)                                        | Идеи и картины продукта без нормативных контрактов                      | Черновик  |
 | [`archive/specs/`](./archive/specs)                        | Завершённые спеки, сгруппированные по году                              | История   |
 | [`plans/`](./plans)                                        | Планы активных работ                                                    | Рабочее   |
+| [`development/`](./development)                            | Развитие: что позаимствовать у других harness'ов, приоритеты и гейты    | Рабочее   |
 | [`archive/plans/`](./archive/plans)                        | Закрытые планы и планы из старых воркфлоу                               | История   |
 | [`agents/`](./agents)                                      | Описание текущего состояния подсистем                                   | **Живое** |
 | [`agents/architecture.md`](./agents/architecture.md)       | Текущее устройство: Output, Host-seam, Security, контракт `LLMProvider` | **Живое** |
