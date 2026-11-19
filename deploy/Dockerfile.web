@@ -18,7 +18,9 @@ RUN bun install --frozen-lockfile --ignore-scripts
 RUN bunx playwright install --with-deps chromium
 
 COPY . .
-RUN chmod +x /app/deploy/docker-test/entrypoint.sh \
+# Короткий ID сборки из отпечатка исходников: футер веба показывает `dev #xxxxx`.
+RUN find /app/src -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -c1-5 > /app/build-id \
+    && chmod +x /app/deploy/docker-test/entrypoint.sh \
     && mkdir -p /config /workspace
 
 EXPOSE 7333

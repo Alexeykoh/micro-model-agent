@@ -90,6 +90,8 @@ export interface HostStateSnapshot {
   version?: string;
   /** Локальная dev-сборка (запуск из src/, не из dist/). */
   dev?: boolean;
+  /** Короткий ID dev-сборки (5 символов) для подписи `dev #xxxxx`. */
+  devBuildId?: string;
   /**
    * Доступная новая версия (`current` → `latest`). Заполняется апдейтером:
    * в вебе единственный способ узнать об апдейте (в stdout никто не смотрит),

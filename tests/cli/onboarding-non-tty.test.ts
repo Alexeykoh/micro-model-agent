@@ -31,18 +31,24 @@ function run(args: string[], dir: string) {
 
 describe("интерактивные команды без TTY", () => {
   for (const args of [["meet"], ["agents", "init"]]) {
-    it(`${args.join(" ")} → код 1 и причина в stderr`, () => {
-      const dir = configDir();
-      try {
-        const res = run(args, dir);
+    it(
+      `${args.join(" ")} → код 1 и причина в stderr`,
+      () => {
+        const dir = configDir();
+        try {
+          const res = run(args, dir);
 
-        expect(res.status).toBe(1);
-        expect(String(res.stderr)).toMatch(/интерактивн|interactive/i);
-        // stdout остаётся человеческим баннером без текста отказа.
-        expect(String(res.stdout)).not.toMatch(/требует интерактивного терминала/);
-      } finally {
-        rmSync(dir, { recursive: true, force: true });
-      }
-    });
+          expect(res.status).toBe(1);
+          expect(String(res.stderr)).toMatch(/интерактивн|interactive/i);
+          // stdout остаётся человеческим баннером без текста отказа.
+          expect(String(res.stdout)).not.toMatch(/требует интерактивного терминала/);
+        } finally {
+          rmSync(dir, { recursive: true, force: true });
+        }
+      },
+      // Синхронный spawn CLI на Windows стабильно занимает 5–7 с: дефолтные
+      // 5 с vitest отрезали тест до того, как процесс успевал ответить.
+      30_000,
+    );
   }
 });

@@ -150,12 +150,17 @@ describe("workspace footer line", () => {
     expect(line.querySelector(".gchip-branch")?.textContent).toBe("⎇ det@abc123");
   });
 
-  it("marks a local dev build next to the version", () => {
-    draw({ version: "0.23.0", dev: true, devTitle: "local dev build" });
+  it("marks a local dev build with a short build id", () => {
+    draw({ version: "0.23.0", dev: true, devLabel: "dev #a1b2c", devTitle: "local dev build" });
     const dev = line.querySelector(".ws-dev");
-    expect(dev?.textContent).toBe("dev");
+    expect(dev?.textContent).toBe("dev #a1b2c");
     expect(dev?.getAttribute("title")).toBe("local dev build");
     expect(line.querySelector(".ws-ver")?.textContent).toBe("mma 0.23.0");
+  });
+
+  it("falls back to plain dev when no build id is provided", () => {
+    draw({ dev: true });
+    expect(line.querySelector(".ws-dev")?.textContent).toBe("dev");
   });
 
   it("shows the dev marker without a version and rebuilds when it disappears", () => {
