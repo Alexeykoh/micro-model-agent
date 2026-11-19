@@ -6,8 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-11-19
+
 ### Added
 
+- **Instructions: live AGENTS.md refresh without history injection.** Instructions reload at the turn boundary with in-place system-prompt replacement (no mid-turn context breaks); per-source overflow replacements with a dropped-source warning and named hint; configurable instruction sources (instructions.sources), CLAUDE.md fallback and upward discovery with opt-out flags; instructions_updated session event with fingerprint (src/core/prompt-instructions.ts, docs/specs/2026-11-19-instruction-source-lifecycle-design.md).
 - **Web UI: картинки в панели Files открываются целиком.** Открытие изображения автоматически разворачивает широкий просмотр (дерево скрыто), клик по картинке открывает полноэкранный лайтбокс (зум, «открыть в новой вкладке», копирование ссылки) — тот же, что у миниатюр в фиде; открытие обычного файла возвращает сплит, если ширину не расширяли вручную (`src/modules/webui/assets/js/sidebar/files*`).
 - **Web UI: чип возможностей модели в композере.** Ряд иконок Lucide у активной модели: `vision` (eye), `tools` (wrench), `reasoning` (brain); hover даёт тултип, клик открывает поп-ап с расшифровкой каждой способности и стратегией/уровнями reasoning. Показываются только подтверждённые способности: при неизвестных capabilities или недоступном эндпоинте чип скрыт, `text-only` — только после ответа пробы (`src/modules/webui/assets/js/settings/caps-chip*.ts`, i18n en/ru).
 - web_search: картинки из выдачи - webSearch.images плюс webSearch.maxImages; скачиваются сервером через сетевой гвард и показываются в веб-чате карточками, модель получает только текст.
