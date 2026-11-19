@@ -83,6 +83,7 @@
           <a href="#quickstart">Быстрый старт</a>
           <a href="#setup">Первый запуск и провайдеры</a>
           <a href="#update">Обновление и удаление</a>
+          <a href="#pre-release">Предварительная версия (pre)</a>
 
           <h4 class="side-head">Работа с агентом</h4>
           <a href="#cli">CLI: однократный запуск</a>
@@ -1765,6 +1766,35 @@ bun run test:e2e         # Playwright (по явной команде)</code></p
           <p class="note">
             Тот же набор состояний, что и в веб-интерфейсе; маскот рисуется на canvas.
           </p>
+
+          <h2 id="pre-release">Предварительная версия (pre-канал)</h2>
+          <p>
+            Pre-канал нужен, чтобы потестировать следующую версию до стабильного релиза. Сейчас это
+            сборка <code>0.26.0</code> из тега <code>v0.26.0-pre.1</code>. Она нестабильна: возможны
+            ошибки и изменение поведения до официального релиза. Стабильный канал при этом не
+            меняется — последний релиз по-прежнему доступен командой из раздела
+            <a href="#install">«Установка»</a>.
+          </p>
+          <h3>Установка pre-сборки</h3>
+          <p><b>Windows (PowerShell 5.1+):</b></p>
+          <pre><code>irm https://raw.githubusercontent.com/Alexeykoh/micro-model-agent/pre/scripts/install-pre.ps1 | iex</code></pre>
+          <p><b>macOS / Linux:</b></p>
+          <pre><code>curl -fsSL https://raw.githubusercontent.com/Alexeykoh/micro-model-agent/pre/scripts/install-pre.sh | bash</code></pre>
+          <p>
+            Скрипт в ветке <code>pre</code> только указывает установщику на каталог pre-релиза;
+            логика загрузки, проверки <code>sha256</code>, PATH и лаунчера — та же, что у обычного
+            установщика. Артефакты и контрольные суммы лежат в
+            <a href="https://github.com/Alexeykoh/micro-model-agent/releases">Pre-Release</a>
+            (в списке релизов отмечен как <i>Pre-release</i>).
+          </p>
+          <div class="callout warn">
+            <b>Важно:</b> после установки pre-сборки команда <code>mma</code> будет брать её из
+            <code>~/.mma/current</code>. Возврат к стабильной версии — переключением
+            <code>current</code> на нужный каталог в <code>~/.mma/versions/</code>, как описано в
+            разделе <a href="#update">«Обновление и удаление»</a>. Встроенный апдейтер следит за
+            стабильным каналом: новые pre-сборки он не ставит автоматически — для каждой из них
+            нужно повторно запустить команду выше.
+          </div>
 
           <p class="note">
             Нашли неточность или не хватает раздела? Откройте issue в

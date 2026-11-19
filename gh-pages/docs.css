@@ -43,6 +43,24 @@ article { max-width: var(--maxw); }
   position: static; left: auto; right: auto; margin-top: 6px; max-height: 300px;
 }
 
+/* ---------- sidebar: categories are not sections ---------- */
+/* The category labels (Начало, Возможности, …) must not read as just another
+   nav item: they get a rule above, more air, and the links nest under them. */
+.docs .side-head {
+  margin: 18px 0 5px;
+  padding: 9px 12px 0;
+  border-top: 1px solid var(--border);
+  color: var(--dim-a);
+}
+.docs .side-links > .side-head:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+.docs .side-links a {
+  padding-left: 24px;
+}
+
 /* ---------- typography ---------- */
 h1 { font-size: clamp(26px, 4vw, 36px); line-height: 1.15; margin: 0 0 12px; letter-spacing: -0.02em; }
 h2 {

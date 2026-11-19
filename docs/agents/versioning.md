@@ -90,6 +90,32 @@ Changelog is part of the GitHub Release artifact set and is visible in the repos
    `latest.json`).
 9. **Update AGENTS.md** with notable changes, if needed.
 
+### Pre-релизный канал (обязательно для каждой версии)
+
+Версии не смешиваются: у каждого канала своя ветка и свой тип тега. `pre` — не линия разработки,
+а **пересоздаваемый указатель** на текущий pre-снимок версии.
+
+| Канал   | Ветка                                  | `package.json`               | Тег                  |
+| ------- | -------------------------------------- | ---------------------------- | -------------------- |
+| stable  | `master`                               | X.Y.Z последнего стабильного | `vX.Y.Z` (без `-pre`) |
+| next    | `dev`                                  | X.Y.Z следующей, `> master`  | —                    |
+| release | `vX_Y_Z`                               | X.Y.Z зафиксирована          | `vX.Y.Z` стабильный  |
+| pre     | `pre` (rolling, пересоздаётся заново)  | X.Y.Z та же, что release     | `vX.Y.Z-pre.N`       |
+
+1. Цикл начинается с резки `vX_Y_Z` из `dev` (версию на `dev` предварительно подтягивают до X.Y.Z);
+   `pre` удаляют и создают заново из release-ветки.
+2. Pre-тег публикуют **только** с `pre`, стабильный — только с `vX_Y_Z` / `master`.
+3. `package.json` содержит чистый `X.Y.Z`: `-pre.N` живёт только в теге и имени релиза. Бета-гвард
+   (`tests/version-beta.test.ts`) при этом не ломается.
+4. Нельзя публиковать пре-релиз из `master` и стабильный тег из `dev` / `pre`.
+5. `.github/workflows/release.yml` помечает релиз prerelease по `-pre` в имени тега — поэтому
+   `/releases/latest` продолжает указывать на предыдущий стабильный релиз, и обычные установщики
+   не получают непротестированную сборку.
+6. Сайт (`gh-pages/docs.html`) ссылается на `.../pre/scripts/install-pre.*` — URL не меняется между
+   версиями; обёртки выставляют `MMA_INSTALL_BASE` на каталог pre-релиза и delegation-ят
+   существующим `scripts/install.sh` / `scripts/install.ps1`.
+7. Инвариант «версия ветки ↔ тип тега» проверяет гейт `tests/arch/release-branches.test.ts`.
+
 ### Commands that require MINOR bump
 
 - New CLI subcommand (`mma <new-cmd>`)
