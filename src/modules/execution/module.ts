@@ -13,7 +13,7 @@ import type { Plan } from "./planner";
 import type { NetworkSecurityConfig, PathSecurityConfig } from "../../config/types";
 import { performWebSearch } from "../../tools/web-search";
 import { createPlanToolDefinitions } from "./plan-tool";
-import { parseKinds, parseChecks } from "./plan-parse";
+import { parseEvidence, parseKinds, parseChecks } from "./plan-parse";
 import { createExecutionPluginState, type ExecutionPluginState } from "./plugin-state";
 import { EXECUTION_ERROR_SEARCH_MIN_INTERVAL_MS as ERROR_SEARCH_MIN_INTERVAL_MS } from "../../config/timeouts";
 import { pendingStepsOf, runFinalAudit } from "./final-audit";
@@ -256,7 +256,7 @@ export class ExecutionModule implements AgentModule {
       missingStepDeliverables: (s) => missingStepDeliverables(this.baseDir, s),
       stillExistingDeliverables: (s) => stillExistingDeliverables(this.baseDir, s),
       parseKinds: (a, st) => parseKinds(a, st),
-      parseChecks: (a, st) => parseChecks(a, st),
+      parseChecks: (a, st) => parseChecks(a, st), parseEvidence: (a, st) => parseEvidence(a, st),
       getTaskText: (c) => getTaskText(c),
       noActivePlanMessage: () => noActivePlanMessage(this.plan.store),
       typecheckFailures: this.state.typecheckFailures,

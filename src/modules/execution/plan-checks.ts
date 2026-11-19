@@ -24,6 +24,7 @@
  */
 import { t } from "../../i18n/index";
 import type { ToolResult } from "../../tools/types";
+import type { StepEvidence } from "./planner";
 import type { NetworkSecurityConfig } from "../../config/types";
 import { runHttpCheck } from "./http-check";
 import {
@@ -69,14 +70,6 @@ const BUILD_COMMANDS = new Set([
   "prettier",
   "check",
 ]);
-
-/**
- * Признаки шага, меняющего поведение: правка UI/экрана/стилей. Сравнение по
- * словам, а не по подстроке: `build` содержит «ui», и подстрочный матч ложно
- * блокировал обычные build-шаги.
- */
-const BEHAVIOR_STEMS_EN = ["component", "page", "screen", "layout", "style"];
-const BEHAVIOR_STEMS_RU = ["стил", "компонент", "страниц", "экран", "интерфейс", "вёрстк", "верстк"];
 
 /** Парсит строку check. Null, если префикс неизвестен/нет или цель пуста. */
 export function parseCheck(check: string): ParsedCheck | null {
@@ -136,20 +129,19 @@ export function classifyCheck(parsed: ParsedCheck): EvidenceClass {
   }
 }
 
-/** True, если описание шага говорит о поведении/UI (по словам). */
-export function isBehaviorStep(description: string): boolean {
-  const words = description.toLowerCase().split(/[^a-zа-яё0-9]+/);
-  return words.some(
-    (w) =>
-      w === "ui" ||
-      BEHAVIOR_STEMS_EN.some((s) => w.startsWith(s)) ||
-      BEHAVIOR_STEMS_RU.some((s) => w.startsWith(s)),
-  );
+/**
+ * Класс доказательства объявляется моделью в плане (`evidence`), а не выводится
+ * из слов описания: правило №10 архитектуры запрещает keyword-классификацию.
+ * Отсутствие поля = "static" (back-compat со старыми планами).
+ */
+export function needsBehaviorEvidence(target: { evidence?: StepEvidence }): boolean {
+  return target.evidence === "behavioral";
 }
 
 export interface StepEvidenceTarget {
   description: string;
   check?: string;
+  evidence?: StepEvidence;
 }
 
 /**
@@ -162,7 +154,7 @@ export function staticEvidenceForBehaviorStep(
   target: StepEvidenceTarget,
   stepId: number,
 ): { note: string; blocked: ToolResult | null } {
-  if (classifyCheck(parsed) === "static" && isBehaviorStep(target.description)) {
+  if (classifyCheck(parsed) === "static" && needsBehaviorEvidence(target)) {
     return {
       note: "",
       blocked: {

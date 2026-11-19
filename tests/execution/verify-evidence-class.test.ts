@@ -1,18 +1,15 @@
-// Guard: verify отличает статическое доказательство от поведенческого.
+// Guard: verify отличает статическое доказательство от поведенческого по
+// ДЕКЛАРАЦИИ шага, а не по словам в описании (правило №10 архитектуры).
 //
-// Регресс из стресс-теста (волна 21): шаг «добавь поиск в каталог» с проверкой
-// `command: bun run build` принимался как выполненный, хотя страница падала в
-// рантайме (`has is not a function`). Спека:
-// docs/specs/2026-10-28-turn-runtime-gate-design.md (W1).
+// Регресс из стресс-теста (волна 21) и сессии ses_mwmeoln9: шаг с проверкой
+// `command: bun run build` / `file-exists:` принимался как выполненный, хотя
+// наблюдаемое поведение было сломано. Спека:
+// docs/specs/2026-11-19-evidence-declaration-design.md.
 import { describe, it, expect } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import {
-  classifyCheck,
-  isBehaviorStep,
-  parseCheck,
-} from "../../src/modules/execution/plan-checks";
+import { classifyCheck, parseCheck } from "../../src/modules/execution/plan-checks";
 import { StepVerifier } from "../../src/modules/execution/verifier";
 import { verifyCheckContract } from "../../src/modules/execution/step-check-contract";
 import type { PlanToolDeps } from "../../src/modules/execution/plan-tool";
@@ -51,9 +48,7 @@ describe("классификация доказательств", () => {
     expect(classifyCheck(kindOf("file-exists:src/a.ts"))).toBe("static");
     expect(classifyCheck(kindOf("manual:открыл страницу, видны 6 карточек"))).toBe("behavioral");
     expect(classifyCheck(kindOf("http:http://127.0.0.1:5173/"))).toBe("behavioral");
-    expect(classifyCheck(kindOf("http:http://127.0.0.1:5173/~Карточки"))).toBe("behavioral");
     expect(classifyCheck(kindOf("browser:http://127.0.0.1:5173/"))).toBe("behavioral");
-    expect(classifyCheck(kindOf("browser:http://127.0.0.1:5173/~Карточки"))).toBe("behavioral");
   });
 
   it("http:/browser: без url не парсятся", () => {
@@ -62,32 +57,8 @@ describe("классификация доказательств", () => {
   });
 });
 
-describe("признаки шага, меняющего поведение", () => {
-  it("UI-шаги распознаются по словам (ru/en)", () => {
-    for (const d of [
-      "Добавь поиск в компонент каталога",
-      "Сделать страницу настроек",
-      "fix the layout of the header",
-      "новый экран выбора",
-      "поправь стили карточки",
-    ]) {
-      expect(isBehaviorStep(d), d).toBe(true);
-    }
-  });
-
-  it("не-UI шаги не считаются поведенческими", () => {
-    for (const d of [
-      "Обнови CHANGELOG",
-      "Добавь метод в src/utils/math.ts",
-      "Переименуй переменную в парсере конфига",
-    ]) {
-      expect(isBehaviorStep(d), d).toBe(false);
-    }
-  });
-});
-
-describe("файловый контракт на поведенческом шаге (F)", () => {
-  it("file-exists не доказывает UI-шаг", async () => {
+describe("декларация поведенческого шага", () => {
+  it("file-exists не доказывает шаг с evidence=behavioral", async () => {
     const baseDir = mkdtempSync(join(tmpdir(), "mma-evidence-f-"));
     try {
       mkdirSync(join(baseDir, "src", "app", "catalog"), { recursive: true });
@@ -102,6 +73,7 @@ describe("файловый контракт на поведенческом ша
           id: 1,
           description: "Создать src/app/catalog/page.tsx",
           status: "pending",
+          evidence: "behavioral",
           check: "file-exists:src/app/catalog/page.tsx",
         },
         1,
@@ -113,23 +85,46 @@ describe("файловый контракт на поведенческом ша
     }
   });
 
-  it("file-exists проходит на не-UI шаге", async () => {
+  it("описание с UI-словами без декларации не блокируется", async () => {
     const baseDir = mkdtempSync(join(tmpdir(), "mma-evidence-f-"));
     try {
       mkdirSync(join(baseDir, "src"), { recursive: true });
-      writeFileSync(join(baseDir, "src", "util.ts"), "export const x = 1;\n");
+      writeFileSync(join(baseDir, "src", "page.tsx"), "export const x = 1;\n");
       const deps = { baseDir, verifier: new StepVerifier(baseDir) } as PlanToolDeps;
       const res = await verifyCheckContract(
         deps,
         {
           id: 1,
-          description: "Добавь функцию в src/util.ts",
+          // Раньше это ловилось по стему "page" — теперь решение за моделью.
+          description: "Добавь страницу настроек src/page.tsx",
           status: "pending",
-          check: "file-exists:src/util.ts",
+          check: "file-exists:src/page.tsx",
         },
         1,
       );
       expect(res.blocked).toBeNull();
+    } finally {
+      rmSync(baseDir, { recursive: true, force: true });
+    }
+  });
+
+  it("behavioral + build-команда тоже блокируется", async () => {
+    const baseDir = mkdtempSync(join(tmpdir(), "mma-evidence-b-"));
+    try {
+      const deps = { baseDir, verifier: new StepVerifier(baseDir) } as PlanToolDeps;
+      const res = await verifyCheckContract(
+        deps,
+        {
+          id: 1,
+          description: "Исправь движение игрока",
+          status: "pending",
+          evidence: "behavioral",
+          check: "command:bun run build",
+        },
+        1,
+      );
+      expect(res.blocked).not.toBeNull();
+      expect(res.blocked!.output).toContain("static evidence");
     } finally {
       rmSync(baseDir, { recursive: true, force: true });
     }

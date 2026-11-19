@@ -64,6 +64,10 @@ async function actionRePlan(deps: PlanToolDeps, _ctx: ToolContext, args: Record<
   if (checked.error) {
     return { success: false, output: checked.error };
   }
+  const declared = deps.parseEvidence?.(args, newSteps);
+  if (declared?.error) {
+    return { success: false, output: declared.error };
+  }
   const baselines = await snapshotBaselines(deps, checked.checks ?? []);
   const replanned = PlanCreator.replan(
     oldPlan,
@@ -71,6 +75,7 @@ async function actionRePlan(deps: PlanToolDeps, _ctx: ToolContext, args: Record<
     args.title ? String(args.title) : undefined,
     checked.checks ?? [],
     baselines,
+    declared?.evidence ?? [],
   );
   const keptCount = replanned.steps.length - newSteps.length;
   deps.setPlan(replanned);
@@ -99,6 +104,10 @@ async function actionCreate(deps: PlanToolDeps, ctx: ToolContext, args: Record<s
   const checked = deps.parseChecks(args, steps);
   if (checked.error) {
     return { success: false, output: checked.error };
+  }
+  const declared = deps.parseEvidence?.(args, steps);
+  if (declared?.error) {
+    return { success: false, output: declared.error };
   }
 
   // Покрытие валидируем ДО любой мутации состояния: заблокированный create не
@@ -147,7 +156,15 @@ async function actionCreate(deps: PlanToolDeps, ctx: ToolContext, args: Record<s
 
   deps.preserveActive();
   const baselines = await snapshotBaselines(deps, checked.checks ?? []);
-  const plan = PlanCreator.createPlan(title, steps, deps.baseDir, parsed.kinds ?? [], checked.checks ?? [], baselines);
+  const plan = PlanCreator.createPlan(
+    title,
+    steps,
+    deps.baseDir,
+    parsed.kinds ?? [],
+    checked.checks ?? [],
+    baselines,
+    declared?.evidence ?? [],
+  );
   deps.setPlan(plan);
   const display = PlanCreator.toPromptBlock(plan, 0);
   let output = t("plan.created", {

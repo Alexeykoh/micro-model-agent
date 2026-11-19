@@ -22,12 +22,13 @@ describe("done-гейт: поведенческий шаг", () => {
     return execModule.getToolDefinitions().find((t2) => t2.name === "plan")!;
   }
 
-  async function createPlan(step: string, check: string) {
+  async function createPlan(step: string, check: string, evidence: "static" | "behavioral" = "static") {
     const res = await planTool().handler({}, {
       action: "create",
       title: "T",
       steps: [step],
       checks: [check],
+      evidence: [evidence],
     });
     expect(res.success, String(res.output)).toBe(true);
   }
@@ -35,7 +36,7 @@ describe("done-гейт: поведенческий шаг", () => {
   it("UI-шаг с build-доказательством не закрывается", async () => {
     const step = "Добавь поиск в компонент каталога";
     const check = "command: bun run build";
-    await createPlan(step, check);
+    await createPlan(step, check, "behavioral");
 
     const res = await planTool().handler({}, { action: "update", step: 1, status: "done" });
 
@@ -44,7 +45,7 @@ describe("done-гейт: поведенческий шаг", () => {
   });
 
   it("UI-шаг с тестами закрывается", async () => {
-    await createPlan("Поправь стили карточки в компоненте", "command: bun test");
+    await createPlan("Поправь стили карточки в компоненте", "command: bun test", "behavioral");
 
     const res = await planTool().handler({}, { action: "update", step: 1, status: "done" });
 
