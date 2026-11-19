@@ -30,7 +30,7 @@ function callersOf(symbol: string): string[] {
 describe("AGENTS.md: точки чтения и обновления", () => {
   it("reads AGENTS.md only at bootstrap and at the turn boundary", () => {
     const allowed = new Set([
-      "src/core/bootstrap/state.ts", // определение loadAgentsMdBlocks
+      "src/core/bootstrap/instructions.ts", // определение loadAgentsMdBlocks
       "src/core/bootstrap/modules-prompt.ts", // стартовая сборка
       "src/core/prompt-instructions.ts", // граница хода
     ]);

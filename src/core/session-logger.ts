@@ -83,18 +83,13 @@ export class SessionLogger {
     this.session?.appendLog({ ts: new Date().toISOString(), source: "core", ...entry });
   }
 
-  /**
-   * Пишет системное сообщение в лог сессии.
-   */
+  /** Пишет системное сообщение в лог сессии. */
   logSystem(content: string): void {
     this.log(systemEntry(content));
   }
 
-  /** Пишет версию инструкций: источники и их хеши, но не содержимое файлов. */
-  logInstructions(info: InstructionLogInfo): void {
-    this.log(instructionsEntry(info));
-  }
-
+  /** Версия инструкций без содержимого файлов. */
+  logInstructions(info: InstructionLogInfo): void { this.log(instructionsEntry(info)); }
   /**
    * Пишет сообщение пользователя (санитизированное) и историю сессии.
    */

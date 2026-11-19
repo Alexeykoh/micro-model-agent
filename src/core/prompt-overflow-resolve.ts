@@ -130,9 +130,7 @@ export async function resolvePromptOverflow(opts: {
   let used = includedTokens;
   const unresolved: PromptBlockKind[] = [];
 
-  // Dry-run bootstrap лишь предупреждает, что блоки «будут суммаризированы
-  // перед первым запуском». Без нотиса тут первый промпт выглядит зависшим,
-  // пока модель переписывает AGENTS.md / карту — показываем явно.
+  // Без нотиса первый промпт выглядит зависшим, пока идёт суммаризация.
   if (sorted.length > 0) {
     logger?.warn(t("prompt.overflow.compressing", { count: String(sorted.length) }));
   }
@@ -253,8 +251,6 @@ export async function resolvePromptOverflow(opts: {
       essential: false,
       estimatedTokens: resolvedTokens,
       kind,
-      // INV-IS-4: замена сохраняет владельца и имя исходного блока —
-      // `applyOverrides` подменяет каждый источник его собственной выжимкой.
       label: block.label,
       source: block.source,
     });
