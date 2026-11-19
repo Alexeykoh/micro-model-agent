@@ -10,7 +10,8 @@
 import { join } from "path";
 import { projectMmaDir } from "../../config/paths";
 import { PromptBuilder, omittedBlocksNote } from "../prompt-builder";
-import { resolvePromptOverflow, overflowHint, HINT_BLOCK_TOKENS } from "../prompt-overflow";
+import { overflowHint } from "../prompt-overflow";
+import { HINT_BLOCK_TOKENS, resolvePromptOverflow } from "../prompt-overflow-resolve";
 import { buildServiceJobPrompt } from "../system-prompt";
 import { estimateTokens } from "../../llm/token-counter";
 import {
@@ -154,7 +155,6 @@ function freezeProjectMap(host: PromptPhaseHost, blocks: PromptBlock[]): PromptB
 }
 
 /** Диагностика промпта (`/sysprompt`, лог контекста) — в `prompt-info.ts`. */
-export { getSystemPromptInfo, logContextStat, type SystemPromptInfo } from "./prompt-info";
 
 /**
  * Одноразовая (первый прогон) обработка instructions/project-map сверх бюджета:

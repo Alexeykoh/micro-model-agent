@@ -27,13 +27,15 @@ import {
 } from "./provider-phase";
 import {
   buildSystemPrompt as phaseBuildSystemPrompt,
-  getSystemPromptInfo as phaseGetSystemPromptInfo,
-  logContextStat as phaseLogContextStat,
   refreshSystemPrompt as phaseRefreshSystemPrompt,
   resolvePromptOverflowOnce as phaseResolvePromptOverflowOnce,
   type PromptPhaseHost,
-  type SystemPromptInfo,
 } from "./prompt-phase";
+import {
+  getSystemPromptInfo as phaseGetSystemPromptInfo,
+  logContextStat as phaseLogContextStat,
+  type SystemPromptInfo,
+} from "./prompt-info";
 import type { SessionLogger } from "../session-logger";
 import { applyClientTz } from "../system-prompt";
 import {

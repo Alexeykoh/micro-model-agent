@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolvePromptOverflow } from "../../src/core/prompt-overflow";
+import { resolvePromptOverflow } from "../../src/core/prompt-overflow-resolve";
 import { applyOverrides } from "../../src/core/agent/prompt-blocks";
 import { loadAgentsMdBlocks } from "../../src/core/bootstrap/state";
 import type { PromptBlock } from "../../src/core/types";

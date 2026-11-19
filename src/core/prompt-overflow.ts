@@ -5,8 +5,7 @@ import type { PromptBlock, PromptBlockKind } from "./types";
 import type { AppConfig } from "../config/types";
 import { t } from "../i18n/index";
 
-// Публичный API: резолвинг блоков живёт в prompt-overflow-resolve.ts.
-export { HINT_BLOCK_TOKENS, resolvePromptOverflow } from "./prompt-overflow-resolve";
+// Резолвинг блоков — в prompt-overflow-resolve.ts (без реэкспорта: цикл графа).
 
 /** Предупреждение о переполнении: блок, токены до/после, режим. */
 export interface OverflowWarning {
