@@ -1,6 +1,7 @@
 /** Резолвинг переполнения промпта: суммаризация/усечение блоков (кэш — отдельно). */
 import type { PromptBlock, PromptBlockKind } from "./types";
 import type { OverflowResolution, OverflowWarning } from "./prompt-overflow";
+import { buildOverflowHintContent, KIND_LABEL } from "./prompt-overflow";
 import type { LLMProvider } from "../llm/provider";
 import type { Logger } from "../logger/app-logger";
 import { estimateTokens } from "../llm/token-counter";
@@ -20,16 +21,6 @@ export const HINT_BLOCK_TOKENS = 60;
 const CHARS_PER_TOKEN = 4;
 
 const KIND_ORDER: PromptBlockKind[] = ["instructions", "project-map"];
-
-const KIND_LABEL: Record<PromptBlockKind, string> = {
-  instructions: "project instructions (AGENTS.md)",
-  "project-map": "project map",
-};
-
-const KIND_SOURCE_FILE: Record<PromptBlockKind, string> = {
-  instructions: "AGENTS.md",
-  "project-map": "",
-};
 
 /**
  * Потолок запроса генерации под окно контекста (B10): просить `2×maxTokens`
@@ -144,6 +135,7 @@ export async function resolvePromptOverflow(opts: {
       warnings.push({
         kind,
         label: blockLabel(block.content),
+        sourceLabel: block.label,
         originalTokens: block.estimatedTokens,
         resolvedTokens: 0,
         mode: "dropped",
@@ -272,28 +264,14 @@ export async function resolvePromptOverflow(opts: {
     warnings.push({
       kind,
       label: blockLabel(block.content),
+      sourceLabel: block.label,
       originalTokens: block.estimatedTokens,
       resolvedTokens,
       mode,
     });
   }
 
-  const hintContent =
-    replacements.length > 0 || unresolved.length > 0
-      ? [
-          `[Instructions note] Some project blocks exceeded the system-prompt budget and were compressed:`,
-          ...warnings.map(
-            (w) =>
-              `- ${KIND_LABEL[w.kind]}: ${w.originalTokens} tokens → ${w.resolvedTokens} tokens (${w.mode})`,
-          ),
-          ...(unresolved.length > 0
-            ? unresolved.map((k) => `- ${KIND_LABEL[k]}: did not fit at all — read it yourself if needed`)
-            : []),
-          ...warnings
-            .filter((w) => KIND_SOURCE_FILE[w.kind])
-            .map((w) => `Read the full ${KIND_SOURCE_FILE[w.kind]} with read_file if details are missing.`),
-        ].join("\n")
-      : null;
+  const hintContent = buildOverflowHintContent(warnings, unresolved, replacements.length > 0);
 
   // B4: вес hint-блока — фактический, а не константа. `HINT_BLOCK_TOKENS`
   // остаётся как аллокационный резерв в цикле выше (оценка сверху), но

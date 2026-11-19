@@ -12,6 +12,8 @@ export { HINT_BLOCK_TOKENS, resolvePromptOverflow } from "./prompt-overflow-reso
 export interface OverflowWarning {
   kind: PromptBlockKind;
   label: string;
+  /** Имя источника (`instructions (docs/)`) — для hint и варнингов (INV-1/17). */
+  sourceLabel?: string;
   originalTokens: number;
   resolvedTokens: number;
   /** `dropped` — не влез даже обрезанным (остаток <100 токенов): блок потерян. */
@@ -28,6 +30,57 @@ export interface OverflowResolution {
 }
 
 /** Итог dry-run: сколько влезло и какие kind-блоки не влезли. */
+/** Человеческое имя kind-блока для hint и варнингов. */
+export const KIND_LABEL: Record<PromptBlockKind, string> = {
+  instructions: "project instructions (AGENTS.md)",
+  "project-map": "project map",
+};
+
+/** Файл-первоисточник kind-блока для back-reference в hint. */
+export const KIND_SOURCE_FILE: Record<PromptBlockKind, string> = {
+  instructions: "AGENTS.md",
+  "project-map": "",
+};
+
+/**
+ * Текст hint-блока о сжатых/потерянных источниках. Называет каждый источник
+ * (INV-1/17), дублирующиеся строки схлопывает. Null — резолвить было нечего.
+ */
+export function buildOverflowHintContent(
+  warnings: OverflowWarning[],
+  unresolved: PromptBlockKind[],
+  hasReplacements: boolean,
+): string | null {
+  if (!hasReplacements && unresolved.length === 0) return null;
+  const seen = new Set<string>();
+  const lines: string[] = [];
+  for (const w of warnings) {
+    const name = w.sourceLabel ?? KIND_LABEL[w.kind];
+    const line =
+      w.mode === "dropped"
+        ? `- ${name}: did not fit at all — read it yourself if needed`
+        : `- ${name}: ${w.originalTokens} tokens → ${w.resolvedTokens} tokens (${w.mode})`;
+    if (w.mode === "dropped" && seen.has(line)) continue;
+    seen.add(line);
+    lines.push(line);
+  }
+  const readHints = [
+    ...new Set(
+      warnings
+        .filter((w) => KIND_SOURCE_FILE[w.kind])
+        .map(
+          (w) =>
+            `Read the full ${KIND_SOURCE_FILE[w.kind]} with read_file if details are missing.`,
+        ),
+    ),
+  ];
+  return [
+    `[Instructions note] Some project blocks exceeded the system-prompt budget and were compressed:`,
+    ...lines,
+    ...readHints,
+  ].join("\n");
+}
+
 export interface OverflowDryRun {
   includedTokens: number;
   /** Исключённые блоки с kind (instructions / project-map). */

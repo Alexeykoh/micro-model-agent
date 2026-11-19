@@ -70,6 +70,9 @@ describe("переполнение инструкций: замена по ис�
     expect(res.warnings.map((w) => w.mode)).toEqual(["dropped", "dropped"]);
     expect(res.hintBlock).not.toBeNull();
     expect(res.hintBlock!.content).toContain("did not fit at all");
+    // Hint называет источники, а не общий kind (INV-1/17).
+    expect(res.hintBlock!.content).toContain("instructions (a/)");
+    expect(res.hintBlock!.content).toContain("instructions (b/)");
     expect(warnings.length).toBeGreaterThan(0);
   });
 
