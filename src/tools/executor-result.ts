@@ -6,6 +6,7 @@ import type { ToolContext, ToolResult, ToolCall } from "./types";
 import type { RegisteredTool } from "./registry";
 import { tagBlockedFileContent, tagShellFileContent } from "./file-content-tag";
 import { admitFromContext } from "./admission";
+import { fileOpsBudgetNote } from "./file-ops-budget";
 
 /** DLP + taint + admission: то, что видит модель и контекст. */
 export function finalizeToolResult(
@@ -25,7 +26,11 @@ export function finalizeToolResult(
   // Admission (OO-1/OO-7): результат больше admitMaxTokens не входит в
   // контекст дословно — спилл + дескриптор. Одна точка для всех тулов;
   // хендлер политику не реализует. Мемо сохраняет уже admitted результат.
-  return admitFromContext(out, ctx, call);
+  const admitted = admitFromContext(out, ctx, call);
+  // Остаток бюджета файловых операций — до блокировки, а не после неё.
+  const budgetNote = fileOpsBudgetNote(ctx, call);
+  if (!budgetNote) return admitted;
+  return { ...admitted, output: `${admitted.output ?? ""}\n${budgetNote}` };
 }
 
 /** Запись вызова в лог сессии/приложения (после post-хуков). */
