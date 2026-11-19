@@ -7,17 +7,13 @@
  * Функции работают над `ProviderPhaseHost` — узким видом `Agent`, владеющего
  * мутабельными `deps`/`costTracker`/`lastProbeIdentity`/`probePassed`.
  */
-import type { AppConfig, ProviderEntry, ReasoningStrategy } from "../../config/types";
+import type { AppConfig, ProviderEntry } from "../../config/types";
 import type { AgentDeps } from "../agent";
 import type { CostTracker } from "../../modules/pricing/index";
 import type { ContextProbeResult } from "../../llm/provider-context";
-import {
-  ProviderManager,
-  activeProviderEndpoint,
-} from "../../modules/providers/manager";
-import { reasoningCapsForProvider } from "../../modules/providers/reasoning-resolve";
-import { rememberReasoningMechanism } from "../../modules/reasoning/probe";
+import { ProviderManager } from "../../modules/providers/manager";
 import { buildActiveProvider } from "../../modules/providers/factory";
+import { publishReasoningCaps } from "./reasoning-reprobe";
 import { refreshSystemInfoBlock } from "../system-prompt";
 import { reprobeActiveProvider } from "./provider-probe-phase";
 
@@ -101,7 +97,7 @@ export async function reconfigure(
   // autoPlan, security, runtime/LSP-строки) stale с bootstrap: пересобрать.
   // Best-effort: без profileCompressed старые поверхности молча пропускают.
   refreshSystemInfoBlock(deps);
-  applyReasoningStrategy(host, config.provider);
+  applyReasoningStrategy(host);
   // Новой паре — новая ленивая reasoning-проба (фон, B2): до её резолва
   // механизм «не подтверждён», а не унаследован от прошлого бэкенда.
   if (identityChanged && opts.probe !== false) {
@@ -117,28 +113,9 @@ export async function reconfigure(
  * Механизм запоминается для пары `baseUrl|model` (INV-R8): UI читает ровно тот
  * резолв, что применён к провайдеру, иначе селектор расходится с запросами.
  */
-function applyReasoningStrategy(host: ProviderPhaseHost, provider: AppConfig["provider"]): void {
-  const cfg = host.deps.config;
-  const probe = host.deps.capabilitiesProbeRef?.probe;
-  const reachable = host.deps.capabilitiesProbeRef?.reachable !== false;
-  const override = cfg.modelCapabilities?.[cfg.model];
-  const caps = reachable ? reasoningCapsForProvider(provider, probe, override) : {};
-  const strategy: ReasoningStrategy = reachable ? caps.reasoningStrategy ?? "none" : "none";
-  host.deps.reasoningStrategy = strategy;
-  host.deps.reasoningLevels = reachable ? caps.reasoningLevels : undefined;
-  if (strategy === "none") host.probePassed = false;
-  const endpoint = activeProviderEndpoint(provider);
-  rememberReasoningMechanism(endpoint.baseUrl, cfg.model, {
-    strategy,
-    reasoningOff: reachable && caps.reasoningOff === true,
-    levels: reachable ? caps.reasoningLevels : undefined,
-  });
-  const ref = host.deps.capabilitiesProbeRef;
-  if (ref) {
-    ref.reasoningStrategy = strategy;
-    ref.reasoningLevels = host.deps.reasoningLevels;
-    ref.reasoningOff = reachable && caps.reasoningOff === true;
-  }
+function applyReasoningStrategy(host: ProviderPhaseHost): void {
+  publishReasoningCaps(host.deps, host.deps.config);
+  if (host.deps.reasoningStrategy === "none") host.probePassed = false;
 }
 
 /** Переключает активного провайдера (и модель) тем же путём, что `/config`. */

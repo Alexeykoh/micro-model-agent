@@ -124,7 +124,7 @@ export async function setupProviderPhase(
   const nativeProbe = hasModel
     ? await probeStartupCapabilities(probeEndpoint, config.model, {
         probeOffSwitch: config.reasoning?.mode !== "none",
-      })
+      }, capabilitiesRef)
     : { reachable: false };
   if (nativeProbe.capabilities) capabilitiesRef.probe = nativeProbe.capabilities;
   capabilitiesRef.reachable = nativeProbe.reachable === true;

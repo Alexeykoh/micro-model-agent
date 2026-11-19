@@ -128,6 +128,8 @@ export function finishTurn(
   s.pool.forceRelease(id);
   syncBusy(s);
   pushState(s, id);
+  // Ход разбудил модель — повторяем холодную пробу /props (INV-R2/R7).
+  if (s.providerReasoning?.().needsReprobe === true) void s.refreshProviderCapabilities?.();
   const next = s.pool.shift(id);
   if (!next) return false;
   if (next.sessionId && s.sessionManager && !s.sessionManager.get(next.sessionId)) {

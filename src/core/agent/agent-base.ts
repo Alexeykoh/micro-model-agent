@@ -26,6 +26,8 @@ import {
   type ProviderPhaseHost,
   type ReconfigureOptions,
 } from "./provider-phase";
+import { discoverCapabilities } from "./provider-probes";
+import { retryReasoningDiscovery } from "./reasoning-reprobe";
 import {
   buildSystemPrompt as phaseBuildSystemPrompt,
   getSystemPromptInfo as phaseGetSystemPromptInfo,
@@ -138,6 +140,25 @@ export class AgentBase {
   /** Стратегия reasoning, реально применённая к активному провайдеру. */
   providerReasoningSnapshot(): ProviderReasoningSnapshot {
     return providerReasoningSnapshot(this.deps);
+  }
+
+  /**
+   * Переспрашивает бэкенд, если стартовая проба не узнала механизм reasoning
+   * у холодной модели. При успехе пересобирает провайдера, чтобы селектор и
+   * реальные запросы пользовались одним резолвом (INV-R8).
+   */
+  async refreshProviderCapabilities(onUpdated?: () => void): Promise<boolean> {
+    const updated = await retryReasoningDiscovery(
+      this.deps,
+      this.deps.config,
+      discoverCapabilities,
+    );
+    if (updated) {
+      if (this.deps.reasoningStrategy === "none") this.probePassed = false;
+      await this.reconfigure(this.deps.config, { probe: false });
+      onUpdated?.();
+    }
+    return updated;
   }
 
   /**

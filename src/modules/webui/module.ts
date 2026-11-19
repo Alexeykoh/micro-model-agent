@@ -192,6 +192,9 @@ export async function startWebUi(deps: WebUiDeps): Promise<WebUiHandle> {
   installModelSurface(state, deps.agent, deps.config, deps.knownModels);
   state.providerReachable = () => deps.agent.providerReachableSnapshot?.();
   state.providerReasoning = () => deps.agent.providerReasoningSnapshot?.();
+  state.refreshProviderCapabilities = () =>
+    deps.agent.refreshProviderCapabilities?.(() => broadcast({ type: "models", ts: Date.now() }, state)) ??
+    Promise.resolve(false);
 
   // Глобальные шины → SSE: лог/предупреждения, снимок запроса (U20), журнал
   // защиты (U22). Ходы идут раннерами (см. turns.ts), main-агент их не ведёт.
