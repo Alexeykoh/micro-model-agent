@@ -12,6 +12,7 @@ import {
 import { diffPrompt, buildPromptSnapshot } from "../../src/core/agent/prefix-monitor";
 import { refreshInstructionBlocks } from "../../src/core/prompt-instructions";
 import type { AgentDeps } from "../../src/core/agent";
+import { instructionsEntry } from "../../src/core/session-log-messages";
 
 /**
  * AGENTS.md — живой источник инструкций, но системный промпт имутабелен внутри
@@ -120,6 +121,26 @@ describe("AGENTS.md: обновление на границе хода", () => {
     expect(
       [...host.promptOverrides.values()].some((b) => b.content.includes("STALE SUMMARY")),
     ).toBe(false);
+  });
+
+  it("emits a structured event with source names but no file contents", () => {
+    const dir = mkdtempSync(join(tmpdir(), "mma-agents-md-"));
+    dirs.push(dir);
+    writeAgents(dir, "v1");
+    const { deps } = hostWith(dir);
+
+    writeAgents(dir, "v2");
+    const refreshed = refreshInstructionBlocks(deps.baseDir, deps.configDir, deps.promptBlocks);
+    expect(refreshed.changed).toBe(true);
+    expect(refreshed.fingerprint).not.toBe("");
+    expect(refreshed.changes).toEqual([{ label: "instructions", action: "changed" }]);
+
+    const entry = instructionsEntry({
+      fingerprint: refreshed.fingerprint,
+      changes: refreshed.changes,
+    });
+    expect(entry.type).toBe("instructions_updated");
+    expect(JSON.stringify(entry)).not.toContain("Marker: v2");
   });
 
   it("reports no change when AGENTS.md is untouched", () => {

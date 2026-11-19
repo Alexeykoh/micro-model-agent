@@ -73,11 +73,6 @@ export async function runTurn(
   // Снимок карты проекта обновляется НА ГРАНИЦЕ ХОДА: внутри хода системный
   // промпт имутабелен, иначе KV-кеш рвётся на каждой записи файла (аудит §8.7).
   host.frozenMapBlock = null;
-  // AGENTS.md — живой источник: перечитываем на ГРАНИЦЕ ХОДА, внутри хода
-  // промпт имутабелен (KV-кеш). system заменяется на месте ниже, в
-  // ensureSessionStart → refreshSystemPrompt, без новой записи в историю.
-  const refreshed = refreshInstructionBlocks(deps.baseDir, deps.configDir, deps.promptBlocks);
-  if (refreshed.changed) deps.promptBlocks = refreshed.blocks;
   host.setScope();
   // P5 автосужение: детерминированно пред-посеваем теги тулов из сырого
   // сообщения ДО первого LLM-вызова. Только добавление — mid-session гранты
@@ -91,6 +86,15 @@ export async function runTurn(
   const { config, llmProvider, pluginManager, contextManager, logger, sessionManager } = deps;
 
   const slog = new SessionLoggerCtor(sessionManager, logger, () => host.callerProvenance());
+
+  // AGENTS.md — живой источник: перечитываем на ГРАНИЦЕ ХОДА, внутри хода
+  // промпт имутабелен (KV-кеш). system заменяется на месте ниже, в
+  // ensureSessionStart → refreshSystemPrompt, без новой записи в историю.
+  const refreshed = refreshInstructionBlocks(deps.baseDir, deps.configDir, deps.promptBlocks);
+  if (refreshed.changed) {
+    deps.promptBlocks = refreshed.blocks;
+    slog.logInstructions({ fingerprint: refreshed.fingerprint, changes: refreshed.changes });
+  }
 
   if (sessionManager && !sessionManager.getActive()) {
     sessionManager.create();

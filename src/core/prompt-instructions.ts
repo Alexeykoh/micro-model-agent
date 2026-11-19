@@ -7,7 +7,7 @@
  * на каждой итерации. Применяется замена на месте (`updateSystemPrompt`),
  * новое system-сообщение в историю не добавляется.
  */
-import type { PromptBlock } from "./types";
+import type { InstructionSourceChange, PromptBlock } from "./types";
 import { loadAgentsMdBlocks } from "./bootstrap/state";
 import { kindHash } from "./agent/prompt-blocks";
 
@@ -17,15 +17,51 @@ export interface InstructionRefreshResult {
   blocks: PromptBlock[];
   /** Изменилось ли содержимое хотя бы одного источника. */
   changed: boolean;
+  /** Отпечаток источников ПОСЛЕ обновления (для события в session.jsonl). */
+  fingerprint: string;
+  /** Что именно изменилось (без содержимого файлов). */
+  changes: InstructionSourceChange[];
+}
+
+/** Карта «источник → хеш содержимого». */
+function instructionMap(blocks: PromptBlock[]): Map<string, string> {
+  return new Map(
+    blocks
+      .filter((b) => b.kind === "instructions")
+      .map((b) => [b.label ?? "", kindHash(b.content)]),
+  );
 }
 
 /** Отпечаток инструкций по `label` + хешу контента (порядок стабилен). */
 export function instructionFingerprint(blocks: PromptBlock[]): string {
-  return blocks
-    .filter((b) => b.kind === "instructions")
-    .map((b) => `${b.label}:${kindHash(b.content)}`)
+  return [...instructionMap(blocks)]
+    .map(([label, hash]) => `${label}:${hash}`)
     .sort()
     .join("|");
+}
+
+/** Разница между двумя наборами источников. */
+export function instructionChanges(
+  before: PromptBlock[],
+  after: PromptBlock[],
+): InstructionSourceChange[] {
+  const old = instructionMap(before);
+  const next = instructionMap(after);
+  const changes: InstructionSourceChange[] = [];
+  for (const [label, hash] of next) {
+    const previous = old.get(label);
+    if (previous === undefined) changes.push({ label, action: "added" });
+    else if (previous !== hash) changes.push({ label, action: "changed" });
+  }
+  for (const label of old.keys()) {
+    if (!next.has(label)) changes.push({ label, action: "removed" });
+  }
+  return changes;
+}
+
+/** Пустой результат для случая, когда перечитывать нечего. */
+function unchanged(blocks: PromptBlock[]): InstructionRefreshResult {
+  return { blocks, changed: false, fingerprint: instructionFingerprint(blocks), changes: [] };
 }
 
 /**
@@ -42,17 +78,11 @@ export function refreshInstructionBlocks(
   blocks: PromptBlock[],
 ): InstructionRefreshResult {
   // `--no-agents-md`: инструкций нет, обновлять нечего.
-  if (!blocks.some((b) => b.kind === "instructions")) {
-    return { blocks, changed: false };
-  }
-  if (!configDir) {
-    return { blocks, changed: false };
-  }
+  if (!blocks.some((b) => b.kind === "instructions")) return unchanged(blocks);
+  if (!configDir) return unchanged(blocks);
 
   const fresh = loadAgentsMdBlocks(baseDir, configDir, false);
-  if (instructionFingerprint(blocks) === instructionFingerprint(fresh)) {
-    return { blocks, changed: false };
-  }
+  if (instructionFingerprint(blocks) === instructionFingerprint(fresh)) return unchanged(blocks);
 
   const byLabel = new Map(fresh.map((b) => [b.label, b]));
   const next: PromptBlock[] = [];
@@ -73,5 +103,10 @@ export function refreshInstructionBlocks(
     const at = lastInstructionIndex >= 0 ? lastInstructionIndex + 1 : next.length;
     next.splice(at, 0, ...added);
   }
-  return { blocks: next, changed: true };
+  return {
+    blocks: next,
+    changed: true,
+    fingerprint: instructionFingerprint(next),
+    changes: instructionChanges(blocks, next),
+  };
 }
