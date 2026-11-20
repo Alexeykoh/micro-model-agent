@@ -277,6 +277,10 @@ git commit -m "feat(web): edit reasoning capabilities in the model capabilities 
 - Modify: `src/i18n/en.json`, `src/i18n/ru.json`
 - Test: `tests/i18n.test.ts`, `tests/webui-i18n.test.ts`
 
+> Порядок выполнения скорректирован: Task 3 выполняется **до** Task 2, потому что
+> gate `tests/config-registry-extra.test.ts` требует i18n-метки для каждой новой
+> колонки и каждой опции селекта.
+
 - [ ] **Step 1: Исходное состояние**
 
 ```bash
@@ -320,10 +324,28 @@ Expected: PASS (новых ключей ещё нет). Гейт симметр�
   "web.settings.model_capabilities.reset": "сбросить оверрайд",
 ```
 
+Также добавить метки опций селекта (их требует тот же гейт реестра):
+
+`en.json` / `ru.json` рядом с `"config.enum.quiet"`:
+
+```json
+  "config.enum.openai-effort": "openai effort",
+  "config.enum.template-kwarg": "template kwarg",
+  "config.enum.prompt-tag": "prompt tag",
+  "config.enum.none": "none",
+```
+
+```json
+  "config.enum.openai-effort": "поле reasoning_effort",
+  "config.enum.template-kwarg": "параметр шаблона",
+  "config.enum.prompt-tag": "тег в промпте",
+  "config.enum.none": "нет",
+```
+
 - [ ] **Step 5: Проверки и коммит**
 
 ```bash
-bun test tests/i18n.test.ts tests/webui-i18n.test.ts
+bun test tests/i18n.test.ts tests/webui-i18n.test.ts tests/config-registry-extra.test.ts
 git add src/i18n/en.json src/i18n/ru.json
 git commit -m "i18n: labels for per-model capability editor"
 ```
@@ -343,7 +365,13 @@ Expected: PASS.
 
 ```ts
 import { describe, it, expect } from "vitest";
-import { buildModelCapabilities } from "../src/modules/webui/assets/js/settings/model-capabilities-form.js";
+import { setupHappyDom } from "./helpers/happy-dom";
+
+setupHappyDom();
+
+const { buildModelCapabilities } = await import(
+  "../src/modules/webui/assets/js/settings/model-capabilities-form.js"
+);
 
 describe("model capabilities form value", () => {
   const all = {
@@ -477,6 +505,15 @@ export function detectedHint(model: string): string | null {
   return parts.length ? parts.join(" · ") : null;
 }
 
+/** Compact trigger placed on each row of the Models tab. */
+export function capabilityEditButton(model: string): HTMLButtonElement {
+  const button = el("button", "chip", t("web.settings.model_capabilities.edit"));
+  button.type = "button";
+  button.dataset.capEdit = "1";
+  button.addEventListener("click", () => openModelCapabilitiesDialog(model));
+  return button;
+}
+
 /** Open the nested dialog for one model. Save/Reset post once, then close. */
 export function openModelCapabilitiesDialog(model: string): void {
   const all = (settings.config?.modelCapabilities ?? {}) as Dict;
@@ -567,9 +604,8 @@ export function openModelCapabilitiesDialog(model: string): void {
 ```bash
 bun test tests/webui-model-capabilities-form.test.ts
 bun run typecheck:frontend
-bunx biome check src/modules/webui/assets/js/settings/model-capabilities-form.ts
 ```
-Expected: PASS. (Если `biome` жалуется на long lines — разбить тернарники, логику не менять.)
+Expected: PASS. `assets/**` намеренно вне Biome (правило репо), поэтому линтер на этот файл не гоняем.
 
 - [ ] **Step 5: Коммит**
 
@@ -728,20 +764,30 @@ Expected: FAIL — нет кнопки `[data-cap-edit]`.
 
 - [ ] **Step 3: Добавить кнопку в строку модели**
 
-В `src/modules/webui/assets/js/settings/model-panel.ts` после импорта `postConfig, loadModels, ensureModelsLoaded` добавить:
+В `model-capabilities-form.ts` добавить триггер (он же владеет кнопкой и держит
+`model-panel.ts` под потолком 300 строк):
 
 ```ts
-import { openModelCapabilitiesDialog } from "./model-capabilities-form.js";
+export function capabilityEditButton(model: string): HTMLButtonElement {
+  const button = el("button", "chip", t("web.settings.model_capabilities.edit"));
+  button.type = "button";
+  button.dataset.capEdit = "1";
+  button.addEventListener("click", () => openModelCapabilitiesDialog(model));
+  return button;
+}
+```
+
+В `src/modules/webui/assets/js/settings/model-panel.ts` после импорта
+`postConfig, loadModels, ensureModelsLoaded` добавить:
+
+```ts
+import { capabilityEditButton } from "./model-capabilities-form.js";
 ```
 
 В `modelsPane()` внутри `models.forEach((m) => { … })`, перед `list.appendChild(item);` вставить:
 
 ```ts
-      const capBtn = chip(t("web.settings.model_capabilities.edit"), "", () => {
-        openModelCapabilitiesDialog(String(m));
-      });
-      capBtn.dataset.capEdit = "1";
-      item.appendChild(capBtn);
+      item.appendChild(capabilityEditButton(String(m)));
 ```
 
 - [ ] **Step 4: Тесты зелёные**
