@@ -228,3 +228,42 @@ describe("registry editor metadata", () => {
     }
   });
 });
+
+describe("modelCapabilities overrides", () => {
+  it("rebuilds the provider when a capability override is written", () => {
+    expect(resolveConfigKey("modelCapabilities")?.effects).toContain("provider.rebuild");
+  });
+
+  it("accepts reasoning fields and arbitrary subsets", () => {
+    const cfg = freshCfg();
+    const raw = JSON.stringify({
+      "bonsai-2-27b-pq2": {
+        vision: true,
+        tools: true,
+        reasoningStrategy: "openai-effort",
+        reasoningOff: true,
+        reasoningLevels: ["low", "medium", "xhigh"],
+      },
+      "bonsai-2-27b": { reasoningStrategy: "none" },
+      "empty-levels": { reasoningLevels: [] },
+    });
+    expect(setConfigValue(cfg, "modelCapabilities", raw).ok).toBe(true);
+    expect(cfg.modelCapabilities?.["bonsai-2-27b-pq2"].reasoningLevels).toEqual([
+      "low", "medium", "xhigh",
+    ]);
+  });
+
+  it("rejects invalid reasoning shapes without changing config", () => {
+    const cfg = freshCfg();
+    expect(
+      setConfigValue(cfg, "modelCapabilities", '{"m":{"reasoningStrategy":"banana"}}').ok,
+    ).toBe(false);
+    expect(
+      setConfigValue(cfg, "modelCapabilities", '{"m":{"reasoningLevels":[1,2]}}').ok,
+    ).toBe(false);
+    expect(
+      setConfigValue(cfg, "modelCapabilities", '{"m":{"reasoningOff":"yes"}}').ok,
+    ).toBe(false);
+    expect(cfg.modelCapabilities).toEqual({});
+  });
+});
