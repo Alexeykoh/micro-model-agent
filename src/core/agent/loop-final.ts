@@ -53,6 +53,7 @@ export async function runForcedFinal(inp: ForcedFinalInput): Promise<boolean> {
     contextManager,
     slog,
     task: input,
+    baseDir: deps.baseDir,
     planSummary: deps.planSummary?.() ?? undefined,
     planPendingSteps: deps.planPendingSteps?.() ?? undefined,
     toolEvents: gatherTurnToolEvents(contextManager, state.criticHistoryMark),

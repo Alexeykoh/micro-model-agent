@@ -170,6 +170,7 @@ export async function runFinalGates(host: AgentDeps, inp: GatesInput): Promise<G
     contextManager,
     slog,
     task: input,
+    baseDir: host.baseDir,
     planSummary: host.planSummary?.() ?? undefined,
     planPendingSteps: host.planPendingSteps?.() ?? undefined,
     toolEvents: gatherTurnToolEvents(contextManager, state.criticHistoryMark),

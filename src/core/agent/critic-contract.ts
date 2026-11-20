@@ -15,6 +15,8 @@ export interface CriticGateDeps {
   contextManager: ContextManager;
   slog: SessionLogger;
   task: string;
+  /** Рабочая директория — нужна для проверки файловых утверждений критика (BCP-1). */
+  baseDir?: string;
   planSummary?: string;
   /** Незакрытые шаги плана (S5): критик видит, что работа не завершена. */
   planPendingSteps?: string[];
