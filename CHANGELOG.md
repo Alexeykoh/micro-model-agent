@@ -6,8 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Fixed
+
+- **Docs: CHANGELOG integrity.** Removed a CP866-mojibaked duplicate block and the duplicate `### Fixed` heading in 0.24.4; restored the missing `0.26.0` release heading and the 0.25.0 notes absorbed by 0.25.1; added a health guard for encoding, empty version sections and release headings.
+
+## [0.26.0] - 2026-11-19
+
 ### Added
 
+- **Instructions: live AGENTS.md refresh without history injection.** Instructions reload at the turn boundary with in-place system-prompt replacement (no mid-turn context breaks); per-source overflow replacements with a dropped-source warning and named hint; configurable instruction sources (instructions.sources), CLAUDE.md fallback and upward discovery with opt-out flags; instructions_updated session event with fingerprint (src/core/prompt-instructions.ts, docs/specs/2026-11-19-instruction-source-lifecycle-design.md).
 - **Web UI: картинки в панели Files открываются целиком.** Открытие изображения автоматически разворачивает широкий просмотр (дерево скрыто), клик по картинке открывает полноэкранный лайтбокс (зум, «открыть в новой вкладке», копирование ссылки) — тот же, что у миниатюр в фиде; открытие обычного файла возвращает сплит, если ширину не расширяли вручную (`src/modules/webui/assets/js/sidebar/files*`).
 - **Web UI: чип возможностей модели в композере.** Ряд иконок Lucide у активной модели: `vision` (eye), `tools` (wrench), `reasoning` (brain); hover даёт тултип, клик открывает поп-ап с расшифровкой каждой способности и стратегией/уровнями reasoning. Показываются только подтверждённые способности: при неизвестных capabilities или недоступном эндпоинте чип скрыт, `text-only` — только после ответа пробы (`src/modules/webui/assets/js/settings/caps-chip*.ts`, i18n en/ru).
 - web_search: картинки из выдачи - webSearch.images плюс webSearch.maxImages; скачиваются сервером через сетевой гвард и показываются в веб-чате карточками, модель получает только текст.
@@ -123,33 +130,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Вкладка «Изменения» перечитывает git-состояние при росте ревизии файлов.
 - Уплотнение `app.ts` / `session-pool.ts` / `setup-api.ts` до 300 строк
   (гейт правила 6).
-- **╨Я╨░╤Г╨╖╨░ ╤Е╨╛╨┤╨░ ╨▓ `mma web`** (TODO ┬з1.13): ╨║╨╜╨╛╨┐╨║╨░ ╨┐╨░╤Г╨╖╤Л ╨▓ ╨║╨╛╨╝╨┐╨╛╨╖╨╡╤А╨╡ ╨┐╨╡╤А╨╡╨┤
-  ╤Б╤В╨╛╨┐╨╛╨╝ (╨╕╨║╨╛╨╜╨║╨╕ pause/play); ╤Е╨╛╨┤ ╤Б╤В╨░╨▓╨╕╤В╤Б╤П ╨╜╨░ ╨┐╨░╤Г╨╖╤Г ╨╜╨░ ╨│╤А╨░╨╜╨╕╤Ж╨╡ ╨╕╤В╨╡╤А╨░╤Ж╨╕╨╣,
-  `stop` ╨▒╤Г╨┤╨╕╤В ╨╖╨░╨▓╨╕╤Б╤И╤Г╤О ╨┐╨░╤Г╨╖╤Г (INV-P3). POST `/api/pause` ╤Б ╨┤╨╡╨╣╤Б╤В╨▓╨╕╤П╨╝╨╕
-  pause/resume/stop, ╨┐╤А╨╛╨╡╨║╤Ж╨╕╤П `pausedIds` ╨▓ ╤Б╨╛╤Б╤В╨╛╤П╨╜╨╕╨╡; ╨╗╨╡╨│╨░╤Б╨╕ ╨╕ ╤В╨╡╤Б╤В╨╛╨▓╤Л╨╡
-  ╨░╨│╨╡╨╜╤В╤Л ╨▒╨╡╨╖ ╨╝╨╡╤В╨╛╨┤╨░ ╨┐╨░╤Г╨╖╤Л ╨╜╨╡ ╤А╨╛╨╜╤П╤О╤В ╨╡╤С (guarded `isPaused?.()`,
-  `resume?.()`). ╨б╨┐╨╡╨║╨░: `docs/specs/2026-11-06-webui-pause-resume-design.md`.
-- **╨Ш╤Б╤В╨╛╤А╨╕╤П ╨╛╤В╨┐╤А╨░╨▓╨╗╨╡╨╜╨╜╤Л╤Е ╤Е╨╛╨┤╨╛╨▓**: ╤Б╤В╤А╨╡╨╗╨║╨╕ тЦ▓/тЦ╝ ╨▓ ╨║╨╛╨╝╨┐╨╛╨╖╨╡╤А╨╡ ╨▓╤Л╨╖╤Л╨▓╨░╤О╤В ╤А╨░╨╜╨╡╨╡
-  ╨╛╤В╨┐╤А╨░╨▓╨╗╨╡╨╜╨╜╤Л╨╡ ╨┐╤А╨╛╨╝╨┐╤В╤Л.
-- **╨а╨╡╨┤╨░╨║╤В╨╛╤А ╨╖╨░╨┐╨╗╨░╨╜╨╕╤А╨╛╨▓╨░╨╜╨╜╤Л╤Е ╤Б╨╛╨╛╨▒╤Й╨╡╨╜╨╕╨╣**: ╨┐╨╛╨┐╨░╨┐ ╨┐╤А╨░╨▓╨║╨╕ + POST
-  `/api/queue/edit`; ╤А╨░╨╜╨╢╨╕╤А `@`-╨┐╨╛╨┐╨░╨┐╨░ ╨┐╨╛ ╤А╨╡╨╗╨╡╨▓╨░╨╜╤В╨╜╨╛╤Б╤В╨╕ ╨┐╤Г╤В╨╕.
-- **╨Я╤А╨╡╨┤╨┐╤А╨╛╤Б╨╝╨╛╤В╤А ╤Д╨░╨╣╨╗╨╛╨▓ ╨▓ ╨╛╤Б╨╜╨╛╨▓╨╜╨╛╨╝ ╨╛╨║╨╜╨╡**: ╨┐╨░╨╜╨╡╨╗╤М ╨┐╨╛╨▓╨╡╤А╤Е ╤Д╨╕╨┤╨░,
-  ╨┐╨╡╤А╨╡╨╕╤Б╨┐╨╛╨╗╤М╨╖╤Г╨╡╤В `paintFile`; ╨║╨╗╨╕╨║ ╨┐╨╛ ╤Д╨░╨╣╨╗╤Г ╨▓ ╨┤╨╡╤А╨╡╨▓╨╡/╨┐╨╛╨╕╤Б╨║╨╡ ╨╛╤В╨║╤А╤Л╨▓╨░╨╡╤В
-  ╨┐╤А╨╡╨┤╨┐╤А╨╛╤Б╨╝╨╛╤В╤А, ╨╜╨╡ ╨┐╨╡╤А╨╡╤Б╤В╤А╨░╨╕╨▓╨░╤П ╤Б╨╡╤Б╤Б╨╕╨╛╨╜╨╜╤Г╤О ╤В╨░╨▒-╨╝╨╛╨┤╨╡╨╗╤М.
-- **╨Р╨┤╨░╨┐╤В╨╕╨▓╨╜╤Л╨╡ ╤В╨░╨▒╤Л ╤Б╨░╨╣╨┤╨▒╨░╤А╨░**: ╨┐╨╛╨┤╨┐╨╕╤Б╨╕ ╨┐╨╛ ╨║╨╛╨╜╤В╨╡╨╣╨╜╨╡╤А╨╜╤Л╨╝ ╨╖╨░╨┐╤А╨╛╤Б╨░╨╝, ╨╕╨║╨╛╨╜╨║╨╕
-  ╨┐╤А╨╕ ╨╜╨╡╤Е╨▓╨░╤В╨║╨╡ ╨╝╨╡╤Б╤В╨░; ╨║╨╛╨╝╨┐╨░╨║╤В╨╜╤Л╨╣ ╨╜╨░╨▒╨╛╤А ╨▓╨║╨╗╨░╨┤╨╛╨║ ╤Б ╨║╨╜╨╛╨┐╨║╨╛╨╣ ╤А╨░╤Б╨║╤А╤Л╤В╨╕╤П.
-- **╨ж╨╡╨┐╨╛╤З╨║╨░ ╨▒╨░╨╖╨╛╨▓╤Л╤Е ╨▓╨╡╤В╨╛╨║ ╨▓ ╤З╨╕╨┐╨╡ тОЗ**: ╨▒╨░╨╖╨░ ╤З╨╕╤В╨░╨╡╤В╤Б╤П ╨┐╨╛ reflog
-  (`base-branch`), ╤Ж╨╡╨┐╨╛╤З╨║╨░ ╤А╨╕╤Б╤Г╨╡╤В╤Б╤П ╨║╨╛╤А╨╡╨╜╤М-╨║-╨▓╨╡╤А╤И╨╕╨╜╨╡, ╨╝╨╡╨╝╨╛ ╨▓ ╨║╨╡╤И╨╡ ╤Б╨╜╨╕╨╝╨║╨╛╨▓.
-- **╨Ч╨▓╤Г╨║╨╕ ╤Г╨▓╨╡╨┤╨╛╨╝╨╗╨╡╨╜╨╕╨╣ ╨┐╨╛ ╤Г╨╝╨╛╨╗╤З╨░╨╜╨╕╤О** + ╤И╨░╨│ ╨▓╤Л╨▒╨╛╤А╨░ ╨╖╨▓╤Г╨║╨╛╨▓ ╨▓ setup-╨╝╨░╤Б╤В╨╡╤А╨╡
-  (╤В╨╡╤А╨╝╨╕╨╜╨░╨╗╤М╨╜╨╛╨╝ ╨╕ ╨▒╤А╨░╤Г╨╖╨╡╤А╨╜╨╛╨╝ ╨▓╨╕╨╖╨░╤А╨┤╨╡).
-- **╨Ч╨░╨│╨╛╨╗╨╛╨▓╨╛╨║ ╨▓╨║╨╗╨░╨┤╨║╨╕ ╨▒╤А╨░╤Г╨╖╨╡╤А╨░** тАФ ╨╕╨╝╤П ╤В╨╡╨║╤Г╤Й╨╡╨│╨╛ ╤З╨░╤В╨░.
-- **e2e-╨║╨╛╨╜╤В╤А╨░╨║╤В Markdown-╤А╨╡╨╜╨┤╨╡╤А╨░** ╨▓ ╨╗╨╡╨╜╤В╨╡ (`tests/webui-md-feed-e2e`).
-
-### Fixed
-
-- ╨Т╨║╨╗╨░╨┤╨║╨░ ┬л╨Ш╨╖╨╝╨╡╨╜╨╡╨╜╨╕╤П┬╗ ╨┐╨╡╤А╨╡╤З╨╕╤В╤Л╨▓╨░╨╡╤В git-╤Б╨╛╤Б╤В╨╛╤П╨╜╨╕╨╡ ╨┐╤А╨╕ ╤А╨╛╤Б╤В╨╡ ╤А╨╡╨▓╨╕╨╖╨╕╨╕ ╤Д╨░╨╣╨╗╨╛╨▓.
-- ╨г╨┐╨╗╨╛╤В╨╜╨╡╨╜╨╕╨╡ `app.ts` / `session-pool.ts` / `setup-api.ts` ╨┤╨╛ 300 ╤Б╤В╤А╨╛╨║
-  (╨│╨╡╨╣╤В ╨┐╤А╨░╨▓╨╕╨╗╨░ 6).
 
 ## [0.24.3] - 2026-11-06
 
@@ -167,30 +147,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   отображение только для чтения — веб не выполняет git-операции.
 
 ## [0.25.0] - 2026-11-09
-
-## [0.25.1] - 2026-11-09
-
-### Changed
-
-- **Релизная матрица без mac-arm64 (временно).** GitHub-hosted macOS ARM пул
-  деградировал fleet-wide (ноябрь 2026, `actions/runner#4833`): джоба 15 мин
-  ждёт раннера и отменяется до checkout. В релизе — 4 платформы
-  (win-x64, mac-x64, linux-x64, linux-arm64); `mma-mac-arm64.tar.gz` из
-  0.25.0 остаётся доступен. Возврат mac-arm64 — записью в матрицу.
-
-### Fixed
-
-- **Обёртки провайдеров не теряют `reasoningStrategy`/`reasoningLevels`**:
-  `SanitizingProvider` (DLP) и `OtelProvider` ре-экспортируют механизм
-  проброса 1:1 (INV-R2) — те же поля терялись глобальным
-  `setEgressGuard` из соседних тестов (порядковая поллюция, падающая
-  POSIX CI в `agent-reconfigure-probe`).
-- **Hermetic тесты проб**: `agent-reconfigure-probe` — через реальный
-  локальный HTTP-стаб вместо мутации `global.fetch` (гонки между файлами);
-  `model-loader` и `download-file` восстанавливают fetch и не переиспользуют
-  Response-объект. Полный сьют: 6272 pass / 0 fail.
-- **Docker live-тесты за флагом `MMA_LIVE_DOCKER=1`**: на GitHub Windows
-  раннерах ломается bind-mount (Docker Desktop) — live не должен ронять CI.
 
 ### Removed
 
@@ -255,6 +211,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   «редактируй файл или задай вопрос». Раньше успешные чтения гасили stuck-счётчик,
   и петля разведки была невидима (сессия `ses_mw7z4mav`). Спека:
   `docs/specs/2026-11-08-read-only-streak-guard-design.md`.
+
+## [0.25.1] - 2026-11-09
+
+### Changed
+
+- **Релизная матрица без mac-arm64 (временно).** GitHub-hosted macOS ARM пул
+  деградировал fleet-wide (ноябрь 2026, `actions/runner#4833`): джоба 15 мин
+  ждёт раннера и отменяется до checkout. В релизе — 4 платформы
+  (win-x64, mac-x64, linux-x64, linux-arm64); `mma-mac-arm64.tar.gz` из
+  0.25.0 остаётся доступен. Возврат mac-arm64 — записью в матрицу.
+
+### Fixed
+
+- **Обёртки провайдеров не теряют `reasoningStrategy`/`reasoningLevels`**:
+  `SanitizingProvider` (DLP) и `OtelProvider` ре-экспортируют механизм
+  проброса 1:1 (INV-R2) — те же поля терялись глобальным
+  `setEgressGuard` из соседних тестов (порядковая поллюция, падающая
+  POSIX CI в `agent-reconfigure-probe`).
+- **Hermetic тесты проб**: `agent-reconfigure-probe` — через реальный
+  локальный HTTP-стаб вместо мутации `global.fetch` (гонки между файлами);
+  `model-loader` и `download-file` восстанавливают fetch и не переиспользуют
+  Response-объект. Полный сьют: 6272 pass / 0 fail.
+- **Docker live-тесты за флагом `MMA_LIVE_DOCKER=1`**: на GitHub Windows
+  раннерах ломается bind-mount (Docker Desktop) — live не должен ронять CI.
 
 ## [0.24.5] - 2026-11-08
 
