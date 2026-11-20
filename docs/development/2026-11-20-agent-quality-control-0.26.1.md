@@ -68,7 +68,29 @@
 - Сетевой обрыв: `terminal: true, recoverable: true` — HTTP-слой уже ретраил, но
   агент получает причину обратно вместо «Ошибка LLM».
 
-## 4. Решения и compromises
+## 4. Живая проверка на bonsai-2-27b-pq2 (llama.cpp / llama-swap)
+
+Прогон через `mma web` в браузере, 2026-11-20 19:15–19:23 MSK. Изолированный
+`MMA_CONFIG_DIR`, сессия `ses_mwp6ft2u_bnkrezboqgkwqvaq`, песочница
+`_testing/live-bonsai`, провайдер `llama-local` → `http://127.0.0.1:8080/v1`.
+В UI подтвердена версия `mma 0.26.1`.
+
+| Правка | Подтверждение вживую | Источник |
+|--------|----------------------|----------|
+| AQC-1 | `plan_step` отклонил `file-modified:comp.tsx` как static-доказательство для UI-файла: «the step changes behaviour/UI … Provide behavioural proof» | лента + `session.jsonl` |
+| AQC-2 | Два отказа «Cannot mark step N done: its check failed — file-modified:…» без изменения файла | лента + `session.jsonl` |
+| AQC-3 | Три срабатывания критика (`concern` / `critical`), две ретракции черновика в ленте | лента |
+| AQC-4 | После трёх падений `bash` отключён, модели ушла директива «DISABLED for the rest of this turn» | `session.jsonl`, `16:21:29` |
+| AQC-5 | `compaction reason=early-small-model, messages 60→11`, затем вторая компакция на 13-й итерации | `session.jsonl` |
+| AQC-6 | Модель сама вызвала `patch_file` (сначала `note.txt`, затем `comp.tsx`), успех + diff | лента + `tool_call`/`tool_result` |
+| AQC-7 | **Не воспроизведено**: апстрим не рвал соединение; покрыто только юнит-тестами | — |
+| AQC-8 | Блок SSRF пришёл дословно с actionable-советом; фоновый `bun server.js` (порт 8899) убит в конце хода — `tool_degraded: stopped 1 process(es) started during the turn` | `session.jsonl`, `16:19:19` / `16:23:10` |
+
+**Честное наблюдение:** модель пересказала actionable-совет неточно (в финале
+появился «start with the same config env…»), хотя в `tool_result` текст был
+корректным. Это свойство 27B-модели, не дефект харнесса.
+
+## 5. Решения и compromises
 
 - Forced `tool_choice` отклонён: llama.cpp откатывает именованный выбор к `auto`.
 - Дедупликация директив оставлена косметикой: текстовые уговоры не лечат цикл.
