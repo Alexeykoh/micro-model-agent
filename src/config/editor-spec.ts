@@ -32,6 +32,8 @@ export interface ConfigEditorSpec {
     array?: boolean;
     /** Колонка-`select`, наполняемая из живого источника опций. */
     optionsSource?: "models" | "providers";
+    /** Фиксированный список опций для колонки-`select` (без живой пробы). */
+    options?: readonly string[];
     /**
      * Для `optionsSource: "models"` — ключ колонки, чьё значение выбирает
      * список моделей (напр. `provider`). Пусто — модели активного провайдера.
