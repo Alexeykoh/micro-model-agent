@@ -1679,7 +1679,6 @@
   "config.enum.openai-effort": "openai effort",
   "config.enum.template-kwarg": "template kwarg",
   "config.enum.prompt-tag": "prompt tag",
-  "config.enum.none": "none",
   "config.enum.normal": "normal",
   "config.enum.verbose": "verbose",
   "config.enum.auto": "auto",

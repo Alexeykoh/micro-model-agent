@@ -1679,7 +1679,6 @@
   "config.enum.openai-effort": "поле reasoning_effort",
   "config.enum.template-kwarg": "параметр шаблона",
   "config.enum.prompt-tag": "тег в промпте",
-  "config.enum.none": "нет",
   "config.enum.normal": "обычно",
   "config.enum.verbose": "подробно",
   "config.enum.auto": "авто",
