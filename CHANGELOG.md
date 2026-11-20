@@ -11,6 +11,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Docs: CHANGELOG structure - restored descending order of the 0.24-0.26 release sections and merged duplicate subsection headings in 0.14.0, 0.4.0 and 2.37.0; the health guard now checks both.
 - **Docs: CHANGELOG integrity.** Removed a CP866-mojibaked duplicate block and the duplicate `### Fixed` heading in 0.24.4; restored the missing `0.26.0` release heading and the 0.25.0 notes absorbed by 0.25.1; added a health guard for encoding, empty version sections and release headings.
 
+## [0.26.1] - 2026-11-20
+
+### Added
+
+- **Web UI: редактирование возможностей модели.** В Settings → Model → Models у каждой модели кнопка открывает поп-ап с `vision/video/audio/pdf/tools` и `reasoningStrategy`/`reasoningOff`/`reasoningLevels`; Save пишет весь `modelCapabilities` одним `POST /api/config` с немедленным реконфигом провайдера, Reset сбрасывает оверрайд только этой модели. Таблица во вкладке Capabilities получила те же колонки, чтобы сохранение из неё не стирало reasoning-поля. Спека: `docs/specs/2026-11-20-web-model-capabilities-design.md`.
+
 ## [0.26.0] - 2026-11-19
 
 ### Added
