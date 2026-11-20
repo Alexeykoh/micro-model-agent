@@ -637,7 +637,8 @@ const win = setupHappyDom(`
     <span id="subTitle"></span>
     <button id="closeSub"></button>
   </div>
-  <div id="saveIndicator"></div>
+  // No #saveIndicator here: setIndicator() owns a 2.4s global queue and would
+  // leak a toast into other DOM test files sharing the module instance.
 `);
 
 const i18n = await import("../src/modules/webui/assets/js/i18n.js");
@@ -709,7 +710,8 @@ describe("per-model capabilities dialog", () => {
   it("posts the merged whole-key record and closes only on success", async () => {
     const calls: Array<{ key: string; value: unknown }> = [];
     const original = globalThis.fetch;
-    globalThis.fetch = (async (_url: string | URL, init?: RequestInit) => {
+    globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
+      if (!String(url).endsWith("/api/config")) return original(url, init);
       calls.push(JSON.parse(String(init?.body ?? "{}")) as { key: string; value: unknown });
       return { ok: true, status: 200, json: async () => ({ ok: true }) } as unknown as Response;
     }) as unknown as typeof fetch;
