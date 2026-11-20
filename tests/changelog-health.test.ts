@@ -43,4 +43,37 @@ describe("CHANGELOG health", () => {
     expect(firstRelease).toBeGreaterThan(unreleased);
     expect(lines[firstRelease]).toContain(`## [${pkg.version}]`);
   });
+
+  it("не повторяет подзаголовки внутри секции релиза", () => {
+    const offenders: string[] = [];
+    let section = "";
+    const seen = new Set<string>();
+    for (const line of lines) {
+      if (/^## \[/.test(line)) {
+        section = line;
+        seen.clear();
+        continue;
+      }
+      const match = /^### (.+?)\s*$/.exec(line);
+      if (!match) continue;
+      if (seen.has(match[1])) offenders.push(`${section}: ${match[1]}`);
+      seen.add(match[1]);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("держит свежие релизы в порядке убывания версии", () => {
+    const version = (title: string): number[] => {
+      const match = /^## \[(\d+)\.(\d+)\.(\d+)\]/.exec(title);
+      if (!match) throw new Error(`not a release heading: ${title}`);
+      return [Number(match[1]), Number(match[2]), Number(match[3])];
+    };
+    const recent = lines.filter((line) => /^## \[\d+\.\d+\.\d+\]/.test(line)).slice(0, 8);
+    for (let i = 1; i < recent.length; i += 1) {
+      const a = version(recent[i - 1]);
+      const b = version(recent[i]);
+      const cmp = a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+      expect(cmp).toBeGreaterThanOrEqual(0);
+    }
+  });
 });

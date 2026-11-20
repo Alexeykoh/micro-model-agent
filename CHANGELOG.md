@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Docs: CHANGELOG structure - restored descending order of the 0.24-0.26 release sections and merged duplicate subsection headings in 0.14.0, 0.4.0 and 2.37.0; the health guard now checks both.
 - **Docs: CHANGELOG integrity.** Removed a CP866-mojibaked duplicate block and the duplicate `### Fixed` heading in 0.24.4; restored the missing `0.26.0` release heading and the 0.25.0 notes absorbed by 0.25.1; added a health guard for encoding, empty version sections and release headings.
 
 ## [0.26.0] - 2026-11-19
@@ -99,52 +100,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   больше не принимается: заменяется на manual + предупреждение (сдвинутый
   массив checks давал `manual:`-ловушку). Спека: `docs/specs/0.25.2/2026-11-10-harness-verification-defects-design.md` (D).
 
-## [0.24.4] - 2026-11-06
+## [0.25.1] - 2026-11-09
 
-### Added
+### Changed
 
-- **Пауза хода в `mma web`** (TODO §1.13): кнопка паузы в композере перед
-  стопом (иконки pause/play); ход ставится на паузу на границе итераций,
-  `stop` будит зависшую паузу (INV-P3). POST `/api/pause` с действиями
-  pause/resume/stop, проекция `pausedIds` в состояние; легаси и тестовые
-  агенты без метода паузы не роняют её (guarded `isPaused?.()`,
-  `resume?.()`). Спека: `docs/specs/2026-11-06-webui-pause-resume-design.md`.
-- **История отправленных ходов**: стрелки ▲/▼ в композере вызывают ранее
-  отправленные промпты.
-- **Редактор запланированных сообщений**: попап правки + POST
-  `/api/queue/edit`; ранжир `@`-попапа по релевантности пути.
-- **Предпросмотр файлов в основном окне**: панель поверх фида,
-  переиспользует `paintFile`; клик по файлу в дереве/поиске открывает
-  предпросмотр, не перестраивая сессионную таб-модель.
-- **Адаптивные табы сайдбара**: подписи по контейнерным запросам, иконки
-  при нехватке места; компактный набор вкладок с кнопкой раскрытия.
-- **Цепочка базовых веток в чипе ⎇**: база читается по reflog
-  (`base-branch`), цепочка рисуется корень-к-вершине, мемо в кеше снимков.
-- **Звуки уведомлений по умолчанию** + шаг выбора звуков в setup-мастере
-  (терминальном и браузерном визарде).
-- **Заголовок вкладки браузера** — имя текущего чата.
-- **e2e-контракт Markdown-рендера** в ленте (`tests/webui-md-feed-e2e`).
+- **Релизная матрица без mac-arm64 (временно).** GitHub-hosted macOS ARM пул
+  деградировал fleet-wide (ноябрь 2026, `actions/runner#4833`): джоба 15 мин
+  ждёт раннера и отменяется до checkout. В релизе — 4 платформы
+  (win-x64, mac-x64, linux-x64, linux-arm64); `mma-mac-arm64.tar.gz` из
+  0.25.0 остаётся доступен. Возврат mac-arm64 — записью в матрицу.
 
 ### Fixed
 
-- Вкладка «Изменения» перечитывает git-состояние при росте ревизии файлов.
-- Уплотнение `app.ts` / `session-pool.ts` / `setup-api.ts` до 300 строк
-  (гейт правила 6).
-
-## [0.24.3] - 2026-11-06
-
-### Added
-
-- **Тул `git`.** Новый инструмент для работы с репозиторием: операции
-  классифицированы по профилу безопасности (read-only / изменяющие), что даёт
-  harness применять к ним единую точку enforcement вместо ручных проверок в
-  хендлере. Спека: `docs/specs/2026-06-08-git-workflow-design.md`.
-- **Классификация shell-операций по security-классам.** `command-shapes` расширен
-  категориями для git-команд, чтобы разграничивать чтение и запись на уровне
-  разрешений, а не текста команды.
-- **Read-only git-контур в `mma web`.** Состояние репозитория (ветка, число
-  изменений) показывается бейджем в строке футера и git-чипами в ленте;
-  отображение только для чтения — веб не выполняет git-операции.
+- **Обёртки провайдеров не теряют `reasoningStrategy`/`reasoningLevels`**:
+  `SanitizingProvider` (DLP) и `OtelProvider` ре-экспортируют механизм
+  проброса 1:1 (INV-R2) — те же поля терялись глобальным
+  `setEgressGuard` из соседних тестов (порядковая поллюция, падающая
+  POSIX CI в `agent-reconfigure-probe`).
+- **Hermetic тесты проб**: `agent-reconfigure-probe` — через реальный
+  локальный HTTP-стаб вместо мутации `global.fetch` (гонки между файлами);
+  `model-loader` и `download-file` восстанавливают fetch и не переиспользуют
+  Response-объект. Полный сьют: 6272 pass / 0 fail.
+- **Docker live-тесты за флагом `MMA_LIVE_DOCKER=1`**: на GitHub Windows
+  раннерах ломается bind-mount (Docker Desktop) — live не должен ронять CI.
 
 ## [0.25.0] - 2026-11-09
 
@@ -212,30 +190,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   и петля разведки была невидима (сессия `ses_mw7z4mav`). Спека:
   `docs/specs/2026-11-08-read-only-streak-guard-design.md`.
 
-## [0.25.1] - 2026-11-09
-
-### Changed
-
-- **Релизная матрица без mac-arm64 (временно).** GitHub-hosted macOS ARM пул
-  деградировал fleet-wide (ноябрь 2026, `actions/runner#4833`): джоба 15 мин
-  ждёт раннера и отменяется до checkout. В релизе — 4 платформы
-  (win-x64, mac-x64, linux-x64, linux-arm64); `mma-mac-arm64.tar.gz` из
-  0.25.0 остаётся доступен. Возврат mac-arm64 — записью в матрицу.
-
-### Fixed
-
-- **Обёртки провайдеров не теряют `reasoningStrategy`/`reasoningLevels`**:
-  `SanitizingProvider` (DLP) и `OtelProvider` ре-экспортируют механизм
-  проброса 1:1 (INV-R2) — те же поля терялись глобальным
-  `setEgressGuard` из соседних тестов (порядковая поллюция, падающая
-  POSIX CI в `agent-reconfigure-probe`).
-- **Hermetic тесты проб**: `agent-reconfigure-probe` — через реальный
-  локальный HTTP-стаб вместо мутации `global.fetch` (гонки между файлами);
-  `model-loader` и `download-file` восстанавливают fetch и не переиспользуют
-  Response-объект. Полный сьют: 6272 pass / 0 fail.
-- **Docker live-тесты за флагом `MMA_LIVE_DOCKER=1`**: на GitHub Windows
-  раннерах ломается bind-mount (Docker Desktop) — live не должен ронять CI.
-
 ## [0.24.5] - 2026-11-08
 
 ### Added
@@ -245,6 +199,53 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
   кнопки `.btn` / `.btn.primary`, dirty-проверка с confirm «Discard changes?»,
   обработка `404 not_queued` (закрытие + toast) и отдельная обработка `400`,
   dim-строка о сохранении вложений и кликабельные только строки с локальным текстом.
+
+## [0.24.4] - 2026-11-06
+
+### Added
+
+- **Пауза хода в `mma web`** (TODO §1.13): кнопка паузы в композере перед
+  стопом (иконки pause/play); ход ставится на паузу на границе итераций,
+  `stop` будит зависшую паузу (INV-P3). POST `/api/pause` с действиями
+  pause/resume/stop, проекция `pausedIds` в состояние; легаси и тестовые
+  агенты без метода паузы не роняют её (guarded `isPaused?.()`,
+  `resume?.()`). Спека: `docs/specs/2026-11-06-webui-pause-resume-design.md`.
+- **История отправленных ходов**: стрелки ▲/▼ в композере вызывают ранее
+  отправленные промпты.
+- **Редактор запланированных сообщений**: попап правки + POST
+  `/api/queue/edit`; ранжир `@`-попапа по релевантности пути.
+- **Предпросмотр файлов в основном окне**: панель поверх фида,
+  переиспользует `paintFile`; клик по файлу в дереве/поиске открывает
+  предпросмотр, не перестраивая сессионную таб-модель.
+- **Адаптивные табы сайдбара**: подписи по контейнерным запросам, иконки
+  при нехватке места; компактный набор вкладок с кнопкой раскрытия.
+- **Цепочка базовых веток в чипе ⎇**: база читается по reflog
+  (`base-branch`), цепочка рисуется корень-к-вершине, мемо в кеше снимков.
+- **Звуки уведомлений по умолчанию** + шаг выбора звуков в setup-мастере
+  (терминальном и браузерном визарде).
+- **Заголовок вкладки браузера** — имя текущего чата.
+- **e2e-контракт Markdown-рендера** в ленте (`tests/webui-md-feed-e2e`).
+
+### Fixed
+
+- Вкладка «Изменения» перечитывает git-состояние при росте ревизии файлов.
+- Уплотнение `app.ts` / `session-pool.ts` / `setup-api.ts` до 300 строк
+  (гейт правила 6).
+
+## [0.24.3] - 2026-11-06
+
+### Added
+
+- **Тул `git`.** Новый инструмент для работы с репозиторием: операции
+  классифицированы по профилу безопасности (read-only / изменяющие), что даёт
+  harness применять к ним единую точку enforcement вместо ручных проверок в
+  хендлере. Спека: `docs/specs/2026-06-08-git-workflow-design.md`.
+- **Классификация shell-операций по security-классам.** `command-shapes` расширен
+  категориями для git-команд, чтобы разграничивать чтение и запись на уровне
+  разрешений, а не текста команды.
+- **Read-only git-контур в `mma web`.** Состояние репозитория (ветка, число
+  изменений) показывается бейджем в строке футера и git-чипами в ленте;
+  отображение только для чтения — веб не выполняет git-операции.
 
 ## [0.24.2] - 2026-11-06
 
@@ -1202,22 +1203,6 @@ subagents · plugins · mcp · map`. Subagents читает `GET /api/sessions/:
   вынесен в `src/modules/lsp/check-run.ts`, потолок `module.ts` уменьшен 415 → 380.
   Гвард: `tests/modules/lsp/check-cold-start.test.ts`.
 
-### Added
-
-- **Прогон субагента теперь виден в `session.jsonl`.** В `ses_mvoac9q9` между
-  `subagent` call и result было 283 секунды и **ноль** событий: стоимость, число
-  LLM-вызовов, прочитанные файлы и причину падения восстановить было нельзя.
-  Подпоток пишет диагностику в журнал владельца записями `type: "subagent"` и
-  `subagent: <runId>`: `start` (задача, глубина, эксперт, модель), `tool` (тул,
-  успех, длительность, голова вывода), `usage` (per-call токены с `origin`),
-  `end` (статус, итерации, длительность, ошибка). Историю хода по-прежнему пишет
-  только родитель — подпоток не трогает `user`/`assistant` и `meta`. Спека:
-  `docs/archive/specs/2026/2026-10-27-subagent-run-journal-design.md`.
-  Гвард: `tests/tools/subagent-session-log.test.ts`. Долг
-  `subagent-run-invisible-in-session-log` оплачен.
-
-### Fixed
-
 - **Субагент не угадывает `expert_tag` и не пропадает из audit.** В `ses_mvoac9q9`
   модель дважды отправила `expert_tag: "code-review"` (имя скилла, не эксперта):
   список валидных тегов был только в тексте ошибки, отказ не писался в
@@ -1252,6 +1237,20 @@ subagents · plugins · mcp · map`. Subagents читает `GET /api/sessions/:
   `docs/archive/specs/2026/2026-10-27-subagent-reliability-design.md` §B.
   Гварды: `tests/core/llm-truncation-recovery.test.ts`,
   `tests/openai-compat.test.ts`, `tests/tools/subagent-max-tokens.test.ts`.
+
+### Added
+
+- **Прогон субагента теперь виден в `session.jsonl`.** В `ses_mvoac9q9` между
+  `subagent` call и result было 283 секунды и **ноль** событий: стоимость, число
+  LLM-вызовов, прочитанные файлы и причину падения восстановить было нельзя.
+  Подпоток пишет диагностику в журнал владельца записями `type: "subagent"` и
+  `subagent: <runId>`: `start` (задача, глубина, эксперт, модель), `tool` (тул,
+  успех, длительность, голова вывода), `usage` (per-call токены с `origin`),
+  `end` (статус, итерации, длительность, ошибка). Историю хода по-прежнему пишет
+  только родитель — подпоток не трогает `user`/`assistant` и `meta`. Спека:
+  `docs/archive/specs/2026/2026-10-27-subagent-run-journal-design.md`.
+  Гвард: `tests/tools/subagent-session-log.test.ts`. Долг
+  `subagent-run-invisible-in-session-log` оплачен.
 
 ## [0.13.6] - 2026-10-26
 
@@ -2172,6 +2171,21 @@ edit_file, …`), and the Trace row/detail renders it
   criterion as `filterToolsByTags`) before the handler. Guard:
   `tests/tools/enforcement-tags.test.ts`.
 
+- **Architecture v2 spec** (`docs/specs/2026-10-12-architecture-v2-design.md`):
+  normative target architecture - 23 invariants (`INV-1..23`), core-vs-module
+  split by a single criterion (can it be disabled?), `ModuleHost` lifecycle
+  contract, declarative tool capabilities with enforcement moved into
+  `ToolExecutor.execute()`, one observability spine with per-event `source`,
+  `ConfigStore` with effect declarations, and a phase-based turn pipeline
+  (a shared VERIFY stage for MoE and the single-loop path). Migration plan in
+  6 waves; gates listed in §6.
+- **Harness module audit** (`docs/analysis/2026-10-12-harness-module-audit.md`,
+  `docs/plans/2026-10-12-harness-module-audit-fixes.md`): ~90 confirmed defects
+  across 9 modules, plus 13 further findings added by the architecture pass
+  (missing ownership of tools / prompt blocks / log entries, three tool
+  registries, dead `OutputEvent.source`, unused `Logger.child`, diverged prompt
+  assembly, config-layer cross-domain mutation).
+
 ### Changed
 
 - **Context budget keys (OO-3/OO-8)**: added `contextBudget.admitMaxTokens`,
@@ -2197,6 +2211,57 @@ edit_file, …`), and the Trace row/detail renders it
   `.arch-allowlist.json` (ceilings may only shrink; an entry is removed once the
   file drops to ≤300 lines).
 
+- **Tool handlers no longer enforce security policy (W2.5, INV-10/INV-9)**: the
+  duplicated scope/protected/SSRF checks in 13 tool handlers (`read_file`,
+  `write_file`, `edit_file`, `create_dir`, `delete_file`, `move_file`, `list_dir`,
+  `file_info`, `grep`, `chunk_query`, `download_file`, `web_fetch`, `web_browse`)
+  are removed — `ToolExecutor.execute()` owns enforcement, so tools are pure
+  domain logic again. Path resolution and domain validation stay (bash
+  command-validator, download size cap, onboarding `writePathAllowlist`,
+  `attach_image` manual). Five handler-level denial tests were dropped as covered
+  by `tests/tools/enforcement-{path,url}.test.ts`.
+- **W2 spec corrected (2026-10-13)**: `caps` is a declaration, not a gate; the
+  enforced policies are tied to arguments (`pathArgs` → scope/protected,
+  `urlArgs` → SSRF). The original `proc → security.bash.enabled` / `net →
+security.network.enabled` mapping is wrong — those keys toggle _validation_,
+  not access — so it was dropped, and W2.4 became a consistency guard
+  (`pathArgs` implies an `fs` cap, `urlArgs` implies a `net` cap).
+- **Output events name their source (INV-13)** (`src/output/`): `OutputEvent.source`
+  is now a canonical `Source` (`mma` | `core` | `module:<name>` | `tool:<name>`)
+  instead of a free string that was often `""`. `Logger` emits `module:<prefix>`
+  (root logger → `mma`); the channel and direct bus producers emit module/tool/host
+  tags. The terminal renders the short owner label (`module:indexer` → `[indexer]`),
+  so chat output is unchanged; machine-readable sinks and `session.jsonl` carry the
+  canonical value. Guarded by `tests/output/source-filled.test.ts`.
+- **Errors are structured diagnostics (INV-14)** (`src/core/session-logger.ts`):
+  `SessionLogger.logError` now takes a `Diagnostic` object
+  (`source`/`operation`/`kind`/`cause`/`recoverable`) instead of a bare string.
+  The `Diagnostic` type is a discriminated union, so `cause` is required by the
+  compiler whenever `kind !== "ok"` (INV-12) — a failure can no longer be logged
+  without a reason. Entries persist `source`/`operation`/`errorKind`/`cause`/
+  `recoverable` (with `content` = cause for existing readers); the web Trace log
+  whitelist gained `operation`/`errorKind`/`recoverable`.
+- **Session log entries carry their module (INV-13)** (`src/modules/session/store.ts`,
+  `src/output/session-sink.ts`): `SessionLogEntry.module` is populated from the
+  event's `Source` (`module:<name>` → `<name>`) when a module-sourced output event
+  is persisted, and the `type` union reserves the `module_<name>` family for
+  module-owned records. The web Trace log whitelist gained `module`.
+- **Prompt blocks name their owner and degradation (INV-1/6/17)**
+  (`src/core/types.ts`, `src/core/prompt-builder.ts`, `src/modules/registry.ts`):
+  `PromptBlock` gains `source` (owner), `label` and `degraded?: { reason }`.
+  `ModuleRegistry` stamps `source = <module name>`; core/static blocks set their
+  own owner. The prompt-build log now reads `indexer: project map` and marks a
+  budget-dropped block with `reason: budget: N tok did not fit` instead of
+  showing truncated content.
+
+- **AGENTS.md rewritten** (~1900 -> ~230 lines): the per-feature log moved to
+  `docs/agents/feature-history.md`; the file now holds positioning, working
+  rules, the architecture map and the invariants that are easy to break.
+- **Working rules revised**: spec-before-code for contract changes, one branch
+  per task with a reviewable diff, "is this a symptom or a structure?" check
+  before patching, and "an invariant without a check is text" - every new
+  architectural rule must ship with a test, guard or `check-arch` rule.
+
 ### Removed
 
 - **`AgentModule` is no longer part of the public API** (breaking): the module
@@ -2204,6 +2269,30 @@ edit_file, …`), and the Trace row/detail renders it
   `hooks`). `AgentModule` stays internal as a thin adapter for `ModuleRegistry`
   instance lookup until that too is narrowed; external code should use
   `AgentPlugin` (the plugin SDK) and does not need `AgentModule`.
+
+- **Agent-level MoE (mixture of experts)** (`src/core/agent-moe.ts`,
+  `src/modules/execution/moe-executor.ts`, `src/llm/orchestrator.ts`,
+  `plan-validator.ts`, `input-from.ts`, `expert-model-check.ts`,
+  `moe-parallelism.ts`): a second execution harness that replaced the single-loop
+  path wholesale and bypassed `HallucinationGate` / `CriticGate` / `AuditGate` /
+  `finalizeWithoutTools`. It shipped default-off, and its value (parallel expert
+  sub-agents) is already delivered by `parallelizable` subagents through the same
+  `ToolExecutor`. Removing it makes the run path single, so a loop guard cannot be
+  bypassed. Also removed: the `moe.*` and `orchestrator.*` config keys, the
+  `moe_plan`/`moe_subtask`/`moe_replan`/`moe_verify` session-log events, the web
+  MoE chip and `moeActive` snapshot field, the MoE settings panel (the `experts`
+  roster stays, now under "Experts"), and the public `OrchestratorClient` /
+  `OrchestratorConfig` exports. Machine-readable step checks keep working through
+  `StepVerifier`; per-tag expert models keep working through `subagent.expert_tag`.
+  Stale `moe.*`/`orchestrator.*` keys in an existing `config.json` are ignored on
+  load, and old `moe_*` session entries still parse.
+  Spec: `docs/specs/2026-10-12-remove-moe-design.md`.
+- **Residual MoE surface** (`chore/moe-closeout`): the removal above left the dead
+  `moeActive` host-state field, the unused `SubtaskContext` type, a `.ws-moe` footer
+  chip style, the `moe` certification tag with three stale scenarios that still set
+  the removed `moe.enabled` key, MoE leftovers in test fixtures, and ghost comments
+  in ~20 files. All cleaned up, and `tests/no-moe-surface.test.ts` now guards against
+  the surface creeping back.
 
 ### Fixed
 
@@ -2296,106 +2385,7 @@ edit_file, …`), and the Trace row/detail renders it
   New config keys `critic.maxTokens` (default 2048) and `critic.timeoutMs`
   (per LLM call, default 60s) replace the too-tight 512 / chain-wide 15s.
 
-### Changed
-
-- **Tool handlers no longer enforce security policy (W2.5, INV-10/INV-9)**: the
-  duplicated scope/protected/SSRF checks in 13 tool handlers (`read_file`,
-  `write_file`, `edit_file`, `create_dir`, `delete_file`, `move_file`, `list_dir`,
-  `file_info`, `grep`, `chunk_query`, `download_file`, `web_fetch`, `web_browse`)
-  are removed — `ToolExecutor.execute()` owns enforcement, so tools are pure
-  domain logic again. Path resolution and domain validation stay (bash
-  command-validator, download size cap, onboarding `writePathAllowlist`,
-  `attach_image` manual). Five handler-level denial tests were dropped as covered
-  by `tests/tools/enforcement-{path,url}.test.ts`.
-- **W2 spec corrected (2026-10-13)**: `caps` is a declaration, not a gate; the
-  enforced policies are tied to arguments (`pathArgs` → scope/protected,
-  `urlArgs` → SSRF). The original `proc → security.bash.enabled` / `net →
-security.network.enabled` mapping is wrong — those keys toggle _validation_,
-  not access — so it was dropped, and W2.4 became a consistency guard
-  (`pathArgs` implies an `fs` cap, `urlArgs` implies a `net` cap).
-- **Output events name their source (INV-13)** (`src/output/`): `OutputEvent.source`
-  is now a canonical `Source` (`mma` | `core` | `module:<name>` | `tool:<name>`)
-  instead of a free string that was often `""`. `Logger` emits `module:<prefix>`
-  (root logger → `mma`); the channel and direct bus producers emit module/tool/host
-  tags. The terminal renders the short owner label (`module:indexer` → `[indexer]`),
-  so chat output is unchanged; machine-readable sinks and `session.jsonl` carry the
-  canonical value. Guarded by `tests/output/source-filled.test.ts`.
-- **Errors are structured diagnostics (INV-14)** (`src/core/session-logger.ts`):
-  `SessionLogger.logError` now takes a `Diagnostic` object
-  (`source`/`operation`/`kind`/`cause`/`recoverable`) instead of a bare string.
-  The `Diagnostic` type is a discriminated union, so `cause` is required by the
-  compiler whenever `kind !== "ok"` (INV-12) — a failure can no longer be logged
-  without a reason. Entries persist `source`/`operation`/`errorKind`/`cause`/
-  `recoverable` (with `content` = cause for existing readers); the web Trace log
-  whitelist gained `operation`/`errorKind`/`recoverable`.
-- **Session log entries carry their module (INV-13)** (`src/modules/session/store.ts`,
-  `src/output/session-sink.ts`): `SessionLogEntry.module` is populated from the
-  event's `Source` (`module:<name>` → `<name>`) when a module-sourced output event
-  is persisted, and the `type` union reserves the `module_<name>` family for
-  module-owned records. The web Trace log whitelist gained `module`.
-- **Prompt blocks name their owner and degradation (INV-1/6/17)**
-  (`src/core/types.ts`, `src/core/prompt-builder.ts`, `src/modules/registry.ts`):
-  `PromptBlock` gains `source` (owner), `label` and `degraded?: { reason }`.
-  `ModuleRegistry` stamps `source = <module name>`; core/static blocks set their
-  own owner. The prompt-build log now reads `indexer: project map` and marks a
-  budget-dropped block with `reason: budget: N tok did not fit` instead of
-  showing truncated content.
-
-### Removed
-
-- **Agent-level MoE (mixture of experts)** (`src/core/agent-moe.ts`,
-  `src/modules/execution/moe-executor.ts`, `src/llm/orchestrator.ts`,
-  `plan-validator.ts`, `input-from.ts`, `expert-model-check.ts`,
-  `moe-parallelism.ts`): a second execution harness that replaced the single-loop
-  path wholesale and bypassed `HallucinationGate` / `CriticGate` / `AuditGate` /
-  `finalizeWithoutTools`. It shipped default-off, and its value (parallel expert
-  sub-agents) is already delivered by `parallelizable` subagents through the same
-  `ToolExecutor`. Removing it makes the run path single, so a loop guard cannot be
-  bypassed. Also removed: the `moe.*` and `orchestrator.*` config keys, the
-  `moe_plan`/`moe_subtask`/`moe_replan`/`moe_verify` session-log events, the web
-  MoE chip and `moeActive` snapshot field, the MoE settings panel (the `experts`
-  roster stays, now under "Experts"), and the public `OrchestratorClient` /
-  `OrchestratorConfig` exports. Machine-readable step checks keep working through
-  `StepVerifier`; per-tag expert models keep working through `subagent.expert_tag`.
-  Stale `moe.*`/`orchestrator.*` keys in an existing `config.json` are ignored on
-  load, and old `moe_*` session entries still parse.
-  Spec: `docs/specs/2026-10-12-remove-moe-design.md`.
-- **Residual MoE surface** (`chore/moe-closeout`): the removal above left the dead
-  `moeActive` host-state field, the unused `SubtaskContext` type, a `.ws-moe` footer
-  chip style, the `moe` certification tag with three stale scenarios that still set
-  the removed `moe.enabled` key, MoE leftovers in test fixtures, and ghost comments
-  in ~20 files. All cleaned up, and `tests/no-moe-surface.test.ts` now guards against
-  the surface creeping back.
-
-### Added
-
-- **Architecture v2 spec** (`docs/specs/2026-10-12-architecture-v2-design.md`):
-  normative target architecture - 23 invariants (`INV-1..23`), core-vs-module
-  split by a single criterion (can it be disabled?), `ModuleHost` lifecycle
-  contract, declarative tool capabilities with enforcement moved into
-  `ToolExecutor.execute()`, one observability spine with per-event `source`,
-  `ConfigStore` with effect declarations, and a phase-based turn pipeline
-  (a shared VERIFY stage for MoE and the single-loop path). Migration plan in
-  6 waves; gates listed in §6.
-- **Harness module audit** (`docs/analysis/2026-10-12-harness-module-audit.md`,
-  `docs/plans/2026-10-12-harness-module-audit-fixes.md`): ~90 confirmed defects
-  across 9 modules, plus 13 further findings added by the architecture pass
-  (missing ownership of tools / prompt blocks / log entries, three tool
-  registries, dead `OutputEvent.source`, unused `Logger.child`, diverged prompt
-  assembly, config-layer cross-domain mutation).
-
-### Changed
-
-- **AGENTS.md rewritten** (~1900 -> ~230 lines): the per-feature log moved to
-  `docs/agents/feature-history.md`; the file now holds positioning, working
-  rules, the architecture map and the invariants that are easy to break.
-- **Working rules revised**: spec-before-code for contract changes, one branch
-  per task with a reviewable diff, "is this a symptom or a structure?" check
-  before patching, and "an invariant without a check is text" - every new
-  architectural rule must ship with a test, guard or `check-arch` rule.
-
 ## [0.3.3] - 2026-10-11
-
 Audit of live session `ses_mv44qabg_s1przq` (`mma web`, single turn: 225 LLM
 calls, 225 tool calls, 15 compactions, no chat output, aborted after ~22 min).
 The model drifted (asked for a plan, built the site) — but five harness defects
@@ -2442,7 +2432,6 @@ amplified it. All fixes are agent-side, general, and test-covered.
   final answer; the value stays user-configurable via `/config maxToolIterations`.
 
 ## [0.3.2] - 2026-10-10
-
 The GitHub Pages landing page drifted from the agent: its version was hardcoded
 (`0.1.0`) while the package was at `0.3.1`, and the install/download links were
 buried in a section far below the fold. The project now states its beta status
@@ -2486,7 +2475,6 @@ across the docs and the versioning rules.
   install command and platform links are shown directly in the hero instead.
 
 ## [0.3.1] - 2026-10-10
-
 The update surface was invisible in practice. Root cause: `renderFooter` was
 built for a `make(cls, text)` callback but the app passes `el(tag, cls, text)`,
 so every footer chip was created as a zero-size element — the update chip never
@@ -2513,7 +2501,6 @@ that, update notices were logged at `info`, which the terminal hides by default.
   keys moved here from Advanced · Service). `POST /api/update` runs the install.
 
 ## [0.3.0] - 2026-10-10
-
 `mma web` gets a second visual register. The theme axis is now split in two: **mode**
 (dark / light / auto) and **theme** (**flat** / **console**), and the console theme is
 the default — the browser UI reads like the terminal it runs in.
@@ -2537,7 +2524,6 @@ the default — the browser UI reads like the terminal it runs in.
 - **Default `mma web` theme is now console** (flat remains one click away in Settings → UI).
 
 ## [0.2.0] - 2026-10-10
-
 Public landing page. The agent finally has a front door: a static GitHub Pages site in the
 project's own visual language — terminal editorial, MMART, two languages, two themes.
 
@@ -2571,7 +2557,6 @@ project's own visual language — terminal editorial, MMART, two languages, two 
 - **Docs**: new "Landing Page (`gh-pages/`)" section in `AGENTS.md`.
 
 ## [0.1.0] - 2026-10-09
-
 First public GitHub release; the npm-era `2.x` line is retired and versioning restarts at `0.1.0`.
 MMA is distributed as a self-contained GitHub release instead of an npm package: a one-line
 installer drops a bundled Bun runtime plus the agent into `~/.mma`, and the in-app updater reads
@@ -2595,7 +2580,6 @@ GitHub Releases. Open source under MIT.
 - **npm install path** — the package is no longer installed from `registry.npmjs.org`; `npm deprecate`/`unpublish` is a separate follow-up once the first GitHub release is verified.
 
 ## [2.40.0] - 2026-10-09
-
 The web chat's work process steps back and the finished answer steps forward: answers get a
 quiet translucent backdrop, reasoning stops shouting, the "jump to latest" pill sits where it
 belongs, and user attachments are rendered properly and survive a page reload.
@@ -2617,7 +2601,6 @@ belongs, and user attachments are rendered properly and survive a page reload.
 - **User message layout**: attachments used to append inline after the text (`> текст [img]`); they now stack above it.
 
 ## [2.39.0] - 2026-10-09
-
 LSP is now a real language-server client instead of a one-shot linter: one warm server
 process per `(server, project root)` with document sync, spec-correct diagnostics and a
 tested JSON-RPC transport. The mascot reacts to LSP, and a native TypeScript engine
@@ -2643,7 +2626,6 @@ tested JSON-RPC transport. The mascot reacts to LSP, and a native TypeScript eng
 - **Structural `KillableProcess` type** (`src/modules/processes/kill-tree.ts`): the parameter accepts any `{ pid?, kill() }`, so the connection passes its own process wrapper without an unsafe cast. `ChildProcess` still satisfies it, so all callers are unchanged.
 
 ## [2.38.0] - 2026-10-09
-
 Harness honesty for read-only work: the loop guard no longer treats "no mutation" as
 "no progress", every forced stop now yields a best-effort final answer instead of a silent
 kill, and the web chat shows why a turn stopped. Frontend seams landed so a future TUI can
@@ -2668,7 +2650,6 @@ reuse the command registry and session snapshot, and `grep` on Windows was harde
 - **Stuck-detector read-only nudge removed** (`src/modules/execution/stuck-detector.ts`, `execution-plugin.ts`): the second "no mutation = stuck" heuristic (10 read-only calls → `exec.read_only_loop`, "No write/exec for N tool calls") fired on legitimate read-only analysis. Removed — real loops stay covered by repetition sampling, step iteration, failure streaks and the duplicate-tool budget. Keys `exec.read_only_loop`, `exec.read_only_loop_recovery`, `exec.hint_read_only` dropped (en+ru).
 
 ## [2.37.0] - 2026-10-09
-
 `mma serve` now describes its own API: a live OpenAPI 3.1 document plus a
 human-readable contract page, so an integrator learns the endpoints from the
 running service instead of from the repository. Auto-update reached `mma web`,
@@ -2695,17 +2676,14 @@ had drifted behind the code.
 - **`updater.autoInstall` notice now says how to enable it** (`i18n` `updater.auto_install_hint`, en+ru): the default is off, so an "update available" line without a next step read like a dead end. The message now points at `/config updater.autoInstall true` alongside the manual command.
 - **Docs:** the Auto-Update section of `docs/agents/modules.md` described `checkOnStart` and `autoInstall` as defaulting to `true` — both have been `false` since 1.x — and claimed the check only ran in the terminal. Now accurate, including the config file location (`~/.mma/updater.json`), the web surface, and the dev guard.
 
+- **README refreshed** (features, tools table, module/tool counts, CLI subcommands, REPL command table, web mode, config keys, architecture and project structure): removed the phantom `scope_request` tool, added `define_capability` / `process_wait`, `mma serve`, `mma plugins …`, `mma security …`, `/security`, `/lsp doctor`, `contextAuto`, `critic.enabled`, `service.port`, the `service` module, and pointed first-time users at the new `/v1/docs` + `/v1/openapi.json` endpoints.
+- **Docs:** a discovery section in `docs/agents/service-api.md` and `docs/serve-mode.md`; auth column added to the endpoint table.
+
 ### Removed
 
 - **`updater.checkOnStart`** (`config/types.ts`, `config/defaults.ts`, `config/registry-extra.ts`, `cli/main.ts`, web settings, both dictionaries): the flag was declared in config, the registry, i18n and the web settings panel, and read nowhere — `runLoop()` checked unconditionally. `enabled: false` already means "never check" and `intervalMs: 0` already means "check once per launch", so both states it could express were already spelled. An existing `~/.mma/updater.json` keeps the field; it is simply ignored. Guards in `tests/webui-config-extra.test.ts` keep the panel and the dictionaries free of it.
 
-### Changed
-
-- **README refreshed** (features, tools table, module/tool counts, CLI subcommands, REPL command table, web mode, config keys, architecture and project structure): removed the phantom `scope_request` tool, added `define_capability` / `process_wait`, `mma serve`, `mma plugins …`, `mma security …`, `/security`, `/lsp doctor`, `contextAuto`, `critic.enabled`, `service.port`, the `service` module, and pointed first-time users at the new `/v1/docs` + `/v1/openapi.json` endpoints.
-- **Docs:** a discovery section in `docs/agents/service-api.md` and `docs/serve-mode.md`; auth column added to the endpoint table.
-
 ## [2.36.0] - 2026-10-08
-
 `mma web` fixes from a live two-tab session (a background session's stream
 leaked into the active tab, Settings showed a stale value after slash-command
 config writes, an interrupted turn reported success, the context probe compared
@@ -2729,7 +2707,6 @@ agent-facing SSE event to a distinct face state.
 - **Tabs lost on reload** (`src/modules/webui/assets/js/session/tabs.ts`, `assets/app.ts`): the set of open session tabs and the active one are persisted to `localStorage` (`mma-open-tabs`) and restored on boot before `refresh()`; the URL `?session=` still wins as the active tab for deep links.
 
 ## [2.35.1] - 2026-10-08
-
 Closing the last tab in `mma web` now resets the session instead of leaving a
 stale active session and its context hanging (the next turn / reload reused the
 closed session and the sidebar kept showing its context).
@@ -2742,7 +2719,6 @@ closed session and the sidebar kept showing its context).
 - **Slash commands render without a tab** (`src/modules/webui/assets/js/feed/turn.ts`): command output falls back to the transcript container instead of being dropped when no tab owns the session.
 
 ## [2.35.0] - 2026-10-08
-
 Agent Service API v1: MMA can run as a long-lived HTTP service (`mma serve`)
 that accepts tasks from external systems (bots, backends, cron) over a stable,
 versioned contract, without touching the agent loop, REPL or `mma web`.
@@ -2772,7 +2748,6 @@ versioned contract, without touching the agent loop, REPL or `mma web`.
 - **Tenant/run audit** (`src/modules/service/api/tasks-api.ts`, `src/modules/session/store.ts`, `src/modules/webui/session/log-api.ts`): auth headers `X-Mma-Tenant` / `X-Mma-Principal` / `X-Mma-Run` / `X-Mma-Tier` / `X-Mma-Scopes` are resolved (never from the body) and written to `session.jsonl` as a `service_task` entry.
 
 ## [2.34.1] - 2026-10-08
-
 Test-infrastructure health (no product behaviour change): the e2e and
 integration suites carried failures that predated the 2.34.0 work.
 
@@ -2786,7 +2761,6 @@ integration suites carried failures that predated the 2.34.0 work.
 - **Three e2e tests skipped** as flaky under full-suite load (green in isolation): `web-commands` slash-autocomplete popup, and the `web-settings` context-window and MCP-toggle scenarios. Re-enable when the harness serializes with more headroom.
 
 ## [2.34.0] - 2026-10-08
-
 Web final answers read as a dense, occasionally broken wall compared to other
 agent UIs. Two causes: cramped typography and GFM that the strict CommonMark
 parser (`smd.js`) left as raw text.
@@ -2803,7 +2777,6 @@ parser (`smd.js`) left as raw text.
 Tests: `tests/webui-md-normalize.test.ts` (normalizer + streaming splits), `tests/webui-md-render.test.ts` (happy-dom structure), guard in `tests/webui-assets.test.ts`.
 
 ## [2.33.1] - 2026-10-08
-
 Post-mortem of a live `mma web` session (`ses_muzbb045_9v1r4t`): the sidebar
 plan vanished, the feed had no first message, and the session name never
 reached the open tab. All three were harness defects around per-session state,
@@ -2817,7 +2790,6 @@ not model behaviour.
 - **Session renames never reached the open tab/dropdown** (`src/modules/session/manager.ts`, `src/modules/webui/module.ts`): the deterministic auto-name and the async LLM title changed `meta.json` only; the tab kept the stale name until an unrelated state push, and the LLM title never appeared. `SessionManager.onRename` (shared with pinned runner siblings) now broadcasts `sessions` + `state`, so the live tab and list update without a reload.
 
 ## [2.33.0] - 2026-10-08
-
 A MoE turn on a local LM Studio backend died without a word: every subtask
 failed with `[object Object]`, the orchestrator called it "a technical problem"
 and re-planned the same work, and the session log ended mid-flight with no
@@ -2840,7 +2812,6 @@ distinct defects, all in the harness rather than the model.
 - **14 identical `Session ended` log lines per turn**: `NotifyPlugin` fired at `info` on every `shutdown()` without a session id. It is now a single `debug` line carrying the id.
 
 ## [2.32.0] - 2026-10-08
-
 The web sidebar had exactly one responsive shape. On anything wider than 760px
 it was a constant 679px column - so on a 768px tablet it left the chat ~90px -
 and below that it became a bare panel pinned at a hardcoded `top: 41px`. It is
@@ -2864,7 +2835,6 @@ now a real drawer on every viewport that cannot fit the column beside the chat.
 - Horizontal-overflow smoke coverage now includes 1024/820/768/390px viewports; nothing below 820px was exercised before.
 
 ## [2.31.0] - 2026-10-08
-
 Opening and closing files in the `mma web` Files tab used to fight you: an open
 file hid the whole tree, so switching files meant closing the viewer, finding
 the file again and re-expanding folders - and the close/attach controls were
@@ -2887,7 +2857,6 @@ where you came from, and the tree itself has collapse/expand controls.
 - Hardcoded English `title` attributes on the Files controls (`attach path`, `close`) are now i18n keys; new keys ship in en + ru.
 
 ## [2.30.0] - 2026-10-08
-
 MoE orchestration is now visible. A turn led by Mixture-of-Experts says so — one
 line when the plan is ready, one when the turn ends — and `mma web` shows a
 `MoE` chip in the composer footer while the orchestration is actually running.
@@ -2909,7 +2878,6 @@ line when the plan is ready, one when the turn ends — and `mma web` shows a
 - **`mma web` footer**: long workspace paths no longer stretch the line (ellipsis), and the agent version is pinned to the right.
 
 ## [2.29.1] - 2026-10-07
-
 Agent-written capability drafts (`define_capability`) are now quality-gated and
 tidy: the handler body is syntax-checked before it is written, a load failure is
 reported back to the model with the real error (and the broken file is discarded),
@@ -2927,7 +2895,6 @@ and the generated file is normalized instead of dumped verbatim.
 - **`mma plugins drafts approve`** (`src/cli/plugin-commands.ts`): on load failures prints each reason, not just the count.
 
 ## [2.29.0] - 2026-10-07
-
 The plugin system stops being "an anonymous object in an array": a plugin is now a
 registered entity with author, version, description, declared permissions and a
 visible on/off switch. `mma web` gets a **Plugins** sidebar tab with live toggles
@@ -2983,7 +2950,6 @@ silently missing.
 - Approving a draft is still a decision, not a boundary: the code runs in the agent process with the harness's own reach (fs, network, `bash`). Real isolation and code trust remain open work (see `docs/archive/specs/2026/2026-09-28-production-readiness-design.md`, P1).
 
 ## [2.28.0] - 2026-10-07
-
 Tool-produced images (browser screenshots, `attach_image`) are now visible in the
 `mma web` feed — a thumbnail with a full-screen lightbox — and survive reload via
 per-session persistence with rotation. The old static placeholder card that never
@@ -3007,7 +2973,6 @@ filled is gone.
 - **Static screenshot placeholder** (`src/modules/webui/assets/js/feed/turn.ts`): the misleading "screenshot" card that was created on every `browser`/`attach_image` call and never filled.
 
 ## [2.27.0] - 2026-10-07
-
 MoE is now usable out of the box: `moe.enabled: true` starts on the active
 model instead of silently falling back when no planner model is set, the
 planner keys are configurable from `/config` and Web UI, and model/provider
@@ -3030,7 +2995,6 @@ references render as dropdowns instead of free-text/JSON fields.
 - **Cert MoE scenarios** (`src/modules/certification/scenarios.ts`): dropped the `orchestrator: { model: "" }` override that disabled MoE and let the file-level checks pass without ever exercising the MoE path.
 
 ## [2.26.0] - 2026-10-07
-
 Web UI polish: the sidebar now has a fixed width with the detail panel on the
 left, and message attachments can be up to 50 MB each (up to 10 per message).
 
@@ -3043,7 +3007,6 @@ left, and message attachments can be up to 50 MB each (up to 10 per message).
 - **Fixed-width sidebar, detail on the left** (`src/modules/webui/assets`): `.sb` is a constant 679 px and the auto-expanding `.sb-expanded` width transition is gone, so the sidebar no longer resizes itself on external events. The Trace detail opens to the left of the list (`flex-direction: row-reverse`); the Files viewer takes the full sidebar width with wrapped lines. The now-unused `sb-expanded` class was removed from CSS/JS.
 
 ## [2.25.0] - 2026-10-07
-
 Multiple subagent calls emitted in one assistant turn now actually run in
 parallel, instead of strictly one after another. The batch executor gains a
 generic "parallelizable tool" capability; every hook, UI event and `role:"tool"`
@@ -3063,7 +3026,6 @@ message stays serial and ordered.
 - **Live session footgun closed**: the tool description's "use for parallel work" is now true; the harness no longer implies concurrency it does not provide.
 
 ## [2.24.0] - 2026-10-07
-
 The `mma web` sidebar is now event-sourced: the SSE `state` event carries the full
 session snapshot, each tab owns its snapshot, and the client-side poll timers are
 gone.
@@ -3084,7 +3046,6 @@ gone.
 - **Auto-advance blocked by timestamp skew** (`src/modules/execution/module.ts`): `provablyStale` compares a step file's mtime against the plan's `createdAt`; the filesystem can record a file written right after plan creation a fraction of a millisecond _earlier_ than `createdAt`, which falsely marked the file "pre-existing" and silently suppressed step auto-advance. A small tolerance now absorbs the skew (real stale files stay stale).
 
 ## [2.23.0] - 2026-10-07
-
 A new **Files** sidebar tab in `mma web`: browse the workspace as a lazy tree,
 read files in-app (read-only) and attach a file to the message by inserting its
 path. Live-refreshes on workspace changes.
@@ -3100,7 +3061,6 @@ path. Live-refreshes on workspace changes.
 - **Shared workspace path resolver** (`src/modules/webui/file/paths.ts`): `resolveWorkspacePath` centralizes the lexical + `realpath` + protected-path jail; `file-api.ts` and the new `files-api.ts` both use it.
 
 ## [2.22.0] - 2026-10-06
-
 Web sidebar metrics are no longer frozen until a turn ends, and the cache cell no
 longer shows a misleading `0%` on backends that do not report prompt caching.
 
@@ -3113,7 +3073,6 @@ longer shows a misleading `0%` on backends that do not report prompt caching.
 - **Cache hit-rate on non-reporting backends** (`src/core/agent/cache-stats.ts`, `src/core/agent.ts`, `types.ts`, `src/cli/cache-line.ts`): `hitRate` is now emitted only when the provider actually returned cache tokens. Previously the prefix monitor always supplied `stableRatio`, so `buildCacheStats` fabricated `hitRate: 0` and the web sidebar showed `0%` (and JSON/CLI consumers saw a false miss) on providers without prompt caching; it now renders `—`.
 
 ## [2.21.0] - 2026-10-06
-
 Additive hardening on top of 2.20.0: deterministic grounding for stated figures,
 a guarded "claimed a file without a write" check, a stricter read-only budget,
 and the effective window in `session_start`. Verified across 12 live
@@ -3132,7 +3091,6 @@ and the effective window in `session_start`. Verified across 12 live
 - **Effective window in `session_start`** (`src/core/agent.ts`): the environment snapshot reads `model`/`contextWindow` from the live config instead of the bootstrap `envReport`, so it reports the probed window (e.g. 34048) rather than the pre-probe value (32768).
 
 ## [2.20.0] - 2026-10-06
-
 Harness reliability fixes from the live-session post-mortem (`ses_muwinhpk_2e69iq`):
 silent critic skip after compaction, information-losing compaction that fed a
 re-exploration loop, unbounded read-only loops, provider/context desync,
@@ -3164,7 +3122,6 @@ model/task-specific tuning).
 - **Compaction progress threshold** (`src/core/agent/compaction.ts`, `src/modules/context/manager.ts`): the significance threshold is now `max(2% history budget, 3% current context)` instead of 2% of the history budget alone, so a marginal shrink (e.g. −1.2% on a 24K context) no longer counts as success and short-circuits stage escalation — it now escalates to `aggressive`/`hard-drop`. `compactAdaptive` reports `reducedBy` as the total reduction from the original context (previously measured incrementally between stages, which could understate real progress to 0). An overflow attempt now consumes the iteration even when it is a no-op, keeping the "one trigger per iteration" guarantee.
 
 ## [2.19.0] - 2026-10-05
-
 Harness hardening from the live-session post-mortem (`ses_muu8kfbw_nyxkre`): false
 compaction and lost working context, plan/step desync, broken `grep` on Windows,
 background-process leaks. Harness fixes only (no model/task-specific tuning).
