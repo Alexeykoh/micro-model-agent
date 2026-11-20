@@ -187,17 +187,11 @@ export function tableEditor(value: unknown, ctx: Dict, editor: Dict): HTMLElemen
       const none = el("option", "", "—");
       none.value = "";
       sel.appendChild(none);
-      const seen = new Set([""]);
-      for (const opt of col.options as string[]) {
-        if (seen.has(opt)) continue;
-        seen.add(opt);
+      const opts = [...(col.options as string[])];
+      if (cur && !opts.includes(cur)) opts.push(cur);
+      for (const opt of opts) {
         const op = el("option", "", opt);
         op.value = opt;
-        sel.appendChild(op);
-      }
-      if (cur && !seen.has(cur)) {
-        const op = el("option", "", cur);
-        op.value = cur;
         sel.appendChild(op);
       }
       sel.value = cur;

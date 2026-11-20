@@ -81,6 +81,15 @@ export function detectedHint(model: string): string | null {
   return parts.length ? parts.join(" · ") : null;
 }
 
+/** Compact trigger placed on each row of the Models tab. */
+export function capabilityEditButton(model: string): HTMLButtonElement {
+  const button = el("button", "chip", t("web.settings.model_capabilities.edit"));
+  button.type = "button";
+  button.dataset.capEdit = "1";
+  button.addEventListener("click", () => openModelCapabilitiesDialog(model));
+  return button;
+}
+
 /** Open the nested dialog for one model. Save/Reset post once, then close. */
 export function openModelCapabilitiesDialog(model: string): void {
   const all = (settings.config?.modelCapabilities ?? {}) as Dict;

@@ -11,7 +11,7 @@ import { contextLabel } from "../format.js";
 import { PANEL_SECTIONS } from "./controls.js";
 import { chip, renderSectionsInto, settingsSection } from "./panels.js";
 import { postConfig, loadModels, ensureModelsLoaded } from "./write.js";
-import { openModelCapabilitiesDialog } from "./model-capabilities-form.js";
+import { capabilityEditButton } from "./model-capabilities-form.js";
 
 export interface ModelPanelDeps {
   /** Provider entries in display order (live config wins over the snapshot). */
@@ -228,11 +228,7 @@ function modelsPane(cfg: Dict, activeName: string): HTMLElement {
           }),
         );
       }
-      const capBtn = chip(t("web.settings.model_capabilities.edit"), "", () => {
-        openModelCapabilitiesDialog(String(m));
-      });
-      capBtn.dataset.capEdit = "1";
-      item.appendChild(capBtn);
+      item.appendChild(capabilityEditButton(String(m)));
       list.appendChild(item);
     });
   };
