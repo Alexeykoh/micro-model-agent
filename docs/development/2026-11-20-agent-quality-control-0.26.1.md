@@ -147,6 +147,32 @@ BCP-4 подтверждён на bonsai; BCP-1 и BCP-7 остаются на �
 Итог: **все семь пунктов BCP-1…7 подтверждены живой моделью** (источники:
 BCP-2/3/5/6 — обе модели; BCP-4 — ornith и bonsai; BCP-1 — bonsai; BCP-7 — ornith).
 
+## 4d. Финальный живой тест: микро-лендинг Next + shadcn
+
+Стенд проверен заранее: bun 1.3.14, node 24.10.0, npm 11.6.1, Playwright 1.62.0,
+npm registry доступен (next 16.4.6, shadcn 4.23.0). Песочница `_testing/final-landing`,
+`mma web` на 7337, модель `bonsai-2-27b-pq2`, сессия `ses_mwpbukoh_jphabqrcvadddbbp`.
+
+**Результат:** проект создан и проверен.
+
+| Этап | Результат |
+|------|-----------|
+| `npx create-next-app@latest . --ts --tailwind --eslint --app --use-npm --yes` | ✅ exit 0, 432 пакета, node_modules |
+| `npx shadcn@latest init --defaults` | ✅ exit 0, components.json + Button + lib/utils |
+| `npx shadcn@latest add button card` | ✅ exit 0, components/ui/card.tsx |
+| `app/page.tsx` | ✅ hero + subheading + CTA Button + 3 Card-карточки |
+| `npx tsc --noEmit` | ✅ exit 0, без диагностик |
+| `npm run build` | ✅ exit 0, статические страницы сгенерированы |
+| `lsp_check` (page.tsx, button.tsx, card.tsx) | ✅ без диагностик |
+| Dev-сервер + HTTP | ✅ `GET / → 200` (ports 3000/3005 заняты WSL-relay/Docker, проверено на `[::1]:3005`, сервер остановлен по PID) |
+
+**Заметные косяки агента в этом прогоне (для следующих волн):**
+
+1. Первый запуск не загрузил скиллы и начал вручную писать конфиги — проект был бы нерабочим. Исправлено перезапуском с явными `load_skill next-best-practices` и `load_skill shadcn` в промпте.
+2. CLI `create-next-app` уперся в служебный `.mma/`; агент корректно вынес его в backup и повторил, но затем сбой записи плана стоит того, чтобы создавать `.mma/plans` до scaffold.
+3. Агент потратил ~560 c и уперся в мягкий бюджет хода трижды — потребовались отдельные ходы-продолжения. Эффективность по-прежнему слабая.
+4. HTTP-проверка через `web_fetch` сорвалась из-за SSRF и занятого порта 3000; агент сделал корректный вывод «не могу доказать 200 — не буду выдумывать», и проверка была закрыта внешним запросом. Это хороший пример интеллектуальной честности.
+
 ## 5. Решения и compromises
 
 - Forced `tool_choice` отклонён: llama.cpp откатывает именованный выбор к `auto`.
