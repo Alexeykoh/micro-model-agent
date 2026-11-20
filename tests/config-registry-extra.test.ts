@@ -214,6 +214,29 @@ describe("registry editor metadata", () => {
     expect(cols.find((c) => c.key === "provider")?.optional).toBe(true);
   });
 
+  it("declares reasoning columns for the modelCapabilities table", () => {
+    const editor = resolveConfigKey("modelCapabilities")?.editor;
+    expect(editor?.layout).toBe("stack");
+    const columns = (editor?.columns ?? []) as Array<Record<string, unknown>>;
+    expect(columns.map((c) => c.key)).toEqual([
+      "name",
+      "vision",
+      "video",
+      "audio",
+      "pdf",
+      "tools",
+      "reasoningStrategy",
+      "reasoningOff",
+      "reasoningLevels",
+    ]);
+    const strategy = columns.find((c) => c.key === "reasoningStrategy");
+    expect(strategy?.options).toEqual([
+      "openai-effort", "template-kwarg", "prompt-tag", "none",
+    ]);
+    expect(columns.find((c) => c.key === "reasoningOff")?.type).toBe("bool");
+    expect(columns.find((c) => c.key === "reasoningLevels")?.array).toBe(true);
+  });
+
   it("labels every option and column in both locales", () => {
     const dicts = getFlatDicts();
     for (const def of configDefs()) {

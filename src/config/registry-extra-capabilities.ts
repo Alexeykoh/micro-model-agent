@@ -66,6 +66,7 @@ export const CAPABILITY_DEFS: ConfigKeyDef[] = [
       (v) => isRecord(v) && Object.values(v).every(validCapabilityEntry),
       {
         kind: "table",
+        layout: "stack",
         columns: [
           { key: "name" },
           { key: "vision", type: "bool", optional: true },
@@ -73,6 +74,13 @@ export const CAPABILITY_DEFS: ConfigKeyDef[] = [
           { key: "audio", type: "bool", optional: true },
           { key: "pdf", type: "bool", optional: true },
           { key: "tools", type: "bool", optional: true },
+          {
+            key: "reasoningStrategy",
+            optional: true,
+            options: [...REASONING_STRATEGIES],
+          },
+          { key: "reasoningOff", type: "bool", optional: true },
+          { key: "reasoningLevels", optional: true, array: true },
         ],
       },
     ),

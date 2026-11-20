@@ -180,6 +180,35 @@ export function tableEditor(value: unknown, ctx: Dict, editor: Dict): HTMLElemen
       });
       return sel;
     }
+    // Static option list (e.g. reasoningStrategy): no network, no live source.
+    if (Array.isArray(col.options) && !col.optionsSource) {
+      const cur = v == null ? "" : String(v);
+      const sel = el("select");
+      const none = el("option", "", "—");
+      none.value = "";
+      sel.appendChild(none);
+      const seen = new Set([""]);
+      for (const opt of col.options as string[]) {
+        if (seen.has(opt)) continue;
+        seen.add(opt);
+        const op = el("option", "", opt);
+        op.value = opt;
+        sel.appendChild(op);
+      }
+      if (cur && !seen.has(cur)) {
+        const op = el("option", "", cur);
+        op.value = cur;
+        sel.appendChild(op);
+      }
+      sel.value = cur;
+      sel.setAttribute("aria-label", `${row.name}: ${ctx.fieldLabel(col.key)}`);
+      sel.addEventListener("change", () => {
+        if (sel.value) row.val[col.key] = sel.value;
+        else delete row.val[col.key];
+        sync();
+      });
+      return sel;
+    }
     const input = el("input");
     if (col.type === "bool") {
       input.type = "checkbox";
