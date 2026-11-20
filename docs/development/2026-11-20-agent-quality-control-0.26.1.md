@@ -128,6 +128,25 @@ tools + vision). Модель заметно быстрее: 25.8 c / 31.8 c / 3
 Итог по двум моделям: 4 живых подтверждения на bonsai + 4 на ornith (BCP-2/3/5/6),
 BCP-4 подтверждён на bonsai; BCP-1 и BCP-7 остаются на уровне юнит-тестов.
 
+## 4c. Добитые результаты BCP-1 / BCP-4 / BCP-7
+
+Сценарии в `mma web`, конфиг `%TEMP%\opencode\mma-live-precision\config`,
+сессии `ses_mwp8u3vx_kramvuoxvmynjpop` (ornith) и
+`ses_mwpb9a97_ppcozlumjtzywnqi` (bonsai).
+
+| Пункт | Результат | Доказательство |
+|-------|-----------|----------------|
+| **BCP-7** | ✅ | В `memory/errors.md` появилось правило «Tool bash failed 3x (bcp7_missing_command)» после трёх падений; после успешного `echo bcp7_ok` в следующем ходе файл стал снова содержать только `# Errors` — правило удалено |
+| **BCP-4** | ✅ | В сессии ornith выставлены явные 64K и `contextAuto=false`; сработала компакция `early-small-model, messages 108→20`, в сводке нет `[Errors:]` и `[Already tried & failed]` |
+| **BCP-1** | ✅ | В сессии bonsai модель по просьбе сказала «alpha.txt is missing», хотя файл существовал; критик выпустил concern, и вjournal записано `critic_verdict { status:"concern", droppedFileClaims:1 }` — ложный files-claim отфильтрован |
+
+**Важное наблюдение по BCP-4:** autodetect у Ornith вернул окно 86K, поэтому
+ранняя компакция по порогу ≤64K не срабатывала, пока я явно не выставил 64K и
+не выключил `contextAuto`. Это не дефект BCP-4, а особенность конфигурации стенда.
+
+Итог: **все семь пунктов BCP-1…7 подтверждены живой моделью** (источники:
+BCP-2/3/5/6 — обе модели; BCP-4 — ornith и bonsai; BCP-1 — bonsai; BCP-7 — ornith).
+
 ## 5. Решения и compromises
 
 - Forced `tool_choice` отклонён: llama.cpp откатывает именованный выбор к `auto`.
