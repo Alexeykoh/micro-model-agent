@@ -90,6 +90,25 @@
 появился «start with the same config env…»), хотя в `tool_result` текст был
 корректным. Это свойство 27B-модели, не дефект харнесса.
 
+## 4a. Живая проверка `feat/control-precision` (0.26.1)
+
+Сессия `ses_mwp7z1so_twhacjvvecjlrsuo`, `mma web` на `127.0.0.1:7336`,
+изолированный конфиг `%TEMP%\opencode\mma-live-precision\config`, модель
+`bonsai-2-27b-pq2`. Спека: `docs/superpowers/specs/2026-11-20-agent-control-precision-design.md`.
+
+| Пункт | Статус вживую | Доказательство |
+|-------|---------------|----------------|
+| BCP-6 (дешёвый критик) | **подтверждено** | `critic_verdict { skipped: "static_fastpath", tools: ["write_file","patch_file"] }`; ответ за 41.7 c без лишнего LLM-критика |
+| BCP-5 (coverage по текущему сообщению) | **подтверждено** | Второй запрос в той же сессии создал план с первой попытки; старый `alpha.txt` не вызвал «Plan does not cover files required» |
+| BCP-2 (каноничная фраза блокировки) | **подтверждено** | Вjournal ответ содержит дословную `Action: … allowLoopback=true … web_fetch …`; искажения не было, гейт не потребовал переответа |
+| BCP-4 (санитизация компакции) | **подтверждено** | Две компакции `early-small-model` (62→11, 60→9 messages); в сводках нет `[Errors:]` и `[Already tried & failed]` |
+| BCP-1 (ложный «file missing») | не воспроизведён вживую | Покрыт юнит-тестом `tests/core/control-precision-wave1.test.ts` |
+| BCP-3 (мягкий бюджет 16 тулов) | не воспроизведён вживую | Сработал более ранний duplicate/failed-batch терминал; покрыт юнит-тестом |
+| BCP-7 (TTL правила памяти) | не воспроизведён вживую | Модель не выполнила bash-сценарий из-за засорённого плана; покрыт юнит-тестом |
+
+Проверки: `bun run quality` зелёный, 101/101 таргетных тестов по трём волнам,
+i18n en/ru симметричен. Дополнительный e2e после этой ветки не гонялся — UI не менялся.
+
 ## 5. Решения и compromises
 
 - Forced `tool_choice` отклонён: llama.cpp откатывает именованный выбор к `auto`.
