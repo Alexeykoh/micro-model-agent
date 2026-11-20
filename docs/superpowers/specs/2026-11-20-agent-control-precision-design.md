@@ -43,7 +43,7 @@ AQC-1…8 устранили structural-дыры, но живой прогон �
 - счётчик `blockedClaimCycles` в `LoopState`, кап 1.
 
 ### BCP-3 — мягкий бюджет тулов
-`SOFT_TOOL_BUDGET = 12` в `src/core/agent/constants.ts`.
+`SOFT_TOOL_BUDGET = 16` в `src/core/agent/constants.ts` (выше hard-stop дублей = 12).
 `tool-batch-signals.ts` возвращает `{ finalize: "soft_tool_budget" }` при достижении порога,
 если нет уже терминального `failed_batches`/`stalled`. `StopReason` расширяется.
 `loop-final.ts` использует существующий tool-less путь, текст через i18n `finalize_soft_budget`.

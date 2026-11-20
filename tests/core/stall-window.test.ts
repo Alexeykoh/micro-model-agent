@@ -62,6 +62,7 @@ describe("окно неудач", () => {
       true, true, true, true, true, false, false, false,
     ]);
     const state = createLoopState();
+    state.toolCallsThisTurn = -100; // BCP-3: нейтрализуем мягкий бюджет в этом тесте
     const finals: Array<string | undefined> = [];
     for (let n = 0; n < STALL_WINDOW; n++) {
       state.iteration = n + 1;
@@ -78,6 +79,7 @@ describe("окно неудач", () => {
   it("жёстко останавливает ход после кумулятивного потолка неудач", async () => {
     const { ex } = makeExecutor([false, true]);
     const state = createLoopState();
+    state.toolCallsThisTurn = -100; // BCP-3: нейтрализуем мягкий бюджет в этом тесте
     let finalize: string | undefined;
     for (let n = 0; n < MAX_FAILED_BATCHES_PER_TURN * 2 && !finalize; n++) {
       state.iteration = n + 1;
@@ -92,6 +94,7 @@ describe("окно неудач", () => {
   it("редкие неудачи в окне не эскалируют", async () => {
     const { ex, added } = makeExecutor([false, false, false, false, true]);
     const state = createLoopState();
+    state.toolCallsThisTurn = -100; // BCP-3: нейтрализуем мягкий бюджет в этом тесте
     for (let n = 0; n < 20; n++) {
       state.iteration = n + 1;
       const out = await ex.execute(state, callN(n), new Set(), SAID, "", "task");
@@ -103,6 +106,7 @@ describe("окно неудач", () => {
   it("честный дебаг «упало → поправил» не попадает в окно", async () => {
     const { ex, added } = makeExecutor([true, true, false, false, false]);
     const state = createLoopState();
+    state.toolCallsThisTurn = -100; // BCP-3: нейтрализуем мягкий бюджет в этом тесте
     for (let n = 0; n < 15; n++) {
       state.iteration = n + 1;
       const out = await ex.execute(state, callN(n), new Set(), SAID, "", "task");

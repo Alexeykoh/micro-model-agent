@@ -85,6 +85,8 @@ export function createLoopState(): LoopState {
     criticCalls: 0,
     criticRepairCycles: 0,
     criticDegradedCycles: 0,
+    blockedClaimCycles: 0,
+    toolCallsThisTurn: 0,
     mutationsSinceCritic: 0,
     criticHistoryMark: 0,
     seenCriticIssues: new Set(),

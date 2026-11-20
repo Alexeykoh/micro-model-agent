@@ -21,6 +21,7 @@ import { MAX_EMPTY_RESPONSE_RETRIES } from "./constants";
 /** AQC-3: сколько раз просим повторить проверку после её деградации. */
 const MAX_CRITIC_DEGRADED_RETRIES = 1;
 import { t } from "../../i18n/index";
+import { checkBlockedClaim, collectBlockedResults } from "./blocked-claim-gate";
 
 /** Итог гейтов: сигнал для петли. */
 export type GatesOutcome =
@@ -207,6 +208,22 @@ export async function runFinalGates(host: AgentDeps, inp: GatesInput): Promise<G
     );
   }
   if (criticAction === "retry") {
+    state.suppressRepetitionRetry = true;
+    inp.draft?.discard();
+    return { kind: "continue" };
+  }
+
+  // BCP-2: один раз заставляем процитировать каноничную подсказку блокировки.
+  const blocked = checkBlockedClaim(
+    textContent,
+    collectBlockedResults(contextManager.getActiveHistory()),
+  );
+  if (blocked.reanswer && state.blockedClaimCycles < 1 && blocked.canonical) {
+    state.blockedClaimCycles++;
+    contextManager.addMessage({
+      role: "user",
+      content: `<system-summary>${t("blocked.claim_reanswer", { canonical: blocked.canonical })}</system-summary>`,
+    });
     state.suppressRepetitionRetry = true;
     inp.draft?.discard();
     return { kind: "continue" };

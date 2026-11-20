@@ -234,6 +234,8 @@
   "critic.repeat": "The verifier repeats a previously flagged problem - do not produce the same answer again. Change the approach, or finish honestly if the complaint does not apply:\n{issues}",
   "critic.act": "The verifier rejected the draft: {summary}. No tool was called since that check, so describing the plan again will not change the verdict. Call the tool that does the work now, or give the final answer with the results you actually have.",
   "critic.degraded_retry": "Verification did not complete (degraded). Before answering, repeat the step with its check: call plan_step status=done with the required check, or state honestly that the result is NOT verified. Do not repeat the same answer without verification.",
+  "blocked.claim_reanswer": "Your answer describes a blocked request but changes the exact advice. Quote this line verbatim: {canonical}",
+  "exec.finalize_soft_budget": "Tool budget for this turn is reached. Stop investigating and give a final answer now: what is done, what was verified, and what remains unverified. Do not call tools.",
   "tool.subagent_queued": "Sub-agent task queued: {task}",
   "tool.subagent_artifact": "Sub-agent completed. Full result saved to artifact: {path}\nIterations: {iterations}\nSummary:\n{summary}",
   "tool.pipeline_started": "Pipeline \"{name}\" execution started. Pipeline engine is a stub — run dispatched.",

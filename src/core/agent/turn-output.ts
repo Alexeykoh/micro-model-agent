@@ -58,7 +58,11 @@ export async function finalizeWithoutTools(
   const { contextManager } = host.deps;
   contextManager.addMessage({
     role: "user",
-    content: `<system-summary>${t("exec.finalize_no_tools")}</system-summary>`,
+    content: `<system-summary>${
+      state.finalizeReason === "soft_tool_budget"
+        ? t("exec.finalize_soft_budget")
+        : t("exec.finalize_no_tools")
+    }</system-summary>`,
   });
   // Форс-вызов тоже тратит токены и время — учитываем в метриках и стоимости.
   const llmStart = Date.now();
