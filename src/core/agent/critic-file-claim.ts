@@ -5,7 +5,7 @@
  */
 import { existsSync } from "fs";
 import { resolve } from "path";
-import type { CriticIssue } from "../modules/critic/types";
+import type { CriticIssue } from "../../modules/critic/types";
 import { extractFilePaths } from "../../modules/execution/plan-coverage";
 
 const MISSING_CLAIM =

@@ -43,14 +43,18 @@ export function recordRepeatedToolFailure(
   result: ToolResult,
   deps: FailureMemoryDeps,
 ): void {
-  if (
-    result.success ||
-    result.blocked ||
-    INFO_TOOLS.has(call.name) ||
-    TRANSIENT_TOOLS.has(call.name)
-  ) {
+  if (result.success) {
+    // BCP-7: успешный повтор аннулирует stale-правило «тул падает».
+    const removed = deps.memoryStore?.deleteEntriesMatching("errors", `${call.name} failed`) ?? 0;
+    if (removed > 0) {
+      deps.logger.diagnostic(
+        "info",
+        `Removed ${removed} stale error rule(s) for ${call.name} after success (BCP-7)`,
+      );
+    }
     return;
   }
+  if (result.blocked || INFO_TOOLS.has(call.name) || TRANSIENT_TOOLS.has(call.name)) return;
   const key = call.name;
   const prev = state.toolFailureCounts.get(key) ?? { count: 0, error: "", samples: [] };
   prev.count++;
