@@ -213,10 +213,9 @@ export interface LoopState {
   /** Последняя сводка неудачного аудита — для сообщения об ошибке. */
   lastAuditSummary: string;
 
-  /** Вызовы критика за прогон. */
-  criticCalls: number;
-  /** Израсходованные циклы починки за прогон. */
-  criticRepairCycles: number;
+  criticCalls: number; // Вызовы критика за прогон.
+  criticRepairCycles: number; // Израсходованные циклы починки.
+  criticDegradedCycles: number; // AQC-3: деградации, после которых запрошен повтор.
   /** Рабочие мутации с последнего вызова критика. */
   mutationsSinceCritic: number;
   /** Маркер seq на старте захода: критик видит только тул-события текущего захода. */

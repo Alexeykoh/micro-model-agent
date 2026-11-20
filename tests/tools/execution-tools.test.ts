@@ -149,7 +149,13 @@ describe("ExecutionModule tools", () => {
         steps: ["First step with enough chars here", "Second step with enough chars here"],
         checks: ["manual:verify First step with enough chars here", "manual:verify Second step with enough chars here"],
       });
-      await planTool.handler(ctx, { action: "update", step: 1, status: "done" });
+      // AQC-1: пропущенное evidence = behavioral → manual: требует наблюдения.
+      await planTool.handler(ctx, {
+        action: "update",
+        step: 1,
+        status: "done",
+        note: "проверено вручную",
+      });
       const second = await planTool.handler(ctx, {
         action: "update",
         step: 1,

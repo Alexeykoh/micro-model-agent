@@ -39,8 +39,12 @@ export interface CriticGateDeps {
   onMeta?: OnMeta;
 }
 
-/** Действие вентиля: пропустить или переспросить модель. */
-export type CriticAction = "pass" | "retry";
+/**
+ * Действие вентиля: пропустить, переспросить или сообщить о деградации.
+ * `degraded` (AQC-3) возвращается только когда есть шаг плана с check-контрактом:
+ * чат-доставка сохраняет fail-open с записью (INV-15).
+ */
+export type CriticAction = "pass" | "retry" | "degraded";
 
 /** Опции вентиля: лимиты, верификатор и сборщик evidence-пакета. */
 export interface CriticGateOptions {

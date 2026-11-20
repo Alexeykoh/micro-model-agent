@@ -37,7 +37,10 @@ export function snapshotFile(
   scope?: ToolScope,
   securityConfig?: PathSecurityConfig,
 ): string | null {
-  return fileContentHash(baseDir, rawPath, scope, securityConfig).hash;
+  // AQC-2: тот же режим резолва, что и на done (`suffix`) — иначе fuzzy-
+  // фолбэк по basename на create и strict-саффикас на done могут хешировать
+  // разные файлы и дать ложное «изменено» без правки.
+  return fileContentHash(baseDir, rawPath, scope, securityConfig, true).hash;
 }
 
 /**

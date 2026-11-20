@@ -92,14 +92,18 @@ function checkContractHolds(d: StepAdvanceDeps, step: PlanStep): boolean {
     const resolved = findExistingFile(d.baseDir, parsed.target, { mode: "suffix" });
     return step.kind === "delete" ? resolved === null : resolved !== null;
   }
-  if (parsed.kind === "file-modified") {
-    const resolved = findExistingFile(d.baseDir, parsed.target, { mode: "suffix" });
-    if (!resolved) return false;
-    const plan = d.tracker?.getPlan();
-    if (!plan) return true;
-    // Файл обязан измениться с момента создания плана — иначе это вакуумная
-    // истина (тот же принцип, что `provablyStale` для описанных токенов).
-    return !provablyStale([resolved], Date.parse(plan.createdAt));
+  // AQC-2: императивные и поведенческие контракты проверяются только явным
+  // `plan_step status=done` через `verifyCheckContract` (хэш / HTTP / браузер).
+  // mtime-эвристика здесь не доказательство — auto-advance не должен закрывать
+  // шаг с check, минуя тот же гейт.
+  if (
+    parsed.kind === "file-modified" ||
+    parsed.kind === "command" ||
+    parsed.kind === "http" ||
+    parsed.kind === "browser" ||
+    parsed.kind === "web-build"
+  ) {
+    return false;
   }
   return true;
 }

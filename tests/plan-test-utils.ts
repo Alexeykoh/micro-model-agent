@@ -50,7 +50,16 @@ export async function createTestPlan(
   const tool = execModule.getToolDefinitions().find((t) => t.name === "plan")!;
   const res = await tool.handler(
     {},
-    { action: "create", title, steps, checks: deriveTestChecks(steps), ...extra },
+    {
+      action: "create",
+      title,
+      steps,
+      checks: deriveTestChecks(steps),
+      // AQC-1: эти тесты проверяют механику плана, а не классификацию
+      // доказательств; сохраняем прежнюю static-семантику явно.
+      evidence: steps.map(() => "static"),
+      ...extra,
+    },
   );
   expect(res.success).toBe(true);
   return res;

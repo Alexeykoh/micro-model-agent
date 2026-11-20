@@ -84,6 +84,7 @@ export function createLoopState(): LoopState {
     lastAuditSummary: "",
     criticCalls: 0,
     criticRepairCycles: 0,
+    criticDegradedCycles: 0,
     mutationsSinceCritic: 0,
     criticHistoryMark: 0,
     seenCriticIssues: new Set(),

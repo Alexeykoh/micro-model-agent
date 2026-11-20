@@ -115,7 +115,9 @@ export class CriticGate {
         deps,
         buildCriticReport(null, outcome.stages, outcome.durationMs, outcome.timedOut),
       );
-      return "pass";
+      // AQC-3: деградация не даёт зелёный свет, если в плане есть незакрытые
+      // шаги — там ответ без проверки危险的. Для чат-шагов fail-open сохраняется.
+      return deps.planPendingSteps && deps.planPendingSteps.length > 0 ? "degraded" : "pass";
     }
     // `critical` без улики в жалобах → `concern` (A6): repair не тратим.
     const provenance = withProvenance(outcome.verdict);

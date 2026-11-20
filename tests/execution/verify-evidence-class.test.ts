@@ -85,7 +85,7 @@ describe("декларация поведенческого шага", () => {
     }
   });
 
-  it("описание с UI-словами без декларации не блокируется", async () => {
+  it("описание с UI-словами при явном static не блокируется (AQC-1: только декларация решает)", async () => {
     const baseDir = mkdtempSync(join(tmpdir(), "mma-evidence-f-"));
     try {
       mkdirSync(join(baseDir, "src"), { recursive: true });
@@ -95,9 +95,10 @@ describe("декларация поведенческого шага", () => {
         deps,
         {
           id: 1,
-          // Раньше это ловилось по стему "page" — теперь решение за моделью.
+          // Решение за декларацией, а не за словами описания (правило №10).
           description: "Добавь страницу настроек src/page.tsx",
           status: "pending",
+          evidence: "static",
           check: "file-exists:src/page.tsx",
         },
         1,

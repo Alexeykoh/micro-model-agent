@@ -14,5 +14,9 @@ export function filterDisabledTools<T extends { name: string }>(
   disabled: ReadonlySet<string>,
 ): T[] {
   if (disabled.size === 0) return tools as T[];
-  return tools.filter((t) => !disabled.has(t.name));
+  const visible = tools.filter((t) => !disabled.has(t.name));
+  // AQC-4: если отключён последний тул, оставляем его в схеме — иначе модель
+  // сразу переходит к текстовому ответу и failed-batch терминал никогда не
+  // срабатывает. Вызов всё равно блокируется детерминированным результатом.
+  return visible.length === 0 && tools.length > 0 ? (tools as T[]) : visible;
 }

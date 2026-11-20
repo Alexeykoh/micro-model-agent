@@ -32,6 +32,7 @@ import {
   type BrowserProbeLauncher,
 } from "./browser-check";
 import { checkWebBuild } from "./web-build-check";
+import { extractFileLikeTokens, stripUrls } from "../../core/hallucination/js-identifiers";
 
 /** Вид контракта: файл, команда, ручная проверка, http/browser-проба, сборка. */
 export type CheckKind = "file" | "file-modified" | "command" | "manual" | "http" | "browser" | "web-build";
@@ -132,10 +133,36 @@ export function classifyCheck(parsed: ParsedCheck): EvidenceClass {
 /**
  * Класс доказательства объявляется моделью в плане (`evidence`), а не выводится
  * из слов описания: правило №10 архитектуры запрещает keyword-классификацию.
- * Отсутствие поля = "static" (back-compat со старыми планами).
+ *
+ * AQC-1: пропущенное поле означает **behavioral**. Раньше absence = static,
+ * из-за чего шаг с UI-правкой и `file-modified:` проходил без проверки поведения
+ * (сессия `ses_mwor4q49`). Явный `"static"` — осознанный выбор модели.
  */
 export function needsBehaviorEvidence(target: { evidence?: StepEvidence }): boolean {
-  return target.evidence === "behavioral";
+  return target.evidence !== "static";
+}
+
+const UI_FILE = /\.(tsx|jsx|css|scss|vue|svelte)$/i;
+
+/**
+ * AQC-1: пропущенное `evidence` выводится из контракта check, а не из слов
+ * описания (правило №10). UI-файл → behavioral, остальное → static back-compat.
+ */
+export function inferDefaultEvidence(
+  steps: string[],
+  checks?: (string | undefined)[] | null,
+): StepEvidence[] {
+  return steps.map((step, i) => {
+    const parsed = checks?.[i] ? parseCheck(checks[i]!) : null;
+    if (!parsed) return "static";
+    if (parsed.kind === "file" || parsed.kind === "file-modified") {
+      const tokens = extractFileLikeTokens(stripUrls(step));
+      return tokens.some((t) => UI_FILE.test(t)) ? "behavioral" : "static";
+    }
+    if (parsed.kind === "manual") return "static";
+    if (parsed.kind === "command") return classifyCheck(parsed);
+    return "behavioral";
+  });
 }
 
 export interface StepEvidenceTarget {

@@ -124,10 +124,19 @@ export class ToolCallRunner {
     // продолжала долбить мёртвый тул, а «используй другой тул» из директивы
     // толкал её на обходы. Теперь ответ детерминированный и non-retryable.
     if (this.init.state.disabledTools.has(call.name)) {
+      // AQC-4: вместо буквального текста проваленного вызова модель видит
+      // описание наблюдаемого сбоя (runtime-generated). Это убирает главный
+      // фактор повтора: поверхность самого действия в контексте.
+      const failures = this.init.state.toolFailureCounts.get(call.name);
+      const detail = failures?.samples?.[0] || failures?.error || "no diagnostic captured";
       return {
         result: {
           success: false,
-          output: t("exec.tool_disabled_blocked", { tool: call.name }),
+          output: t("exec.tool_flailing_blocked", {
+            tool: call.name,
+            count: String(failures?.count ?? 0),
+            detail: detail.slice(0, 160),
+          }),
           errorMeta: { code: "TOOL_DISABLED", retryable: false },
         },
         duration: 0,

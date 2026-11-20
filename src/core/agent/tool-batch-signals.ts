@@ -76,8 +76,9 @@ export interface BatchSignalsResult {
 
 /** Применяет recovery-сигналы пакета в порядке приоритета. */
 export function applyBatchSignals(inp: BatchSignalsInput): BatchSignalsResult {
-  const { state, contextManager, logger, slog, input, textContent, toolCalls } = inp;
-  const { anyToolFailed, batchHasSuccess } = inp;
+  const { state, contextManager, logger, slog, input, textContent, toolCalls, anyToolFailed, batchHasSuccess } = inp;
+  // AQC-4: блок спарен со стопом через общий failed-batch счётчик.
+  const blockedCall = toolCalls.some((c) => state.disabledTools.has(c.name));
 
   // Последовательные неудачи: recovery-сообщение + правило в память.
   if (anyToolFailed) {
@@ -152,7 +153,7 @@ export function applyBatchSignals(inp: BatchSignalsInput): BatchSignalsResult {
   if (state.consecutiveFailedBatches >= HARD_STOP_FAILED_BATCHES) {
     logger.diagnostic(
       "warn",
-      `Retry loop terminated after ${state.consecutiveFailedBatches} consecutive failed batches — forcing final answer`,
+      `Retry loop terminated after ${state.consecutiveFailedBatches} consecutive failed batches${blockedCall ? " (blocked tool retry)" : ""} — forcing final answer`,
     );
     return { finalize: "failed_batches" };
   }

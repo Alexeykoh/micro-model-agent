@@ -13,6 +13,7 @@ import type { AuditGate } from "./audit-gate";
 import type { DraftSink } from "./draft-buffer";
 import { gatherTurnToolEvents } from "./critic-events";
 import { recordFinalAnswer } from "./turn-output";
+import { t } from "../../i18n/index";
 
 export interface ForcedFinalInput {
   deps: AgentDeps;
@@ -65,7 +66,17 @@ export async function runForcedFinal(inp: ForcedFinalInput): Promise<boolean> {
     total: criticMs,
     gates: { critic: criticMs },
   });
-  if (action === "retry") {
+  if (action === "degraded" && state.criticDegradedCycles < 1) {
+    // AQC-3: деградированная проверка на шаге с check → один повтор с запросом
+    // verificaton, дальше честный fail-open (как и в обычном гейте).
+    state.criticDegradedCycles++;
+    contextManager.addMessage({
+      role: "user",
+      content: `<system-summary>${t("critic.degraded_retry")}</system-summary>`,
+    });
+    draft.discard();
+    finalText = await inp.finalize(draft.onText);
+  } else if (action === "retry") {
     draft.discard();
     finalText = await inp.finalize(draft.onText);
   }

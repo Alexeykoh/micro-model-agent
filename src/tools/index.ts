@@ -14,6 +14,7 @@ import { readFileTool } from "./read-file";
 import { writeFileTool } from "./write-file";
 import { appendFileTool } from "./append-file";
 import { editFileTool } from "./edit-file";
+import { patchFileTool } from "./patch-file";
 import { globTool } from "./glob-tool";
 import { grepTool } from "./grep-tool";
 import { listDirTool } from "./list-dir";
@@ -63,6 +64,7 @@ export {
   writeFileTool,
   appendFileTool,
   editFileTool,
+  patchFileTool,
   globTool,
   grepTool,
   listDirTool,
@@ -111,6 +113,7 @@ export function registerAllTools(
     writeFileTool,
     appendFileTool,
     editFileTool,
+    patchFileTool,
     globTool,
     grepTool,
     listDirTool,

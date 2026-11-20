@@ -51,6 +51,10 @@ export function autoCloseEvidenceSteps(d: FinalAuditHost, plan: Plan): number {
   let closed = 0;
   for (const step of plan.steps) {
     if (step.status === "done" || step.status === "skipped") continue;
+    // AQC-2: шаг с `file-modified:` закрывается только явным `plan_step done`
+    // через verifyCheckContract с хэшем — автозакрытие по существованию файла
+    // обходит проверку содержимого.
+    if (step.check && parseCheck(step.check)?.kind === "file-modified") continue;
     // Поведенческий шаг не закрывается по файлам: нужен реальный прогон,
     // а не существование деливерабла (сессия ses_mwmeoln9).
     if (needsBehaviorEvidence(step)) continue;

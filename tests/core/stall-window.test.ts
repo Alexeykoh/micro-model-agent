@@ -23,7 +23,9 @@ const FAIL: ToolResult = { success: false, output: "boom" };
 
 /** Пакет с одним вызовом: `failing` — упал ли он; аргументы уникальны. */
 function callN(n: number, tool = "bash") {
-  return [{ id: String(n), name: tool, arguments: { command: `run ${n}` } }];
+  // AQC-4: тул отключается после 3 падений. Здесь проверяется окно неудач на
+  // уровне пакетов, поэтому имена уникальны — per-tool disable не мешает.
+  return [{ id: String(n), name: `${tool}${n}`, arguments: { command: `run ${n}` } }];
 }
 
 function makeExecutor(pattern: boolean[]) {

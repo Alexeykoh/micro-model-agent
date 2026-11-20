@@ -17,6 +17,9 @@ import { gatherTurnToolEvents } from "./critic-events";
 import { resolveArtifactStates } from "./artifact-resolve";
 import { resolveVerbosity } from "../../ui/theme";
 import { MAX_EMPTY_RESPONSE_RETRIES } from "./constants";
+
+/** AQC-3: сколько раз просим повторить проверку после её деградации. */
+const MAX_CRITIC_DEGRADED_RETRIES = 1;
 import { t } from "../../i18n/index";
 
 /** Итог гейтов: сигнал для петли. */
@@ -182,6 +185,25 @@ export async function runFinalGates(host: AgentDeps, inp: GatesInput): Promise<G
   if (inp.isShutdownRequested?.()) {
     inp.draft?.discard();
     return { kind: "break" };
+  }
+  // AQC-3: деградированная проверка на шаге с check не равна «ок». Один раз
+  // просим модель повторить шаг с проверкой; дальше — честный fail-open с
+  // записью в лог, чтобы не уйти в бесконечный retry.
+  if (criticAction === "degraded") {
+    if (state.criticDegradedCycles < MAX_CRITIC_DEGRADED_RETRIES) {
+      state.criticDegradedCycles++;
+      contextManager.addMessage({
+        role: "user",
+        content: `<system-summary>${t("critic.degraded_retry")}</system-summary>`,
+      });
+      state.suppressRepetitionRetry = true;
+      inp.draft?.discard();
+      return { kind: "continue" };
+    }
+    logger.diagnostic(
+      "warn",
+      "Critic degraded retries exhausted — accepting answer without verification",
+    );
   }
   if (criticAction === "retry") {
     state.suppressRepetitionRetry = true;

@@ -41,6 +41,8 @@ describe("autoCloseEvidenceSteps и declarative evidence", () => {
         dir,
         [],
         ["file-exists:README.md"],
+        [],
+        ["static"],
       );
       const host = { baseDir: dir } as FinalAuditHost;
       const closed = autoCloseEvidenceSteps(host, plan);

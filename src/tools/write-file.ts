@@ -39,8 +39,9 @@ export const writeFileTool: ToolDefinition = {
   security: { caps: [{ fs: "write" }], pathArgs: ["path"] },
   icon: "📝",
   description:
-    "Create or overwrite a file with given content. Creates intermediate directories if needed. " +
-    "For content longer than ~6000 chars, write the first part with write_file and append the rest with append_file chunks (≤8000 chars per call).",
+    "Create a new file, or fully overwrite it ONLY when intentionally replacing all content. " +
+    "For an EXISTING file use patch_file with small edits instead: it applies several exact-match hunks in one call and validates syntax once. " +
+    "Do not rewrite a 7 KB file line by line — chunking with append_file breaks syntax and is a last resort.",
   tags: ["file", "code"],
   parameters: {
     type: "object",

@@ -14,6 +14,7 @@ import { seedToolTags } from "../../tools/auto-tags";
 import { deriveSessionName, generateSessionTitle, TITLE_MAX_TOKENS, type TitleChat } from "../../modules/session/auto-name";
 import { ensureSessionStart } from "./session-start";import type { SystemPromptBuild } from "./prompt-phase";
 import { refreshInstructionBlocks } from "../prompt-instructions";
+import { stopTurnProcesses } from "./turn-process-cleanup";
 
 /** Мутабельный вид `Agent`, которым владеет координатор хода. */
 export interface TurnRunHost {
@@ -238,6 +239,7 @@ export async function runTurn(
     throw err;
   } finally {
     invalidateTurnCheckpoint(sessionManager, deps);
+    stopTurnProcesses(sessionManager, deps, startedAt);
   }
 }
 

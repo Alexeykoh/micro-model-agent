@@ -177,6 +177,9 @@ export class ContextManager {
   /** Число сообщений в истории. */
   getMessageCount(): number { return this.s.messages.length; }
 
+  /** Размер окна модели — нужен для ранней компакции на маленьких моделях (AQC-5). */
+  getContextWindow(): number { return this.s.contextWindow; }
+
   /** Ёмкость истории: окно минус reserve, system и тулы; не выше конфигурной доли. */
   getHistoryLimit(): number { return historyLimit(this.s); }
 
