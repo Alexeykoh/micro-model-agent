@@ -46,7 +46,8 @@
 | `bun test` полный | 6961 pass / 16 skip / 7 fail; все 7 при изолированном повторе прошли (флейк от параллельной нагрузки), лог `mma-verify-test.log` |
 | Totally isolated повтор 7 падавших файлов | 7/7 pass (`tests/execution-typecheck-gate.test.ts`, `tests/attach-image.test.ts`, `tests/bash-docker.test.ts`, `tests/cli/readonly-no-overflow-warning.test.ts`) |
 | Arch-гейт `tests/arch/agent-quality-control.test.ts` | 8/8 pass; добавляет контрактные проверки AQC-1…8 |
-| Браузерные e2e | одиночный прогон: 16 падений по таймаутам/ассертам ассетов. **Базовый замер на чистой `dev` в worktree** (`tests/e2e/web-filecard.e2e-test.ts`) падает так же — дефект окружения/стенда, не этой ветки.Лог: `mma-verify-e2e-alone.log`, базовый прогон 17:52 |
+| Браузерные e2e (до починки) | 16 падений; базовый замер на чистой `dev` в worktree падал так же — устаревшие селекторы/пути ассетов, а не регрессия |
+| Браузерные e2e (после ветки `fix/e2e-stale-selectors`) | **12 файлов, 35 passed / 3 skipped**, 566.55 c — лог `mma-e2e-final.log`. Ветка влита в эту; `bun run quality` после merge зелёный |
 | Финальный `bun test` после всех правок | **6974 pass / 16 skip / 2 fail**, 6992 тестов в 982 файлах, 383.59 c — лог `mma-final-green-test.log`. Два падения (`attach_image`, `bash-docker`) при изолированном повторе проходят (11/11) — сетевые флейки по 5 c |
 | Изменения в `src/modules/webui/assets/**` | **нет** — в ветке не трогались ни вёрстка, ни ассеты, ни селекторы |
 
@@ -72,3 +73,7 @@
 - Forced `tool_choice` отклонён: llama.cpp откатывает именованный выбор к `auto`.
 - Дедупликация директив оставлена косметикой: текстовые уговоры не лечат цикл.
 - `CHANGELOG.md` и версия пакета не трогаются — релиз по отдельной команде.
+- E2E-набор чинился отдельной веткой `fix/e2e-stale-selectors` (коммит `7b6b151e`) и
+  влит сюда merge: 16 падений оказались устаревшими селекторами под текущий UI
+  (компактные табы сайдбара, внутренние табы Agent/Plugins, асинхронный registry
+  и presets, скрытый reasoning-ряд, отсутствующий `providerReachable` в моке).
