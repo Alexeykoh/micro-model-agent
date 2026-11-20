@@ -118,6 +118,19 @@ export async function withE2E(
  * that loses streamed output: SSE never replays, and a tab-less feed drops
  * `command`/`turn_end` events silently.
  */
+/**
+ * Клик по вкладке сайдбара с учётом компактного режима: не-приоритетные
+ * вкладки (map/lsp/plugins) скрыты за `.sb-tab-toggle` до раскрытия.
+ */
+export async function openSidebarTab(page: Page, tab: string): Promise<void> {
+  const target = page.locator(`.sb-tab[data-tab="${tab}"]`);
+  if (!(await target.isVisible())) {
+    const toggle = page.locator(".sb-tab-toggle");
+    if (await toggle.isVisible()) await toggle.click();
+  }
+  await target.click();
+}
+
 export async function waitForLiveTab(page: Page, timeout = 30_000): Promise<void> {
   await expect.poll(() => page.locator(".stab").count(), { timeout }).toBeGreaterThan(0);
 }

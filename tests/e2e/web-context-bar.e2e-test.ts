@@ -40,6 +40,8 @@ describe("web e2e: context breakdown bar", () => {
             contextUsed: BREAKDOWN.used,
             contextLimit: BREAKDOWN.window,
             contextBreakdown: BREAKDOWN,
+            // The bar/legend are skipped entirely for an unreachable provider.
+            providerReachable: true,
           };
           await route.fulfill({ response: res, json });
         });

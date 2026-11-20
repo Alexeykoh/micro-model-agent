@@ -26,6 +26,7 @@ import {
   writeArtifacts,
   apiPost,
   apiGet,
+  fillProviderForm,
   type Launched,
 } from "./web-helpers";
 
@@ -35,7 +36,7 @@ const STUB_CONTEXT = 65536;
 async function openModelPanel(page: Page): Promise<void> {
   await page.click("#openSettings");
   await page.waitForSelector("#overlay.open", { timeout: 10_000 });
-  await page.click('[data-p="model"]');
+  await page.click('#setMenu [data-p="model"]');
   await page.waitForSelector('[data-panel="model"]', { timeout: 10_000 });
 }
 
@@ -86,22 +87,40 @@ describe("web e2e: provider context auto-detect", () => {
       const dir = artifactsDirFor("ctx-preset");
       await withE2E(dir, async (srv, { page, errors }: Launched) => {
         await openModelPanel(page);
-        await page.click(".sec-add");
+        // The browser store fills providerPresets only after a provider write
+        // (providers.ts:127). Seed one through the UI, then open the real form.
+        await page.locator('[data-panel="model"] .sec-add').click();
         await page.waitForSelector("#subOverlay.open", { timeout: 10_000 });
-        await page.locator(".pform-preset").selectOption("lmstudio");
+        await fillProviderForm(page, {
+          type: "openai-compat",
+          label: "e2e-preset-seed",
+          baseUrl: "http://127.0.0.1:9/v1",
+        });
+        await page.locator(".pform-actions button").first().click();
+        await page.waitForSelector("#subOverlay.open", { state: "hidden", timeout: 10_000 });
+
+        await page.locator('[data-panel="model"] .sec-add').click();
+        await page.waitForSelector("#subOverlay.open", { timeout: 10_000 });
+        await expect
+          .poll(() => page.locator("#subHost .pform-preset").count(), { timeout: 30_000 })
+          .toBe(1);
+        await page.locator("#subHost .pform-preset").selectOption("lmstudio");
         // The preset fills the type <select> and the base-URL <select>.
         await expect
           .poll(() => page.locator('#subHost select[aria-label="type"]').inputValue(), { timeout: 10_000 })
           .toBe("lmstudio");
-        expect(await page.locator("#subHost .pform-base select").inputValue()).toBe("http://localhost:1234/v1");
+        await expect
+          .poll(() => page.locator("#subHost .pform-base select").inputValue(), { timeout: 10_000 })
+          .toBe("http://localhost:1234/v1");
         await page.locator('#subHost input[placeholder="my-provider"]').fill("e2e-lmstudio");
         await page.locator(".pform-actions button").first().click();
         await page.waitForSelector("#subOverlay.open", { state: "hidden", timeout: 10_000 });
         await expect
           .poll(() => page.locator(".provider-item").count(), { timeout: 10_000 })
           .toBeGreaterThan(0);
-        const names = await page.locator(".provider-item").allInnerTexts();
-        expect(names.some((t) => t.includes("e2e-lmstudio"))).toBe(true);
+        await expect
+          .poll(async () => (await page.locator(".provider-item").allInnerTexts()).some((t) => t.includes("e2e-lmstudio")), { timeout: 10_000 })
+          .toBe(true);
         const saved = (
           await (await fetch(`${srv.baseUrl}/api/providers`)).json()
         ) as { entries?: Array<{ label?: string; type?: string }> };
@@ -147,9 +166,11 @@ describe("web e2e: provider context auto-detect", () => {
             expect(modelled.status).toBe(200);
             // The model switch reconfigures → probes the stub → adopts 65536.
             await expect.poll(() => stateContext(srv.baseUrl), { timeout: 30_000 }).toBe(STUB_CONTEXT);
-            // The topbar follows the snapshot without a reload.
+            // With contextAuto on, the button says "auto" and the detected
+            // window lives in the menu item's subtitle (selectors-write.ts).
+            await page.click("#selContextBtn");
             await expect
-              .poll(() => page.locator("#selContextBtn").innerText(), { timeout: 20_000 })
+              .poll(() => page.locator("#selContextMenu .mi").first().locator(".sub").innerText(), { timeout: 20_000 })
               .toMatch(/64K/);
             await page.screenshot({ path: join(dir, "topbar-64k.png") });
             writeArtifacts(dir, "autodetect", {

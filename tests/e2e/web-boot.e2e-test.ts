@@ -21,6 +21,7 @@ import {
   e2e,
   withE2E,
   waitForLiveTab,
+  openSidebarTab,
   writeArtifacts,
   type Launched,
 } from "./web-helpers";
@@ -109,11 +110,11 @@ describe("web e2e: boot smoke", () => {
         await waitForLiveTab(page);
 
         // Index via the Map tab: POST /api/index broadcasts index start/done.
-        await page.click('.sb-tab[data-tab="map"]');
+        await openSidebarTab(page, "map");
         await page.click(".map-reindex");
 
         // Trace tab renders the index rows live.
-        await page.click('.sb-tab[data-tab="trace"]');
+        await openSidebarTab(page, "trace");
         const rows = page.locator("#pane-trace .trc");
         await expect.poll(() => rows.count(), { timeout: 20_000 }).toBeGreaterThan(0);
         await page.screenshot({ path: `${dir}/boot-trace.png` });

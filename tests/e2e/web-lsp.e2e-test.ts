@@ -15,6 +15,7 @@ import {
   e2e,
   withE2E,
   waitForLiveTab,
+  openSidebarTab,
   apiGet,
   apiPost,
   artifactsDirFor,
@@ -47,7 +48,7 @@ describe("web e2e: LSP setup", () => {
         // produces a manual-install command per applicable npx server.
         await apiPost(srv.baseUrl, "/api/config", { key: "lsp.offline", value: true });
 
-        await page.click('.sb-tab[data-tab="lsp"]');
+        await openSidebarTab(page, "lsp");
         await page.waitForSelector("#pane-lsp .lsp-info-btn", { timeout: 10_000 });
         await page.click("#pane-lsp .lsp-info-btn");
         await page.waitForSelector("#subOverlay.open", { timeout: 10_000 });

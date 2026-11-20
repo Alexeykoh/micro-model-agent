@@ -67,11 +67,11 @@ describe("web e2e: settings", () => {
 
         // Theme: light adds the class, dark removes it.
         await page.click('#setMenu [data-p="ui"]');
-        await page.locator('[data-panel="ui"] button', { hasText: "light" }).click();
+        await page.getByRole("button", { name: "light", exact: true }).click();
         await page.waitForFunction(() => document.body.classList.contains("light"), {
           timeout: 10_000,
         });
-        await page.locator('[data-panel="ui"] button', { hasText: "dark" }).click();
+        await page.getByRole("button", { name: "dark", exact: true }).click();
         await page.waitForFunction(() => !document.body.classList.contains("light"), {
           timeout: 10_000,
         });
@@ -100,7 +100,9 @@ describe("web e2e: settings", () => {
         // way back is by value, not visible text. (Enum renders as <select>
         // since full-config-surfaces; was `.seg button` before.)
         const localeSel = () =>
-          page.locator('[data-panel="general"] .row').first().locator("select");
+          page
+            .locator('[data-panel="general"] select')
+            .filter({ has: page.locator('option[value="ru"]') });
         await localeSel().selectOption("ru");
         await expect
           .poll(() => page.textContent("#settingsTitle"), { timeout: 15_000 })
