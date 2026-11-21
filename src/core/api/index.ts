@@ -16,6 +16,8 @@ export { summarizeToolArgs } from "../agent/tool-output";
 export { canonicalArgsKey } from "../agent/canonical-args";
 // RCV-1: классификация ошибок валидации для recovery-модуля.
 export { isValidationFailure } from "../agent/validation-failure";
+// RCV-9: тип состояния цикла для recovery-модуля (только тип, рантайм-цикла нет).
+export type { LoopState } from "../agent/loop-state";
 // Калибровка контекста (context-модуль).
 export { ContextCalibrator, isImplausibleJump } from "../agent/context-calibration";
 export type { CalibrationState } from "../agent/context-calibration";

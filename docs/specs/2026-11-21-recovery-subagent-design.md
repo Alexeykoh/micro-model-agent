@@ -37,6 +37,7 @@ Next.js уже создан, а остальные шаги выполнимы. 
 | **RCV-6** | Директива отключённого тула **не велит остановить задачу**: «unavailable for the rest of this turn … continue with other available tools». | `tests/i18n.test.ts`, `tests/webui-i18n.test.ts` |
 | **RCV-7** | Новый публичный контракт — только события `session.jsonl` и внутренний API модуля `recovery`; формат конфига и REST/SSE не меняются (спека не требуется для конфига). | — |
 | **RCV-8** | Тул, который успешно отработал хотя бы раз в этом ходе, **никогда** не отключается до конца хода: успех доказывает работоспособность, последующие отказы — ошибки аргументов. | `tests/core/recovery-succeeded-tool.test.ts` |
+| **RCV-9** | Failure-based терминалы (`failed_batches`/`stalled`/`duplicate`/`silent`) **не завершают** ход: ошибка отдаётся recovery-сабагенту, стрики сбрасываются, цикл продолжается. Кап 2 вылечивания на ход; при отказе/исчерпании — прежний forced final. | `tests/core/recovery-terminal.test.ts` |
 
 ## 3. Контракты и потоки
 

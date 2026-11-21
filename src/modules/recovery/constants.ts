@@ -11,3 +11,5 @@ export const RECOVERY_TIMEOUT_MS = 20000;
 export const RECOVERY_MAX_TOKENS = 1024;
 /** Максимум символов ошибки в промпте сабагента. */
 export const RECOVERY_ERROR_CHARS = 2000;
+/** RCV-9: сколько failure-терминалов можно вылечить за ход. */
+export const RECOVERY_MAX_TERMINALS = 2;

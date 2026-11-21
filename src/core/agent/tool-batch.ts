@@ -13,6 +13,7 @@ import type { LoopState } from "./loop-state";
 import type { CompactionService } from "./compaction";
 import { ToolCallRunner } from "./tool-batch-calls";
 import { applyBatchSignals } from "./tool-batch-signals";
+import { isRecoverableTerminal, resetFailureCounters } from "../../modules/recovery/terminal";
 
 /** Дефолтный кап конкурентных тулов одного batch'а (см. security.rateLimits). */
 const DEFAULT_MAX_PARALLEL_TOOLS = 5;
@@ -61,7 +62,7 @@ export interface ToolBatchDeps {
   isShutdownRequested: () => boolean;
   /** Переустановка tool scope перед каждым вызовом тула. */
   setScope: () => void;
-  /** RCV-3: recovery-сабагент на повторяющиеся ошибки валидации. */
+  /** RCV-3/9: recovery-сабагент на ошибки валидации и failure-терминалы. */
   recovery?: import("../../modules/recovery/gate").RecoveryGate;
 }
 
@@ -239,7 +240,34 @@ export class ToolBatchExecutor {
       batchHasSuccess: runner.hadSuccess,
       memoryStore: this.deps.memoryStore,
     });
-    if (signals.finalize) return { interrupted: false, finalize: signals.finalize };
+    if (signals.finalize) {
+      // RCV-9: «застрял» ≠ «задача закончена». Маленькие модели путаются в
+      // ошибках — отдаём терминал сабагенту, сбрасываем стрики и продолжаем.
+      let recovered = false;
+      const candidate = runner.recoveryCandidate;
+      if (
+        isRecoverableTerminal(signals.finalize) &&
+        this.deps.recovery &&
+        candidate &&
+        !this.deps.isShutdownRequested()
+      ) {
+        recovered = await this.deps.recovery.recoverTerminal(
+          signals.finalize,
+          state,
+          input,
+          candidate.call,
+          candidate.result,
+          async (corrected) => {
+            runner.prepare(corrected);
+            const exec = await runner.execute(corrected, this.deps.toolExecutor);
+            if (!exec.shutdown) await runner.finalize(corrected, exec);
+            return exec.result;
+          },
+        );
+        if (recovered) resetFailureCounters(state);
+      }
+      if (!recovered) return { interrupted: false, finalize: signals.finalize };
+    }
 
     // Статусная строка плана после каждого пакета тулов. Заменяет динамический
     // plan-блок, который жил в system prompt (удалён ради KV-cache — план
