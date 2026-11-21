@@ -189,6 +189,10 @@ body[data-font="large"] { font-size: 17px; }
 .conn.stale .linkbtn { font-size: 11.5px; }
 .tabstrip {
   display: flex; gap: 4px; align-items: center; overflow-x: auto;
+  /* overflow-x:auto делает overflow-y вычисляемым auto — из-за этого в хэдере
+     появляется лишний вертикальный скролл. Горизонтальная прокрутка вкладок
+     сохраняется, вертикальная явно запрещена. */
+  overflow-y: hidden;
   flex: 1; min-width: 0;
 }
 .tabstrip::-webkit-scrollbar { height: 5px; }
@@ -331,9 +335,12 @@ body[data-font="large"] { font-size: 17px; }
    действия остаётся акцентным. Не наследует `.warn`. */
 .metaln.retract { color: var(--dim-b); }
 .metaln.retract::before { content: "⟳ "; color: var(--cyan); }
-.act { display: flex; gap: 8px; min-width: 0; line-height: 1.35; }
+.act { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; min-width: 0; line-height: 1.35; }
 .act .lab { white-space: nowrap; }
-.act .args { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.act .args { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; min-width: 8ch; }
+/* Бейдж длительности — неделимый: при нехватке места переносится целиком
+   на строку ниже, а не разрывается на «✓» и «276ms». */
+.act .ok { white-space: nowrap; flex: none; }
 .act.recon .g, .act.recon .lab { color: var(--cyan); }
 .act.mut .g, .act.mut .lab { color: var(--purple); }
 .act.exe .g, .act.exe .lab { color: var(--accent); }
