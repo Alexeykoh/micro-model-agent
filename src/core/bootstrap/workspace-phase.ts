@@ -144,7 +144,11 @@ export async function setupWorkspacePhase(
   const projectSkillsDir = join(projectMmaDir(baseDir), "skills");
   const availableSkills = skillsLoader.loadFromAllSources(builtinDir, globalDir, projectSkillsDir);
 
-  const skillsBudget = Math.floor(config.contextWindow * config.skills.budget);
+  // Динамический бюджет: при contextAuto проба модели приземляется фоном и
+  // меняет config.contextWindow уже после сборки модуля (1M вместо стартовых
+  // 32K). Функция читает актуальное окно на каждый load_skill — obsolete-значение
+  // не блокирует загрузку второго скилла (например shadcn на hy4-flash-free).
+  const skillsBudget = (): number => Math.floor(config.contextWindow * config.skills.budget);
   // Usage counters live in the global dir: the top-10 catalog survives restarts.
   const skillUsage = new SkillUsage(globalMmaDir());
   const skillsModule = new SkillsModule(

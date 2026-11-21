@@ -28,7 +28,8 @@ export class SkillsModule implements AgentModule {
   private loadedSkills: Map<string, SkillMeta> = new Map();
   /** Hub подписки на изменение загруженного набора (веб-индикатор). */
   private readonly loadedEvents = new LoadedEvents();
-  private budget: number;
+  /** Динамический бюджет: контекAuto подставляет окно пробы ПОСЛЕ сборки модуля. */
+  private readonly budgetOf: () => number;
   private currentTokens = 0;
   /** Каталоги для `reload()`; без них пересканировать навыки нечем. */
   private sources?: SkillSources;
@@ -42,13 +43,13 @@ export class SkillsModule implements AgentModule {
 
   constructor(
     availableSkills: SkillMeta[],
-    budget: number,
+    budget: number | (() => number),
     sources?: SkillSources,
     usage?: SkillUsage,
     catalogLimit: number = CATALOG_LIMIT,
   ) {
     this.availableSkills = availableSkills;
-    this.budget = budget;
+    this.budgetOf = typeof budget === "function" ? budget : () => budget;
     this.sources = sources;
     this.usage = usage;
     this.catalogLimit = catalogLimit;
@@ -184,10 +185,11 @@ export class SkillsModule implements AgentModule {
 
   /** Бюджет токенов: занято, всего, остаток. */
   getBudget(): { used: number; total: number; remaining: number } {
+    const total = this.budgetOf();
     return {
       used: this.currentTokens,
-      total: this.budget,
-      remaining: this.budget - this.currentTokens,
+      total,
+      remaining: total - this.currentTokens,
     };
   }
 
@@ -249,7 +251,7 @@ export class SkillsModule implements AgentModule {
   }
 
   private tryLoad(skill: SkillMeta): LoadResult {
-    const decision = checkLoadBudget(skill, this.budget, this.currentTokens);
+    const decision = checkLoadBudget(skill, this.budgetOf(), this.currentTokens);
     if (!decision.ok) return { success: false, message: decision.message };
     const { tokens, effectiveBudget } = decision;
 
