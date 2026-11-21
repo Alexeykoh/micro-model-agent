@@ -41,6 +41,14 @@ describe("extractFilePaths", () => {
     expect(paths).toContain("foo.ts");
     expect(paths).toContain("styles.css");
   });
+
+  it("does not treat technology names like next.js as deliverable files", () => {
+    const task = "Создай проект next.js с Next.js App Router и SPEC.md";
+    const paths = extractFilePaths(task);
+    expect(paths).not.toContain("next.js");
+    expect(paths).not.toContain("Next.js");
+    expect(paths).toContain("SPEC.md");
+  });
 });
 
 describe("checkPlanCoverage", () => {
@@ -73,6 +81,12 @@ describe("checkPlanCoverage", () => {
     const task = "5. src/string.test.ts — tests for each function";
     const steps = ["create src/String.Test.ts tests"];
     const result = checkPlanCoverage(task, steps);
+    expect(result.missing).toEqual([]);
+  });
+
+  it("does not block plan creation because of a technology name in the task", () => {
+    const task = "Создай проект next.js";
+    const result = checkPlanCoverage(task, ["scaffold Next.js App Router"]);
     expect(result.missing).toEqual([]);
   });
 });

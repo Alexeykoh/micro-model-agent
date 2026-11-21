@@ -233,6 +233,11 @@ const FILE_TOKEN_RE = /(?:[a-zA-Z]:[\\/])?[\w./\\-]+\.[a-z]{1,6}\b/gi;
  * — никогда файлы). JS member access (`process.env`) и техно-имена
  * (`node.js`) — никогда файлы.
  */
+/** Технологии/рантаймы, чьи имена выглядят как `word.ext`, но не являются файлами. */
+export function isTechnologyName(s: string): boolean {
+  return TECH_NAMES.has(s.toLowerCase());
+}
+
 export function isFilePathLike(s: string): boolean {
   const lower = s.toLowerCase();
   if (TECH_NAMES.has(lower)) return false;
