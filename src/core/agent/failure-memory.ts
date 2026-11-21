@@ -45,6 +45,9 @@ export function recordRepeatedToolFailure(
   deps: FailureMemoryDeps,
 ): void {
   if (result.success) {
+    // RCV-8: успех доказывает, что тул рабочий — дальше ломаются только
+    // аргументы. Такой тул нельзя отключать до конца хода.
+    state.succeededToolsThisTurn.add(call.name);
     // BCP-7: успешный повтор аннулирует stale-правило «тул падает».
     const removed = deps.memoryStore?.deleteEntriesMatching("errors", `${call.name} failed`) ?? 0;
     if (removed > 0) {
@@ -72,7 +75,11 @@ export function recordRepeatedToolFailure(
   state.toolFailureCounts.set(key, prev);
 
   // Мёртвый тул отключаем на остаток хода (счётчик суммарный, не стрик).
-  if (prev.count >= MAX_TOOL_FAILURES_PER_TURN && !state.toolDisabledNudged.has(key)) {
+  if (
+    prev.count >= MAX_TOOL_FAILURES_PER_TURN &&
+    !state.succeededToolsThisTurn.has(key) &&
+    !state.toolDisabledNudged.has(key)
+  ) {
     state.toolDisabledNudged.add(key);
     state.disabledTools.add(key);
     deps.logger.diagnostic(

@@ -197,9 +197,10 @@ export class ToolCallRunner {
     // Plugin-level блок считается неудачей для honest-stop: перебор
     // заблокированных вариантов — та же петля, а «нейтральность» замораживала
     // счётчик навсегда (§1.7 аудита). Успехом блок при этом не становится.
-    if (!result.success && !INFO_TOOLS.has(call.name) && !isValidationFailure(result)) {
-      this.anyToolFailed = true;
-    }
+    // AQC-4: plugin-level блоки намеренно считаются фейлами для honest-stop —
+    // этот контракт не меняем. RCV-1 влияет только на отключение тула и на
+    // recovery, а не на счётчики пакетов.
+    if (!result.success && !INFO_TOOLS.has(call.name)) this.anyToolFailed = true;
     if (result.success) this.batchHasSuccess = true;
     if (!result.success && isValidationFailure(result)) {
       this.lastValidationFailure = { call, result };

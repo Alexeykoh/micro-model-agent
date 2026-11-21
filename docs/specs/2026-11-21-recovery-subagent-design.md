@@ -29,13 +29,14 @@ Next.js уже создан, а остальные шаги выполнимы. 
 
 | ID | Инвариант | Гейт |
 |----|-----------|------|
-| **RCV-1** | Детерминированные ошибки ввода/политики (`[SECURITY BLOCKED]`, `errorMeta.retryable:false`, «Process not found», «does not cover files required») **не отключают тул** и **не питают** `consecutiveFailedBatches` / `failedBatchesTotal` / `stalled`. | `tests/core/recovery-gate.test.ts` |
+| **RCV-1** | Детерминированные ошибки ввода/политики (`[SECURITY BLOCKED]`, `errorMeta.retryable:false`, «Process not found», «does not cover files required») **не отключают тул**. Счётчики пакетов (honest-stop, AQC-4) не меняются: blocked-вызовы по-прежнему считаются фейлом пакета. | `tests/core/recovery-gate.test.ts` |
 | **RCV-2** | При повторе одной сигнатуры ошибки ≥2 раз харнесс вызывает recovery-сабагента: свежий контекст (только ошибка + задача + доступные тулы), рассуждения включены, ответ — ровно один JSON с исправленным вызовом тула или решением `skip`. | `tests/core/recovery-client.test.ts` |
 | **RCV-3** | Исправленный вызов исполняется **только** через `ToolExecutor.execute()` — общую точку allowlist, scope, path/SSRF. Обхода enforcement'а нет; сабагент не имеет привилегий основного хода. | `tests/core/recovery-gate.test.ts` |
 | **RCV-4** | Каждая попытка и результат пишутся в `session.jsonl` событиями `recovery_attempt` / `recovery_result` с `source:"module:recovery"`; отказ/таймаут — fail-open с причиной, без остановки хода. | `tests/core/recovery-observability.test.ts` |
 | **RCV-5** | Бounds: ≤2 попытки на сигнатуру за ход, ≤4 за ход, таймаут 20 с, `maxTokens ≤1024`, интерактивные тулы не восстанавливаются. | `tests/core/recovery-gate.test.ts` |
 | **RCV-6** | Директива отключённого тула **не велит остановить задачу**: «unavailable for the rest of this turn … continue with other available tools». | `tests/i18n.test.ts`, `tests/webui-i18n.test.ts` |
 | **RCV-7** | Новый публичный контракт — только события `session.jsonl` и внутренний API модуля `recovery`; формат конфига и REST/SSE не меняются (спека не требуется для конфига). | — |
+| **RCV-8** | Тул, который успешно отработал хотя бы раз в этом ходе, **никогда** не отключается до конца хода: успех доказывает работоспособность, последующие отказы — ошибки аргументов. | `tests/core/recovery-succeeded-tool.test.ts` |
 
 ## 3. Контракты и потоки
 

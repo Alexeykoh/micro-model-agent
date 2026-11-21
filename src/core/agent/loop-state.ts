@@ -146,6 +146,8 @@ export interface LoopState {
    *  первые строки ошибок (не только подряд). Distinct-заголовки нужны
    *  diagnoseRepeatedFailures: причина/решение по сигнатуре, а не boilerplate. */
   toolFailureCounts: Map<string, { count: number; error: string; samples: string[] }>;
+  /** RCV-8: тулы, успешно отработавшие в этом ходе — их нельзя отключать. */
+  succeededToolsThisTurn: Set<string>;
   /** Тулы, по которым правило в память уже записано (дедупликация). */
   memoryRuleRecorded: Set<string>;
   /**

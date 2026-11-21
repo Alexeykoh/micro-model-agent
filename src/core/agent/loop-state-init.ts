@@ -57,6 +57,7 @@ export function createLoopState(softToolBudget: number = SOFT_TOOL_BUDGET): Loop
     consecutiveToolSuccesses: 0,
     repeatedToolCount: 0,
     toolFailureCounts: new Map(),
+    succeededToolsThisTurn: new Set(),
     memoryRuleRecorded: new Set(),
     disabledTools: new Set(),
     toolDisabledNudged: new Set(),
