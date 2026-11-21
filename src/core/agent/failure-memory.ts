@@ -18,6 +18,22 @@ const INFO_TOOLS = new Set(["file_info"]);
 /** Транзиентные сетевые тулы: 404/TLS не systemic. */
 const TRANSIENT_TOOLS = new Set(["web_fetch", "web_search", "web_browse"]);
 
+/**
+ * Маркеры детерминированных ошибок ввода/политики. Это НЕ поломка тула:
+ * модель просто передала неверные аргументы (запрещённый оператор, несуществующий
+ * id процесса). Такие ответы уже несут actionable-подсказку и разбираются
+ * STUCK-директивами; отключать за них рабочий тул — значит лишить модель
+ * единственного способа выполнить задачу (наблюдалось: bash отключался после
+ * трёх `[SECURITY BLOCKED]` на `>`, что останавливало scaffold Next.js).
+ */
+const VALIDATION_MARKERS = ["[SECURITY BLOCKED]", "Process not found:"] as const;
+
+function isValidationFailure(result: ToolResult): boolean {
+  if (result.blocked || result.errorMeta?.retryable === false) return true;
+  const output = String(result.output ?? "");
+  return VALIDATION_MARKERS.some((marker) => output.includes(marker));
+}
+
 export interface FailureMemoryDeps {
   memoryStore?: MemoryStore;
   contextManager: ContextManager;
@@ -54,7 +70,11 @@ export function recordRepeatedToolFailure(
     }
     return;
   }
-  if (result.blocked || INFO_TOOLS.has(call.name) || TRANSIENT_TOOLS.has(call.name)) return;
+  if (
+    isValidationFailure(result) ||
+    INFO_TOOLS.has(call.name) ||
+    TRANSIENT_TOOLS.has(call.name)
+  ) return;
   const key = call.name;
   const prev = state.toolFailureCounts.get(key) ?? { count: 0, error: "", samples: [] };
   prev.count++;
