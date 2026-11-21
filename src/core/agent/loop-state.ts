@@ -217,6 +217,7 @@ export interface LoopState {
   criticDegradedCycles: number; // AQC-3: деградации, после которых запрошен повтор.
   blockedClaimCycles: number; // BCP-2: искажения каноничной подсказки блокировки.
   toolCallsThisTurn: number; // BCP-3: всего вызовов тулов в текущем ходе.
+  softToolBudget: number; // Эффективный бюджет хода, выведенный из maxToolIterations.
   /** Рабочие мутации с последнего вызова критика. */
   mutationsSinceCritic: number;
   /** Маркер seq на старте захода: критик видит только тул-события текущего захода. */
@@ -230,10 +231,7 @@ export interface LoopState {
   emptyResponseExhausted: boolean;
   /** Аудит провален после исчерпания повторов — итоговый результат success:false. */
   auditFailed: boolean;
-  /**
-   * Истинно, когда финальный ответ принят. Отменяет ошибку max_iters:
-   * ответ на последней разрешённой итерации — это успех, а не "кончились итерации".
-   */
+  /** Финальный ответ принят — отменяет ошибку max_iters на последней итерации. */
   finalAnswerAccepted: boolean;
   /**
    * Подавление повтора после отклонения аудитом: повторный ответ на

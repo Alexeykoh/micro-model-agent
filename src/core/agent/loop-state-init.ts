@@ -9,10 +9,11 @@ import {
   FORCED_COMPACTION_COOLDOWN,
   RECOVERY_DIRECTIVE_REFRESH,
   RECOVERY_MEMORY_RULE_REFRESH,
+  SOFT_TOOL_BUDGET,
 } from "./constants";
 import { createArtifactChurnState } from "./artifact-progress";
 
-export function createLoopState(): LoopState {
+export function createLoopState(softToolBudget: number = SOFT_TOOL_BUDGET): LoopState {
   return {
     iteration: 0,
     lastText: "",
@@ -87,6 +88,7 @@ export function createLoopState(): LoopState {
     criticDegradedCycles: 0,
     blockedClaimCycles: 0,
     toolCallsThisTurn: 0,
+    softToolBudget,
     mutationsSinceCritic: 0,
     criticHistoryMark: 0,
     seenCriticIssues: new Set(),

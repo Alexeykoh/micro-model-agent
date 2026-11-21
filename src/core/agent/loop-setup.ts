@@ -7,6 +7,7 @@
 import type { AgentDeps } from "../agent";
 import type { SessionLogger } from "../session-logger";
 import { createLoopState, type LoopState } from "./loop-state";
+import { effectiveSoftToolBudget } from "./tool-batch-budget";
 import { CompactionService } from "./compaction";
 import { TokenTracker } from "./token-tracker";
 import { ReasoningEffortResolver } from "./reasoning-resolver";
@@ -53,7 +54,7 @@ export function createLoopModules(host: LoopSetupHost, slog: SessionLogger): Loo
     deps;
 
   // Единый контейнер состояния цикла — заменяет ~24 разрозненных `let`.
-  const state = createLoopState();
+  const state = createLoopState(effectiveSoftToolBudget(config.maxToolIterations));
   // Маркер начала захода для критика: события тулов прошлых run'ов в
   // evidence-пакеты этого захода не входят. Fallback на длину — для моков.
   state.criticHistoryMark =
