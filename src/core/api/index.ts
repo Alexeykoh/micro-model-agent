@@ -14,6 +14,8 @@ export { redactContextSecrets } from "../agent/context-log";
 export { summarizeToolArgs } from "../agent/tool-output";
 // Структурный ключ аргументов тула (execution/stuck-detector).
 export { canonicalArgsKey } from "../agent/canonical-args";
+// RCV-1: классификация ошибок валидации для recovery-модуля.
+export { isValidationFailure } from "../agent/validation-failure";
 // Калибровка контекста (context-модуль).
 export { ContextCalibrator, isImplausibleJump } from "../agent/context-calibration";
 export type { CalibrationState } from "../agent/context-calibration";

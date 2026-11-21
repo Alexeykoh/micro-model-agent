@@ -8,6 +8,8 @@ import type { AgentDeps } from "../agent";
 import type { SessionLogger } from "../session-logger";
 import { createLoopState, type LoopState } from "./loop-state";
 import { effectiveSoftToolBudget } from "./tool-batch-budget";
+import { RecoveryClient } from "../../modules/recovery/client";
+import { createRecoveryGate } from "../../modules/recovery/gate";
 import { CompactionService } from "./compaction";
 import { TokenTracker } from "./token-tracker";
 import { ReasoningEffortResolver } from "./reasoning-resolver";
@@ -105,6 +107,20 @@ export function createLoopModules(host: LoopSetupHost, slog: SessionLogger): Loo
     deps.onUsage,
   );
   const reasoningResolver = new ReasoningEffortResolver();
+  // RCV-2/3: recovery-сабагент с компактным свежим промптом. Исполнение всегда
+  // приходит из tool-batch через execute — здесь только запасной fail-open путь.
+  // Тестовые дубли ToolExecutor не обязаны нести registry — fail-open с пустым
+  // списком: сабагент просто не предложит вызов, ход продолжается как раньше.
+  const registry = typeof toolExecutor.getRegistry === "function" ? toolExecutor.getRegistry() : undefined;
+  const availableTools =
+    registry && typeof registry.list === "function" ? registry.list() : [];
+  const recovery = createRecoveryGate({
+    client: new RecoveryClient(deps.llmProvider),
+    availableTools,
+    slog,
+    logger,
+    execute: async () => ({ success: false, output: "recovery execute unavailable" }),
+  });
   const toolBatch = new ToolBatchExecutor({
     config,
     toolExecutor,
@@ -119,6 +135,7 @@ export function createLoopModules(host: LoopSetupHost, slog: SessionLogger): Loo
     getAbortSignal: () => host.getAbortSignal(),
     isShutdownRequested: () => host.isShutdownRequested(),
     setScope: () => host.setScope(),
+    recovery,
   });
   const hallucinationGate = new HallucinationGate(hallucinationDetector);
   const auditGate = new AuditGate(deps.finalAudit);

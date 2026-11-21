@@ -29,6 +29,8 @@ export const DIAGNOSTIC_EVENTS = [
   "egress_degraded",
   "taint_degraded",
   "stall_detected",
+  "recovery_attempt",
+  "recovery_result",
   "provider_degraded",
   "provider_failover",
   "tool_degraded",

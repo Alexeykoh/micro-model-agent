@@ -8,6 +8,7 @@ import type { ContextManager } from "../context/manager";
 import type { LoopState } from "./loop-state";
 import { issueDirective } from "./directives";
 import { diagnoseRepeatedFailures } from "./failure-diagnosis";
+import { isValidationFailure } from "./validation-failure";
 import {
   MAX_TOOL_FAILURES_PER_TURN,
   MIN_REPEATED_TOOL_FAILURES,
@@ -17,22 +18,6 @@ import {
 const INFO_TOOLS = new Set(["file_info"]);
 /** Транзиентные сетевые тулы: 404/TLS не systemic. */
 const TRANSIENT_TOOLS = new Set(["web_fetch", "web_search", "web_browse"]);
-
-/**
- * Маркеры детерминированных ошибок ввода/политики. Это НЕ поломка тула:
- * модель просто передала неверные аргументы (запрещённый оператор, несуществующий
- * id процесса). Такие ответы уже несут actionable-подсказку и разбираются
- * STUCK-директивами; отключать за них рабочий тул — значит лишить модель
- * единственного способа выполнить задачу (наблюдалось: bash отключался после
- * трёх `[SECURITY BLOCKED]` на `>`, что останавливало scaffold Next.js).
- */
-const VALIDATION_MARKERS = ["[SECURITY BLOCKED]", "Process not found:"] as const;
-
-function isValidationFailure(result: ToolResult): boolean {
-  if (result.blocked || result.errorMeta?.retryable === false) return true;
-  const output = String(result.output ?? "");
-  return VALIDATION_MARKERS.some((marker) => output.includes(marker));
-}
 
 export interface FailureMemoryDeps {
   memoryStore?: MemoryStore;

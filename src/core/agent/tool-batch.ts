@@ -61,6 +61,8 @@ export interface ToolBatchDeps {
   isShutdownRequested: () => boolean;
   /** Переустановка tool scope перед каждым вызовом тула. */
   setScope: () => void;
+  /** RCV-3: recovery-сабагент на повторяющиеся ошибки валидации. */
+  recovery?: import("../../modules/recovery/gate").RecoveryGate;
 }
 
 /** Итог пакета: прервана ли итерация по shutdown (цикл должен выйти). */
@@ -208,6 +210,20 @@ export class ToolBatchExecutor {
     if (this.deps.isShutdownRequested()) {
       runner.synthesizePending();
       return { interrupted: true };
+    }
+
+    // RCV-3: исправление повторяющейся ошибки валидации через сабагента.
+    // Выполняется тем же runner'ом → тот же enforcement, контекст и события.
+    if (this.deps.recovery && !this.deps.isShutdownRequested()) {
+      const candidate = runner.recoveryCandidate;
+      if (candidate) {
+        await this.deps.recovery.maybeRecover(candidate.call, candidate.result, input, async (corrected) => {
+          runner.prepare(corrected);
+          const exec = await runner.execute(corrected, this.deps.toolExecutor);
+          if (!exec.shutdown) await runner.finalize(corrected, exec);
+          return exec.result;
+        });
+      }
     }
 
     // Recovery-сигналы: неудачи, повторы, разведка, окно фейлов, молчание.
