@@ -1,7 +1,9 @@
-// Rendering of tool results: file rows, tool output bodies, link lines and
-// image cards — вынесено из `feed/turn.ts` (правило ≤300).
+// Rendering of tool result cards: file rows, link lines and image cards —
+// вынесено из `feed/turn.ts` (правило ≤300). Тело тула рисует ОДИН канал —
+// `meta(kind:"tool")` в `feed/stream.ts` (паритет с терминальным
+// `BodyStream.write`); `tool_end` только закрывает строку действия статусом.
 import { el, icon } from "../dom.js";
-import { t, pluralCount } from "../i18n.js";
+import { t } from "../i18n.js";
 import { streamStateFor, session, hooks } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 import {
@@ -10,29 +12,7 @@ import {
 } from "../format.js";
 import { copyText } from "../../md.js";
 import { imageCard } from "./image-card.js";
-import { feedForEvent, appendTo, insertAfter, liveFeed } from "./core.js";
-
-function renderToolOutput(line: HTMLElement | null, text: unknown): void {
-  if (typeof text !== "string" || !text) return;
-  const wrap = el("div", "toolout");
-  const code = el("div", "code");
-  code.textContent = text;
-  wrap.appendChild(code);
-  const long = text.length > 600 || text.split("\n").length > 12;
-  if (long) {
-    wrap.classList.add("collapsed");
-    const outLabel = "▸ " + pluralCount("web.tool.output", text.length);
-    const more = el("span", "more", outLabel);
-    more.addEventListener("click", () => {
-      const collapsed = wrap.classList.toggle("collapsed");
-      more.textContent = collapsed ? outLabel : "▾ " + t("web.tool.collapse");
-    });
-    wrap.appendChild(more);
-  }
-  const feed = line && line.parentNode ? null : liveFeed();
-  if (line && line.parentNode) line.parentNode.insertBefore(wrap, line.nextSibling);
-  else appendTo(feed, wrap);
-}
+import { feedForEvent, appendTo, insertAfter } from "./core.js";
 
 function safeUrl(url: unknown): string | null {
   if (typeof url !== "string" || !url) return null;
@@ -212,8 +192,8 @@ export function finishToolEnd(data: Dict): void {
       }
       return;
     }
-    const card = cardFor(data.name, args, data.sessionId, data.success);
-    renderToolOutput(card || line, data.output);
+    // Тело уже нарисовано `meta(kind:"tool")` — здесь только карточка файла.
+    cardFor(data.name, args, data.sessionId, data.success);
     return;
   }
   if (verbosity() === "quiet") {
@@ -232,5 +212,4 @@ export function finishToolEnd(data: Dict): void {
     return;
   }
   if (data.success) cardFor(data.name, args, data.sessionId, data.success);
-  renderToolOutput(line, data.output);
 }

@@ -152,7 +152,10 @@ export function onReasoning(
 // always visible, one dim line per chunk, never collapsed. Tool bodies
 // (`kind: "tool"` — display/output/diff/failure-gist from ToolBatch) are
 // model-facing and hidden in quiet mode, mirroring the terminal renderer
-// (`writeInlineBody`); failures still surface once via `tool_end` ↳ cause.
+// (`BodyStream.write`). In non-quiet modes THIS is the only place the body is
+// drawn: `tool_end` closes the action line with its status and never opens a
+// second `.toolout` box (the old onMeta + toolout duplication in normal/verbose).
+// Failures still surface once in quiet via `tool_end` ↳ first output line.
 export function onMeta(chunk: string, sid?: string, kind?: string): void {
   if (kind === "tool" && verbosity() === "quiet") return;
   const feed = feedForEvent(sid);
