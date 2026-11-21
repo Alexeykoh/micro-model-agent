@@ -20,6 +20,7 @@ import { queueToolImages } from "./tool-images";
 import { imageEventFields, renderToolResultMeta } from "./tool-result-meta";
 import { recordRepeatedToolFailure } from "./failure-memory";
 import { recordToolTargetFailure } from "./target-failures";
+import { isValidationFailure } from "./validation-failure";
 import {
   bumpBudgetAfterWriteTooLarge,
   detectScriptWorkaround,
@@ -64,8 +65,14 @@ export interface ToolCallExecution {
 export class ToolCallRunner {
   private anyToolFailed = false;
   private batchHasSuccess = false;
+  private lastValidationFailure: { call: ToolCall; result: ToolResult } | undefined;
 
   constructor(private readonly init: ToolCallRunnerInit) {}
+
+  /** RCV-3: последняя ошибка валидации пакета — вход recovery-сабагента. */
+  get recoveryCandidate(): { call: ToolCall; result: ToolResult } | undefined {
+    return this.lastValidationFailure;
+  }
 
   /** Был ли в пакете хоть один фейл (кроме информационных тулов). */
   get hadFailure(): boolean {
@@ -190,8 +197,13 @@ export class ToolCallRunner {
     // Plugin-level блок считается неудачей для honest-stop: перебор
     // заблокированных вариантов — та же петля, а «нейтральность» замораживала
     // счётчик навсегда (§1.7 аудита). Успехом блок при этом не становится.
-    if (!result.success && !INFO_TOOLS.has(call.name)) this.anyToolFailed = true;
+    if (!result.success && !INFO_TOOLS.has(call.name) && !isValidationFailure(result)) {
+      this.anyToolFailed = true;
+    }
     if (result.success) this.batchHasSuccess = true;
+    if (!result.success && isValidationFailure(result)) {
+      this.lastValidationFailure = { call, result };
+    }
 
     trackToolResultSideEffects(deps, this.init.state, call, result);
     bumpBudgetAfterWriteTooLarge(this.init.state, call, result);

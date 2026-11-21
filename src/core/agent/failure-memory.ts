@@ -8,6 +8,7 @@ import type { ContextManager } from "../context/manager";
 import type { LoopState } from "./loop-state";
 import { issueDirective } from "./directives";
 import { diagnoseRepeatedFailures } from "./failure-diagnosis";
+import { isValidationFailure } from "./validation-failure";
 import {
   MAX_TOOL_FAILURES_PER_TURN,
   MIN_REPEATED_TOOL_FAILURES,
@@ -54,7 +55,11 @@ export function recordRepeatedToolFailure(
     }
     return;
   }
-  if (result.blocked || INFO_TOOLS.has(call.name) || TRANSIENT_TOOLS.has(call.name)) return;
+  if (
+    isValidationFailure(result) ||
+    INFO_TOOLS.has(call.name) ||
+    TRANSIENT_TOOLS.has(call.name)
+  ) return;
   const key = call.name;
   const prev = state.toolFailureCounts.get(key) ?? { count: 0, error: "", samples: [] };
   prev.count++;

@@ -7,6 +7,8 @@
 import type { AgentDeps } from "../agent";
 import type { SessionLogger } from "../session-logger";
 import { createLoopState, type LoopState } from "./loop-state";
+import { RecoveryClient } from "../../modules/recovery/client";
+import { createRecoveryGate } from "../../modules/recovery/gate";
 import { CompactionService } from "./compaction";
 import { TokenTracker } from "./token-tracker";
 import { ReasoningEffortResolver } from "./reasoning-resolver";
@@ -104,6 +106,15 @@ export function createLoopModules(host: LoopSetupHost, slog: SessionLogger): Loo
     deps.onUsage,
   );
   const reasoningResolver = new ReasoningEffortResolver();
+  // RCV-2/3: recovery-сабагент с компактным свежим промптом. Исполнение всегда
+  // приходит из tool-batch через execute — здесь только запасной fail-open путь.
+  const recovery = createRecoveryGate({
+    client: new RecoveryClient(deps.llmProvider),
+    availableTools: toolExecutor.getRegistry().list(),
+    slog,
+    logger,
+    execute: async () => ({ success: false, output: "recovery execute unavailable" }),
+  });
   const toolBatch = new ToolBatchExecutor({
     config,
     toolExecutor,
@@ -118,6 +129,7 @@ export function createLoopModules(host: LoopSetupHost, slog: SessionLogger): Loo
     getAbortSignal: () => host.getAbortSignal(),
     isShutdownRequested: () => host.isShutdownRequested(),
     setScope: () => host.setScope(),
+    recovery,
   });
   const hallucinationGate = new HallucinationGate(hallucinationDetector);
   const auditGate = new AuditGate(deps.finalAudit);
