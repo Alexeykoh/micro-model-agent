@@ -122,6 +122,29 @@ describe("webui assets", () => {
     expect(js(a)).toMatch(/data\.diagnostic && verbosity\(\) !== "verbose"\)\s*return;/);
   });
 
+  it("folds agent steps into an expandable Lucide summary row", () => {
+    const a = loadAssets();
+    const src = js(a);
+    expect(src).toContain('icon("plus")');
+    expect(src).toContain('"chevron-down"');
+    expect(src).toContain("foldHistory(feed)");
+    expect(src).toContain('aria-expanded", "false"');
+    expect(src).toContain("collapseSteps()");
+    expect(src).toContain("ui.collapseSteps");
+    expect(a.css).toContain(".group-sum .parts");
+    expect(a.css).toContain("text-overflow: ellipsis");
+    expect(a.css).toContain(".group-detail.hidden");
+    expect(src).toContain('thoughts: "bulb"');
+    expect(src).toContain('reads: "eye"');
+    expect(src).toContain('failures: "circle-alert"');
+    expect(src).toContain('warnings: "triangle-alert"');
+    expect(src).toContain('"circle-alert":');
+    expect(src).toContain('"triangle-alert":');
+    expect(a.css).toContain("@keyframes groupIn");
+    expect(a.css).toContain("@keyframes groupBump");
+    expect(a.css).toContain("allow-discrete");
+  });
+
   it("renders file actions as quiet filerow lines with viewer link and icon copy", () => {
     const a = loadAssets();
     const src = js(a);

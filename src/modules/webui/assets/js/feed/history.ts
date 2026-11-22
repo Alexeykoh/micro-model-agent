@@ -21,6 +21,7 @@ import {
   userBlock,
 } from "./core.js";
 import { buildRetractBlock } from "./retract-block.js";
+import { foldHistory } from "./activity-group.js";
 
 function renderAssistantText(feed: HTMLElement, text: unknown): void {
   const raw = String(text == null ? "" : text);
@@ -139,6 +140,9 @@ function renderHistory(feed: HTMLElement, entries: Dict[]): void {
         break;
     }
   });
+  // Replayed rows are all in the DOM now: fold consecutive step runs into the
+  // same collapsible summary the live feed produces.
+  foldHistory(feed);
 }
 
 /** Скелетон ленты: строки-заглушки, пока история не едет (INV-W8). */

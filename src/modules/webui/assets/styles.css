@@ -576,6 +576,41 @@ body.light .codeblock { border: 1px solid var(--border); }
 .json-err { color: var(--err); overflow-wrap: anywhere; }
 .grouped { color: var(--dim-a); padding-left: 8px; overflow-wrap: anywhere; }
 .grouped .pipe { color: var(--pipe); }
+/* Collapsed agent steps: one dim line, Lucide `+` affordance, counts that
+   ellipsize instead of wrapping. No box — only indentation and dim text
+   (STYLE.md). The chevron is an affordance, not a status glyph. */
+.group-sum {
+  /* Own reset (not the generic `button.*` list): that list sets
+     `color: inherit`/`width: auto` with higher specificity and would undo the
+     dim color and full-width hit area here. */
+  font: inherit; color: var(--dim-b); background: none; border: none;
+  text-align: left; padding: 0; cursor: pointer;
+  display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0;
+  font-size: 12.5px; line-height: 1.35;
+  user-select: none; white-space: nowrap; overflow: hidden;
+}
+.group-sum:hover, .group-sum:hover .tog { color: var(--dim-a); }
+.group-sum .g { display: inline-flex; flex: 0 0 auto; color: var(--pipe); }
+.group-sum .g .svg-icon { width: 13px; height: 13px; }
+.group-sum .parts { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.group-sum .part { display: inline-flex; align-items: center; gap: 4px; }
+.group-sum .part .svg-icon { width: 12px; height: 12px; color: var(--dim-b); }
+.group-sum .meta { flex: 0 0 auto; margin-left: auto; color: var(--dim-a); }
+.group-sum .tog { display: inline-flex; flex: 0 0 auto; color: var(--dim-c); }
+.group-sum .tog .svg-icon { width: 13px; height: 13px; animation: chevIn .16s ease-out; }
+/* State changes stay quiet: short fade/slide, no bounce (killed by the global
+   prefers-reduced-motion block). */
+@keyframes groupIn { from { opacity: 0; transform: translateY(-3px); } }
+@keyframes groupBump { 0% { opacity: .5; } 100% { opacity: 1; } }
+@keyframes chevIn { from { opacity: 0; transform: translateX(-2px); } }
+.group-sum.enter { animation: groupIn .16s ease-out; }
+.group-sum .parts.bump { animation: groupBump .22s ease-out; }
+.group-detail {
+  padding-left: 12px; opacity: 1; transform: none;
+  transition: display .16s allow-discrete, opacity .16s ease-out, transform .16s ease-out;
+}
+.group-detail.hidden { display: none; opacity: 0; transform: translateY(-2px); }
+@starting-style { .group-detail:not(.hidden) { opacity: 0; transform: translateY(-2px); } }
 .msgs .busy { color: var(--think); display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; }
 .busy .spin { display: inline-block; animation: spin 1s linear infinite; }
 .busy .busytime { color: var(--dim-a); }

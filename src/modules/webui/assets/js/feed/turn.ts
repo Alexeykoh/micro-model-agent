@@ -55,7 +55,6 @@ export function onToolStart(data: Dict): void {
   line.classList.add("running");
   appendTo(feed, line);
   st.toolNodes.set(data.toolCallId, { status, line });
-  if (categoryOf(data.name) !== "recon") st.runReconOnly = false;
   st.runCount++;
 }
 
@@ -72,7 +71,6 @@ export function onTurnEnd(data: Dict): void {
   clearBusy(feed);
   finishThink(feed);
   finishMd(feed);
-  flushRun(feed);
   const st = feed ? streamStateFor(feed) : null;
   // Interrupted tools never get `tool_end`: drop their pulse so nothing
   // looks alive after the turn is over.
@@ -121,6 +119,9 @@ export function onTurnEnd(data: Dict): void {
   }
   const plain = st.turnRoots.map((r) => r.innerText || r.textContent || "").join("\n\n");
   appendActionsRow(feed, plain, st.turnMd);
+  // Close the group only after the turn's error/metric/status rows landed, so
+  // they join the current step run instead of spawning one-row summaries.
+  flushRun(feed);
   resetTurnText(feed);
 }
 

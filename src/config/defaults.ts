@@ -217,6 +217,7 @@ export const DEFAULTS: AppConfig = {
     activityRail: "line",
     showContextStats: false,
     showCompaction: true,
+    collapseSteps: true,
     verbose: false,
     verbosity: "quiet",
     fontSize: "comfortable",
