@@ -90,6 +90,8 @@ export function createLoopState(softToolBudget: number = SOFT_TOOL_BUDGET): Loop
     blockedClaimCycles: 0,
     toolCallsThisTurn: 0,
     softToolBudget,
+    reasoningDegradationLogged: false,
+    toolcallHintLogged: false,
     mutationsSinceCritic: 0,
     criticHistoryMark: 0,
     seenCriticIssues: new Set(),

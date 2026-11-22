@@ -142,19 +142,13 @@ export interface LoopState {
   lastFinishReason?: string;
   /** Счётчик повторных одинаковых тулов (exit-on-complete). */
   repeatedToolCount: number;
-  /** Общий счётчик неудач по каждому тулу + последняя ошибка и distinct
-   *  первые строки ошибок (не только подряд). Distinct-заголовки нужны
-   *  diagnoseRepeatedFailures: причина/решение по сигнатуре, а не boilerplate. */
+  /** Неудачи по тулу + distinct-заголовки для diagnoseRepeatedFailures. */
   toolFailureCounts: Map<string, { count: number; error: string; samples: string[] }>;
   /** RCV-8: тулы, успешно отработавшие в этом ходе — их нельзя отключать. */
   succeededToolsThisTurn: Set<string>;
   /** Тулы, по которым правило в память уже записано (дедупликация). */
   memoryRuleRecorded: Set<string>;
-  /**
-   * Тулы, отключённые на остаток хода: суммарно провалились больше
-   * `MAX_TOOL_FAILURES_PER_TURN` раз (не транзиентные). Не попадают в видимый
-   * модели набор тулов — иначе слабая модель бесконечно повторяет мёртвый тул.
-   */
+  /** Отключённые на ход тулы (не попадают в набор — слабая модель повторяла бы их). */
   disabledTools: Set<string>;
   /** Тулы, по которым директива «отключён» уже отправлена (1 раз на тул). */
   toolDisabledNudged: Set<string>;
@@ -220,6 +214,10 @@ export interface LoopState {
   blockedClaimCycles: number; // BCP-2: искажения каноничной подсказки блокировки.
   toolCallsThisTurn: number; // BCP-3: всего вызовов тулов в текущем ходе.
   softToolBudget: number; // Эффективный бюджет хода, выведенный из maxToolIterations.
+  /** LM-2: деградация reasoning-переговоров уже записана в этом ходе. */
+  reasoningDegradationLogged: boolean;
+  /** LM-4: совет по tool-call parser уже записан в этом ходе. */
+  toolcallHintLogged: boolean;
   /** Рабочие мутации с последнего вызова критика. */
   mutationsSinceCritic: number;
   /** Маркер seq на старте захода: критик видит только тул-события текущего захода. */

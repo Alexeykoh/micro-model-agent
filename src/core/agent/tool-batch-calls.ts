@@ -1,10 +1,7 @@
 /**
- * Жизненный цикл одного вызова тула внутри пакета: подготовка, исполнение,
- * финализация.
- *
- * Вынесено из `tool-batch.ts` (правило 6): serial- и parallel-путь делят один
- * и тот же код вызова. Оркестрация (планировщик, recovery-сигналы) остаётся в
- * `tool-batch.ts`; здесь — только вызов и его побочные эффекты.
+ * Жизненный цикл вызова тула: подготовка, исполнение, финализация.
+ * Вынесено из `tool-batch.ts`: общий код для serial/parallel путей,
+ * оркестрация и recovery-сигналы остаются там.
  */
 import { t } from "../../i18n/index";
 import { visibleFileContent } from "../../modules/security/data-policy/file-content";
@@ -21,6 +18,7 @@ import { imageEventFields, renderToolResultMeta } from "./tool-result-meta";
 import { recordRepeatedToolFailure } from "./failure-memory";
 import { recordToolTargetFailure } from "./target-failures";
 import { isValidationFailure } from "./validation-failure";
+import { maybeLogToolcallHint } from "../../modules/recovery/toolcall-hint";
 import {
   bumpBudgetAfterWriteTooLarge,
   detectScriptWorkaround,
@@ -33,7 +31,7 @@ import {
 /** Информационные read-only тулы, чей "фейл" — ожидаемое поведение. */
 const INFO_TOOLS = new Set(["file_info"]);
 
-/** Параметры одного пакета, общие для всех вызовов. */
+/** Параметры пакета, общие для всех вызовов. */
 export interface ToolCallRunnerInit {
   deps: ToolBatchDeps;
   state: LoopState;
@@ -112,28 +110,18 @@ export class ToolCallRunner {
     slog?.logToolCall(call, iteration);
   }
 
-  /**
-   * Выполнение хендлера (allowlist/плагины/таймаут — внутри executor'а).
-   * `shutdown: true` — итерация прервана (Esc/Ctrl+C): вызывающий выходит,
-   * не рендеря результат.
-   */
+  /** Исполнение через executor; `shutdown` — итерация прервана. */
   async execute(call: ToolCall, executor: ToolExecutor): Promise<ToolCallExecution> {
     const { contextManager, logger, costTracker, getAbortSignal, isShutdownRequested } = this.init.deps;
     const { slog } = this.init;
     const startTime = Date.now();
     const tokensBeforeTool = contextManager.getEstimatedTokens();
-    // Снимок стоимости ДО тула: рендеру нужна стоимость именно этого вызова
-    // (subagent/mcp/pipeline тратят токены), а не накопленная за сессию.
+    // Стоимость именно этого вызова (subagent/mcp тратят токены).
     const costBeforeTool = costTracker.total;
     let result: ToolResult;
-    // Отключённый тул не исполняется вовсе. Раньше он лишь исчезал из списка
-    // схем, но вызов из истории всё равно доходил до executor'а — модель
-    // продолжала долбить мёртвый тул, а «используй другой тул» из директивы
-    // толкал её на обходы. Теперь ответ детерминированный и non-retryable.
+    // Отключённый тул: детерминированный non-retryable ответ вместо обходов.
     if (this.init.state.disabledTools.has(call.name)) {
-      // AQC-4: вместо буквального текста проваленного вызова модель видит
-      // описание наблюдаемого сбоя (runtime-generated). Это убирает главный
-      // фактор повтора: поверхность самого действия в контексте.
+      // AQC-4: модель видит описание сбоя, а не текст проваленного вызова.
       const failures = this.init.state.toolFailureCounts.get(call.name);
       const detail = failures?.samples?.[0] || failures?.error || "no diagnostic captured";
       return {
@@ -290,5 +278,21 @@ export class ToolCallRunner {
       contextManager: deps.contextManager,
       logger,
     });
+
+    // LM-4: отказы разбора на локальной модели — совет про parser/template.
+    const failures = this.init.state.toolFailureCounts.get(call.name)?.count ?? 0;
+    const logged = maybeLogToolcallHint(
+      {
+        model: config.model,
+        providerType: config.provider?.type ?? "",
+        failures,
+        error: String(result.output ?? ""),
+        alreadyLogged: this.init.state.toolcallHintLogged,
+      },
+      (cause) => slog?.logDiagnosticEvent("tool_degraded", {
+        source: "module:recovery", operation: "toolcall.parser", kind: "degraded", cause,
+      }),
+    );
+    if (logged) this.init.state.toolcallHintLogged = true;
   }
 }

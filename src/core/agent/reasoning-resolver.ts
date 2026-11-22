@@ -5,6 +5,7 @@ import type { ReasoningConfig, ReasoningLevel, ReasoningStrategy } from "../../c
 import type { ReasoningState } from "../../tools/set-thinking";
 import type { LoopState } from "./loop-state";
 import { projectLevel } from "../../llm/request-body";
+import { negotiateReasoningLevel } from "./reasoning-negotiation";
 
 /** Откуда взят текущий уровень reasoning — для логирования и диагностики. */
 export type ReasoningSource = "policy" | "agent_override" | "fixed" | "none";
@@ -104,7 +105,14 @@ export class ReasoningEffortResolver {
         level = undefined;
       }
     } else if (reasoningConfig && reasoningConfig.mode !== "auto") {
-      level = reasoningConfig.mode;
+      // LM-1: fixed-уровень тоже согласуется с провайдером. Раньше здесь уходил
+      // сырой `minimal` даже при `mechanism IGNORED` — провайдер отклонял запрос.
+      const negotiated = negotiateReasoningLevel(
+        reasoningConfig.mode,
+        deps.probePassed,
+        deps.reasoningLevels,
+      );
+      level = negotiated.level;
       source = "fixed";
     }
 

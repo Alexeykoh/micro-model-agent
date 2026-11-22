@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { homedir } from "os";
 import { DEFAULTS } from "./defaults";
-import { DEFAULT_SECURITY_CONFIG } from "./security";
+import { DEFAULT_SECURITY_CONFIG, applyLocalTrustedBashPolicy } from "./security";
 import { t } from "../i18n/index";
 import type { AppConfig } from "./types";
 import { deepMerge, regexReplacer, regexReviver } from "./utils";
@@ -164,6 +164,7 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
       DEFAULT_SECURITY_CONFIG.contentScan.dangerousPatterns,
     );
   }
+  applyLocalTrustedBashPolicy(config);
   normalizeLspServerArgs(config);
   reportShortCriticTimeout(config);
 

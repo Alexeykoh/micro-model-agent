@@ -31,6 +31,7 @@ export const DIAGNOSTIC_EVENTS = [
   "stall_detected",
   "recovery_attempt",
   "recovery_result",
+  "reasoning_degraded",
   "provider_degraded",
   "provider_failover",
   "tool_degraded",
