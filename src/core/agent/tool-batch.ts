@@ -14,16 +14,12 @@ import type { CompactionService } from "./compaction";
 import { ToolCallRunner } from "./tool-batch-calls";
 import { applyBatchSignals } from "./tool-batch-signals";
 import { isRecoverableTerminal, resetFailureCounters } from "../../modules/recovery/terminal";
+import { RECOVERY_MAX_TERMINALS } from "../../modules/recovery/constants";
 
 /** Дефолтный кап конкурентных тулов одного batch'а (см. security.rateLimits). */
 const DEFAULT_MAX_PARALLEL_TOOLS = 5;
 
-/**
- * Прогоняет `fn` по `items` с лимитом одновременных запусков, сохраняя порядок
- * результатов (results[i] соответствует items[i]). Пул воркеров, а не
- * `Promise.all` пачками — ровный кап без простоя. `fn` наружу release-хуков не
- * требует; если он бросит, промис отклонится (как serial `await`).
- */
+/** Пул воркеров с лимитом и сохранением порядка результатов (results[i] = items[i]). */
 async function runWithConcurrency<T, R>(
   items: T[],
   limit: number,
@@ -264,14 +260,30 @@ export class ToolBatchExecutor {
             return exec.result;
           },
         );
-        if (recovered) resetFailureCounters(state);
+        if (recovered) {
+          resetFailureCounters(state);
+        } else if (
+          this.deps.recovery.terminalAttempts() < RECOVERY_MAX_TERMINALS &&
+          !this.deps.isShutdownRequested() &&
+          // Отключённый тул ({ code: "TOOL_DISABLED", retryable: false }) починить
+          // невозможно — там честный forced final, а не бесконечный ретрай.
+          candidate.result.errorMeta?.code !== "TOOL_DISABLED"
+        ) {
+          // RCV-9b: сабагент не предложил правку — НЕ сдаёмся. Отдаём модели
+          // точный текст ошибки, сбрасываем стрики и даём ещё попытку. Ход
+          // завершается только после исчерпания капа.
+          summaries.push(
+            `Recovery could not auto-fix the failure. Fix it yourself and continue — do NOT end the turn.\n` +
+              `Error: ${String(candidate.result.output ?? "").slice(0, 800)}`,
+          );
+          resetFailureCounters(state);
+          recovered = true;
+        }
       }
       if (!recovered) return { interrupted: false, finalize: signals.finalize };
     }
 
-    // Статусная строка плана после каждого пакета тулов. Заменяет динамический
-    // plan-блок, который жил в system prompt (удалён ради KV-cache — план
-    // меняется каждую итерацию).
+    // Статус плана после батча (динамический plan-блок убран ради KV-cache).
     const planLine = this.deps.planSummary?.();
     if (planLine) summaries.push(planLine);
 

@@ -45,6 +45,7 @@ export interface RecoveryGate {
     execute: (call: ToolCall) => Promise<ToolResult>,
   ): Promise<boolean>;
   total(): number;
+  terminalAttempts(): number;
 }
 
 export function createRecoveryGate(deps: RecoveryGateDeps): RecoveryGate {
@@ -64,6 +65,7 @@ export function createRecoveryGate(deps: RecoveryGateDeps): RecoveryGate {
 
   return {
     total: () => total,
+    terminalAttempts: () => terminalUsed,
 
     async maybeRecover(call, result, input, execute): Promise<ToolResult | null> {
       const run = execute ?? deps.execute;

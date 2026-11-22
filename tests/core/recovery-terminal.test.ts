@@ -75,6 +75,7 @@ describe("RCV-9: recoverable terminals", () => {
     });
     for (let i = 0; i < RECOVERY_MAX_TERMINALS + 2; i++) await run();
     expect(executed).toHaveLength(RECOVERY_MAX_TERMINALS);
+    expect(g.terminalAttempts()).toBe(RECOVERY_MAX_TERMINALS);
     expect(await run()).toBe(false); // бюджет исчерпан
 
     const skipped = gate({ skip: true, reason: "no fix" });
