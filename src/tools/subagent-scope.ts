@@ -27,6 +27,18 @@ function scopeFromArgs(
   };
 }
 
+/**
+ * Явный скоуп субагента побеждает, иначе наследуем родительский.
+ * `undefined` у родителя означает «без ограничений», а не «пустой список»:
+ * пустой список — это deny-all, отсюда отказы записи у дочерних агентов.
+ */
+export function resolveSubagentScope(
+  explicit: ToolScope | undefined,
+  parent: ToolScope | undefined,
+): ToolScope | undefined {
+  return explicit ?? parent;
+}
+
 /** Проверить и нормализовать скоуп субагента перед прогоном. */
 export function prepareScope(args: Record<string, unknown>, inherited?: ToolScope): PreparedScope {
   const input = scopeFromArgs(args, inherited);

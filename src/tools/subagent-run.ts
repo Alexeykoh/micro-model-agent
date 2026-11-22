@@ -8,7 +8,7 @@ import { PluginManager } from "../modules/plugins/manager";
 import type { PromptBlock } from "../core/types";
 import { logSecurityBlock } from "../modules/security/audit-log";
 import { getSessionSecurityConfig } from "../modules/security/session-isolation";
-import { prepareScope } from "./subagent-scope";
+import { prepareScope, resolveSubagentScope } from "./subagent-scope";
 import { ScopeDenialCollector, formatScopeRequest } from "./scope-request";
 import { resolveExpertProvider } from "../modules/execution/expert-provider";
 import { withTokenCap } from "../llm/token-cap";
@@ -126,7 +126,7 @@ export async function runSubagent(
   // Сейв/рестор shared-скоупа исполнителя, чтобы субагент не мутировал скоуп
   // родителя навсегда.
   const parentScope = executor?.getScope?.() ?? ctx.scope;
-  const appliedScope = scope || { allowed_files: [], read_only_files: [] };
+  const appliedScope = resolveSubagentScope(scope, parentScope);
   // Свой менеджер плагинов у ребёнка (A5): иначе застревание и счётчики
   // флейлинга родителя видят падения ребёнка как свои; форк даёт и свой
   // контекст для счётчиков bash.
@@ -135,7 +135,7 @@ export async function runSubagent(
   subPluginManager.register(scopeCollector.plugin, "builtin");
   const childExecutor = executor?.fork?.(subPluginManager);
   const restoreScope = () => {
-    if (childExecutor?.getScope?.() === appliedScope) childExecutor.setScope(parentScope);
+    if (childExecutor && childExecutor.getScope?.() === appliedScope) childExecutor.setScope(parentScope);
   };
 
   try {
