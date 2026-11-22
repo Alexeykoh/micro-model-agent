@@ -298,7 +298,11 @@ body[data-font="large"] { font-size: 17px; }
    a strip above it — see `.u-attach` — so the marker never floats over them. */
 /* Переносы пользователя сохраняем: сообщение рендерится textContent, и без
    pre-wrap многострочный промпт схлопывался в одну строку (B-36). */
-.u-text { overflow-wrap: anywhere; white-space: pre-wrap; }
+/* Hanging indent: the `> ` marker is inline content on the first line only,
+   so wrapped lines would otherwise start under the marker. Push every line
+   right by the marker width (2ch in the monospace UI) and pull just the first
+   line back, so all text lines line up under the prompt text. */
+.u-text { overflow-wrap: anywhere; white-space: pre-wrap; padding-left: 2ch; text-indent: -2ch; }
 .u-text::before { content: "> "; color: var(--u-border); }
 .u-attach { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 /* agent text = calmer, dimmer than user block */

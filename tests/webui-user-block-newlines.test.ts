@@ -26,4 +26,15 @@ describe("сообщение пользователя: переносы стро
     expect(start).toBeGreaterThan(-1);
     expect(rule).toContain("white-space: pre-wrap");
   });
+
+  it("переносы выровнены под текстом, а не под маркером `> `", () => {
+    const css = readFileSync("src/modules/webui/assets/styles.css", "utf8");
+    const start = css.indexOf(".u-text {");
+    const rule = css.slice(start, css.indexOf("}", start));
+
+    // `> ` — ровно 2ch в моноширинном UI: висячий отступ ставит все строки
+    // под текст первой строки, а не под сам маркер.
+    expect(rule).toContain("padding-left: 2ch");
+    expect(rule).toContain("text-indent: -2ch");
+  });
 });
