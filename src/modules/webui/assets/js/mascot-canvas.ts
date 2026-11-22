@@ -1,6 +1,4 @@
-// Canvas mascot runtime: one shared rAF loop for every face, a spring pose,
-// theme-aware palette and reduced-motion handling. `loader.ts` keeps the public
-// createFace/setFaceState API; this module only owns the pixels.
+// Canvas mascot runtime: shared rAF loop, spring pose, palette; `loader.ts` owns the API.
 import { FACE_CLASS, type FaceState } from "./loader-states.js";
 import { renderFace } from "./mascot-draw.js";
 import { catOfElement, palette, radiusFraction } from "./mascot-palette.js";
@@ -48,6 +46,8 @@ class Mascot {
   private dpr = 1;
   private radius = 0.32;
   visible = true;
+  /** Пере-измерение бэкинга: вызывается при появлении и в rAF (размытие 8×8). */
+  applySize: (() => void) | undefined;
   private trackX = 0;
   private trackY = 0;
   private targetX = 0;
@@ -91,19 +91,17 @@ class Mascot {
       this.canvas.width = Math.round(w * dpr);
       this.canvas.height = Math.round(h * dpr);
       this.paletteVersion = -1;
-      // Re-read the wrapper radius on every resize: the first draw can happen
-      // while the face is still detached (size 0), so the theme's square
-      // corners would otherwise never reach the canvas.
+      // Радиус перечитываем при каждом resize: первый draw бывает при size 0.
       this.radius = radiusFraction(this.canvas);
       this.draw();
     };
+    this.applySize = apply;
     if (typeof ResizeObserver === "function") {
       this.ro = new ResizeObserver(apply);
       this.ro.observe(this.canvas);
     }
     apply();
-    // The face is created detached and inserted right after; measure again once
-    // layout has run (and once more after fonts/styles settle).
+    // Повторное измерение после вставки в DOM и стабилизации стилей.
     if (typeof requestAnimationFrame === "function") requestAnimationFrame(apply);
     if (typeof window !== "undefined") {
       window.setTimeout(apply, 80);
@@ -111,7 +109,11 @@ class Mascot {
     }
     if (typeof IntersectionObserver === "function") {
       this.io = new IntersectionObserver((rows) => {
-        for (const row of rows) this.visible = row.isIntersecting;
+        for (const row of rows) {
+          this.visible = row.isIntersecting;
+          // Создано скрытым? При появлении перемерить (иначе бэкинг 8×8).
+          if (row.isIntersecting) apply();
+        }
       }, { rootMargin: "100px" });
       this.io.observe(this.canvas);
     }
@@ -236,6 +238,11 @@ function loop(now: number): void {
   // Faces are created/destroyed by the feed; drop the ones removed from the DOM.
   if (++frames % 120 === 0) {
     for (const m of instances) if (!m.canvas.isConnected) m.destroy();
+  }
+  // Свёрка бэкинга с актуальным CSS-размером: при смене чата/субагента
+  // ResizeObserver не всегда приходит, и лицо остаётся размытым 8×8.
+  if (frames % 30 === 0) {
+    for (const m of instances) if (m.visible) m.applySize?.();
   }
   const drawNow = !reduced || now - lastReducedDraw >= REDUCED_FRAME_MS;
   if (drawNow) lastReducedDraw = now;
