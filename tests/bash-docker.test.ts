@@ -46,5 +46,7 @@ describe("sandbox docker runner (offline)", () => {
       expect(r.success).toBe(false);
       expect(r.output.length).toBeGreaterThan(0);
     });
-  });
+    // docker проверяет образ через registry — ответ может идти >5 с при
+    // загруженном демоне; проверяем fail-closed, а не скорость реестра.
+  }, 20000);
 });
