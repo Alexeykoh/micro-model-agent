@@ -71,6 +71,10 @@ describe("web_fetch tool", () => {
     expect(result.success).toBe(true);
     expect(result.output.length).toBeLessThanOrEqual(15100);
     expect(result.output).toContain("truncated");
+    // Нет полной страницы — даём явный выход, чтобы не перезапрашивать URL.
+    expect(result.output).toContain("PAGE PARTIALLY SHOWN");
+    expect(result.output).toContain("download_file + read_file");
+    expect(result.output).toContain("do NOT re-fetch");
   });
 
   it("surfaces a non-OK HTTP response as a failure", async () => {
