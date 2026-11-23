@@ -12,8 +12,10 @@ import {
   SOFT_TOOL_BUDGET,
 } from "./constants";
 import { createArtifactChurnState } from "./artifact-progress";
+import { resetWebRepeat } from "./web-repeat";
 
 export function createLoopState(softToolBudget: number = SOFT_TOOL_BUDGET): LoopState {
+  resetWebRepeat();
   return {
     iteration: 0,
     lastText: "",

@@ -16,6 +16,7 @@ import { appendErrorMeta, summarizeToolArgs, truncateToolOutput } from "./tool-o
 import { queueToolImages } from "./tool-images";
 import { imageEventFields, renderToolResultMeta } from "./tool-result-meta";
 import { recordRepeatedToolFailure } from "./failure-memory";
+import { recordWebWaste } from "./web-repeat";
 import { recordToolTargetFailure } from "./target-failures";
 import { isValidationFailure } from "./validation-failure";
 import { maybeLogToolcallHint } from "../../modules/recovery/toolcall-hint";
@@ -278,6 +279,7 @@ export class ToolCallRunner {
       contextManager: deps.contextManager,
       logger,
     });
+    recordWebWaste(this.init.state, call.name, call.arguments);
 
     // LM-4: отказы разбора на локальной модели — совет про parser/template.
     const failures = this.init.state.toolFailureCounts.get(call.name)?.count ?? 0;
