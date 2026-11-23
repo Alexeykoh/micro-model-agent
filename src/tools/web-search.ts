@@ -151,7 +151,7 @@ export const webSearchTool: ToolDefinition = {
   icon: "🌍",
   description:
     "Search the web for information. Returns search results with titles and snippets. Use this for search queries instead of opening search engines (Google/Yandex/Bing) in the browser — they block headless browsers.",
-  tags: ["research"],
+  tags: ["web", "research"],
   parameters: {
     type: "object",
     properties: {

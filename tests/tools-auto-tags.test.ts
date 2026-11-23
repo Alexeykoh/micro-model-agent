@@ -11,10 +11,22 @@ describe("inferExtraToolTags (P5)", () => {
     expect(inferExtraToolTags("")).toEqual([]);
   });
 
-  it("detects research intent (en+ru)", () => {
-    expect(inferExtraToolTags("найди в интернете варианты велосипедов")).toContain("research");
-    expect(inferExtraToolTags("search the web for TypeScript docs")).toContain("research");
-    expect(inferExtraToolTags("какая погода в Москве? https://example.com")).toContain("research");
+  it("detects web intent without unlocking heavy research tools", () => {
+    for (const text of [
+      "найди в интернете варианты велосипедов",
+      "search the web for TypeScript docs",
+      "какая погода в Москве? https://example.com",
+      "найди актуальные цены и абонементы в gym24",
+    ]) {
+      const tags = inferExtraToolTags(text);
+      expect(tags, text).toContain("web");
+      expect(tags, text).not.toContain("research");
+    }
+  });
+
+  it("keeps the research tag for explicit heavy analysis", () => {
+    expect(inferExtraToolTags("разбери большой текст через chunk_query")).toContain("research");
+    expect(inferExtraToolTags("проанализируй корпус документов")).toContain("research");
   });
 
   it("detects browser intent with vision", () => {
@@ -49,14 +61,14 @@ describe("seedToolTags (P5)", () => {
   it("adds inferred tags without removing defaults", () => {
     const active = ["file", "code"];
     const added = seedToolTags(active, "найди в интернете новости");
-    expect(added).toEqual(["research"]);
-    expect(active).toEqual(["file", "code", "research"]);
+    expect(added).toEqual(["web"]);
+    expect(active).toEqual(["file", "code", "web"]);
   });
 
   it("never duplicates and preserves enable_tools grants", () => {
-    const active = ["file", "code", "research"];
+    const active = ["file", "code", "web"];
     expect(seedToolTags(active, "найди новости")).toEqual([]);
-    expect(active).toEqual(["file", "code", "research"]);
+    expect(active).toEqual(["file", "code", "web"]);
   });
 
   it("is a no-op for trivial input and legacy mode", () => {
@@ -76,7 +88,7 @@ describe("seedToolTags (P5)", () => {
   it("seeded tags unlock hidden tools via the tag filter", () => {
     const tools = [
       { name: "read_file", description: "r", parameters: {}, tags: ["file"] },
-      { name: "web_search", description: "w", parameters: {}, tags: ["research"] },
+      { name: "web_search", description: "w", parameters: {}, tags: ["web", "research"] },
       { name: "plan", description: "p", parameters: {}, alwaysOn: true },
     ];
     const active = ["file", "code"];

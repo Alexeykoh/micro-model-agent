@@ -121,7 +121,7 @@ export const webBrowseTool: ToolDefinition = {
   security: { caps: [{ net: true }], urlArgs: ["url"] },
   icon: "🌐",
   description: `Fetch and read a web page. Returns the whole page as plain text (max ${MAX_PREVIEW_LINES} lines / ${MAX_CHARS} chars). This is a plain HTTP request — it does NOT execute JavaScript, so JS-rendered single-page apps (weather sites, dashboards, modern SPAs) return empty or near-empty content. For such pages use the "browser" tool instead.`,
-  tags: ["research"],
+  tags: ["web", "research"],
   parameters: {
     type: "object",
     properties: {
