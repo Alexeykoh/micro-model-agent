@@ -148,7 +148,12 @@ export interface SessionLogEntry {
   cacheWriteTokens?: number;
   /** Источник кеш-данных: api | derived. */
   cacheSource?: string;
-  progress?: { totalBatches: number; novelTools: number; duplicateBatches: number };
+  progress?: {
+    totalBatches: number;
+    novelTools: number;
+    duplicateBatches: number;
+    wastefulToolCalls?: number;
+  };
   environment?: Record<string, unknown>;
   lspProbe?: {
     ok: Array<{ language: string; durationMs: number }>;

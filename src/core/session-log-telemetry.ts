@@ -78,7 +78,12 @@ export interface LlmUsageLogInfo {
   /** Кеш-статистика вызова от провайдера. */
   cache?: CacheUsage;
   /** Кумулятивный прогресс хода (не стрик). */
-  progress?: { totalBatches: number; novelTools: number; duplicateBatches: number };
+  progress?: {
+    totalBatches: number;
+    novelTools: number;
+    duplicateBatches: number;
+    wastefulToolCalls?: number;
+  };
 }
 
 /** `compaction`: сводка до/после в `content`. */

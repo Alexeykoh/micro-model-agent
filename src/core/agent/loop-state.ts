@@ -122,23 +122,17 @@ export interface LoopState {
   totalBatches: number;
   /** Пакетов, целиком повторяющих уже сделанные вызовы (кумулятивно). */
   duplicateBatches: number;
+  /** Напрасные вызовы за ход: дубли + неудачи тулов (метрика в llm_usage). */
+  wastefulToolCalls: number;
   /** Уникальные канонические ключи вызовов — кумулятивная метрика новизны. */
   novelToolKeys: Set<string>;
-  /**
-   * Причина принудительного завершения без тулов, или null. `max_iters` сюда
-   * не попадает: он не приходит от батча, а выводится в цикле по дефолту.
-   */
+  /** Причина завершения без тулов; `max_iters` выводится в цикле, не здесь. */
   finalizeReason: Exclude<StopReason, "max_iters"> | null;
   /** Машиночитаемая причина остановки для результата/чата (после финала). */
   stopReason: StopReason | null;
   /** Подряд идущие успешные итерации с тулами — вход для reasoning policy. */
   consecutiveToolSuccesses: number;
-  /**
-   * `finish_reason` последнего ответа провайдера ("stop" | "length" |
-   * "tool_calls"). Без него обрыв ответа неотличим от законченной мысли:
-   * в ses_mvpk4zjl финал оборвался на 1374 знаках, и понять, был ли это лимит
-   * токенов или сбой, по журналу нельзя.
-   */
+  /** `finish_reason` провайдера: без него обрыв ответа неотличим от мысли. */
   lastFinishReason?: string;
   /** Счётчик повторных одинаковых тулов (exit-on-complete). */
   repeatedToolCount: number;
@@ -278,7 +272,10 @@ export function recordBatchProgress(
     state.novelToolKeys.add(key);
   }
   state.totalBatches++;
-  if (duplicateBatch) state.duplicateBatches++;
+  if (duplicateBatch) {
+    state.duplicateBatches++;
+    state.wastefulToolCalls++;
+  }
 }
 
 /**

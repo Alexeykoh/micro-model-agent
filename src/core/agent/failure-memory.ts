@@ -64,6 +64,7 @@ export function recordRepeatedToolFailure(
     TRANSIENT_TOOLS.has(call.name)
   ) return;
   const key = call.name;
+  state.wastefulToolCalls++;
   const prev = state.toolFailureCounts.get(key) ?? { count: 0, error: "", samples: [] };
   prev.count++;
   const errText = String(result.output ?? "");

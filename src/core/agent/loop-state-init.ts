@@ -51,6 +51,7 @@ export function createLoopState(softToolBudget: number = SOFT_TOOL_BUDGET): Loop
     seenToolCalls: new Set<string>(),
     totalBatches: 0,
     duplicateBatches: 0,
+    wastefulToolCalls: 0,
     novelToolKeys: new Set<string>(),
     finalizeReason: null,
     stopReason: null,

@@ -168,6 +168,7 @@ export class TokenTracker {
         totalBatches: state.totalBatches,
         novelTools: state.novelToolKeys.size,
         duplicateBatches: state.duplicateBatches,
+        wastefulToolCalls: state.wastefulToolCalls,
       },
     });
     // Стоимость от провайдера (OpenCode list_cost) — авторитетный источник;

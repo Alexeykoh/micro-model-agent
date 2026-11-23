@@ -6,7 +6,31 @@ import { tmpdir } from "os";
 import { omitStaleErrorLines } from "../../src/core/context/compaction-summary-sanitize";
 import { MemoryStore } from "../../src/modules/memory/store";
 import { recordRepeatedToolFailure } from "../../src/core/agent/failure-memory";
-import { createLoopState } from "../../src/core/agent/loop-state";
+import { createLoopState, recordBatchProgress } from "../../src/core/agent/loop-state";
+
+describe("wastefulToolCalls: метрика напрасных вызовов", () => {
+  it("считает дублирующие пакеты и неудачи тулов", () => {
+    const state = createLoopState();
+    const deps = {
+      contextManager: { addMessage: () => undefined } as never,
+      logger: { diagnostic: () => undefined } as never,
+    };
+    expect(state.wastefulToolCalls).toBe(0);
+
+    recordBatchProgress(state, ["read_file::a"], false);
+    expect(state.wastefulToolCalls).toBe(0);
+    recordBatchProgress(state, ["read_file::a"], true);
+    expect(state.wastefulToolCalls).toBe(1);
+
+    recordRepeatedToolFailure(
+      state,
+      { id: "1", name: "mcp_call", arguments: {} } as never,
+      { success: false, output: "No open pages available" } as never,
+      deps,
+    );
+    expect(state.wastefulToolCalls).toBe(2);
+  });
+});
 
 describe("BCP-4: сводка компакции", () => {
   it("убирает старые ошибки из tool ledger", () => {
