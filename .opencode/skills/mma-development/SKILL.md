@@ -11,8 +11,11 @@ AGENTS.md wins; report the conflict.
 
 ## Start a task
 
-1. Branch from `dev`: `<type>/<short-name>` (`feat/|fix/|docs/|refactor/|chore/`).
-   Never work in `dev` directly; never commit to `master` (release branch).
+1. Default branch point is `dev`; name the branch `<type>/<short-name>`
+   (`feat/|fix/|docs/|refactor/|chore/`). Never work in `dev` directly; never
+   commit to `master` (release branch). Exception: when the user explicitly asks
+   for a branch from the current line (e.g. live work on `integration/vX.Y.Z-*`),
+   follow that instruction — the user's branch point wins over the default.
 2. If the change touches a **contract** (data path, module boundary, enforcement
    point, event format, config schema) — write the spec first in
    `docs/specs/<YYYY-MM-DD>-<topic>-design.md`, commit it in the same branch.
@@ -24,13 +27,19 @@ AGENTS.md wins; report the conflict.
 ## Definition of done (all of it)
 
 ```bash
-bun test           # ~3800 tests, must be green
-bun run quality    # typecheck + typecheck:frontend + lint + fallow + check:arch
+bun test                                    # full suite, must be green
+bun test tests/core/agent.test.ts           # one file
+bun test tests/core/agent.test.ts -t "name" # one test
+bun run quality                             # typecheck + frontend + check:arch + lint + fallow
 ```
 
 - Behavior change → a test that **would fail** without your change.
 - UI/CLI change → a live run (`bun run mma "<prompt>"`), evidence in `session.jsonl`/log.
+- Text visible to the model/user → evidence in `session.jsonl` or a log entry.
+- Docs-only → `bun test tests/docs-link-check.test.ts` (links must resolve).
 - Check all three dimensions: user UX · model ergonomics · adjacent modules.
+- CI is stricter: coverage 87% funcs / 90% lines, `bun run evals:check`,
+  `bun test tests/replay`, POSIX `bun run quality:posix`. Local green ≠ CI green.
 - Integration: merge to `dev` only when both commands are green.
 
 ## Recipes
@@ -62,6 +71,17 @@ imports core only via `src/core/api/` — `tests/arch/module-boundaries.test.ts`
 **New architectural rule** — ship the guard with it (`tests/arch/*`, `tests/output/*`);
 a rule without a check dies by the next big change (AGENTS.md rule 5).
 
+**System prompt edit** — text lives in `src/core/system-prompt-render.ts`
+(`system-prompt.ts` is a barrel). Keep compact-core ≤910 tokens
+(`tests/core/system-prompt-compact.test.ts`) and ≤120 chars per runtime line;
+update the golden snapshot deliberately with `bun test -u tests/core/system-prompt-compact.test.ts`.
+Guard phrase-locked strings in `tests/core/bootstrap.test.ts`. Compound lines with
+`+` are fine for source length but not for the runtime line guard.
+
+**session.jsonl format change** — even an additive optional field counts as a
+contract change: write the spec first, then update both `src/modules/session/log-types.ts`
+and `src/core/session-log-telemetry.ts` plus the emitting site.
+
 ## Hard constraints (guards will fail you)
 
 - Every `src/**/*.ts` ≤ 300 lines; `.arch-allowlist.json` is empty and only shrinks.
@@ -86,6 +106,14 @@ a rule without a check dies by the next big change (AGENTS.md rule 5).
 
 - Running `mma` outside the repo hits the **global install**; run from repo root and
   verify the version in the `Environment: … mma <version>` banner against `package.json`.
+- `bunfig.toml` excludes `tests/integration/**` from `bun test`; a test placed there
+  silently never runs. Put it in `tests/` or run `bun run test:integration`.
+- A guard may read a re-export shim, not the file you edited: e.g.
+  `tests/core/system-prompt-line-length.test.ts` reads `src/core/system-prompt.ts`
+  while prompt strings live in `src/core/system-prompt-render.ts`. Check what the
+  guard actually reads before trusting it.
+- `CHANGELOG.md`: not one line without an explicit user command — not for a fix,
+  test, spec or refactor (AGENTS.md rule 10). Use `bun run changelog:add` only on request.
 - Disabling a plugin ≠ sandbox: module code already ran; `permissions` is display-only.
 - `gh-pages/` is intentionally excluded from gates.
 - Three i18n keys exist only in `ru.json` (`cli.config_value`, `cli.show_secrets`,
@@ -98,4 +126,9 @@ a rule without a check dies by the next big change (AGENTS.md rule 5).
 Only on explicit user decision: update `CHANGELOG.md` + `package.json` (PATCH for
 fixes/i18n/docs/tests, MINOR for new commands/tools/modules/keys/skills) → merge
 `dev` → `master` (plain merge) → tag `vX.Y.Z` on master; CI builds 5-platform
-artifacts. No npm publish, no gitea mirror.
+artifacts. No npm publish, no gitea mirror. Versions are `0.x.y` only (beta).
+
+Channels are not mixed: stable tag `vX.Y.Z` only from `master`/`vX_Y_Z`;
+pre-tag `vX.Y.Z-pre.N` only from the rolling `pre` branch (recreated from the
+release branch each cycle); `package.json` always holds a clean `X.Y.Z`.
+`tests/arch/release-branches.test.ts` guards the branch↔tag invariant.
