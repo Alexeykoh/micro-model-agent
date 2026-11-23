@@ -1,7 +1,7 @@
 // Per-model capability editor: one popup form over config.modelCapabilities[model].
 // Fields mirror ModelCapabilities (src/config/types.ts); labels come from the
 // same config.field.* keys as the Capabilities table.
-import { el } from "../dom.js";
+import { el, icon, makeToggle } from "../dom.js";
 import { t } from "../i18n.js";
 import { session, settings } from "../store.js";
 import type { Dict } from "../core/store/types.js";
@@ -28,6 +28,18 @@ export const CAPABILITY_FIELDS: CapabilityField[] = [
   },
   { key: "reasoningOff", kind: "bool" },
   { key: "reasoningLevels", kind: "list" },
+];
+
+/** Reasoning levels offered by the multi-select popup. */
+export const REASONING_LEVELS = [
+  "default",
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
 ];
 
 /** Whole-key value: replace one model's entry, keep every other override. */
@@ -90,6 +102,58 @@ export function capabilityEditButton(model: string): HTMLButtonElement {
   return button;
 }
 
+/** Button + popup of level checkboxes, replacing a free-form comma string. */
+function reasoningLevelsField(
+  model: string,
+  key: string,
+  label: string,
+  initial: string[],
+  form: Record<string, unknown>,
+): HTMLElement {
+  const wrap = el("div", "caps-levels");
+  const chosen = new Set<string>(initial);
+  const button = el("button", "caps-levels-btn");
+  button.type = "button";
+  button.setAttribute("aria-haspopup", "true");
+  button.setAttribute("aria-expanded", "false");
+  button.setAttribute("aria-label", `${model}: ${label}`);
+  const value = el("span", "caps-levels-value");
+  const toggle = el("span", "tog");
+  toggle.appendChild(icon("chevron-down"));
+  button.append(value, toggle);
+
+  const paint = (): void => {
+    value.textContent = chosen.size
+      ? [...chosen].join(", ")
+      : t("web.settings.model_capabilities.levels.none");
+  };
+  form[key] = [...chosen];
+  const popup = el("div", "caps-levels-pop");
+  popup.hidden = true;
+  for (const level of REASONING_LEVELS) {
+    const row = el("div", "caps-levels-row");
+    row.appendChild(el("span", "caps-levels-name", level));
+    const sw = makeToggle(chosen.has(level), (next) => {
+      if (next) chosen.add(level);
+      else chosen.delete(level);
+      form[key] = [...chosen];
+      paint();
+      return true;
+    });
+    sw.dataset.level = level;
+    sw.setAttribute("aria-label", level);
+    row.appendChild(sw);
+    popup.appendChild(row);
+  }
+  button.addEventListener("click", () => {
+    popup.hidden = !popup.hidden;
+    button.setAttribute("aria-expanded", popup.hidden ? "false" : "true");
+  });
+  paint();
+  wrap.append(button, popup);
+  return wrap;
+}
+
 /** Open the nested dialog for one model. Save/Reset post once, then close. */
 export function openModelCapabilitiesDialog(model: string): void {
   const all = (settings.config?.modelCapabilities ?? {}) as Dict;
@@ -105,49 +169,62 @@ export function openModelCapabilitiesDialog(model: string): void {
     );
   }
 
-  for (const field of CAPABILITY_FIELDS) {
-    const label = t("config.field." + field.key);
-    const row = el("label", "table-field");
-    row.appendChild(el("span", "table-field-label", label));
-    let input: HTMLInputElement | HTMLSelectElement;
-    if (field.kind === "bool") {
-      const cb = el("input");
-      cb.type = "checkbox";
-      cb.checked = current[field.key] === true;
-      input = cb;
-    } else if (field.kind === "enum") {
-      const sel = el("select");
-      const none = el("option", "", t("config.enum.none"));
-      none.value = "";
-      sel.appendChild(none);
-      for (const option of field.options ?? []) {
-        const op = el("option", "", option);
-        op.value = option;
-        sel.appendChild(op);
+  const note = el("div", "caps-note");
+  note.appendChild(icon("info"));
+  note.appendChild(el("span", "", t("web.settings.model_capabilities.note")));
+  body.appendChild(note);
+
+  const groups: Array<{ title: string; fields: typeof CAPABILITY_FIELDS }> = [
+    {
+      title: t("web.settings.model_capabilities.group.capabilities"),
+      fields: CAPABILITY_FIELDS.filter((f) => f.kind === "bool" && !f.key.startsWith("reasoning")),
+    },
+    {
+      title: t("web.settings.model_capabilities.group.reasoning"),
+      fields: CAPABILITY_FIELDS.filter((f) => f.key.startsWith("reasoning")),
+    },
+  ];
+
+  for (const group of groups) {
+    const section = el("div", "caps-group");
+    section.appendChild(el("div", "sec-title", group.title));
+    for (const field of group.fields) {
+      const label = t("config.field." + field.key);
+      const row = el("div", "row");
+      row.appendChild(el("span", "row-name", label));
+      if (field.kind === "bool") {
+        const on = current[field.key] === true;
+        const sw = makeToggle(on, (next) => {
+          form[field.key] = next;
+          return true;
+        });
+        sw.setAttribute("aria-label", `${model}: ${label}`);
+        form[field.key] = on;
+        row.appendChild(sw);
+      } else if (field.kind === "enum") {
+        const sel = el("select", "val");
+        const none = el("option", "", t("config.enum.none"));
+        none.value = "";
+        sel.appendChild(none);
+        for (const option of field.options ?? []) {
+          const op = el("option", "", option);
+          op.value = option;
+          sel.appendChild(op);
+        }
+        sel.value = typeof current[field.key] === "string" ? String(current[field.key]) : "";
+        sel.setAttribute("aria-label", `${model}: ${label}`);
+        sel.addEventListener("change", () => { form[field.key] = sel.value; });
+        form[field.key] = sel.value;
+        row.appendChild(sel);
+      } else {
+        const initial = Array.isArray(current[field.key])
+          ? current[field.key].map(String)
+          : [];
+        row.appendChild(reasoningLevelsField(model, field.key, label, initial, form));
       }
-      sel.value = typeof current[field.key] === "string" ? String(current[field.key]) : "";
-      input = sel;
-    } else {
-      const text = el("input");
-      text.type = "text";
-      text.placeholder = "low, medium, xhigh";
-      text.value = Array.isArray(current[field.key])
-        ? current[field.key].join(", ")
-        : current[field.key] == null
-          ? ""
-          : String(current[field.key]);
-      input = text;
+      section.appendChild(row);
     }
-    input.setAttribute("aria-label", `${model}: ${label}`);
-    form[field.key] =
-      field.kind === "bool" ? current[field.key] === true : input.value;
-    input.addEventListener("change", () => {
-      form[field.key] = field.kind === "bool"
-        ? (input as HTMLInputElement).checked
-        : input.value;
-    });
-    row.appendChild(input);
-    body.appendChild(row);
+    body.appendChild(section);
   }
 
   const actions = el("div", "model-pane-actions");

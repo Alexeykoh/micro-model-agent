@@ -20,6 +20,8 @@ i18n.I18N.dicts = {
     "config.enum.none": "—",
     "web.settings.model_capabilities.reset": "reset override",
     "web.settings.model_capabilities.detected": "Detected by provider: {values}",
+    "web.settings.model_capabilities.note": "These values force-override model and provider settings.",
+    "web.settings.model_capabilities.levels.none": "not set",
     "web.settings.model_capabilities.edit": "edit capabilities",
     "config.field.vision": "vision",
     "config.field.video": "video",
@@ -76,13 +78,16 @@ describe("per-model capabilities dialog", () => {
     expect(button).toBeTruthy();
     button?.click();
     expect(document.getElementById("subOverlay")?.classList.contains("open")).toBe(true);
-    const fields = [...document.querySelectorAll<HTMLElement>("#subHost .caps-form input, #subHost .caps-form select")];
-    expect(fields.length).toBe(8);
     const strategy = document.querySelector<HTMLSelectElement>(
       '#subHost select[aria-label="bonsai-2-27b-pq2: reasoningStrategy"]',
     );
     expect(strategy).toBeTruthy();
     expect(strategy?.value).toBe("");
+    expect(document.querySelector("#subHost .caps-levels-btn")).toBeTruthy();
+    expect(document.querySelector("#subHost .caps-note")?.textContent).toContain("force-override");
+    expect(document.querySelectorAll("#subHost input[type=checkbox]").length).toBe(0);
+    expect(document.querySelectorAll("#subHost .caps-group > .row > .toggle").length).toBe(6);
+    expect(document.querySelectorAll('#subHost [aria-label$="reasoningOff"]').length).toBe(1);
   });
 
   it("posts the merged whole-key record and closes only on success", async () => {
@@ -97,12 +102,18 @@ describe("per-model capabilities dialog", () => {
     try {
       mount();
       form.openModelCapabilitiesDialog("bonsai-2-27b-pq2");
-      const levels = document.querySelector<HTMLInputElement>(
-        '#subHost input[aria-label="bonsai-2-27b-pq2: reasoningLevels"]',
+      const levelsBtn = document.querySelector<HTMLElement>(
+        '#subHost button[aria-label="bonsai-2-27b-pq2: reasoningLevels"]',
       );
-      if (!levels) throw new Error("levels input missing");
-      levels.value = "low, xhigh";
-      levels.dispatchEvent(new win.Event("change"));
+      if (!levelsBtn) throw new Error("levels button missing");
+      levelsBtn.click();
+      for (const level of ["low", "xhigh"]) {
+        const sw = document.querySelector<HTMLElement>(
+          `#subHost .caps-levels-pop [data-level="${level}"]`,
+        );
+        if (!sw) throw new Error(`level ${level} missing`);
+        sw.click();
+      }
       const save = [...document.querySelectorAll<HTMLElement>("#subHost button")]
         .find((b) => b.textContent === "save");
       if (!save) throw new Error("save button missing");
