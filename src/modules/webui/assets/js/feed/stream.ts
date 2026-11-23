@@ -130,8 +130,10 @@ export function onReasoning(
   finishMd(feed);
   const st = streamStateFor(feed);
   if (!st.curThink) {
-    flushRun(feed);
+    // Thinking belongs INSIDE the step group: it folds together with the tools
+    // that follow, so no `flushRun` here (the group closes on text/turn end).
     const { wrap, head, body } = buildThinkBlock(true, undefined, info);
+    // `appendTo` fires `hooks.afterFeedAppend`, which folds the row immediately.
     appendTo(feed, wrap);
     const think: ThinkState = { wrap, head, body, startedAt: Date.now(), chars: 0, timer: undefined };
     st.curThink = think;

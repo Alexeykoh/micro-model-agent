@@ -50,6 +50,10 @@ export interface StoreHooks {
   afterHistory?: ((id: string) => void) | null;
   /** Перед заменой ленты в `#msgs` (закрывает вид субагента, если открыт). */
   beforeFeedMount?: (() => void) | null;
+  /** Новая строка добавлена в ленту: точка свёртывания шагов (`appendTo`). */
+  afterFeedAppend?: ((feed: HTMLElement, node: HTMLElement) => void) | null;
+  /** Конфиг перечитан/изменён: пересобрать ленту под новые опции. */
+  afterConfig?: (() => void) | null;
   /**
    * Открыть настройки сразу на нужной панели (и, если задан, прокрутить к
    * якорю внутри неё). Регистрирует `settings/modal.ts`; сайдбар зовёт через

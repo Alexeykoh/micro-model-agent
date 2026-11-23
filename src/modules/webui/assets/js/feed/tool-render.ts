@@ -167,7 +167,6 @@ export function finishToolEnd(data: Dict): void {
     if (!data.success) {
       node.status.classList.add("fail");
       st.runFails++;
-      st.runReconOnly = false;
     }
     st.toolNodes.delete(data.toolCallId);
   }

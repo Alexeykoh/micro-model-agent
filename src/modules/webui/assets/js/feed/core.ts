@@ -1,6 +1,4 @@
-// Feed container + sticky-scroll + read-only run folding for `mma web`.
-// Extracted from `feed.js`; the streaming/turn/history handlers stay there and
-// import these primitives. `feed.js` re-exports this module's public surface.
+// Feed container + sticky-scroll primitives for `mma web`; re-exported by `feed.js`.
 import { msgs, el, icon } from "../dom.js";
 import { t } from "../i18n.js";
 import { tabs as tabState, hooks } from "../store.js";
@@ -8,12 +6,8 @@ import { getUpdateInfo, isUpdateDismissed } from "../update-state.js";
 import { updateCard } from "./update-card.js";
 import { copyAction } from "./blocks.js";
 
-// ---------------------------------------------------------------------------
-// Shared render helpers used by the stream/turn/history clusters. Pure visual
-// builders (Markdown options, reasoning block, copy button) live in
-// `blocks.ts`; the container primitives stay here so those clusters never need
-// to import one another.
-// ---------------------------------------------------------------------------
+// Shared helpers for the stream/turn/history clusters; visual builders live in
+// `blocks.ts` so those clusters never import one another.
 
 export { mdOpts, buildThinkBlock, copyAction } from "./blocks.js";
 export type { MdOpts, ThinkBlock } from "./blocks.js";
@@ -86,8 +80,11 @@ export function appendActionsRow(
 }
 
 export function insertAfter(ref: Node | null, node: Node): void {
-  if (ref && ref.parentNode) ref.parentNode.insertBefore(node, ref.nextSibling);
-  else appendTo(liveFeed(), node);
+  if (ref && ref.parentNode) {
+    ref.parentNode.insertBefore(node, ref.nextSibling);
+    if (node instanceof HTMLElement && ref.parentNode instanceof HTMLElement)
+      hooks.afterFeedAppend?.(ref.parentNode, node);
+  } else appendTo(liveFeed(), node);
 }
 
 function emptyView(): HTMLElement {
@@ -273,22 +270,23 @@ msgs?.addEventListener("scroll", () => {
 export function appendTo<T extends Node>(feed: HTMLElement | null, node: T): T {
   if (!feed) return node;
   feed.appendChild(node);
+  if (node instanceof HTMLElement) hooks.afterFeedAppend?.(feed, node);
   trimFeed(feed);
   if (feed === activeFeed()) scroll();
   return node;
 }
 
-/**
- * Сколько верхнеуровневых узлов держим в ленте. Лента растёт всю сессию, и
- * без предела DOM пухнет (аудит §6.15): старые узлы уходят, как в кольце.
- */
+/** Ring limit for top-level feed nodes (audit §6.15). */
 export const FEED_MAX_NODES = 400;
 
-/** Убирает самые старые узлы ленты, пока их больше предела. */
 function trimFeed(feed: HTMLElement): void {
   while (feed.childElementCount > FEED_MAX_NODES) {
     const first = feed.firstElementChild;
     if (!first) return;
+    // Never leave an orphaned detail after trimming its summary (or vice versa).
+    const partner = first.nextElementSibling;
+    if (first.matches(".group-sum, .group-detail") && partner?.matches(".group-sum, .group-detail"))
+      partner.remove();
     first.remove();
   }
 }

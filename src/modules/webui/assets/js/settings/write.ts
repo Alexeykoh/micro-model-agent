@@ -149,6 +149,7 @@ export async function postConfig(
       );
     }
     if (settings.config && r.data.value !== undefined) setPath(settings.config, key, r.data.value);
+    hooks.afterConfig?.();
     // Смена провайдера инвалидирует список моделей: старый список принадлежит
     // прошлому бэкенду и не должен мелькать под новым. Свежий придёт SSE
     // `models` после фонового refresh; до него честно показываем «грузится».
@@ -217,6 +218,7 @@ export async function loadConfig(): Promise<void> {
   settings.config = r.data.config || {};
   settings.registry = Array.isArray(r.data.registry) ? r.data.registry : [];
   settings.webToken = typeof r.data.webToken === "string" ? r.data.webToken : null;
+  hooks.afterConfig?.();
   // The OS snapshot must land before syncThemeFromConfig: on Linux the
   // `omarchy` skin reads colours from the active OS theme; elsewhere it is absent.
   await loadOsTheme();

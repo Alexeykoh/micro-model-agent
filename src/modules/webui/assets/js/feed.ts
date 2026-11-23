@@ -1,7 +1,8 @@
 // Feed barrel. The implementation is split by cluster under `./feed/`:
 //   core     — container, sticky scroll, shared render helpers
 //   blocks   — reasoning block, Markdown options, copy button
-//   busy     — busy indicator, run folding
+//   busy     — busy indicator, run flushing
+//   activity-group — collapsible step groups (summary + expand)
 //   sidebar  — usage / workspace / environment renders
 //   stream   — text, reasoning, meta, phase, retract
 //   turn     — tool start/end, turn end, command output, log
@@ -12,6 +13,7 @@
 export * from "./feed/core.js";
 export * from "./feed/blocks.js";
 export * from "./feed/busy.js";
+export * from "./feed/activity-group.js";
 export * from "./feed/sidebar.js";
 export * from "./feed/speed-chip.js";
 export * from "./feed/history.js";

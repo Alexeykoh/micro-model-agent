@@ -178,6 +178,13 @@ export function verbosity(): string {
   return ui.verbose ? "verbose" : "quiet";
 }
 
+/** Step folding in the feed (option `ui.collapseSteps`, default on). Verbose
+ *  always keeps the full detail, regardless of the toggle. */
+export function collapseSteps(): boolean {
+  const ui = (settings.config && settings.config.ui) || {};
+  return ui.collapseSteps !== false && verbosity() !== "verbose";
+}
+
 // First non-empty line of a tool result — the calm one-line cause shown in
 // quiet mode instead of the whole model-facing body.
 export function firstOutputLine(text: string | null | undefined): string {
