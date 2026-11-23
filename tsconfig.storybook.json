@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.frontend.json",
+  "include": ["stories/**/*", ".storybook/**/*"],
+  "exclude": ["node_modules", "dist", "src/modules/webui/assets/**"]
+}
