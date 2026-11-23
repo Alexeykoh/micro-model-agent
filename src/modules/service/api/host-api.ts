@@ -61,9 +61,13 @@ export async function handleHostApi(
   }
   if (parts.length === 3 && parts[2] === "models" && req.method === "GET") {
     const provider = reqUrl.searchParams.get("provider") ?? undefined;
+    const refresh = reqUrl.searchParams.get("refresh") === "1" && !provider;
+    // Явное нажатие: дожидаемся провайдера и отдаём свежий список, иначе
+    // daemon-адаптер не сможет обновить браузер по SSE `models`.
+    if (refresh) await s.models.refresh();
     const resolved = provider
       ? s.models.getFor(provider)
-      : { models: s.models.get(), loading: false };
+      : { models: s.models.get(), loading: false, refreshStarted: refresh };
     sendJson(res, 200, resolved);
     return true;
   }

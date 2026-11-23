@@ -16,6 +16,7 @@ export interface HostConfigWiringState {
   reconfigure?: (config: AppConfig) => void | Promise<void>;
   knownModels?: () => string[];
   knownModelsFor?: (name: string) => { models: string[]; loading: boolean };
+  knownModelsRefresh?: () => Promise<void>;
 }
 
 /** Возвращает `getConfig`/`setConfig`/`listModels` для `WebHost`. */
@@ -25,7 +26,7 @@ export function makeHostConfigWiring(
 ): {
   getConfig: () => HostConfigSnapshot;
   setConfig: (key: string, value: unknown) => Promise<HostConfigWriteResult>;
-  listModels: (provider?: string) => HostModels;
+  listModels: (provider?: string, refresh?: boolean) => HostModels;
 } {
   return {
     getConfig: () => ({
@@ -43,12 +44,19 @@ export function makeHostConfigWiring(
       if (result.ok && key === "locale") setLocale(config.locale);
       return result;
     },
-    listModels: (provider?: string) => {
+    listModels: (provider?: string, refresh?: boolean) => {
       if (provider && state.knownModelsFor) {
         const resolved = state.knownModelsFor(provider);
         return { models: resolved.models, loading: resolved.loading };
       }
-      return { models: state.knownModels?.() ?? [] };
+      // Явный рефреш: публикация SSE `models` обновит клиент, когда
+      // провайдер ответит. Готовый список остаётся видимым во время запроса.
+      const started = refresh && !!state.knownModelsRefresh;
+      if (started) void state.knownModelsRefresh!();
+      return {
+        models: state.knownModels?.() ?? [],
+        refreshStarted: started || undefined,
+      };
     },
   };
 }

@@ -68,4 +68,20 @@ describe("loadModels single-flight", () => {
     expect(store.session.capabilities).toEqual({ vision: true, video: true, tools: true });
     expect(renders).toBeGreaterThan(0);
   });
+
+  it("asks the server to re-fetch from the provider on an explicit refresh", async () => {
+    const urls: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      urls.push(String(input));
+      return new Response(JSON.stringify({ models: ["x"], refreshStarted: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    const started = await loader.requestModelsRefresh();
+
+    expect(started).toBe(true);
+    expect(urls).toEqual(["/api/models?refresh=1"]);
+  });
 });
