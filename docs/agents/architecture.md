@@ -148,7 +148,7 @@ hook in `Agent.run()` (so REPL, web and one-shot all behave the same):
 ### Security Module
 
 > **Spec:** `docs/archive/specs/2025/2025-07-28-mma-v2-design.md#14-security-module` — Comprehensive security system for MMA v2.
-> **Status:** **Phase 1 implemented** (Bash command validation, path restrictions, network filtering, content scanning, subagent recursion control).
+> **Status:** implemented (Bash command validation, path restrictions, network filtering, content scanning, subagent recursion control; extended features — below).
 
 The security module provides multiple layers of protection:
 
@@ -168,10 +168,10 @@ The security module provides multiple layers of protection:
   - Applied to all filesystem tools (`read_file`, `write_file`, `delete_file`, `edit_file`, `create_dir`, `move_file`, `list_dir`, `file_info`)
 
 - **Network Validation** (`src/modules/security/network-validator.ts`):
-  - Denied domains blacklist
-  - Allowed domains whitelist (optional)
-  - URL sanitization (removing sensitive query parameters)
-  - Applied to `web_fetch`, `web_search`, `web_browse`
+  - Scheme allowlist (`http`/`https`), denied domains blacklist, optional allowed-domains whitelist
+  - SSRF guard: private/reserved IPs (IPv4/IPv6, encoded forms), DNS resolution to private addresses, manual redirects re-validated on every hop
+  - Timeout/response-size caps; URL sanitization (removing sensitive query parameters) for logs
+  - Applied in `ToolExecutor` to every tool with `urlArgs` (`web_fetch`, `web_browse`, `download_file`, image tools), plus browser navigation, `web_search`, and framework-initiated calls (`src/modules/security/outbound-policy.ts`: audit webhooks, task callbacks, OTEL, `git push`)
 
 - **Content Scanning** (`src/modules/security/content-scanner.ts`):
   - Detection of dangerous patterns in file content (`eval(`, `child_process.exec(`, `rm -rf`, etc.)
@@ -235,15 +235,15 @@ tag narrowing: `PromptBlock.requiresTags` gates blocks (e.g. `browser`), and
 do not break the prefix cache. Blocks excluded by budget produce `omittedBlocksNote`
 (INV-6/17). Contract: `docs/specs/2026-10-31-system-prompt-v3-design.md`.
 
-#### Backward Compatibility
+#### Security defaults and opt-out
 
-Security is **disabled by default** (`SecurityConfig.enabled: false`):
+Security is **enabled by default** (`DEFAULT_SECURITY_CONFIG` in `src/config/security.ts`, merged into `DEFAULTS.security` in `src/config/defaults.ts`):
 
-- All validators (command, path, network, content scan) return `allowed: true` when `enabled` is `false`
-- The default `DEFAULT_SECURITY_CONFIG` has empty/benign defaults — blacklists exist as templates, not active rules
-- To enable security: set `security.enabled: true` and configure individual modules (bash, paths, network, contentScan)
-- Each sub-module also has its own `enabled` flag for granular control
-- Existing code continues to work without modifications
+- `security.enabled: true`, `security.bash.enabled: true`, `security.network.enabled: true`; path checks and content scanning are opt-in per sub-module (`security.paths.enabled: false`, `security.contentScan.enabled: false`).
+- Network defaults: only `http`/`https`, `deniedDomains: [localhost, 127.0.0.1, ::1]`, empty allowlist (any public domain), 15 s timeout, 15 KB response cap; `allowLoopback` and `allowPrivateOutbound` are `false`.
+- Validators (command, path, network, content scan) return `allowed: true` when their own `enabled` is `false`; `security.enabled: false` switches them all off. An explicitly stored opt-out is honored verbatim — stale defaults are not force-restored.
+- Two guards stay on regardless: protected-path confirmation for file-mutating tools (see above) and the framework's fail-closed outbound policy for webhooks/callbacks/OTEL/`git push` (`security.network.enabled` only covers model-initiated tool calls).
+- Each sub-module also has its own `enabled` flag for granular control.
 
 #### Phase 4: Extended Security Features
 
