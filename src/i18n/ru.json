@@ -254,6 +254,7 @@
   "tool.question.batch_truncated": "Заданы первые {shown} из {total} неизвестных вопросов — вызовите тул ещё раз для остальных.",
   "tool.name_or_task": "Укажите параметр \"name\" или \"task\"",
   "tool.chunk_query_no_query": "chunk_query: требуется строка запроса.",
+  "tool.chunk_query_too_many_chunks": "chunk_query: слишком много чанков ({count} > {max}) — увеличьте chunk_chars, сузьте вход или ответьте сразу по загруженной странице.",
   "tool.chunk_query_no_input": "chunk_query: укажите input_path или text.",
   "tool.chunk_query_no_provider": "chunk_query: в контексте нет LLM-провайдера.",
   "tool.chunk_query_path_not_allowed": "[SCOPE] {reason}",

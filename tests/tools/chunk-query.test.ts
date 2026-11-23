@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
+import { setLocale } from "../../src/i18n/index";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,6 +14,9 @@ function mockProvider() {
     },
   };
 }
+
+// Локаль процессная: english-строки сообщений фиксируем явно.
+beforeEach(() => setLocale("en"));
 
 const baseCtx = (dir: string) =>
   ({
@@ -30,6 +34,28 @@ describe("chunkQueryTool", () => {
     expect(chunkQueryTool.name).toBe("chunk_query");
     expect(chunkQueryTool.parameters.required).toContain("query");
     expect(chunkQueryTool.tags).toContain("research");
+    expect((chunkQueryTool.parameters.properties as Record<string, unknown>).max_chunks).toBeDefined();
+  });
+
+  it("refuses a run that would fan out into too many chunks", async () => {
+    const res = await chunkQueryTool.handler(baseCtx("/tmp"), {
+      query: "q",
+      text: "x".repeat(2_500),
+      chunk_chars: 100,
+    });
+    expect(res.success).toBe(false);
+    expect(res.output).toContain("too many chunks");
+    expect(res.output).toContain("chunk_chars");
+  });
+
+  it("allows an explicitly raised chunk budget", async () => {
+    const res = await chunkQueryTool.handler(baseCtx("/tmp"), {
+      query: "q",
+      text: "x".repeat(2_500),
+      chunk_chars: 100,
+      max_chunks: 30,
+    });
+    expect(res.success).toBe(true);
   });
 
   it("fails without input", async () => {
@@ -50,7 +76,7 @@ describe("chunkQueryTool", () => {
           ...baseCtx(dir),
           scope: { allowed_files: [dir], read_only_files: [file] },
         },
-        { query: "count rows", input_path: file, chunk_chars: 100 },
+        { query: "count rows", input_path: file, chunk_chars: 100, max_chunks: 20 },
       );
       expect(res.success).toBe(true);
       expect(res.output).toContain("chunk(s)");

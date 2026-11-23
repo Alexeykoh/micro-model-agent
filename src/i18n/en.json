@@ -274,6 +274,7 @@
   "tool.question.batch_truncated": "Asked the first {shown} of {total} unknown questions — call the tool again for the rest.",
   "tool.name_or_task": "Provide either \"name\" or \"task\" parameter",
   "tool.chunk_query_no_query": "chunk_query: a query string is required.",
+  "tool.chunk_query_too_many_chunks": "chunk_query: too many chunks ({count} > {max}) — increase chunk_chars or narrow the input, or answer directly from the fetched page.",
   "tool.chunk_query_no_input": "chunk_query: provide input_path or text.",
   "tool.chunk_query_no_provider": "chunk_query: missing LLM provider in context.",
   "tool.chunk_query_path_not_allowed": "[SCOPE] {reason}",

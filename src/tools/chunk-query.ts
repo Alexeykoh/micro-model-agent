@@ -5,13 +5,17 @@ import { t } from "../i18n/index";
 import type { ToolDefinition, ToolContext, ToolResult } from "./types";
 import { runChunkQuery } from "../core/context/chunk-query";
 
+const DEFAULT_CHUNK_CHARS = 12_000;
+/** Потолок числа чанков по умолчанию: 22 чанка в сессии GYM24 стоили 196 с. */
+const DEFAULT_MAX_CHUNKS = 8;
+
 /** Отвечает на вопрос по тексту вне контекстного окна (чанк-параллелизм). */
 export const chunkQueryTool: ToolDefinition = {
   name: "chunk_query",
   security: { caps: [{ fs: "read" }], pathArgs: ["input_path"] },
   icon: "🧩",
   description:
-    "Answer a query over a large text (file or inline) by splitting it into chunks and querying the model per chunk in parallel, then optionally synthesizing a final answer. Use when the input is too large for the context window.",
+    "Answer a query over a large text (file or inline) by splitting it into chunks and querying the model per chunk in parallel, then optionally synthesizing a final answer. Use when the input is too large for the context window. If web_fetch/web_browse already returned the answer, answer directly instead.",
   tags: ["research"],
   /** Несколько LLM-вызовов (чанк-запросы + синтез) — нужен больший бюджет. */
   timeoutMs: 300000,
@@ -32,7 +36,11 @@ export const chunkQueryTool: ToolDefinition = {
       },
       chunk_chars: {
         type: "number",
-        description: "Approximate chunk size in chars (default 12000).",
+        description: `Approximate chunk size in chars (default ${DEFAULT_CHUNK_CHARS}).`,
+      },
+      max_chunks: {
+        type: "number",
+        description: `Refuse to fan out beyond this many chunks (default ${DEFAULT_MAX_CHUNKS}).`,
       },
       max_parallel: {
         type: "number",
@@ -83,6 +91,25 @@ export const chunkQueryTool: ToolDefinition = {
       }
     }
 
+    const chunkChars =
+      typeof args.chunk_chars === "number" && args.chunk_chars > 0
+        ? args.chunk_chars
+        : DEFAULT_CHUNK_CHARS;
+    const maxChunks =
+      typeof args.max_chunks === "number" && args.max_chunks > 0
+        ? args.max_chunks
+        : DEFAULT_MAX_CHUNKS;
+    const estimatedChunks = Math.ceil(content.length / chunkChars);
+    if (estimatedChunks > maxChunks) {
+      return {
+        success: false,
+        output: t("tool.chunk_query_too_many_chunks", {
+          count: estimatedChunks,
+          max: maxChunks,
+        }),
+      };
+    }
+
     if (!ctx.llmProvider) {
       return { success: false, output: t("tool.chunk_query_no_provider") };
     }
@@ -93,7 +120,7 @@ export const chunkQueryTool: ToolDefinition = {
         : (ctx.config.subagent?.maxParallelChunkQueries ?? 4);
 
     const res = await runChunkQuery(ctx.llmProvider, content, query, {
-      chunkChars: typeof args.chunk_chars === "number" ? args.chunk_chars : undefined,
+      chunkChars,
       maxParallel,
       synthesize: typeof args.synthesize === "boolean" ? args.synthesize : undefined,
       maxChunkTokens: typeof args.max_chunk_tokens === "number" ? args.max_chunk_tokens : undefined,
