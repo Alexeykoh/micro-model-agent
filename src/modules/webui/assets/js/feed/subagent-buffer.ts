@@ -4,6 +4,7 @@
 import { t } from "../i18n.js";
 import type { Dict } from "../core/store/types.js";
 import { formatMs } from "../format.js";
+import { formatDuration } from "../duration.js";
 import { toolState, type FaceState } from "../loader.js";
 
 const MAX_RUNS = 40;
@@ -117,7 +118,7 @@ export function runFaceState(b: RunBuf): FaceState {
   const status = meta.status || "running";
   if (status === "running") {
     const secs = Math.max(0, Math.round((now - started) / 1000));
-    return t("web.subagent.running") + (secs ? " · " + secs + "s" : "");
+    return t("web.subagent.running") + (secs ? " · " + formatDuration(secs * 1000) : "");
   }
   const key =
     status === "done"

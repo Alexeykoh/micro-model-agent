@@ -3,6 +3,7 @@
 import { el } from "../dom.js";
 import { t } from "../i18n.js";
 import { categoryOf, argText, formatMs } from "../format.js";
+import { formatDuration } from "../duration.js";
 import type { Dict } from "../core/store/types.js";
 import { sb, type TraceEntry } from "./state.js";
 import { isWarn, rowLabel } from "./trace-labels.js";
@@ -29,7 +30,7 @@ function turnOffset(entry: TraceEntry): string {
   const first = sb.trace.find((e) => e.turn === entry.turn);
   const start = typeof first?.ts === "number" ? first.ts : entry.ts;
   if (typeof entry.ts !== "number" || typeof start !== "number") return "";
-  return `+${((entry.ts - start) / 1000).toFixed(1)}s`;
+  return `+${formatDuration(entry.ts - start)}`;
 }
 
 /** Right-hand time cell; `title` carries the offset inside the turn. */

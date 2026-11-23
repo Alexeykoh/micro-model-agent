@@ -2,6 +2,7 @@
 
 import { t } from "./i18n.js";
 import { settings } from "./store.js";
+import { formatDuration } from "./duration.js";
 
 export const CATEGORIES: Record<string, string[]> = {
   recon: [
@@ -164,9 +165,9 @@ export function readRangeText(name: string, args: unknown): string {
   return "";
 }
 
+/** Обратная совместимость: все старые вызовы теперь идут через единый формат. */
 export function formatMs(ms: number | null | undefined): string {
-  if (typeof ms !== "number" || !isFinite(ms)) return "";
-  return ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : Math.round(ms) + "ms";
+  return formatDuration(ms);
 }
 
 // Effective chat verbosity, mirroring `resolveVerbosity` in src/ui/theme.ts:

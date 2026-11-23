@@ -9,6 +9,7 @@
 import { el, icon } from "../dom.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
+import { formatDuration } from "../duration.js";
 import type { Dict } from "../core/store/types.js";
 import { hooks } from "../store.js";
 import { sb } from "./state.js";
@@ -49,7 +50,9 @@ function startTicker(box: HTMLElement): void {
   const paint = () => {
     const node = box.querySelector<HTMLElement>(".lsp-file-progress");
     if (node)
-      node.textContent = t("web.sidebar.lsp_file_checking", { secs: String(checkElapsedSec()) });
+      node.textContent = t("web.sidebar.lsp_file_checking", {
+        duration: formatDuration(checkElapsedSec() * 1000),
+      });
   };
   paint();
   ticker = window.setInterval(paint, 500);
@@ -109,7 +112,9 @@ export function renderLspFile(box: HTMLElement): void {
       el(
         "div",
         "lsp-file-progress",
-        t("web.sidebar.lsp_file_checking", { secs: String(checkElapsedSec()) }),
+        t("web.sidebar.lsp_file_checking", {
+          duration: formatDuration(checkElapsedSec() * 1000),
+        }),
       ),
     );
     startTicker(box);
@@ -129,8 +134,8 @@ export function renderLspFileResult(box: HTMLElement, res: Dict): void {
   if (res.ok !== true) {
     const key = "web.sidebar.lsp_file_" + String(res.error || "failed").replace(/-/g, "_");
     const ms = Number(res.ms);
-    const spent = Number.isFinite(ms) && ms > 0 ? String(Math.round(ms / 1000)) : "";
-    const text = t(key, spent ? { secs: spent } : undefined);
+    const spent = Number.isFinite(ms) && ms > 0 ? formatDuration(ms) : "";
+    const text = t(key, spent ? { duration: spent } : undefined);
     const hint = el("div", "lsp-file-state bad");
     hint.appendChild(el("span", "lsp-g fail", "!"));
     hint.appendChild(
@@ -189,7 +194,7 @@ export function renderLspFileResult(box: HTMLElement, res: Dict): void {
 }
 
 function formatSec(ms: number): string {
-  return t("web.sidebar.lsp_file_ms", { secs: (ms / 1000).toFixed(1) });
+  return t("web.sidebar.lsp_file_ms", { duration: formatDuration(ms) });
 }
 
 /** Проверить файл; при смене файла в «Файлах» результат заменяется. */

@@ -3,6 +3,7 @@
 // ответ модели. Хост — `onMeta kind: "critic"` → SSE `critic` (см. forward.ts).
 import { el, setIcon } from "../dom.js";
 import { t } from "../i18n.js";
+import { formatDuration } from "../duration.js";
 import type { Dict } from "../core/store/types.js";
 import { activeFeed, appendTo, clearEmpty, feedForEvent, scroll } from "./core.js";
 import { clearBusy } from "./busy.js";
@@ -22,7 +23,7 @@ function statusLabel(status: string): string {
 }
 
 function durationLabel(ms: number): string {
-  return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
+  return formatDuration(ms);
 }
 
 function issueRow(issue: Dict): HTMLElement {

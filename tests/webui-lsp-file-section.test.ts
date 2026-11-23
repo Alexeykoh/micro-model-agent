@@ -19,10 +19,10 @@ i18n.I18N.dicts = {
     "web.sidebar.lsp_file_not_checked_yet": "нажми «проверить снова»",
     "web.sidebar.lsp_file_refresh": "проверить снова",
     "web.sidebar.lsp_file_clean": "ошибок нет",
-    "web.sidebar.lsp_file_ms": "{secs} с",
+    "web.sidebar.lsp_file_ms": "{duration}",
     "web.sidebar.lsp_file_failed": "проверка не удалась",
     "web.sidebar.lsp_file_outside_workspace": "путь вне проекта — не проверяю",
-    "web.sidebar.lsp_file_lsp_timeout": "сервер LSP не ответил за {secs} с - попробуй ещё раз",
+    "web.sidebar.lsp_file_lsp_timeout": "сервер LSP не ответил за {duration} - попробуй ещё раз",
     "web.sidebar.lsp_file_unsupported": "для этого типа файла нет LSP-сервера",
     "web.sidebar.lsp_file_starting": "сервер запускается (большой проект, до минуты)",
     "web.sidebar.lsp_file_more": "ещё {count} диагностик(и) не показано",
@@ -126,7 +126,7 @@ describe("LSP: секция проверки файла", () => {
     mod.renderLspFileResult(b, { ok: true, path: "src/a.ts", diagnostics: [], ms: 640 });
 
     expect(b.textContent).toContain("ошибок нет");
-    expect(b.textContent).toContain("0.6");
+    expect(b.textContent).toContain("640ms");
   });
 
   it("отказ вне workspace объясняется", () => {

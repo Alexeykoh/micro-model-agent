@@ -4,6 +4,7 @@ import { msgs, el, setIcon } from "../dom.js";
 import { t } from "../i18n.js";
 import { streamStateFor } from "../store.js";
 import { verbosity } from "../format.js";
+import { formatDuration } from "../duration.js";
 import { mountMarkdown } from "../../md.js";
 import {
   activeFeed,
@@ -86,7 +87,7 @@ export function onText(chunk: string, sid?: string): void {
 
 /** Header text for a think block: duration only (tok/s lives in the footer chip). */
 export function thinkDurText(startedAt: number, now = Date.now()): string {
-  return `· ${((now - startedAt) / 1000).toFixed(1)}s`;
+  return `· ${formatDuration(now - startedAt)}`;
 }
 
 function updateThinkHeader(feed: HTMLElement): void {
