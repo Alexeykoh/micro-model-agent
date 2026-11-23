@@ -326,13 +326,18 @@ describe("webui assets", () => {
     expect(js(a)).toContain("window.MmaSetup");
   });
 
-  it("wires the Agent settings panel (experts + critic keys) and the collapsed critic block", () => {
+  it("wires the Agent settings panel (experts + critic keys) and the always-visible critic block", () => {
     const a = loadAssets();
-    // 2026-11-05: критик получил собственное SSE-событие и свёрнутый блок.
+    // 2026-11-23: критик получил собственное SSE-событие; замечания видны сразу.
     expect(js(a)).toContain('["critic"');
     expect(js(a)).toContain("onCritic");
     expect(js(a)).toContain("critic-block");
-    expect(js(a)).toContain('"think-body hidden"');
+    const critic = a.jsModules["js/feed/critic-block.js"] ?? "";
+    expect(critic).toContain('"critic-head"');
+    expect(critic).toContain('"think-body critic-body"');
+    expect(critic).not.toContain("think-h");
+    expect(critic).not.toContain('"think-body hidden"');
+    expect(a.css).toContain(".critic-block .critic-head");
     expect(js(a)).toContain("critic.enabled");
     expect(js(a)).toContain("experts");
     // MoE removed 2026-10-12: no MoE keys or chips anywhere in the assets.
