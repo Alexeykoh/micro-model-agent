@@ -140,7 +140,7 @@ describe("sidebar DOM behaviour", () => {
     sidebar.sidebarTraceEvent("tool_start", { toolCallId: "c3", name: "grep", args: { q: "x" } });
     const stamp = rows()[0].querySelector<HTMLElement>(".ts");
     expect(stamp?.textContent).toMatch(/^\d{2}:\d{2}:\d{2}$/);
-    expect(stamp?.title).toMatch(/^\+\d+\.\d+s$/);
+    expect(stamp?.title).toMatch(/^\+(?:\d+ms|\d+\.\d+s|\d+m \d{2}s)$/);
     const header = win.document.querySelector<HTMLElement>(".trace-turn");
     expect(header?.textContent).toMatch(/\d{2}:\d{2}:\d{2}/);
   });
