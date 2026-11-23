@@ -75,11 +75,11 @@ export const AGENT_EXTRA_DEFS: ConfigKeyDef[] = [
   enumOf("ui.fontSize", "ui", ["compact", "comfortable", "large"] as const, false,
     (c) => c.ui.fontSize ?? "comfortable",
     (c, v) => { c.ui.fontSize = v as "compact" | "comfortable" | "large"; }),
-  // `live` — токены идут в UI сразу (текущее поведение). `after-review` —
-  // финальный кандидат держится в буфере до прохождения critic/audit, а
-  // отклонённый черновик не попадает ни в ленту, ни в историю.
+  // `after-review` (дефолт) — финальный кандидат держится в буфере до
+  // прохождения critic/audit, отклонённый черновик не попадает ни в ленту,
+  // ни в историю. `live` — токены идут в UI сразу, до вердикта критика.
   enumOf("ui.draftMode", "ui", ["live", "after-review"] as const, false,
-    (c) => c.ui.draftMode ?? "live",
+    (c) => c.ui.draftMode ?? "after-review",
     (c, v) => { c.ui.draftMode = v as "live" | "after-review"; }),
   // Тема — серверная настройка веб-UI (см. docs/specs/2026-10-30-webui-theme-
   // persistence-design.md): `localStorage` держит только кэш для pre-paint.

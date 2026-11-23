@@ -3751,20 +3751,20 @@ body.light .c-dim { --face-c: var(--panel); }
 }
 
 .critic-block .critic-summary { color: var(--fg); margin-bottom: 6px; white-space: normal; }
-/* Шапка критика: без тоггла — замечания видны сразу. На узкой ширине длинная
-   строка (web.feed.critic_head + статус) сжимается до эллипсиса. */
-.critic-block .critic-head { display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; color: var(--dim-b); }
-.critic-block .critic-head .g { flex: 0 0 auto; }
-.critic-block .critic-head .lab { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Шапка свёрнутого критика: на узкой ширине длинная строка
+   (web.feed.critic_head + статус) не должна наезжать на тоггл — глиф и тоггл
+   фиксированы, лейбл сжимается до эллипсиса (тот же паттерн, что у .trc .lab). */
+.critic-block .think-h .g, .critic-block .think-h .tog { flex: 0 0 auto; }
+.critic-block .think-h .lab { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .critic-block .critic-meta { color: var(--dim-c); margin-bottom: 8px; }
 .critic-block .critic-sub { color: var(--dim-c); margin: 8px 0 4px; text-transform: uppercase; letter-spacing: .04em; font-size: 10.5px; }
 .critic-block .critic-none { color: var(--dim-c); }
 .critic-block .critic-issue { margin: 0 0 8px; padding-left: 8px; border-left: 2px solid var(--line); white-space: normal; }
 .critic-block .critic-issue-head { display: flex; gap: 8px; align-items: baseline; }
-.critic-block .critic-sev { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; }
+.critic-block .critic-sev { flex: 0 0 auto; white-space: nowrap; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; }
+.critic-block .critic-claim { min-width: 0; overflow-wrap: anywhere; }
 .critic-block .critic-sev.sev-critical { color: var(--danger, #d9534f); }
 .critic-block .critic-sev.sev-concern { color: var(--warn, #d9a441); }
-.critic-block .critic-problem, .critic-block .critic-suggestion, .critic-block .critic-evidence { color: var(--dim-c); margin-top: 2px; }
 .critic-block .critic-check { margin: 0 0 6px; white-space: normal; }
 .critic-block .critic-check-mark { display: inline-block; width: 14px; }
 .critic-block .critic-check-tool { color: var(--fg); }

@@ -1,6 +1,6 @@
 ---
 name: MMA Development
-description: Playbook for developing the MMA (micro-models-agent) repo — branches, gates, definitions of done, recipes for tools/config/commands/skills, traps. Use for any code, test or docs change in this repository.
+description: Playbook for developing the MMA (micro-models-agent) repo — branches, gates, definitions of done, recipes, traps, live web UI verification with browser tools (selectors, sessions, SSE). Use for any code, test or docs change in this repository, including browser checks of mma web.
 ---
 
 # MMA — development playbook
@@ -100,7 +100,45 @@ and `src/core/session-log-telemetry.ts` plus the emitting site.
   `~/.mma`.
 - Long commands (dev server, `mma web`, watchers) start with `background: true`;
   readiness-poll with a small cap; kill by exact PID after the check.
-- Playwright (`bun run test:e2e`) only on explicit user request.
+- Playwright (`bun run test:e2e`) only on explicit user request. The `browse`
+  tools are fine for a live UI check when the user asks to check in the browser.
+
+## Live mma web via `browse` (verified selectors)
+
+Ask for the port; the live stand uses `http://localhost:4319/`. Open a **new**
+tab with `browse.navigate({ url, id: "..." })` and keep the returned `tab` id
+for every call; close it with `browse.tabs({ action: "close", tab })` when done.
+Do not take over tabs the user lent you.
+
+| Goal | Selector / action |
+| --- | --- |
+| Open a session | `http://localhost:<port>/?session=<sessionId>` |
+| New chat | click `role=button[name="новый чат"]` → URL becomes `?session=<new id>` |
+| Send a prompt | `browse.fill({ selector: "#inp", value })` then `browse.press({ selector: "#inp", key: "Enter" })` |
+| Feed / messages | `.feed` inside `#msgs`; step groups `.group-sum` + `.group-detail.hidden` |
+| Wait for the run | `browse.wait_for({ selector: ".msgs .busy", state: "detached", timeout: 240000 })` (plain `.busy` also matches `.input-area.busy` and `#sendBtn.busy`) |
+| Wait for critic | `browse.wait_for({ selector: ".critic-block", timeout: 240000 })` |
+| Critic block | `.critic-block > button.think-h` + `.critic-body.hidden`; `aria-expanded` flips on click via the delegated handler on `#msgs` |
+| Retract notice | `.retract-block` (button `think-h`) |
+| Sessions menu | button «все сессии»; copy id — «скопировать ID сессии» |
+| Sidebar tabs | `role=tablist "sidebar"` → «Сессия», «Файлы», «Изменения», «Субагенты» |
+
+Gotchas learned the hard way:
+
+- `browse.eval` runs in an **isolated world** by default: a dynamic
+  `import('/js/store.js')` there gets a fresh module with empty `tabs`. Use
+  `world: "main"` to read the app's live store, or inject a test SSE event via
+  `import('/js/feed/critic-block.js').then(m => m.onCritic(report, sessionId))`.
+- Assets are served straight from `src/`, but a page already loaded keeps its
+  old JS in memory. After editing assets, **reload/navigate the tab** and verify
+  with `fetch('/js/feed/<file>.js')` containing a marker string before judging
+  the UI. A real run started before the reload will render with the old code.
+- Synthetic `onCritic()` is a UI check only — say so explicitly; a real verdict
+  needs an actual turn. The session log does not replay `critic` into the feed,
+  so an old session shows no critic block until a new run happens.
+- Check DOM state, not just classes: `getComputedStyle(body).display === "none"`
+  proves the body is really hidden. For an empty «+» group, count `.group-sum`
+  whose `.parts` text is blank.
 
 ## Traps
 

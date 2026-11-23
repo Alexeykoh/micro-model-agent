@@ -1,7 +1,7 @@
-// Блок проверки критика: заголовок + сразу видимые замечания в ленте.
-// Критику не нужно скрывать в чате — это часть ответа, а не внутренний лог.
+// Свёрнутый блок проверки критика: одна строка в ленте, всё остальное — под
+// тогглом. По умолчанию закрыт ВСЕГДА: это материал проверки, а не ответ модели.
 // Хост — `onMeta kind: "critic"` → SSE `critic` (см. forward.ts).
-import { el } from "../dom.js";
+import { el, setIcon } from "../dom.js";
 import { t } from "../i18n.js";
 import { formatDuration } from "../duration.js";
 import type { Dict } from "../core/store/types.js";
@@ -50,7 +50,10 @@ function checkRow(check: Dict): HTMLElement {
   return row;
 }
 
-/** Отрисовка итога проверки: замечания видны сразу, без клика по тогглу. */
+/**
+ * Отрисовка итога проверки. Тело всегда `hidden`; раскрытие — общий
+ * `.think-h`-обработчик (тот же, что у размышлений и отзыва черновика).
+ */
 export function onCritic(report: Dict | undefined, sid?: string): void {
   if (!report || typeof report !== "object") return;
   const feed = feedForEvent(sid);
@@ -64,7 +67,9 @@ export function onCritic(report: Dict | undefined, sid?: string): void {
   const passes = num(report.passes);
   const duration = num(report.durationMs);
   const wrap = el("div", "think critic-block");
-  const head = el("div", "critic-head");
+  const head = el("button", "think-h");
+  head.type = "button";
+  head.setAttribute("aria-expanded", "false");
   head.appendChild(el("span", "g", "◇"));
   head.appendChild(
     el(
@@ -77,8 +82,11 @@ export function onCritic(report: Dict | undefined, sid?: string): void {
       }),
     ),
   );
+  const tog = el("span", "tog");
+  setIcon(tog, "chevron-right", t("web.action.show"));
+  head.appendChild(tog);
 
-  const body = el("div", "think-body critic-body");
+  const body = el("div", "think-body critic-body hidden");
   if (str(report.summary)) body.appendChild(el("div", "critic-summary", str(report.summary)));
   body.appendChild(
     el(

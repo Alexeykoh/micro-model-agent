@@ -248,4 +248,25 @@ describe("agent step groups", () => {
     expect(feed().querySelector('[data-tool-call-id="sub1"]')).toBeTruthy();
     expect(feed().querySelectorAll(".group-sum").length).toBe(3);
   });
+
+  it("leaves no empty '+' group when a transient status line is removed", () => {
+    reset();
+    const status = el("metaln status");
+    feed().appendChild(status);
+    trackNode(feed(), status);
+    expect(feed().querySelector(".group-sum")).toBeNull();
+
+    const read = el("act recon");
+    feed().appendChild(read);
+    trackNode(feed(), read);
+    const detail = feed().querySelector(".group-detail") as HTMLElement;
+    expect(detail.contains(status)).toBe(false);
+    expect(detail.contains(read)).toBe(true);
+
+    // clearStatusLines() before the critic report removes the status row;
+    // the step group must stay real, not become an empty "+" summary.
+    status.remove();
+    expect(feed().querySelectorAll(".group-sum").length).toBe(1);
+    expect(detail.children.length).toBe(1);
+  });
 });

@@ -1,4 +1,5 @@
-// Критику не нужно скрывать в чате: замечания критика видны сразу, без тоггла.
+// Критик в чате полностью свёрнут: видна только строка шапки, всё остальное —
+// под общим `.think-h`-тогглом. Раскрывается по клику, как размышления.
 import { describe, it, expect, beforeEach } from "vitest";
 import { setupHappyDom } from "../helpers/happy-dom";
 
@@ -20,6 +21,8 @@ function criticDict(): Record<string, string> {
     "web.feed.critic_issues": "what it flagged",
     "web.feed.critic_no_issues": "no issues — nothing to fix",
     "web.feed.critic_checks": "checks it ran",
+    "web.action.show": "show",
+    "web.action.hide": "hide",
   };
 }
 
@@ -28,11 +31,12 @@ i18n.I18N.dicts = { en: criticDict() };
 
 const store = await import("../../src/modules/webui/assets/js/store.js");
 const { onCritic } = await import("../../src/modules/webui/assets/js/feed/critic-block.js");
+const { toggleThinkHead } = await import("../../src/modules/webui/assets/js/feed/stream.js");
 
 function mountTab(id: string): HTMLElement {
   const feed = win.document.createElement("div");
   feed.className = "feed";
-  win.document.body.appendChild(feed);
+  win.document.getElementById("msgs")!.appendChild(feed);
   store.tabs.tabs = [{ id, feed } as never];
   store.tabs.activeTabId = id;
   store.tabs.liveTabId = id;
@@ -48,8 +52,8 @@ beforeEach(() => {
   store.tabs.liveTabId = "";
 });
 
-describe("critic verdict in chat: always visible", () => {
-  it("renders issues and checks inline, with no toggle and no hidden body", () => {
+describe("critic verdict in chat: collapsed by default", () => {
+  it("shows only the header line and keeps the whole verdict hidden", () => {
     const feed = mountTab("S1");
     onCritic(
       {
@@ -72,28 +76,46 @@ describe("critic verdict in chat: always visible", () => {
 
     const block = feed.querySelector<HTMLElement>(".critic-block");
     expect(block).not.toBeNull();
-    // Свёрнутого блока больше нет: ни кнопки, ни тоггла, ни hidden-тела.
-    expect(block!.querySelector(".think-h")).toBeNull();
-    expect(block!.querySelector(".tog")).toBeNull();
-    expect(block!.querySelector("[aria-expanded]")).toBeNull();
-    const body = block!.querySelector<HTMLElement>(".think-body");
+    const head = block!.querySelector<HTMLElement>("button.think-h");
+    expect(head).not.toBeNull();
+    expect(head!.getAttribute("aria-expanded")).toBe("false");
+    expect(head!.querySelector(".tog")).toBeTruthy();
+    expect(head!.textContent).toContain("concern");
+    // Всё содержимое лежит в скрытом теле: в ленте видна только шапка.
+    const body = block!.querySelector<HTMLElement>(".critic-body");
     expect(body).not.toBeNull();
-    expect(body!.classList.contains("hidden")).toBe(false);
-    // Замечания лежат в ленте и читаются без клика.
-    expect(feed.textContent).toContain("Build is broken");
-    expect(feed.textContent).toContain("Module not found: better-sqlite3");
-    expect(feed.textContent).toContain("install the dependency");
-    expect(feed.textContent).toContain("bun run build");
-    expect(block!.querySelector(".critic-head")?.textContent).toContain("concern");
+    expect(body!.classList.contains("hidden")).toBe(true);
+    expect(body!.textContent).toContain("Build is broken");
+    expect(body!.textContent).toContain("Module not found: better-sqlite3");
+    expect(body!.textContent).toContain("install the dependency");
+    expect(body!.textContent).toContain("bun run build");
+    expect(body!.querySelector(".critic-check-tool")?.textContent).toBe("bash");
   });
 
-  it("still shows the empty verdict line without any toggle", () => {
+  it("opens and closes the whole body from the header toggle", () => {
     const feed = mountTab("S2");
     onCritic({ status: "ok", passes: 1, durationMs: 900 }, "S2");
+    const head = feed.querySelector<HTMLElement>(".critic-block .think-h")!;
+    const body = feed.querySelector<HTMLElement>(".critic-block .critic-body")!;
+    expect(body.classList.contains("hidden")).toBe(true);
+
+    // Прямой вызов той же логики, что и delegated-клик (#msgs подменяется
+    // между тестовыми файлами, слушатель может остаться на старом document).
+    toggleThinkHead(head);
+    expect(head.getAttribute("aria-expanded")).toBe("true");
+    expect(body.classList.contains("hidden")).toBe(false);
+
+    toggleThinkHead(head);
+    expect(head.getAttribute("aria-expanded")).toBe("false");
+    expect(body.classList.contains("hidden")).toBe(true);
+  });
+
+  it("renders the empty verdict line inside the collapsed body", () => {
+    const feed = mountTab("S3");
+    onCritic({ status: "ok", passes: 1, durationMs: 900 }, "S3");
     const body = feed.querySelector<HTMLElement>(".critic-block .critic-body");
     expect(body).not.toBeNull();
-    expect(body!.classList.contains("hidden")).toBe(false);
+    expect(body!.classList.contains("hidden")).toBe(true);
     expect(body!.textContent).toContain("no issues — nothing to fix");
-    expect(feed.querySelector(".critic-block .think-h")).toBeNull();
   });
 });

@@ -265,12 +265,10 @@ export function onPhase(phase: string, sid?: string): void {
 }
 
 // Global `.think-h` toggle (depends on the wrap > [head, body] structure
-// built by `buildThinkBlock`). `?.` — как в feed/core: в тестовом процессе
-// модульный кэш общий и `#msgs` может отсутствовать на момент оценки.
-msgs?.addEventListener("click", (e) => {
-  const target = e.target as HTMLElement;
-  const head = target.closest(".think-h");
-  if (!head) return;
+// built by `buildThinkBlock`). Экспортирован отдельно от слушателя: в тестовом
+// процессе общий модульный кэш, а `document`/`#msgs` подменяются между файлами,
+// поэтому delegated-клику нельзя доверять в DOM-тестах — зовём логику напрямую.
+export function toggleThinkHead(head: HTMLElement): void {
   const body = head.nextElementSibling;
   if (!body) return;
   const hidden = body.classList.toggle("hidden");
@@ -282,4 +280,11 @@ msgs?.addEventListener("click", (e) => {
       hidden ? "chevron-right" : "chevron-down",
       t(hidden ? "web.action.show" : "web.action.hide"),
     );
+}
+
+// `?.` — как в feed/core: `#msgs` может отсутствовать на момент оценки.
+msgs?.addEventListener("click", (e) => {
+  const target = e.target as HTMLElement;
+  const head = target.closest(".think-h");
+  if (head) toggleThinkHead(head as HTMLElement);
 });

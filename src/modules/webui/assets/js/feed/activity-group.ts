@@ -34,9 +34,11 @@ const ICONS: Record<Kind, string> = {
 };
 // Subagent rows keep their live MMART slot outside a folded group. Retract and
 // critic notices are user-facing blocks, not agent steps — both stay visible.
+// `.metaln.status` is transient: `clearStatusLines()` removes it before the
+// critic report arrives. Folding one leaves an empty "+" group behind.
 const ACTIVITY =
   ".think:not(.retract-block):not(.critic-block), .act, .filerow, .linkline, " +
-  ".cmdout, .metaln, .errline, .warnline, .detail";
+  ".cmdout, .metaln:not(.status), .errline, .warnline, .detail";
 // Only real content splits a turn into separate groups. Failure/status rows
 // belong to the same step run — otherwise every tool error starts a new
 // summary instead of updating the current one.
