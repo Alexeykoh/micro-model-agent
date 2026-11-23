@@ -2015,6 +2015,8 @@
   "web.settings.provider_required": "type and base URL are required",
   "web.settings.provider_invalid": "invalid numeric value",
   "web.settings.provider_active_guard": "cannot delete the active provider — switch first",
+  "web.settings.provider_delete_confirm_title": "Delete provider?",
+  "web.settings.provider_delete_confirm_body": "“{name}” will be removed from the config. This cannot be undone.",
   "web.settings.builtin": "builtin",
   "web.settings.plugins_note": "plugins are loaded from ~/.mma/plugins and <project>/.mma/plugins. The toggle stops their hooks right away, without a restart; the full list with descriptions and details lives in the Plugins tab of the sidebar. Plugin code is already loaded though — this is a switch, not a sandbox.",
   "web.settings.mcp_enable": "enable",

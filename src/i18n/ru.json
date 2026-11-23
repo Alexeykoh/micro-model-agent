@@ -1988,6 +1988,8 @@
   "web.settings.provider_required": "тип и base URL обязательны",
   "web.settings.provider_invalid": "некорректное числовое значение",
   "web.settings.provider_active_guard": "нельзя удалить активного провайдера — сначала переключись",
+  "web.settings.provider_delete_confirm_title": "Удалить провайдера?",
+  "web.settings.provider_delete_confirm_body": "«{name}» будет удалён из конфига. Это действие нельзя отменить.",
   "web.settings.builtin": "встроенный",
   "web.settings.plugins_note": "плагины загружаются из ~/.mma/plugins и <project>/.mma/plugins. Тумблер выключает хуки сразу, без перезапуска; полный список с описаниями и подробностями — во вкладке Plugins сайдбара. Код плагина при этом уже загружен: это переключатель, а не песочница.",
   "web.settings.mcp_enable": "включить",

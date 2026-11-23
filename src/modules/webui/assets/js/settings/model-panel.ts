@@ -22,8 +22,8 @@ export interface ModelPanelDeps {
   providerMeta: (p: Dict) => string;
   /** Open the add/edit provider dialog. */
   openForm: (mode: string, entry: Dict | null) => void;
-  /** Delete a non-active provider and refresh the list/config. */
-  deleteProvider: (name: string) => Promise<void>;
+  /** Confirm, then delete a non-active provider and refresh the list/config. */
+  deleteProvider: (name: string) => void;
 }
 
 let deps: ModelPanelDeps = {
@@ -31,7 +31,7 @@ let deps: ModelPanelDeps = {
   providerName: () => "—",
   providerMeta: () => "",
   openForm: () => {},
-  deleteProvider: async () => {},
+  deleteProvider: () => {},
 };
 
 export function initModelPanel(d: ModelPanelDeps): void {

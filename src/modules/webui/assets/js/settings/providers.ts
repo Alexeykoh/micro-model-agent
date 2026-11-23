@@ -8,7 +8,7 @@ import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { settings } from "../store.js";
 import type { Dict } from "../core/store/types.js";
-import { setIndicator } from "../dialog.js";
+import { openConfirm, setIndicator } from "../dialog.js";
 import { loadConfig } from "./write.js";
 import { pfield, providerInput, providerSelect } from "./form.js";
 import { openSubDialog, closeSubDialog } from "./subdialog.js";
@@ -199,11 +199,23 @@ async function deleteProvider(name: string): Promise<void> {
   setIndicator(err === "active-provider" ? t("web.settings.provider_active_guard") : String(err), true);
 }
 
+// Deleting a provider writes config and reconfigures the runtime — ask first.
+// Lives here (not in the panel) so the panel stays a dumb list renderer.
+function confirmDeleteProvider(name: string): void {
+  openConfirm({
+    title: t("web.settings.provider_delete_confirm_title"),
+    body: t("web.settings.provider_delete_confirm_body", { name }),
+    acceptLabel: t("web.settings.delete"),
+    cancelLabel: t("web.settings.cancel"),
+    onAccept: () => void deleteProvider(name),
+  });
+}
+
 initModelPanel({
   entries: providerEntries,
   providerName,
   providerMeta,
   openForm: openProviderForm,
-  deleteProvider,
+  deleteProvider: confirmDeleteProvider,
 });
 export { renderModelPanel };
