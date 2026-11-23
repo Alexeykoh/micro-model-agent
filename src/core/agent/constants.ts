@@ -121,7 +121,7 @@ export const HARD_STOP_DUPLICATE_BATCHES = 12;
  * любым не-web тулом. Наблюдалось: 91 web-вызов подряд в сессии
  * ses_mv44qabg_s1przq без единого артефакта.
  */
-export const MAX_RESEARCH_BATCHES = 12;
+export const MAX_RESEARCH_BATCHES = 6;
 /**
  * Подряд идущие пакеты тулов БЕЗ текста ассистента (пустой `content`) до
  * директивы «скажи пользователю, что делаешь». Модель, ушедшая в молчаливые
