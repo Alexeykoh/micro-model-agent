@@ -858,7 +858,9 @@ describe("ContextManager compaction: plan state + read facts", () => {
     expect(summary).not.toContain("[Errors: Error: TS2769]");
   });
 
-  it("still extracts error facts from tool messages", () => {
+  it("does not carry error facts from compressed tool messages into the summary (BCP-4)", () => {
+    // BCP-4: ошибки из сжатых ходов — прошлое состояние, а не живой фейл.
+    // Факт остаётся в извлекателе, но в <system-summary> не проносится.
     const cm = new ContextManager(100000);
     cm.addMessage({ role: "system", content: "SYS" });
     cm.addMessage({
@@ -872,6 +874,7 @@ describe("ContextManager compaction: plan state + read facts", () => {
       cm.addMessage({ role: "assistant", content: `resp ${i}` });
     }
     cm.compact();
-    expect(summaryOf(cm)).toContain("[Errors: Error: build failed]");
+    expect(summaryOf(cm)).not.toContain("[Errors:");
+    expect(summaryOf(cm)).not.toContain("Error: build failed");
   });
 });
