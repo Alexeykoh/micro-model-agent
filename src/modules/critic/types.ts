@@ -70,4 +70,10 @@ export interface EvidencePack {
    * без `verified` критик должен помечать (наблюдалось: выдуманный md-файл).
    */
   webGrounding?: { attempted: number; verified: boolean; unverifiedClaims?: string[] };
+  /**
+   * Короткие выдержки успешно прочитанных страниц с URL. Без них критик видел
+   * только `✓ web_fetch url=…` и объявлял цены «без web-обоснования», хотя
+   * страница была в выводе тула (сессия ses_mwt63i97_mwstglzngbgqzyqk).
+   */
+  webExcerpts?: string[];
 }

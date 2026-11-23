@@ -50,6 +50,28 @@ const MAX_ANSWER_CHARS = 2000;
 const MIN_GROUNDING_CHARS = 200;
 /** Сетевые тулы, дающие веб-обоснование. */
 const GROUNDING_TOOLS = new Set(["web_fetch", "web_search", "web_browse"]);
+/** Сколько выдержек страниц приложить и какой длины. */
+const MAX_WEB_EXCERPTS = 3;
+const MAX_WEB_EXCERPT_CHARS = 1200;
+
+/** Выдержки успешно прочитанных страниц: критик проверяет числа по ним. */
+function computeWebExcerpts(events: EvidenceToolEvent[]): string[] | undefined {
+  const excerpts = events
+    .filter(
+      (ev) =>
+        ev.ok !== false &&
+        (ev.tool === "web_fetch" || ev.tool === "web_browse") &&
+        typeof ev.output === "string" &&
+        ev.output.length > 60,
+    )
+    .slice(-MAX_WEB_EXCERPTS)
+    .map((ev) => {
+      const url = typeof ev.args?.url === "string" ? ev.args.url : "(url unknown)";
+      const text = (ev.output ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_WEB_EXCERPT_CHARS);
+      return `${url}: ${text}`;
+    });
+  return excerpts.length > 0 ? excerpts : undefined;
+}
 
 /** Веб-обоснование по событиям тулов: сколько было сетевых чтений и дало ли хоть одно контент. */
 function computeWebGrounding(
@@ -106,6 +128,7 @@ export function buildEvidencePack(input: EvidenceInput): EvidencePack {
       ? redactContextSecrets(input.answerText).slice(0, MAX_ANSWER_CHARS)
       : undefined,
     webGrounding: computeWebGrounding(input.toolEvents, input.answerText),
+    webExcerpts: computeWebExcerpts(input.toolEvents),
   };
 }
 

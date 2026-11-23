@@ -203,6 +203,24 @@ describe("critic evidence web grounding", () => {
     expect(pack.webGrounding).toEqual({ attempted: 1, verified: true });
   });
 
+  it("puts successful web fetch excerpts into the pack so figures can be checked", () => {
+    const pack = buildEvidencePack({
+      task: "prices",
+      toolEvents: [
+        {
+          tool: "web_fetch",
+          args: { url: "https://www.gym24.by/stoimost/" },
+          ok: true,
+          output: "STRUCTURED PAGE DATA: Подписка GYM24 | 99 BYN | первый месяц 199 руб. Разовое посещение | 29 BYN",
+        },
+      ],
+      answerText: "99 руб. и 199 руб. подтверждены страницей.",
+    });
+    expect(pack.webExcerpts?.length).toBe(1);
+    expect(pack.webExcerpts?.[0]).toContain("gym24.by/stoimost");
+    expect(pack.webExcerpts?.[0]).toContain("99 BYN");
+  });
+
   it("omits web grounding when no web tools were used", () => {
     const pack = buildEvidencePack({
       task: "t",
