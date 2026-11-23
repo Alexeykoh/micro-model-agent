@@ -8,6 +8,7 @@ import { broadcast, type WebUiState } from "./state";
 import { sendJson } from "./util";
 import { handleI18nGet } from "./i18n/i18n-api";
 import { handleFaviconGet } from "./favicon";
+import { daemonModelsGet } from "./daemon-models-get";
 import type { WebDaemonHost } from "./daemon-contracts";
 
 /** Контекст одного запроса адаптера. */
@@ -44,10 +45,7 @@ export const ROUTES: Record<string, Handler> = {
     const result = await host.setConfig(String(body.key ?? ""), body.value);
     sendJson(res, result.ok ? 200 : 400, result);
   },
-  "GET /api/models": async ({ res, reqUrl, host }) => {
-    const provider = reqUrl.searchParams.get("provider") ?? undefined;
-    sendJson(res, 200, await host.listModels(provider));
-  },
+  "GET /api/models": async (ctx) => daemonModelsGet(ctx.res, ctx.reqUrl, ctx.s, ctx.host),
   "POST /api/update": async ({ res, host }) => {
     sendJson(res, 200, await host.installUpdate());
   },

@@ -2219,6 +2219,8 @@
   "web.selectors.no_models": "no models",
   "web.selectors.search_models": "search models…",
   "web.selectors.refresh_list": "refresh list",
+  "web.selectors.models_refreshing": "updating model list…",
+  "web.selectors.models_refresh_failed": "could not refresh the model list",
   "web.selectors.custom": "custom…",
   "web.selectors.current": "current",
   "web.selectors.context_prompt": "context window (tokens)",

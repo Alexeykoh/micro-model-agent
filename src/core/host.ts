@@ -147,6 +147,8 @@ export interface HostConfigSnapshot {
 export interface HostModels {
   models: string[];
   loading?: boolean;
+  /** true — сервер принял явный запрос на переопрос провайдера. */
+  refreshStarted?: boolean;
 }
 
 /** Итог записи ключа конфига через wire. */
@@ -202,7 +204,8 @@ export interface Host extends HostBridge {
   // Конфиг и модели (W3b).
   getConfig(): Promise<HostConfigSnapshot>;
   setConfig(key: string, value: unknown): Promise<HostConfigWriteResult>;
-  listModels(provider?: string): Promise<HostModels>;
+  /** `refresh` — явный переопрос провайдера (кнопка «обновить список»). */
+  listModels(provider?: string, refresh?: boolean): Promise<HostModels>;
 }
 
 /** Опции фабрики хост-моста: занятость, картинки, запуск и прерывание. */

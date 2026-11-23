@@ -237,8 +237,11 @@ export function handleModelsGet(
   // `?provider=` — модели конкретной записи (страница экспертов): первый
   // запрос к незакешированной записи отвечает `loading: true`.
   let provider: string | null = null;
+  let refresh = false;
   try {
-    provider = new URL(req.url ?? "/", "http://localhost").searchParams.get("provider");
+    const params = new URL(req.url ?? "/", "http://localhost").searchParams;
+    provider = params.get("provider");
+    refresh = params.get("refresh") === "1";
   } catch {
     /* битый URL — активный провайдер */
   }
@@ -256,10 +259,13 @@ export function handleModelsGet(
   // продолжил опрос.
   const retrying =
     activeState?.error === true && !activeState.loading && !!s.knownModelsRefresh;
-  if (retrying) void s.knownModelsRefresh!();
+  // Явное «обновить список»: переспрашиваем провайдера даже когда список готов.
+  const forced = refresh && !activeState?.loading && !!s.knownModelsRefresh;
+  if (forced || retrying) void s.knownModelsRefresh!();
   const body: Record<string, unknown> = {
     models: activeState?.models ?? s.knownModels(),
   };
+  if (forced || retrying) body.refreshStarted = true;
   if (activeState) {
     // Честные состояния: «грузится» и «не ответил» не маскируются под пустой
     // список (UI иначе говорит «провайдер не сообщил моделей» во всех случаях).

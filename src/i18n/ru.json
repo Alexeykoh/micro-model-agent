@@ -2192,6 +2192,8 @@
   "web.selectors.no_models": "нет моделей",
   "web.selectors.search_models": "поиск моделей…",
   "web.selectors.refresh_list": "обновить список",
+  "web.selectors.models_refreshing": "обновляем список моделей…",
+  "web.selectors.models_refresh_failed": "не удалось обновить список моделей",
   "web.selectors.custom": "другое…",
   "web.selectors.current": "текущее",
   "web.selectors.context_prompt": "контекстное окно (токены)",

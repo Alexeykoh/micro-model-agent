@@ -216,6 +216,7 @@ export const HOST_OPERATIONS: SpecOperation[] = [
     summary: "Модели провайдера",
     params: [
       { name: "provider", in: "query", description: "Имя записи провайдера (по умолчанию активный)", schema: { type: "string" } },
+      { name: "refresh", in: "query", description: "1 — переопросить активного провайдера (кнопка «обновить список»)", schema: { type: "string" } },
     ],
     responses: { "200": ok("Список моделей"), ...PROBLEM_RESPONSES },
   },  {

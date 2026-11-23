@@ -38,7 +38,7 @@ export interface WebHostDeps {
   sessions?: WebHostSessions;
   getConfig?: () => HostConfigSnapshot;
   setConfig?: (key: string, value: unknown) => Promise<HostConfigWriteResult>;
-  listModels?: (provider?: string) => HostModels;
+  listModels?: (provider?: string, refresh?: boolean) => HostModels;
 }
 
 /** Реализация хоста для `mma web` — без TTY, без LineEditor. */
@@ -104,8 +104,8 @@ export class WebHost implements Host {
     return this.deps.setConfig(key, value);
   }
 
-  async listModels(provider?: string): Promise<HostModels> {
-    return this.deps.listModels?.(provider) ?? { models: [] };
+  async listModels(provider?: string, refresh?: boolean): Promise<HostModels> {
+    return this.deps.listModels?.(provider, refresh) ?? { models: [] };
   }
 
   /** Транспорт-нейтральная подписка: локальная шина отдаёт `HostEvent`. */

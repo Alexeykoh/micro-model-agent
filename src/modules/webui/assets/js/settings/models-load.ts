@@ -61,6 +61,17 @@ export function loadModels(): Promise<void> {
   return modelsInflight;
 }
 
+/**
+ * Explicit «refresh list» action: asks the server to re-query the provider.
+ * Deliberately outside the `loadModels` single-flight — a background re-read
+ * from SSE must not swallow a click. The fresh list arrives with the `models`
+ * event published by the server hook.
+ */
+export async function requestModelsRefresh(): Promise<boolean> {
+  const r = await api<{ refreshStarted?: boolean }>("/api/models?refresh=1");
+  return r.ok && r.data?.refreshStarted === true;
+}
+
 async function doLoadModels(): Promise<void> {
   const seq = ++modelsSeq;
   settings.modelsStatus = "loading";

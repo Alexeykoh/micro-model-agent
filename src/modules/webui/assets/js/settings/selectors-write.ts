@@ -9,6 +9,8 @@ import { settings, session, getPath } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 import { contextLabel, matchesQuery } from "../format.js";
 import { closeAllMenus, setSessOpen } from "../core/menus.js";
+import { setIndicator } from "../dialog.js";
+import { requestModelsRefresh } from "./models-load.js";
 import { reasoningStatus } from "./reasoning-status.js";
 import { renderCapsChip } from "./caps-chip-render.js";
 import {
@@ -137,7 +139,12 @@ export function renderSelectors(): void {
   modelMenu.appendChild(el("div", "sep"));
   modelMenu.appendChild(
     menuAction(t("web.selectors.refresh_list"), "refresh", () => {
-      void loadModels().then(renderSelectors);
+      void requestModelsRefresh().then((started) =>
+        setIndicator(
+          t(started ? "web.selectors.models_refreshing" : "web.selectors.models_refresh_failed"),
+          !started,
+        ),
+      );
     }),
   );
 

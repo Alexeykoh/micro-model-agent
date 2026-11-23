@@ -178,8 +178,12 @@ export class RemoteHost extends RemoteSettingsClient implements Host {
     return { ok: false, persisted: false, error: `daemon config write failed: ${res.status} ${detail}` };
   }
 
-  async listModels(provider?: string): Promise<HostModels> {
-    const suffix = provider ? `?provider=${encodeURIComponent(provider)}` : "";
+  async listModels(provider?: string, refresh?: boolean): Promise<HostModels> {
+    const params = new URLSearchParams();
+    if (provider) params.set("provider", provider);
+    if (refresh) params.set("refresh", "1");
+    const query = params.toString();
+    const suffix = query ? `?${query}` : "";
     const res = await this.request(`${this.base}/v1/host/models${suffix}`);
     if (!res.ok) throw new Error(`daemon models failed: ${res.status} ${await safeText(res)}`);
     return (await res.json()) as HostModels;
