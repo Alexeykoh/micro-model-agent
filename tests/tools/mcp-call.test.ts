@@ -5,6 +5,7 @@ import { setLocale } from "../../src/i18n/index";
 // (на CI иной), поэтому файлы с английскими строками пинят "en" сами.
 beforeEach(() => setLocale("en"));
 import { mcpCallTool } from "../../src/tools/mcp-call";
+import { resetMcpCircuitForTests } from "../../src/tools/mcp-circuit";
 import type { ToolContext } from "../../src/tools/types";
 
 const mockCtx = (): ToolContext => ({
@@ -89,5 +90,29 @@ describe("mcpCallTool", () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it("refuses a call after two consecutive failures without spawning a transport", async () => {
+    resetMcpCircuitForTests();
+    const ctx = mockCtx();
+    ctx.config.mcpServers = {
+      "flaky-circuit": {
+        name: "flaky-circuit",
+        command: "__mma_no_such_mcp_binary__",
+        args: [],
+      },
+    } as any;
+    const call = { server: "flaky-circuit", tool: "probe", args: {} };
+
+    expect((await mcpCallTool.handler(ctx, call)).success).toBe(false);
+    expect((await mcpCallTool.handler(ctx, call)).success).toBe(false);
+    const blocked = await mcpCallTool.handler(ctx, call);
+    expect(blocked.success).toBe(false);
+    expect(blocked.output).toContain("cooling down");
+
+    resetMcpCircuitForTests();
+    const retried = await mcpCallTool.handler(ctx, call);
+    expect(retried.success).toBe(false);
+    expect(retried.output).not.toContain("cooling down");
   });
 });

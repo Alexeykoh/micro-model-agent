@@ -307,6 +307,7 @@
   "tool.pipeline_error": "Pipeline error: {error}",
   "tool.mcp_server_not_found": "MCP server \"{server}\" not found. Available: {available}",
   "tool.mcp_call_failed": "MCP call failed: {error}",
+  "tool.mcp_circuit_open": "MCP server \"{server}\" is cooling down after 2 consecutive failures; use another tool or retry later.",
   "tool.meet_done": "Interview marked complete.",
   "tool.invalid_params": "Invalid parameters",
   "tool.skill_budget": "Skill \"{name}\" loaded ({tokens} tokens, {remaining} remaining in skills budget). Skill content is now in system prompt — no need to reload after context compaction.",

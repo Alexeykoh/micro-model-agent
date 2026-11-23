@@ -287,6 +287,7 @@
   "tool.pipeline_error": "Ошибка пайплайна: {error}",
   "tool.mcp_server_not_found": "MCP-сервер \"{server}\" не найден. Доступны: {available}",
   "tool.mcp_call_failed": "Вызов MCP не удался: {error}",
+"tool.mcp_circuit_open": "MCP-сервер \"{server}\" закрыт после 2 неудач подряд; используйте другой тул или повторите позже.",
   "tool.meet_done": "Интервью отмечено завершённым.",
   "tool.invalid_params": "Неверные параметры",
   "tool.skill_budget": "Скилл \"{name}\" загружен ({tokens} токенов, осталось {remaining} в бюджете скиллов). Контент скилла теперь в системном промпте — перезагрузка после компрессии не нужна.",
