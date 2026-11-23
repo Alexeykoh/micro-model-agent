@@ -191,10 +191,15 @@ describe("webui assets", () => {
   it("marks the finished answer apart from the work process", () => {
     const a = loadAssets();
     expect(a.css).toContain(".feed > .md");
-    expect(a.css).toContain("border-left: 2px solid var(--accent)");
-    // The answer carries a muted, translucent accent backdrop so the dim
+    // No left rail on user messages or on any answer — final or intermediate.
+    expect(a.css).not.toMatch(/\.u \{[^}]*border-left/);
+    expect(a.css).not.toMatch(/\.feed > \.md[^{]*\{[^}]*border-left/);
+    // The final answer carries a muted, translucent accent backdrop so the dim
     // work process (think/tool/meta) stays visually secondary.
     expect(a.css).toMatch(/\.feed > \.md, \.feed > \.ans \{[^}]*background: var\(--ans-bg\)/);
+    // Intermediate drafts (still streaming or already closed by a tool) keep a
+    // neutral fill instead.
+    expect(a.css).toContain(".feed > .md.streaming, .feed > .md.interim {");
   });
 
   it("anchors the jump-to-latest pill to the composer, not a fixed offset", () => {

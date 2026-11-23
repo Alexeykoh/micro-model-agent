@@ -47,12 +47,17 @@ function scheduleText(feed: HTMLElement): void {
 }
 
 // Close the Markdown segment owned by `feed` (if any) and clear its text state.
-export function finishMd(feed?: HTMLElement | null): void {
+// `final` — ответ закрыт самым ходом (`onTurnEnd`): только ему положены рейка
+// и фон. Всё, что закрылось по ходу работы (инструмент, размышление, статус,
+// критик), — промежуточный ответ: он остаётся «голым», без белой полосы слева.
+// Класс `streaming` при этом снимается, чтобы не мигал курсор у готового текста.
+export function finishMd(feed?: HTMLElement | null, final = false): void {
   if (!feed) return;
   const st = streamStateFor(feed);
   flushText(feed);
   if (st.curMd) {
     st.curMd.root.classList.remove("streaming");
+    if (!final) st.curMd.root.classList.add("interim");
     st.curMd.end();
     st.curMd = null;
   }

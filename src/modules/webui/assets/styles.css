@@ -290,8 +290,8 @@ body[data-font="large"] { font-size: 17px; }
 @keyframes skelSweep { to { background-position: -200% 0; } }
 .feed > * { flex-shrink: 0; min-height: fit-content; }
 .u {
-  color: var(--u-fg); background: var(--u-bg); border-left: 2px solid var(--u-border);
-  padding: 7px 12px; border-radius: 0 4px 4px 0; margin-top: 6px;
+  color: var(--u-fg); background: var(--u-bg);
+  padding: 7px 12px; border-radius: 4px; margin-top: 6px;
   user-select: text; overflow-wrap: anywhere;
 }
 /* The `> ` prompt marker belongs to the text line. Attachments (if any) sit in
@@ -404,17 +404,20 @@ body.light .code { border: 1px solid var(--border); }
 .toolout .more { color: var(--dim-b); cursor: pointer; font-size: 12px; }
 .toolout .more:hover { color: var(--dim-a); }
 
-/* markdown answers (streamed by md.js) — lines and glyphs, no boxes.
-   The finished answer mirrors the user's `> ` block: a quiet accent rail plus a
-   muted, translucent accent backdrop (`--ans-bg`), so it reads instantly apart
-   from the dim work process (tool/think/meta rows stay plain). Scoped to
-   `.feed >` — code blocks inside keep their own styling. No drawn frames: the
-   separation is fill + a single rail, never a card border. */
+/* markdown answers (streamed by md.js) — lines and glyphs, no boxes, no rails.
+   Финальный ответ отличается от процесса только приглушённым полупрозрачным
+   акцентным фоном (`--ans-bg`); никакой полосы слева ни у одного блока. */
 .feed > .md, .feed > .ans {
-  border-left: 2px solid var(--accent);
   background: var(--ans-bg);
   padding: 12px 18px 14px;
-  border-radius: 0 6px 6px 0;
+  border-radius: 6px;
+}
+/* Промежуточные ответы (`streaming` — текст ещё идёт, `interim` — уже дописан,
+   но за ним были инструменты/размышления/статус) получают нейтральный `--surface`
+   вместо акцентного фона финального. Полосы нет ни у тех, ни у других. */
+.feed > .md.streaming, .feed > .md.interim {
+  background: var(--surface);
+  border-radius: 6px;
 }
 .md { color: var(--ans); overflow-wrap: anywhere; line-height: 1.68; }
 .md > * { flex-shrink: 0; }
