@@ -33,6 +33,7 @@ describe("parseChangeEntry", () => {
       mode: 0o600,
       to: "b.txt",
       toBefore: null,
+      toMode: 0o644,
     });
     expect(parseChangeEntry(move)).toEqual(move);
     const undo = changeEntry(root, { op: "undo", targetId: "ch_target" });
@@ -67,6 +68,9 @@ describe("parseChangeEntry", () => {
       { ...valid, bytes: "3" },
       { ...valid, mode: "600" },
       { ...valid, mode: -1 },
+      { ...valid, toMode: "644" },
+      { ...valid, toMode: -1 },
+      { ...valid, op: "write", toMode: 0o600 },
       { ...valid, to: 7 },
       { ...valid, toBefore: "../bad" },
       { ...valid, targetId: null },

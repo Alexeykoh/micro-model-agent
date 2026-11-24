@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -16,9 +17,24 @@ import type { ChangeEntry, UndoOptions } from "../../src/modules/changes/types";
 import { ChangeUndo } from "../../src/modules/changes/undo";
 
 let root: string;
+let outsideRoot: string;
 let config: AppConfig;
 let store: ChangesStore;
 let undoer: ChangeUndo;
+
+/** File symlinks need elevation on Windows; junctions work and read as symlinks. */
+const link = (target: string, at: string): void => {
+  try {
+    symlinkSync(target, at);
+  } catch (err) {
+    if (
+      process.platform === "win32" &&
+      (err as NodeJS.ErrnoException).code === "EPERM"
+    ) {
+      symlinkSync(target, at, "junction");
+    } else throw err;
+  }
+};
 
 const entry = (over: Partial<ChangeEntry>): ChangeEntry => ({
   v: 1,
@@ -45,6 +61,7 @@ const read = (name: string): string => readFileSync(join(root, name), "utf8");
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "mma-undo-"));
+  outsideRoot = mkdtempSync(join(tmpdir(), "mma-undo-out-"));
   mkdirSync(join(root, "sessions", "s1"), { recursive: true });
   config = structuredClone(DEFAULTS) as AppConfig;
   store = new ChangesStore({
@@ -53,7 +70,10 @@ beforeEach(() => {
   });
   undoer = new ChangeUndo({ store, getConfig: () => config, baseDir: root });
 });
-afterEach(() => rmSync(root, { recursive: true, force: true }));
+afterEach(() => {
+  rmSync(root, { recursive: true, force: true });
+  rmSync(outsideRoot, { recursive: true, force: true });
+});
 
 describe("ChangeUndo", () => {
   it("restores content from before a write and steps back through history", () => {
@@ -81,6 +101,9 @@ describe("ChangeUndo", () => {
 
     expect(undoer.undo(opts({ path: "a.txt", steps: 2 })).ok).toBe(true);
     expect(read("a.txt")).toBe("v1");
+    // Both consumed revisions are invalidated, not just the restore target.
+    expect(undoer.list({ sessionId: "s1", baseDir: root })).toHaveLength(0);
+    expect(undoer.undo(opts({ path: "a.txt" })).ok).toBe(false);
     expect(undoer.undo(opts({ path: "a.txt", steps: 2 })).ok).toBe(false);
   });
 
@@ -267,6 +290,117 @@ describe("ChangeUndo", () => {
       undoer.list({ sessionId: "s1", baseDir: root, path: "b.txt" }),
     ).toHaveLength(1);
   });
+
+  it("returns an UndoResult for invalid steps and clamps list limit", () => {
+    const zero = undoer.undo(opts({ path: "a.txt", steps: 0 }));
+    expect(zero.ok).toBe(false);
+    expect(zero.message).toContain("invalid steps");
+    expect(undoer.undo(opts({ path: "a.txt", steps: 1.5 })).ok).toBe(false);
+    for (let i = 0; i < 60; i++) {
+      store.append("s1", entry({ id: `e${i}` }));
+    }
+    expect(
+      undoer.list({ sessionId: "s1", baseDir: root, limit: 1000 }),
+    ).toHaveLength(50);
+    expect(
+      undoer.list({ sessionId: "s1", baseDir: root, limit: -5 }),
+    ).toHaveLength(0);
+  });
+
+  it("caps generated diff output", () => {
+    const lines = (word: string) =>
+      Array.from({ length: 320 }, (_, i) => `${word}-${i}`).join("\n");
+    const before = store.putBlob("s1", Buffer.from(lines("old")));
+    const after = store.putBlob("s1", Buffer.from(lines("new")));
+    writeFileSync(join(root, "a.txt"), lines("new"));
+    store.append("s1", entry({ id: "d", before, after }));
+    const res = undoer.undo(opts({ path: "a.txt" }));
+    expect(res.ok).toBe(true);
+    expect(res.diff!.split("\n").length).toBeLessThanOrEqual(301);
+  });
+
+  it("refuses a symlinked source path even with force", () => {
+    link(outsideRoot, join(root, "a.txt"));
+    const before = store.putBlob("s1", Buffer.from("old"));
+    store.append("s1", entry({ id: "s", before, after: null }));
+    const res = undoer.undo(opts({ path: "a.txt", force: true }));
+    expect(res.ok).toBe(false);
+    expect(res.items[0]!.reason).toContain("symbolic link");
+  });
+
+  it("refuses a source reached through a symlinked parent", () => {
+    mkdirSync(join(outsideRoot, "sub"), { recursive: true });
+    writeFileSync(join(outsideRoot, "sub", "a.txt"), "secret");
+    link(join(outsideRoot, "sub"), join(root, "sub"));
+    const before = store.putBlob("s1", Buffer.from("restored"));
+    store.append(
+      "s1",
+      entry({
+        id: "p",
+        path: "sub/a.txt",
+        pathAbs: join(root, "sub", "a.txt"),
+        before,
+        after: null,
+      }),
+    );
+    const res = undoer.undo(opts({ path: "sub/a.txt", force: true }));
+    expect(res.ok).toBe(false);
+    expect(res.items[0]!.reason).toContain("outside");
+    expect(readFileSync(join(outsideRoot, "sub", "a.txt"), "utf8")).toBe(
+      "secret",
+    );
+  });
+
+  it("refuses a symlinked move destination", () => {
+    writeFileSync(join(outsideRoot, "dst.txt"), "outside-content");
+    link(outsideRoot, join(root, "dst"));
+    const src = store.putBlob("s1", Buffer.from("source"));
+    const toBefore = store.putBlob("s1", Buffer.from("old"));
+    store.append(
+      "s1",
+      entry({
+        id: "m",
+        op: "move",
+        path: "src.txt",
+        pathAbs: join(root, "src.txt"),
+        before: src,
+        after: null,
+        to: "dst",
+        toBefore,
+      }),
+    );
+    const res = undoer.undo(opts({ path: "src.txt", force: true }));
+    expect(res.ok).toBe(false);
+    expect(res.items[0]!.reason).toContain("move destination");
+    expect(readFileSync(join(outsideRoot, "dst.txt"), "utf8")).toBe(
+      "outside-content",
+    );
+  });
+
+  it("does not half-restore a move when the destination blob is missing", () => {
+    const src = store.putBlob("s1", Buffer.from("source"));
+    const lost = store.putBlob("s1", Buffer.from("lost"));
+    rmSync(join(store.dir("s1"), "blobs", lost.slice(0, 2), `${lost}.gz`));
+    writeFileSync(join(root, "dst.txt"), "source");
+    store.append(
+      "s1",
+      entry({
+        id: "m",
+        op: "move",
+        path: "src.txt",
+        pathAbs: join(root, "src.txt"),
+        before: src,
+        after: null,
+        to: "dst.txt",
+        toBefore: lost,
+      }),
+    );
+    const res = undoer.undo(opts({ path: "src.txt" }));
+    expect(res.ok).toBe(false);
+    expect(existsSync(join(root, "src.txt"))).toBe(false);
+    expect(read("dst.txt")).toBe("source");
+    expect(store.readEntries("s1").filter((e) => e.op === "undo")).toHaveLength(0);
+  });
 });
 
 describe("ChangesStore.evict", () => {
@@ -336,5 +470,33 @@ describe("ChangesStore.evict", () => {
     expect(
       store.readEntries("s1").filter((e) => e.op === "evicted"),
     ).toHaveLength(0);
+  });
+
+  it("resumes blob deletion after a failed delete without duplicating markers", () => {
+    config.changes!.maxTotalBytes = 1;
+    const a = store.putBlob("s1", Buffer.from("aaaa"));
+    const b = store.putBlob("s1", Buffer.from("bbbb"));
+    store.append("s1", entry({ id: "e1", before: null, after: a }));
+    store.append("s1", entry({ id: "e2", before: a, after: b }));
+    const blobA = join(store.dir("s1"), "blobs", a.slice(0, 2), `${a}.gz`);
+    const blobB = join(store.dir("s1"), "blobs", b.slice(0, 2), `${b}.gz`);
+    // A directory at a blob path makes rmSync fail; the other blob keeps the
+    // byte budget exceeded so both entries are still victims.
+    rmSync(blobA);
+    mkdirSync(blobA);
+
+    expect(() => store.evict("s1")).toThrow();
+    expect(existsSync(blobA)).toBe(true);
+    expect(existsSync(blobB)).toBe(false);
+    expect(
+      store.readEntries("s1").filter((e) => e.op === "evicted"),
+    ).toHaveLength(2);
+
+    rmSync(blobA, { recursive: true, force: true });
+    store.evict("s1");
+    expect(existsSync(blobA)).toBe(false);
+    expect(
+      store.readEntries("s1").filter((e) => e.op === "evicted"),
+    ).toHaveLength(2);
   });
 });

@@ -31,6 +31,7 @@ export interface ChangeEntry {
   mode?: number;
   to?: string;
   toBefore?: string | null;
+  toMode?: number;
   targetId?: string;
   skipped?: "too-large" | "evicted" | "unsupported";
 }
@@ -138,6 +139,9 @@ export function parseChangeEntry(value: unknown): ChangeEntry | null {
   if (value.toBefore !== undefined && !isNullableSha256(value.toBefore)) {
     return null;
   }
+  if (value.toMode !== undefined && !isSafeNonNegativeInteger(value.toMode)) {
+    return null;
+  }
   if (value.targetId !== undefined && !isNonEmptyString(value.targetId)) {
     return null;
   }
@@ -146,10 +150,11 @@ export function parseChangeEntry(value: unknown): ChangeEntry | null {
   }
   const hasTo = value.to !== undefined;
   const hasToBefore = value.toBefore !== undefined;
+  const hasToMode = value.toMode !== undefined;
   const hasTarget = value.targetId !== undefined;
   if (value.op === "move") {
     if (!hasTo || hasTarget) return null;
-  } else if (hasTo || hasToBefore) {
+  } else if (hasTo || hasToBefore || hasToMode) {
     return null;
   }
   if (value.op === "undo" || value.op === "evicted") {
@@ -174,6 +179,7 @@ export function parseChangeEntry(value: unknown): ChangeEntry | null {
     ...(value.mode !== undefined ? { mode: value.mode } : {}),
     ...(value.to !== undefined ? { to: value.to } : {}),
     ...(value.toBefore !== undefined ? { toBefore: value.toBefore } : {}),
+    ...(value.toMode !== undefined ? { toMode: value.toMode } : {}),
     ...(value.targetId !== undefined ? { targetId: value.targetId } : {}),
     ...(value.skipped !== undefined ? { skipped: value.skipped } : {}),
   };

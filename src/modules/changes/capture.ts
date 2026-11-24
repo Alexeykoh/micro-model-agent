@@ -184,10 +184,11 @@ export class ChangeCapture {
     // hashing an oversized/failing destination just to fill `toBefore`.
     const toBefore = !skipped && target && "toPathAbs" in target && existsSync(target.toPathAbs) ? shaOf(this.store, ctx.sessionId!, target.toPathAbs) : null;
     const mode = skipped ? undefined : statSync(abs, { throwIfNoEntry: false })?.mode;
+    const toMode = !skipped && target && "toPathAbs" in target ? statSync(target.toPathAbs, { throwIfNoEntry: false })?.mode : undefined;
     const toRaw = plan.toArg ? String(call.arguments[plan.toArg] ?? "") : "";
     return {
       sessionId: ctx.sessionId!,
-      entry: { ...this.baseEntry(call, plan.op, path, abs, before, skipped), ...(mode !== undefined ? { mode } : {}), ...(target && "to" in target ? { to: target.to, toBefore } : {}) },
+      entry: { ...this.baseEntry(call, plan.op, path, abs, before, skipped), ...(mode !== undefined ? { mode } : {}), ...(target && "to" in target ? { to: target.to, toBefore, ...(toMode !== undefined ? { toMode } : {}) } : {}) },
       guardPaths: toRaw ? [path, toRaw] : [path],
       pathGuard: ctx.pathGuard,
       base,
