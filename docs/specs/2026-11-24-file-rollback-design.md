@@ -39,15 +39,26 @@ CLI mma undo / slash /undo ─────────────────�
 
 ```ts
 export interface FileChangesPort {
-  beginTurn(): void;
+  beginTurn(sessionId: string): void;
   captureBefore(ctx: ToolContext, tool: ToolDefinition, call: ToolCall): void;
   captureAfter(callId: string, success: boolean): void;
-  list(options: { path?: string; limit?: number }): ChangeEntry[];
-  undo(options: { path?: string; steps?: number; turn?: number; force?: boolean }): UndoResult;
+  list(options: { sessionId: string; path?: string; limit?: number }): ChangeEntry[];
+  undo(options: {
+    sessionId: string;
+    path?: string;
+    steps?: number;
+    turn?: number;
+    force?: boolean;
+  }): UndoResult;
 }
+
+export function createFileChangesPort(deps: {
+  sessionManager: { getSessionDirectory(id: string): string };
+  getConfig: () => AppConfig;
+}): FileChangesPort;
 ```
 
-`ToolContext.fileChanges?: FileChangesPort` — живой геттер, который ставит bootstrap (`src/core/bootstrap/tool-context.ts`) из активного `SessionManager` и конфига. `ToolExecutor.fork()` копирует дескрипторы `ctx`, поэтому порт — один на всех субагентов хода.
+`ToolContext.fileChanges?: FileChangesPort` — живой геттер. Порт создаётся фабрикой `createFileChangesPort` в обоих билдерах контекста: `src/core/bootstrap/tool-context.ts` (основной агент) и `src/core/bootstrap/session-runner-scope.ts` (раннеры web/service). Сессия передаётся явно через `sessionId`, потому что у закреплённого раннера `sessionManager.getActive()` может быть null. `ToolExecutor.fork()` копирует дескрипторы `ctx`, поэтому порт — один на всех субагентов хода. Шифратор строится из `getConfig().security?.sessionEncryption`: тот же конфиг и путь ключа дают тот же ключ, что у `SessionStore`.
 
 ### 2.2 Точки вызова
 
@@ -62,7 +73,7 @@ export interface FileChangesPort {
 |---|---|---|
 | `write_file`, `edit_file`, `patch_file`, `append_file`, `download_file` | `write` | `path` |
 | `delete_file` | `delete` | `path` |
-| `move_file` | `move` | `path` (откуда) + `newPath` (куда) |
+| `move_file` | `move` | `from` (откуда) + `to` (куда) — фактические имена аргументов тула |
 
 Проверка аргументов — по фактическим именам параметров тула; неизвестный тип или отсутствие пути → диагностика, без записи. Ядро не знает про конкретные имена тулов: таблица живёт в модуле.
 
@@ -131,6 +142,8 @@ interface ChangeEntry {
 | `changes.maxTotalBytes` | `67108864` (64 MiB) | бюджет блобов на сессию |
 | `changes.maxRevisionsPerFile` | `20` | глубина отката по одному файлу |
 
+Регистрация ключей: тип — инлайн-поле `changes` в `AppConfig` (`src/config/types.ts`), значения — только в `src/config/defaults.ts`, определения — `bool`/`int` в `src/config/registry-extra-*.ts` с доменом `changes`, персистентность — `CONFIG_DOMAINS.changes` в `src/config/domains.ts`. Гейты требуют: поднять счётчик доменов в `tests/config-domains.test.ts` (18 → 19), добавить 8 пар ключей `config.key.*`/`config.desc.*` в `en.json` и `ru.json` и положить четыре ключа ровно в одну секцию `keys: [...]` в `src/modules/webui/assets/js/settings/controls.ts` (новую секцию заводить не нужно).
+
 При превышении бюджета или глубины самые старые записи помечаются `skipped:"evicted"`, их блобы удаляются, если на них нет ссылок из остальных записей. Откат к вытесненной версии возвращает явную ошибку (см. §6).
 
 ## 4. Захват
@@ -180,8 +193,8 @@ interface ChangeEntry {
 - `mma undo <path> [--steps N] [--force]` — откат по файлу.
 - `mma undo --turn [N] [--session ID]` — откат хода; по умолчанию последний зарегистрированный.
 - `mma undo --list [path]` — список версий.
-- `/undo` — каталог команд `src/core/commands/catalog.ts` + хендлер в handler-map `src/cli/repl-commands*.ts` (terminal/tui).
-- Новый билдер `buildUndoCommand(program)` в `src/cli/undo-commands.ts`, регистрация в `createProgram()` (`src/cli/commands.ts`).
+- `/undo` — описание в `SPEC_DEFS` (`src/core/commands/spec.ts`, без `surfaces` → terminal+tui) и хендлер `ctx.registerCommand({ name: "undo", ... })` в уже перечисленном гейтом файле `src/cli/repl-commands-session.ts` (жёсткий список файлов в `tests/core/command-catalog.test.ts`).
+- Новый билдер `buildUndoCommand(program)` в `src/cli/undo-command.ts`, регистрация в `createProgram()` (`src/cli/commands.ts`). Вывод — только через `getDefaultChannel().writeLine`, ошибки — `fail()` из `src/cli/exit-code.ts`.
 - Сессия по умолчанию — последняя активная для текущего `baseDir` (как у `mma session show`); при неоднозначности — ошибка с просьбой `--session`.
 
 ### 6.3 Наблюдаемость
