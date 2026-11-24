@@ -40,14 +40,13 @@ function cookieValue(header: string | undefined, name: string): string | null {
  * Заголовки безопасности веб-поверхности (аудит §6.1): фрейминг, MIME-sniffing,
  * referrer и CSP.
  *
- * `script-src` содержит `'unsafe-inline'` — в `index.html` есть инлайновый
- * bootstrap темы; без него тема мигает при загрузке. Вынос скрипта в файл
- * позволит сузить политику — это `DEBT(webui-csp-inline-script)`.
+ * `script-src` ограничен `'self'`: bootstrap темы и splash-failsafe вынесены
+ * в `/theme.js`, чтобы не ослаблять CSP инлайн-скриптами.
  */
 export const SECURITY_HEADERS: Record<string, string> = {
   "Content-Security-Policy": [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline'",
+    "script-src 'self'",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: blob:",

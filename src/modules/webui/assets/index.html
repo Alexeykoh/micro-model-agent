@@ -20,30 +20,7 @@
 
 <a class="skip-link" href="#msgs">skip to messages</a>
 
-<script>
-  // Apply the stored theme before the boot splash paints (no dark flash on light).
-  // This is only a CACHE mirror of the server config (`ui.theme`/`ui.themeMode`):
-  // the authoritative value arrives with `GET /api/config` and is applied by
-  // `app.js`, so a stale/empty cache can never override the server.
-  (function () {
-    try {
-      var theme = localStorage.getItem("mma-theme") || "auto";
-      var light = theme === "light" ||
-        (theme === "auto" && window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches);
-      if (light) document.body.classList.add("light");
-      // U10: браузеру сообщаем схему и цвет хрома до первой отрисовки —
-      // иначе нативные скроллбары и адресная строка остаются светлыми.
-      document.documentElement.style.colorScheme = light ? "light" : "dark";
-      var meta = document.querySelector('meta[name="theme-color"]');
-      if (meta) meta.setAttribute("content", light ? "#f7f7f4" : "#0f0f10");
-      var locale = localStorage.getItem("mma-locale");
-      if (locale === "en" || locale === "ru") document.documentElement.lang = locale;
-      var ui = localStorage.getItem("mma-ui-theme") || "console";
-      var uiThemes = ["console", "groovebox", "neon", "paper", "contrast", "winter", "spring", "summer", "autumn", "metallica", "omarchy"];
-      if (uiThemes.indexOf(ui) >= 0) document.body.classList.add(ui);
-    } catch (e) { /* ignore */ }
-  })();
-</script>
+<script src="/theme.js"></script>
 
 <div class="setup-gate" id="setupGate" hidden></div>
 
@@ -55,18 +32,6 @@
   </div>
   <div class="bs-prog" aria-hidden="true"><i></i></div>
 </div>
-<script>
-  // Hard failsafe: a module error or a stalled import must not trap the page
-  // behind the splash forever (the app's own cap needs app.js to run).
-  // 12 s: a live boot extends the cap with its stages (A3), but without
-  // app.js the splash still goes away on its own.
-  window.setTimeout(function () {
-    var s = document.getElementById("bootSplash");
-    if (!s || s.hidden) return;
-    s.classList.add("hide");
-    window.setTimeout(function () { s.hidden = true; }, 500);
-  }, 12000);
-</script>
 
 <div class="bar-top">
   <button class="icon-btn primary" id="newChat" title="new chat" aria-label="new chat">+</button>
