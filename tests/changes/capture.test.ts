@@ -114,6 +114,25 @@ describe("ChangeCapture", () => {
     });
   });
 
+  it("journals a skipped move even when the destination exceeds the blob limit", () => {
+    const small = structuredClone(config);
+    small.changes!.maxFileBytes = 4;
+    const smallStore = new ChangesStore({
+      sessionManager: { getSessionDirectory: () => join(root, "sessions", "s1") },
+      getConfig: () => small,
+    });
+    const cap = new ChangeCapture(smallStore, () => small, (d) => diags.push(d));
+    writeFileSync(join(root, "source.txt"), "0123456789");
+    writeFileSync(join(root, "dest.txt"), "0123456789");
+    cap.before(local(small), tool("move_file"), call("sk", "move_file", { from: "source.txt", to: "dest.txt" }));
+    cap.after("sk", true);
+    const e = smallStore.readEntries("s1")[0]!;
+    expect(e.skipped).toBe("too-large");
+    expect(e.to).toBe("dest.txt");
+    expect(e.toBefore).toBeNull();
+    expect(diag("failed")).toBeUndefined();
+  });
+
   it.skipIf(!canSymlink)("journals a symlink move with a skipped reason but not an escaping destination", () => {
     writeFileSync(join(root, "inside.txt"), "data");
     symlinkSync(join(root, "inside.txt"), join(root, "link.txt"), "file");
@@ -140,6 +159,26 @@ describe("ChangeCapture", () => {
     expect(e.to).toBe("moved");
     expect(e.toBefore).toBeNull();
     expect(diag("skipped")?.cause).toContain("symbolic link");
+  });
+
+  it("journals a linked source with an oversized destination", () => {
+    const small = structuredClone(config);
+    small.changes!.maxFileBytes = 4;
+    const smallStore = new ChangesStore({
+      sessionManager: { getSessionDirectory: () => join(root, "sessions", "s1") },
+      getConfig: () => small,
+    });
+    const cap = new ChangeCapture(smallStore, () => small, (d) => diags.push(d));
+    mkdirSync(join(root, "real"));
+    symlinkSync(join(root, "real"), join(root, "linked"), "junction");
+    writeFileSync(join(root, "dest.txt"), "0123456789");
+    cap.before(local(small), tool("move_file"), call("lsk", "move_file", { from: "linked", to: "dest.txt" }));
+    cap.after("lsk", true);
+    const e = smallStore.readEntries("s1")[0]!;
+    expect(e.skipped).toBe("unsupported");
+    expect(e.to).toBe("dest.txt");
+    expect(e.toBefore).toBeNull();
+    expect(diag("failed")).toBeUndefined();
   });
 
   it("never journals a move whose destination leaves baseDir", () => {
@@ -239,6 +278,12 @@ describe("ChangeCapture", () => {
     cap.after("off", true);
     expect(store.readEntries("s1")).toHaveLength(0);
     expect(diags).toHaveLength(0);
+  });
+
+  it("bounds model-supplied paths in diagnostic detail", () => {
+    const long = "x".repeat(400);
+    capture.before(local(), tool("move_file"), call("long", "move_file", { from: long, to: "../escape.txt" }));
+    expect(diag("skipped")?.detail?.path).toBe("x".repeat(200));
   });
 
   it("a store failure is fail-open with contextual diagnostics", () => {

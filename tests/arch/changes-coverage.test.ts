@@ -5,7 +5,7 @@ import {
   OP_BY_TOOL,
 } from "../../src/modules/changes/capture";
 import { signalForOperation } from "../../src/core/bootstrap/tool-context";
-import { DIAGNOSTIC_EVENTS, type Diagnostic } from "../../src/output/types";
+import type { Diagnostic } from "../../src/output/types";
 import { registerAllTools } from "../../src/tools/index";
 import { ToolRegistry } from "../../src/tools/registry";
 
@@ -55,13 +55,13 @@ describe("file-tool snapshot coverage", () => {
     expect(EXCLUDED_TOOLS.restore_file).toBeTruthy();
   });
 
-  it("keeps skipped diagnostics inside the closed signal whitelist", () => {
+  it("maps changes diagnostics to module degradation", () => {
     for (const op of [
       "changes.capture.before",
       "changes.capture.after",
       "changes.capture.pending",
     ]) {
-      expect(DIAGNOSTIC_EVENTS).toContain(signalForOperation(op));
+      expect(signalForOperation(op)).toBe("module_degraded");
     }
     const skipped: Diagnostic = {
       source: "module:changes",

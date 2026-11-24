@@ -46,6 +46,8 @@ interface Pending {
 }
 
 const message = (err: unknown): string => err instanceof Error ? err.message : String(err);
+/** Model-supplied paths are untrusted: keep diagnostic detail bounded in session.jsonl. */
+const clip = (p: string): string => p.slice(0, 200);
 const maxBytes = (c: AppConfig): number => c.changes?.maxFileBytes ?? DEFAULTS.changes!.maxFileBytes!;
 const shaOf = (store: ChangesStore, sid: string, p: string | null): string | null =>
   !p || !existsSync(p) ? null : store.putBlob(sid, readFileSync(p));
@@ -109,7 +111,7 @@ export class ChangeCapture {
       if (!plan || !ctx.sessionId || this.getConfig().changes?.enabled === false) return;
       const base = resolve(ctx.baseDir);
       const path = String(call.arguments[plan.pathArg] ?? "");
-      detail.path = path;
+      detail.path = clip(path);
       if (!path) return;
       const pathAbs = safeResolvePath(base, path);
       if (!isInsideDir(pathAbs, base)) return;
@@ -143,7 +145,7 @@ export class ChangeCapture {
     const p = this.pending.get(callId);
     this.pending.delete(callId);
     if (!p || !success) return;
-    const detail: Detail = { callId, sessionId: p.sessionId, path: p.entry.path, call: p.entry.tool };
+    const detail: Detail = { callId, sessionId: p.sessionId, path: clip(p.entry.path), call: p.entry.tool };
     try {
       for (const guarded of p.guardPaths) {
         if (p.pathGuard?.recheck(guarded)) {
@@ -178,7 +180,9 @@ export class ChangeCapture {
   }
 
   private forCall(ctx: ToolContext, call: ToolCall, plan: Plan, path: string, abs: string, base: string, target: Target | { cause: string } | null, before: string | null, skipped: ChangeEntry["skipped"]): Pending {
-    const toBefore = target && "toPathAbs" in target && existsSync(target.toPathAbs) ? shaOf(this.store, ctx.sessionId!, target.toPathAbs) : null;
+    // Skipped sources have no usable pre-image; never stall the journal by
+    // hashing an oversized/failing destination just to fill `toBefore`.
+    const toBefore = !skipped && target && "toPathAbs" in target && existsSync(target.toPathAbs) ? shaOf(this.store, ctx.sessionId!, target.toPathAbs) : null;
     const mode = skipped ? undefined : statSync(abs, { throwIfNoEntry: false })?.mode;
     const toRaw = plan.toArg ? String(call.arguments[plan.toArg] ?? "") : "";
     return {

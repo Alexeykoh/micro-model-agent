@@ -66,6 +66,7 @@ const OPERATION_PREFIXES: Array<[string, DiagnosticEvent]> = [
   ["skill.", "module_degraded"],
   ["memory.", "module_degraded"],
   ["browser.", "module_degraded"],
+  ["changes.", "module_degraded"],
   ["updater.", "module_degraded"],
   ["plan.", "module_degraded"],
   ["webui.", "module_degraded"],
