@@ -98,6 +98,7 @@ export const DEFAULTS: AppConfig = {
   // а 0 < любого положительного cap. Явный 0 — осознанный opt-out.
   cost: { maxRunUsd: 5 },
   hitl: { killSwitch: false, autoApproveLow: false },
+  changes: { enabled: true, maxFileBytes: 2_097_152, maxTotalBytes: 67_108_864, maxRevisionsPerFile: 20 },
   compliance: { enabled: false, retentionDays: 180 },
   memory: {
     validator: {
