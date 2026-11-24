@@ -3,6 +3,7 @@ import {
   chmodSync,
   existsSync,
   readFileSync,
+  rmSync,
   statSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
@@ -263,5 +264,36 @@ export class ChangesStore {
       this.encode(JSON.stringify({ v: 1, turn })),
     );
     return turn;
+  }
+
+  /** Evict oldest snapshots to keep the per-session and per-file revision budgets. */
+  evict(sessionId: string): void {
+    const cfg = this.deps.getConfig().changes ?? {};
+    const limit = (v: number | undefined, d: number): number =>
+      v !== undefined && Number.isSafeInteger(v) && v > 0 ? v : d;
+    const maxBytes = limit(cfg.maxTotalBytes, DEFAULTS.changes!.maxTotalBytes!);
+    const maxRevisions = limit(cfg.maxRevisionsPerFile, DEFAULTS.changes!.maxRevisionsPerFile!);
+    const entries = this.readEntries(sessionId);
+    const dead = new Set(entries.filter((e) => e.targetId && (e.op === "undo" || e.op === "evicted")).map((e) => e.targetId!));
+    const live = entries.filter((e) => (e.op === "write" || e.op === "delete" || e.op === "move") && !dead.has(e.id) && !e.skipped);
+    const size = (sha: string): number => { const f = this.blob(sessionId, sha); return existsSync(f) ? statSync(f).size : 0; };
+    const shas = (e: ChangeEntry): string[] => [...new Set([e.before, e.after, e.toBefore].filter((s): s is string => s !== null && s !== undefined))];
+    const refs = new Map<string, number>();
+    for (const e of live) for (const sha of shas(e)) refs.set(sha, (refs.get(sha) ?? 0) + 1);
+    let total = [...refs.keys()].reduce((n, sha) => n + size(sha), 0);
+    const victims = new Set<string>();
+    const release = (e: ChangeEntry): void => { for (const sha of shas(e)) { const n = refs.get(sha) ?? 0; if (n <= 1) { refs.delete(sha); total -= size(sha); } else refs.set(sha, n - 1); } };
+    const byPath = new Map<string, ChangeEntry[]>();
+    for (const e of live) byPath.set(e.pathAbs, [...(byPath.get(e.pathAbs) ?? []), e]);
+    for (const list of byPath.values()) for (const e of list.slice(0, Math.max(0, list.length - maxRevisions))) { victims.add(e.id); release(e); }
+    for (const e of live) { if (total > maxBytes && !victims.has(e.id)) { victims.add(e.id); release(e); } }
+    const deletable = new Set(live.filter((e) => victims.has(e.id)).flatMap((e) => shas(e).filter((sha) => !refs.has(sha))));
+    const failures: unknown[] = [];
+    for (const e of live) {
+      if (!victims.has(e.id)) continue;
+      this.append(sessionId, { v: 1, id: `ch_ev_${Date.now()}_${e.id}`, ts: new Date().toISOString(), turn: e.turn, tool: e.tool, callId: e.callId, op: "evicted", path: e.path, pathAbs: e.pathAbs, before: e.before, after: e.after, bytes: e.bytes, targetId: e.id, skipped: "evicted" });
+    }
+    for (const sha of deletable) { try { rmSync(this.blob(sessionId, sha)); } catch (error) { failures.push(error); } }
+    if (failures.length > 0) throw new Error(`Failed to delete ${failures.length} evicted blob(s) for session ${sessionId}`, { cause: failures });
   }
 }
