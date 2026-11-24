@@ -10,6 +10,7 @@ import { ContextManager } from "../../src/core/context/manager";
 import { createContextManager } from "../../src/core/bootstrap/context-factory";
 import { DEFAULTS } from "../../src/config/defaults";
 import type { AppConfig } from "../../src/config/types";
+import { fakeSessionManager } from "../helpers/fake-session-manager";
 
 let dir: string;
 
@@ -149,6 +150,29 @@ describe("ContextManager durable ledger", () => {
       result = mgr.compact({ keepLastN: 2 });
     }).not.toThrow();
     expect(result).toBeTruthy();
+  });
+
+  it("emits a context_degraded signal when the ledger write fails (INV-15)", () => {
+    // Файл-блокер на месте каталога леджера: mkdir/append обязаны упасть.
+    const blocker = join(dir, "blocker");
+    writeFileSync(blocker, "not a directory");
+    const { manager: sessionManager, entries } = fakeSessionManager();
+    const cfg = structuredClone(DEFAULTS) as AppConfig;
+    cfg.contextBudget.notesPath = "blocker/NOTES.md";
+
+    const mgr = createContextManager(cfg, dir, sessionManager);
+    seed(mgr, true);
+
+    expect(entries).toEqual([
+      expect.objectContaining({
+        type: "context_degraded",
+        source: "core",
+        operation: "context.ledger.write",
+        errorKind: "failed",
+        recoverable: true,
+      }),
+    ]);
+    expect(String(entries[0]?.cause)).toMatch(/ENOTDIR|EEXIST|EISDIR/);
   });
 
   it("clear() keeps the durable ledger but resets the in-memory tool ledger", () => {
