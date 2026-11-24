@@ -514,21 +514,28 @@ Coverage gate (`tests/arch/changes-coverage.test.ts`) — must fail before captu
 
 ```ts
 import { describe, expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
 import { OP_BY_TOOL, EXCLUDED_TOOLS } from "../../src/modules/changes/capture";
-
-const WRITERS = ["write_file", "edit_file", "patch_file", "append_file", "download_file", "delete_file", "move_file"];
+import { registerAllTools } from "../../src/tools/index";
+import { ToolRegistry } from "../../src/tools/registry";
 
 describe("file-tool snapshot coverage", () => {
-  it("covers every fs-write tool with pathArgs", () => {
-    for (const name of WRITERS) expect(OP_BY_TOOL[name]).toBeDefined();
+  it("covers or explicitly excludes every fs-write tool with pathArgs", () => {
+    const registry = new ToolRegistry();
+    registerAllTools(registry);
+    const writers = registry.getAll().filter((tool) =>
+      tool.security.pathArgs?.length &&
+      tool.security.caps.some((cap) => cap.fs === "write" || cap.fs === "any"),
+    );
+    expect(writers.length).toBeGreaterThan(0);
+    for (const tool of writers) {
+      expect(OP_BY_TOOL[tool.name] ?? EXCLUDED_TOOLS[tool.name]).toBeTruthy();
+    }
   });
+
   it("documents exclusions with a reason", () => {
     expect(EXCLUDED_TOOLS.create_dir).toBeTruthy();
     expect(EXCLUDED_TOOLS.bash).toBeTruthy();
-    const sources = ["src/tools/write-file.ts", "src/tools/move-file.ts"]
-      .map((p) => readFileSync(p, "utf8")).join("\n");
-    expect(sources).toContain('caps: [{ fs: "write" }]');
+    expect(EXCLUDED_TOOLS.restore_file).toBeTruthy();
   });
 });
 ```
@@ -543,9 +550,10 @@ describe("file-tool snapshot coverage", () => {
 
 ```ts
 import { existsSync, lstatSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import type { AppConfig } from "../../config/types";
 import type { Diagnostic } from "../../output/types";
+import { isInsideDir, safeResolvePath } from "../../tools/path-utils";
 import type { ToolCall, ToolContext, ToolDefinition } from "../../tools/types";
 import { ChangesStore } from "./store";
 import type { ChangeEntry, ChangeOp } from "./types";
@@ -563,6 +571,7 @@ export const OP_BY_TOOL: Record<string, { op: ChangeOp; pathArg: string; toArg?:
 export const EXCLUDED_TOOLS: Record<string, string> = {
   create_dir: "directory creation has no file content to snapshot",
   bash: "no pathArgs; shell mutations cannot be attributed reliably",
+  restore_file: "undo writes are journaled as undo markers, not edit revisions",
 };
 
 interface Pending {
@@ -594,29 +603,31 @@ export class ChangeCapture {
       const base = resolve(ctx.baseDir);
       const path = String(call.arguments[plan.pathArg] ?? "");
       if (!path) return;
-      const pathAbs = resolve(base, path);
-      if (!pathAbs.startsWith(`${base}/`)) return; // путь уже проверен enforcement’ом
-      const stat = statSync(pathAbs, { throwIfNoEntry: false });
-      if (lstatSync(pathAbs, { throwIfNoEntry: false })?.isSymbolicLink()) {
+      const pathAbs = safeResolvePath(base, path);
+      if (!isInsideDir(pathAbs, base)) return; // путь уже проверен enforcement’ом
+      const link = lstatSync(pathAbs, { throwIfNoEntry: false });
+      if (link?.isSymbolicLink()) {
         this.pending.set(call.id, {
           sessionId: ctx.sessionId,
-          entry: { ...this.baseEntry(call, plan.op, path, pathAbs, null, "unsupported"), bytes: 0 },
+          entry: this.baseEntry(call, plan.op, path, pathAbs, null, "unsupported"),
           afterPathAbs: null, toPathAbs: null, onDiagnostic: ctx.onDiagnostic,
         });
         return;
       }
+      const stat = statSync(pathAbs, { throwIfNoEntry: false });
       const tooBig = !!stat && stat.size > (this.getConfig().changes?.maxFileBytes ?? 2_097_152);
       if (tooBig) {
         this.pending.set(call.id, {
           sessionId: ctx.sessionId,
-          entry: { ...this.baseEntry(call, plan.op, path, pathAbs, null, "too-large"), bytes: 0 },
+          entry: this.baseEntry(call, plan.op, path, pathAbs, null, "too-large"),
           afterPathAbs: null, toPathAbs: null, onDiagnostic: ctx.onDiagnostic,
         });
         return;
       }
       const before = stat ? shaOf(this.store, ctx.sessionId, pathAbs) : null;
       const mode = stat?.mode;
-      const toPathAbs = plan.toArg ? resolve(base, String(call.arguments[plan.toArg] ?? "")) : null;
+      const toPathAbs = plan.toArg ? safeResolvePath(base, String(call.arguments[plan.toArg] ?? "")) : null;
+      if (toPathAbs && !isInsideDir(toPathAbs, base)) return;
       const toBefore = toPathAbs && existsSync(toPathAbs) ? shaOf(this.store, ctx.sessionId, toPathAbs) : null;
       this.pending.set(call.id, {
         sessionId: ctx.sessionId,
@@ -644,7 +655,6 @@ export class ChangeCapture {
         after,
         bytes,
       });
-      this.store.evict(sessionId);
     } catch (err) {
       this.report("changes.capture.after", err, p.onDiagnostic);
     }
