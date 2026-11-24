@@ -105,6 +105,18 @@ describe("ChangesStore blob integrity", () => {
     expect(() => store.getBlob("s1", sha)).toThrow(/blob.*(limit|large)/i);
   });
 
+  it("rejects oversized encoded blobs before reading their payload", () => {
+    const config = changesConfig(root);
+    config.changes!.maxFileBytes = 1024;
+    config.changes!.maxTotalBytes = 8192;
+    store = createStore(ChangesStore, root, config);
+    const sha = createHash("sha256").update("hello").digest("hex");
+    const file = blobFile(sha);
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, "x".repeat(1024 * 2 + 64 * 1024 + 1), "utf8");
+    expect(() => store.getBlob("s1", sha)).toThrow(/encoded.*(large|limit)/i);
+  });
+
   it("verifies and atomically repairs an existing corrupt blob", () => {
     const content = Buffer.from("hello");
     const sha = store.putBlob("s1", content);

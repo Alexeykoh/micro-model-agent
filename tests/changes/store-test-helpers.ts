@@ -16,10 +16,10 @@ export function changesConfig(root: string): AppConfig {
 }
 
 export function createStore(
-  Store: typeof ChangesStoreType,
+  Store: typeof ChangesStore,
   root: string,
   config: AppConfig,
-): ChangesStoreType {
+): ChangesStore {
   return new Store({
     sessionManager: { getSessionDirectory: () => join(root, "sessions", "s1") },
     getConfig: () => config,

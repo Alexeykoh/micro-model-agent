@@ -3,11 +3,13 @@ import {
   chmodSync,
   existsSync,
   readFileSync,
+  statSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { DEFAULTS } from "../../config/defaults";
 import type { AppConfig } from "../../config/types";
+import { isEncryptedString } from "../security/encryption";
 import { SessionFileEncryptor } from "../security/session-encryption";
 import {
   appendPrivateFile,
@@ -121,15 +123,24 @@ export class ChangesStore {
     }
     const sha = createHash("sha256").update(content).digest("hex");
     const file = this.blob(sessionId, sha);
+    const shouldEncrypt =
+      this.deps.getConfig().security?.sessionEncryption?.enabled === true;
     this.ensure(sessionId);
     const shard = dirname(file);
     ensurePrivateDirectory(shard);
     if (existsSync(file)) {
       chmodSync(file, 0o600);
       try {
-        if (this.readBlob(file, sha).equals(content)) return sha;
+        const encoded = this.readEncodedBlob(file, sha);
+        const raw = this.decodeBlob(encoded, sha);
+        if (
+          raw.equals(content) &&
+          isEncryptedString(encoded) === shouldEncrypt
+        ) {
+          return sha;
+        }
       } catch {
-        // Existing content is corrupt or uses an old key: replace it atomically.
+        // Corrupt, old-key, oversized, or differently encoded: replace atomically.
       }
     }
     writePrivateFileAtomic(
@@ -149,9 +160,27 @@ export class ChangesStore {
   }
 
   private readBlob(file: string, sha: string): Buffer {
+    return this.decodeBlob(this.readEncodedBlob(file, sha), sha);
+  }
+
+  private readEncodedBlob(file: string, sha: string): string {
+    const limit = Math.min(
+      Number.MAX_SAFE_INTEGER,
+      this.maxFileBytes() * 2 + 64 * 1024,
+    );
+    const size = statSync(file).size;
+    if (size > limit) {
+      throw new Error(
+        `Encoded blob ${sha} is too large: ${size} bytes exceeds limit ${limit}`,
+      );
+    }
+    return readFileSync(file, "utf8");
+  }
+
+  private decodeBlob(encoded: string, sha: string): Buffer {
     let raw: Buffer;
     try {
-      const body = this.decode(readFileSync(file, "utf8"));
+      const body = this.decode(encoded);
       raw = gunzipSync(Buffer.from(body, "base64"), {
         maxOutputLength: this.maxFileBytes(),
       });

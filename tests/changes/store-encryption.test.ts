@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { gzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
+import { isEncryptedString } from "../../src/modules/security/encryption";
 import {
   ChangesStore,
   changeEntry,
@@ -89,6 +90,30 @@ describe("ChangesStore encrypted mode", () => {
     expect(raw).not.toBe(gzipSync(content).toString("base64"));
 
     expect(freshStore().getBlob("s1", sha)!.equals(content)).toBe(true);
+  });
+
+  it("re-encrypts an existing plaintext blob when encryption is enabled", () => {
+    const content = Buffer.from("transition content");
+    const plaintext = createStore(ChangesStore, root, changesConfig(root));
+    const sha = plaintext.putBlob("s1", content);
+    expect(isEncryptedString(readFileSync(blobFile(sha), "utf8"))).toBe(false);
+
+    expect(store.putBlob("s1", content)).toBe(sha);
+    expect(isEncryptedString(readFileSync(blobFile(sha), "utf8"))).toBe(true);
+    expect(freshStore().getBlob("s1", sha)!.equals(content)).toBe(true);
+  });
+
+  it("repairs an encrypted blob to plaintext when encryption is disabled", () => {
+    const content = Buffer.from("transition content");
+    const sha = store.putBlob("s1", content);
+    expect(isEncryptedString(readFileSync(blobFile(sha), "utf8"))).toBe(true);
+
+    const plaintext = createStore(ChangesStore, root, changesConfig(root));
+    expect(plaintext.putBlob("s1", content)).toBe(sha);
+    const raw = readFileSync(blobFile(sha), "utf8");
+    expect(isEncryptedString(raw)).toBe(false);
+    expect(gunzipSync(Buffer.from(raw, "base64")).equals(content)).toBe(true);
+    expect(plaintext.getBlob("s1", sha)!.equals(content)).toBe(true);
   });
 
   it("encrypts turn state at rest and resumes through a fresh store", () => {
