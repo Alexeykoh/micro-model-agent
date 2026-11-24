@@ -137,7 +137,8 @@ preview}` (i18n-шаблон `tool.output_admitted`). Поля `handle`/`digest`
 Долги волны (pay-once, см. [реестр долгов](../../../agents/debt.md)):
 `DEBT(descriptor-fields-deferred)` — поля дескриптора;
 `DEBT(admission-spill-no-gc)` — спилл не чистится;
-`DEBT(admit-threshold-unmeasured)` — дефолт порога не измерен.
+`admit-threshold-unmeasured` — **оплачен 2026-11-24**: дефолт 4000 зафиксирован
+[замером §11](../../../analysis/2026-11-24-admit-threshold-measurement.md).
 
 Дескриптор обязан содержать достаточное для OO-2 (путь + диапазон или путь артефакта).
 

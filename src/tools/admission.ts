@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { estimateTokens } from "../llm/token-counter";
 import { t } from "../i18n/index";
-import { DEFAULTS } from "../config/defaults";
+import { DEFAULT_ADMIT_MAX_TOKENS } from "../config/defaults";
 import type { ToolCall, ToolContext, ToolResult } from "./types";
 
 /** Сколько первых строк вывода оставить в превью дескриптора. */
@@ -102,11 +102,7 @@ export function admitFromContext(
     return admitToolResult(result, {
       baseDir: ctx.baseDir,
       sessionId: ctx.sessionId ?? "default",
-      // DEBT(admit-threshold-unmeasured): 3000 — placeholder до замера (§11).
-      maxTokens:
-        ctx.config?.contextBudget?.admitMaxTokens ??
-        DEFAULTS.contextBudget.admitMaxTokens ??
-        3000,
+      maxTokens: ctx.config?.contextBudget?.admitMaxTokens ?? DEFAULT_ADMIT_MAX_TOKENS,
       source: typeof path === "string" ? path : undefined,
     });
   } catch (e) {
