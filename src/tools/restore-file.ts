@@ -40,8 +40,8 @@ function localizeReason(reason: string): string {
   return reason;
 }
 
-/** Собираем вывод для модели из items; результат undo — не пользовательский текст. */
-function localizeOutput(result: UndoResult): string {
+/** Локализованный результат undo: общий вывод для тула restore_file и CLI. */
+export function localizeOutput(result: UndoResult): string {
   const detail = result.items.length
     ? result.items
         .map((item) =>

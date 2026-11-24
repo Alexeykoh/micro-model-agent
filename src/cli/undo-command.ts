@@ -8,6 +8,7 @@ import { t } from "../i18n/index";
 import { createFileChangesPort } from "../modules/changes";
 import { matchProtectedPath } from "../modules/security/protected-paths";
 import { getDefaultChannel } from "../output";
+import { localizeOutput } from "../tools/restore-file";
 import { fail } from "./exit-code";
 
 interface Parsed {
@@ -47,8 +48,12 @@ export async function runUndo(
     write(t("changes.invalid_steps"), "stderr");
     return;
   }
+  // `--turn` без числа — ошибка: неявного текущего хода нет (как и в туле).
   const turn = typeof parsed.turn === "string" ? Number(parsed.turn) : undefined;
-  if (turn !== undefined && (!Number.isSafeInteger(turn) || turn < 1)) {
+  if (
+    (parsed.turn !== undefined && turn === undefined) ||
+    (turn !== undefined && (!Number.isSafeInteger(turn) || turn < 1))
+  ) {
     write(t("changes.invalid_turn"), "stderr");
     return;
   }
@@ -100,21 +105,8 @@ export async function runUndo(
     force: parsed.force,
     authorize,
   });
-  const detail = result.items
-    .map((i) =>
-      i.ok
-        ? `${i.path}: ${t("changes.reason.restored")}`
-        : `${i.path}: ${i.reason ?? t("changes.reason.unknown")}`,
-    )
-    .join("; ");
-  write(
-    result.ok
-      ? t("changes.result_ok", { detail })
-      : t("changes.result_fail", {
-          detail: detail || (result.message ?? t("changes.reason.unknown")),
-        }),
-    result.ok ? undefined : "stderr",
-  );
+  // Один и тот же локализованный вывод для CLI и тула restore_file.
+  write(localizeOutput(result), result.ok ? undefined : "stderr");
 }
 
 export function buildUndoCommand(program: Command): void {
