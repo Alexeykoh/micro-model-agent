@@ -2698,6 +2698,8 @@
   "config.desc.changes.maxTotalBytes": "Oldest snapshots are evicted when this budget is exceeded.",
   "config.key.changes.maxRevisionsPerFile": "undo depth per file",
   "config.desc.changes.maxRevisionsPerFile": "How many previous versions of one file remain undoable.",
+  "changes.no_session": "No active session with change history — nothing to restore.",
+  "changes.empty": "No recorded file changes to undo.",
   "config.desc.cost.maxRunUsd": "Hard budget per agent run in whole USD (0 = no limit). At the cap the turn ends with cost_budget.",
   "config.key.otel.enabled": "OTel spans",
   "config.desc.otel.enabled": "Emit OpenTelemetry GenAI spans (otel-adapter).",

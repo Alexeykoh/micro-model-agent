@@ -2698,6 +2698,8 @@
   "config.desc.changes.maxTotalBytes": "Самые старые снимки удаляются при превышении бюджета.",
   "config.key.changes.maxRevisionsPerFile": "глубина отката по файлу",
   "config.desc.changes.maxRevisionsPerFile": "Сколько предыдущих версий одного файла остаются доступными для отката.",
+  "changes.no_session": "Нет активной сессии с историей правок — откатывать нечего.",
+  "changes.empty": "Нет записанных правок файлов для отката.",
   "config.desc.cost.maxRunUsd": "Жёсткий бюджет одного хода в целых USD (0 — без лимита). На капе ход заканчивается с cost_budget.",
   "config.key.otel.enabled": "OTel трейсы",
   "config.desc.otel.enabled": "Эмитить спаны OpenTelemetry GenAI (otel-адаптер).",

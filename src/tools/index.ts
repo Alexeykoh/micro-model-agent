@@ -22,6 +22,8 @@ import { createDirTool } from "./create-dir";
 import { deleteFileTool } from "./delete-file";
 import { moveFileTool } from "./move-file";
 import { fileInfoTool } from "./file-info";
+import { listFileChangesTool } from "./list-file-changes";
+import { restoreFileTool } from "./restore-file";
 import { bashTool } from "./bash";
 import { gitTool } from "./git";
 import { processListTool } from "./process-list";
@@ -72,6 +74,8 @@ export {
   deleteFileTool,
   moveFileTool,
   fileInfoTool,
+  listFileChangesTool,
+  restoreFileTool,
   bashTool,
   gitTool,
   subagentTool,
@@ -121,6 +125,8 @@ export function registerAllTools(
     deleteFileTool,
     moveFileTool,
     fileInfoTool,
+    listFileChangesTool,
+    restoreFileTool,
     bashTool,
     gitTool,
     subagentTool,
