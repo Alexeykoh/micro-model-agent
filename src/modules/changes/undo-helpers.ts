@@ -8,6 +8,28 @@ const MAX_DIFF_LINES = 300;
 export const message = (err: unknown): string =>
   err instanceof Error ? err.message : String(err);
 
+/**
+ * Caller-supplied policy checked before every write: the source, the move
+ * destination and the parent directory each restore would create/use.
+ * This is additional to — never a replacement for — containment/symlink guards.
+ */
+export function authorizationIssue(
+  e: ChangeEntry,
+  base: string,
+  authorize?: (path: string) => string | null,
+): string | null {
+  if (!authorize) return null;
+  const targets = [resolve(e.pathAbs)];
+  if (e.op === "move" && e.to) targets.push(resolve(base, e.to));
+  for (const target of targets) {
+    for (const path of [target, dirname(target)]) {
+      const reason = authorize(path);
+      if (reason) return reason;
+    }
+  }
+  return null;
+}
+
 /** Live, undoable revisions: no marker targets them and they were snapshotted. */
 export function effective(all: ChangeEntry[]): ChangeEntry[] {
   const dead = new Set(

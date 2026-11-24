@@ -63,6 +63,8 @@ export interface UndoOptions {
   steps?: number;
   turn?: number;
   force?: boolean;
+  /** Additional caller policy; returns a denial reason, or null when allowed. */
+  authorize?: (path: string) => string | null;
 }
 
 const CHANGE_OPS: ReadonlySet<string> = new Set([

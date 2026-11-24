@@ -401,6 +401,84 @@ describe("ChangeUndo", () => {
     expect(read("dst.txt")).toBe("source");
     expect(store.readEntries("s1").filter((e) => e.op === "undo")).toHaveLength(0);
   });
+
+  it("honors authorize: no write and no marker when a path is denied", () => {
+    const before = store.putBlob("s1", Buffer.from("old"));
+    const after = store.putBlob("s1", Buffer.from("new"));
+    writeFileSync(join(root, "a.txt"), "new");
+    store.append("s1", entry({ id: "auth", before, after }));
+    const seen: string[] = [];
+    const res = undoer.undo(
+      opts({
+        path: "a.txt",
+        force: true,
+        authorize: (p) => {
+          seen.push(p);
+          return p === join(root, "a.txt") ? "blocked by policy" : null;
+        },
+      }),
+    );
+    expect(res.ok).toBe(false);
+    expect(res.items[0]!.reason).toContain("blocked by policy");
+    expect(read("a.txt")).toBe("new");
+    expect(store.readEntries("s1").filter((e) => e.op === "undo")).toHaveLength(0);
+    expect(seen).toContain(join(root, "a.txt"));
+  });
+
+  it("authorizes the directory creation target before writing", () => {
+    const before = store.putBlob("s1", Buffer.from("restored"));
+    store.append(
+      "s1",
+      entry({
+        id: "dir",
+        path: "sub/a.txt",
+        pathAbs: join(root, "sub", "a.txt"),
+        before,
+        after: null,
+      }),
+    );
+    const res = undoer.undo(
+      opts({
+        path: "sub/a.txt",
+        authorize: (p) => (p === join(root, "sub") ? "dir denied" : null),
+      }),
+    );
+    expect(res.ok).toBe(false);
+    expect(res.items[0]!.reason).toContain("dir denied");
+    expect(existsSync(join(root, "sub"))).toBe(false);
+  });
+
+  it("authorizes a move destination before any write, ignoring force", () => {
+    const src = store.putBlob("s1", Buffer.from("source"));
+    const toBefore = store.putBlob("s1", Buffer.from("old"));
+    writeFileSync(join(root, "dst.txt"), "source");
+    store.append(
+      "s1",
+      entry({
+        id: "m",
+        op: "move",
+        path: "src.txt",
+        pathAbs: join(root, "src.txt"),
+        before: src,
+        after: null,
+        to: "dst.txt",
+        toBefore,
+      }),
+    );
+    const res = undoer.undo(
+      opts({
+        path: "src.txt",
+        force: true,
+        authorize: (p) =>
+          p === join(root, "dst.txt") ? "destination denied" : null,
+      }),
+    );
+    expect(res.ok).toBe(false);
+    expect(res.items[0]!.reason).toContain("destination denied");
+    expect(existsSync(join(root, "src.txt"))).toBe(false);
+    expect(read("dst.txt")).toBe("source");
+    expect(store.readEntries("s1").filter((e) => e.op === "undo")).toHaveLength(0);
+  });
 });
 
 describe("ChangesStore.evict", () => {

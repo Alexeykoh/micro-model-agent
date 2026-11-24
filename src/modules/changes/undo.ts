@@ -20,6 +20,7 @@ import type {
   UndoResult,
 } from "./types";
 import {
+  authorizationIssue,
   effective,
   escapeCause,
   joinDiffs,
@@ -93,13 +94,13 @@ export class ChangeUndo {
           items: [],
         };
       }
-      const group: Group = { target: mine[steps - 1]!, consumed: mine.slice(0, steps) };
       return this.apply(
-        [group],
+        [{ target: mine[steps - 1]!, consumed: mine.slice(0, steps) }],
         options.force === true,
         options.sessionId,
         base,
         steps > 1 ? mine[0] : undefined,
+        options.authorize,
       );
     }
     const turn = options.turn ?? (this.deps.store.loadTurn(options.sessionId) || 1);
@@ -119,6 +120,8 @@ export class ChangeUndo {
       options.force === true,
       options.sessionId,
       base,
+      undefined,
+      options.authorize,
     );
   }
 
@@ -154,6 +157,7 @@ export class ChangeUndo {
     sessionId: string,
     base: string,
     verify?: ChangeEntry,
+    authorize?: (path: string) => string | null,
   ): UndoResult {
     const items: UndoItem[] = [];
     const diffs: string[] = [];
@@ -166,6 +170,12 @@ export class ChangeUndo {
       let restored = false;
       let marked = false;
       try {
+        // Additional caller policy; checked before conflicts and every write.
+        const denial = authorizationIssue(e, base, authorize);
+        if (denial) {
+          items.push({ path: e.path, ok: false, reason: denial });
+          continue;
+        }
         // With steps>1 skipped revisions are implied: compare against the newest.
         const reason = this.conflict(verify ?? e, base);
         if (reason && !force) {
