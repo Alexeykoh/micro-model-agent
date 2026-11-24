@@ -1,22 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-} from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { gzipSync } from "node:zlib";
 import {
+  ChangesStore,
   changeEntry,
   changesConfig,
   createStore,
-  loadChangesStoreModule,
 } from "./store-test-helpers";
-
-const { ChangesStore } = await loadChangesStoreModule();
 
 let root: string;
 let store: InstanceType<typeof ChangesStore>;
@@ -108,28 +100,5 @@ describe("ChangesStore encrypted mode", () => {
     const fresh = freshStore();
     expect(fresh.loadTurn("s1")).toBe(1);
     expect(fresh.nextTurn("s1")).toBe(2);
-  });
-
-  it("rebuilds the cached encryptor when the effective default key path changes", () => {
-    const previousConfigDir = process.env.MMA_CONFIG_DIR;
-    const firstDir = join(root, "config-one");
-    const secondDir = join(root, "config-two");
-    mkdirSync(firstDir);
-    mkdirSync(secondDir);
-    const config = encryptedConfig();
-    config.security!.sessionEncryption.keyPath = "";
-    try {
-      process.env.MMA_CONFIG_DIR = firstDir;
-      store = createStore(ChangesStore, root, config);
-      store.putBlob("s1", Buffer.from("first"));
-      process.env.MMA_CONFIG_DIR = secondDir;
-      store.putBlob("s1", Buffer.from("second"));
-
-      expect(existsSync(join(firstDir, ".session-encryption-key"))).toBe(true);
-      expect(existsSync(join(secondDir, ".session-encryption-key"))).toBe(true);
-    } finally {
-      if (previousConfigDir === undefined) delete process.env.MMA_CONFIG_DIR;
-      else process.env.MMA_CONFIG_DIR = previousConfigDir;
-    }
   });
 });

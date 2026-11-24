@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
+  appendFileSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -10,22 +11,26 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  ChangesStore,
   changeEntry,
   changesConfig,
   createStore,
-  loadChangesStoreModule,
 } from "./store-test-helpers";
-
-const { ChangesStore } = await loadChangesStoreModule();
 
 let root: string;
 let store: InstanceType<typeof ChangesStore>;
 
 const statePath = (): string => join(store.dir("s1"), "state.json");
+const indexPath = (): string => join(store.dir("s1"), "index.jsonl");
 
 function writeState(content: string): void {
   mkdirSync(store.dir("s1"), { recursive: true });
   writeFileSync(statePath(), content, "utf8");
+}
+
+function writeJournal(content: string): void {
+  mkdirSync(store.dir("s1"), { recursive: true });
+  writeFileSync(indexPath(), content, "utf8");
 }
 
 beforeEach(() => {
@@ -38,6 +43,45 @@ afterEach(() => rmSync(root, { recursive: true, force: true }));
 describe("ChangesStore turn state", () => {
   it("returns zero only when state is missing", () => {
     expect(store.loadTurn("s1")).toBe(0);
+  });
+
+  it("trusts valid state without reading a corrupt journal", () => {
+    expect(store.nextTurn("s1")).toBe(1);
+    mkdirSync(indexPath());
+    expect(store.nextTurn("s1")).toBe(2);
+  });
+
+  it("fails closed when missing state has a wholly corrupt journal", () => {
+    writeJournal("not-json\n");
+    expect(() => store.nextTurn("s1")).toThrow(/journal|corrupt/i);
+    expect(store.loadTurn("s1")).toBe(0);
+  });
+
+  it("fails closed when a later journal record is malformed", () => {
+    store.append("s1", changeEntry(root, { turn: 5 }));
+    const malformed = changeEntry(root, { turn: 6, to: "unexpected.txt" });
+    appendFileSync(indexPath(), `${JSON.stringify(malformed)}\n`, "utf8");
+    const corruptState = "{broken";
+    writeState(corruptState);
+
+    expect(() => store.nextTurn("s1")).toThrow(/journal|corrupt/i);
+    expect(readFileSync(statePath(), "utf8")).toBe(corruptState);
+  });
+
+  it("fails closed when a recovery journal exists but is empty", () => {
+    writeJournal("");
+    expect(() => store.nextTurn("s1")).toThrow(/journal|empty/i);
+  });
+
+  it("distinguishes state I/O errors from invalid state", () => {
+    mkdirSync(statePath(), { recursive: true });
+    expect(() => store.loadTurn("s1")).toThrow(/read.*state|state.*read/i);
+    expect(() => store.nextTurn("s1")).toThrow(/read.*state|state.*read/i);
+  });
+
+  it("distinguishes journal I/O errors from a missing journal", () => {
+    mkdirSync(indexPath(), { recursive: true });
+    expect(() => store.nextTurn("s1")).toThrow(/read.*journal|journal.*read/i);
   });
 
   it("recovers corrupt JSON from the maximum journal turn", () => {
@@ -94,11 +138,11 @@ describe("ChangesStore turn state", () => {
     expect(store.nextTurn("s1")).toBe(10);
   });
 
-  it("never reuses a journal turn higher than valid state", () => {
+  it("does not raise valid state from later journal entries", () => {
     store.append("s1", changeEntry(root, { turn: 8 }));
     expect(store.nextTurn("s1")).toBe(9);
     store.append("s1", changeEntry(root, { turn: 10 }));
-    expect(store.nextTurn("s1")).toBe(11);
+    expect(store.nextTurn("s1")).toBe(10);
   });
 
   it("refuses to allocate an unsafe turn number", () => {

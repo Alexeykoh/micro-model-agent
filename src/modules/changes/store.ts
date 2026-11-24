@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import {
-  appendFileSync,
   chmodSync,
   existsSync,
   readFileSync,
@@ -8,17 +7,25 @@ import {
 import { dirname, join } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { DEFAULTS } from "../../config/defaults";
-import { globalMmaDir } from "../../config/paths";
 import type { AppConfig } from "../../config/types";
 import { SessionFileEncryptor } from "../security/session-encryption";
 import {
+  appendPrivateFile,
   ensurePrivateDirectory,
   writePrivateFileAtomic,
 } from "./store-fs";
 import {
+  parseJournalLines,
+  readChangeJournal,
+} from "./journal";
+import {
+  InvalidTurnStateError,
+  readTurnState,
+  type TurnStateRead,
+} from "./turn-state";
+import {
   assertSha256,
   type ChangeEntry,
-  parseChangeEntry,
 } from "./types";
 
 export interface ChangesStoreDeps {
@@ -27,8 +34,6 @@ export interface ChangesStoreDeps {
 }
 
 export class ChangesStore {
-  private encryptor?: { keyPath: string; value: SessionFileEncryptor };
-
   constructor(private readonly deps: ChangesStoreDeps) {}
 
   dir(sessionId: string): string {
@@ -37,16 +42,7 @@ export class ChangesStore {
 
   private enc(): SessionFileEncryptor | null {
     const config = this.deps.getConfig().security?.sessionEncryption;
-    if (!config?.enabled) return null;
-    const keyPath =
-      config.keyPath || join(globalMmaDir(), ".session-encryption-key");
-    if (this.encryptor?.keyPath !== keyPath) {
-      this.encryptor = {
-        keyPath,
-        value: new SessionFileEncryptor({ ...config, keyPath }),
-      };
-    }
-    return this.encryptor.value;
+    return config?.enabled ? new SessionFileEncryptor(config) : null;
   }
 
   private encode(content: string): string {
@@ -60,6 +56,18 @@ export class ChangesStore {
   private decodeJSONL(lines: string[]): string[] {
     const encryptor = this.enc();
     return encryptor ? encryptor.decryptJSONL(lines) : lines;
+  }
+
+  private decodeJSONLStrict(lines: string[]): string[] {
+    const encryptor = this.enc();
+    if (!encryptor) return lines;
+    return lines.map((line) => {
+      try {
+        return encryptor.decryptFileContent(line);
+      } catch (error) {
+        throw new Error("Unable to decrypt change journal line", { cause: error });
+      }
+    });
   }
 
   private index(sessionId: string): string {
@@ -81,66 +89,53 @@ export class ChangesStore {
     ensurePrivateDirectory(join(dir, "blobs"));
   }
 
-  private blobLimit(): number {
-    const changes = this.deps.getConfig().changes;
-    const defaults = DEFAULTS.changes!;
-    const maxFile = this.positiveLimit(changes?.maxFileBytes, defaults.maxFileBytes!);
-    const maxTotal = this.positiveLimit(
-      changes?.maxTotalBytes,
-      defaults.maxTotalBytes!,
-    );
-    return Math.max(maxFile, maxTotal);
-  }
-
-  private positiveLimit(value: number | undefined, fallback: number): number {
+  private maxFileBytes(): number {
+    const value = this.deps.getConfig().changes?.maxFileBytes;
+    const fallback = DEFAULTS.changes!.maxFileBytes!;
     return value !== undefined && Number.isSafeInteger(value) && value > 0
       ? value
       : fallback;
   }
 
   readEntries(sessionId: string): ChangeEntry[] {
-    const file = this.index(sessionId);
-    if (!existsSync(file)) return [];
-    const lines = this.decodeJSONL(
-      readFileSync(file, "utf8").split(/\r?\n/).filter(Boolean),
-    );
-    const out: ChangeEntry[] = [];
-    for (const line of lines) {
-      try {
-        const entry = parseChangeEntry(JSON.parse(line));
-        if (entry) out.push(entry);
-      } catch {
-        // Битая строка — пропуск, как в session.jsonl.
-      }
-    }
-    return out;
+    const journal = readChangeJournal(this.index(sessionId));
+    if (journal.status === "missing") return [];
+    const lines = this.decodeJSONL(journal.lines.filter(Boolean));
+    return parseJournalLines(lines, false, this.index(sessionId));
   }
 
   append(sessionId: string, entry: ChangeEntry): void {
     this.ensure(sessionId);
-    const file = this.index(sessionId);
-    appendFileSync(
-      file,
+    appendPrivateFile(
+      this.index(sessionId),
       `${this.encode(JSON.stringify(entry))}\n`,
-      { encoding: "utf8", mode: 0o600 },
     );
-    chmodSync(file, 0o600);
   }
 
   putBlob(sessionId: string, content: Buffer): string {
+    const limit = this.maxFileBytes();
+    if (content.byteLength > limit) {
+      throw new Error(
+        `Blob size ${content.byteLength} exceeds changes.maxFileBytes limit ${limit}`,
+      );
+    }
     const sha = createHash("sha256").update(content).digest("hex");
     const file = this.blob(sessionId, sha);
     this.ensure(sessionId);
     const shard = dirname(file);
     ensurePrivateDirectory(shard);
-    if (!existsSync(file)) {
-      writePrivateFileAtomic(
-        file,
-        this.encode(gzipSync(content).toString("base64")),
-      );
-    } else {
+    if (existsSync(file)) {
       chmodSync(file, 0o600);
+      try {
+        if (this.readBlob(file, sha).equals(content)) return sha;
+      } catch {
+        // Existing content is corrupt or uses an old key: replace it atomically.
+      }
     }
+    writePrivateFileAtomic(
+      file,
+      this.encode(gzipSync(content).toString("base64")),
+    );
     return sha;
   }
 
@@ -150,15 +145,19 @@ export class ChangesStore {
     if (!existsSync(file)) {
       throw new Error(`Missing blob ${sha} for session ${sessionId}`);
     }
+    return this.readBlob(file, sha);
+  }
+
+  private readBlob(file: string, sha: string): Buffer {
     let raw: Buffer;
     try {
       const body = this.decode(readFileSync(file, "utf8"));
       raw = gunzipSync(Buffer.from(body, "base64"), {
-        maxOutputLength: this.blobLimit(),
+        maxOutputLength: this.maxFileBytes(),
       });
     } catch (error) {
       throw new Error(
-        `Corrupt blob ${sha} for session ${sessionId}: decode failed or the decompression limit was exceeded`,
+        `Corrupt blob ${sha}: decode failed or the per-file decompression limit was exceeded`,
         { cause: error },
       );
     }
@@ -172,54 +171,61 @@ export class ChangesStore {
   }
 
   loadTurn(sessionId: string): number {
-    const file = this.state(sessionId);
-    if (!existsSync(file)) return 0;
-    try {
-      const value: unknown = JSON.parse(this.decode(readFileSync(file, "utf8")));
-      if (typeof value !== "object" || value === null || Array.isArray(value)) {
-        throw new Error("Turn state must be an object");
-      }
-      const state = value as Record<string, unknown>;
-      if (
-        state.v !== 1 ||
-        typeof state.turn !== "number" ||
-        !Number.isSafeInteger(state.turn) ||
-        state.turn < 0
-      ) {
-        throw new Error("Turn state requires v:1 and a safe non-negative turn");
-      }
-      return state.turn;
-    } catch (error) {
-      throw new Error(`Invalid or corrupt turn state for session ${sessionId}`, {
-        cause: error,
-      });
-    }
+    const state = readTurnState(this.state(sessionId), (raw) => this.decode(raw));
+    return state.status === "valid" ? state.turn : 0;
   }
 
   /** Single-writer allocation; atomic rename avoids partial state, not process races. */
   nextTurn(sessionId: string): number {
-    let stateTurn = 0;
-    let stateInvalid = false;
-    let stateCause: unknown;
+    let state: TurnStateRead;
     try {
-      stateTurn = this.loadTurn(sessionId);
+      state = readTurnState(this.state(sessionId), (raw) => this.decode(raw));
     } catch (error) {
-      stateInvalid = true;
-      stateCause = error;
+      if (!(error instanceof InvalidTurnStateError)) throw error;
+      return this.recoverTurn(sessionId, error);
     }
-    const entries = this.readEntries(sessionId);
+    if (state.status === "valid") return this.allocateTurn(sessionId, state.turn);
+    return this.recoverTurn(sessionId);
+  }
+
+  private recoverTurn(sessionId: string, stateCause?: unknown): number {
+    const file = this.index(sessionId);
+    const journal = readChangeJournal(file);
+    if (journal.status === "missing") {
+      if (stateCause) {
+        throw new Error(
+          `Cannot recover turn counter for session ${sessionId}: corrupt state and no journal`,
+          { cause: stateCause },
+        );
+      }
+      return this.allocateTurn(sessionId, 0);
+    }
+    if (journal.lines.length === 0) {
+      throw new Error(
+        `Cannot recover turn counter for session ${sessionId}: journal is empty`,
+        { cause: stateCause },
+      );
+    }
+    let lines: string[];
+    try {
+      lines = this.decodeJSONLStrict(journal.lines);
+    } catch (error) {
+      throw new Error(
+        `Cannot recover turn counter for session ${sessionId}: undecryptable journal`,
+        { cause: error },
+      );
+    }
+    const entries = parseJournalLines(lines, true, file);
     const journalTurn = entries.reduce(
       (max, entry) => Math.max(max, entry.turn),
       0,
     );
-    if (stateInvalid && entries.length === 0) {
-      throw new Error(
-        `Cannot recover turn counter for session ${sessionId}: corrupt state and no journal evidence`,
-        { cause: stateCause },
-      );
-    }
-    const turn = Math.max(stateTurn, journalTurn) + 1;
-    if (!Number.isSafeInteger(turn) || turn < 0) {
+    return this.allocateTurn(sessionId, journalTurn);
+  }
+
+  private allocateTurn(sessionId: string, previous: number): number {
+    const turn = previous + 1;
+    if (!Number.isSafeInteger(turn) || turn < 1) {
       throw new Error(`Turn counter overflow for session ${sessionId}`);
     }
     this.ensure(sessionId);

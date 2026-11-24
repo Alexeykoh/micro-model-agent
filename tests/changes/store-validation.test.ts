@@ -7,13 +7,11 @@ import {
   type ChangeEntry,
 } from "../../src/modules/changes/types";
 import {
+  ChangesStore,
   changeEntry,
   changesConfig,
   createStore,
-  loadChangesStoreModule,
 } from "./store-test-helpers";
-
-const { ChangesStore } = await loadChangesStoreModule();
 
 let root: string;
 let store: InstanceType<typeof ChangesStore>;
@@ -28,17 +26,23 @@ beforeEach(() => {
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
 describe("parseChangeEntry", () => {
-  it("accepts required and valid optional fields", () => {
+  it("accepts required and operation-specific optional fields", () => {
     expect(parseChangeEntry(valid)).toEqual(valid);
-    const withOptionals = changeEntry(root, {
+    const move = changeEntry(root, {
       op: "move",
       mode: 0o600,
       to: "b.txt",
       toBefore: null,
+    });
+    expect(parseChangeEntry(move)).toEqual(move);
+    const undo = changeEntry(root, { op: "undo", targetId: "ch_target" });
+    expect(parseChangeEntry(undo)).toEqual(undo);
+    const evicted = changeEntry(root, {
+      op: "evicted",
       targetId: "ch_target",
       skipped: "evicted",
     });
-    expect(parseChangeEntry(withOptionals)).toEqual(withOptionals);
+    expect(parseChangeEntry(evicted)).toEqual(evicted);
   });
 
   it("rejects malformed shapes, unsafe numbers, and invalid optional fields", () => {
@@ -49,12 +53,14 @@ describe("parseChangeEntry", () => {
       { ...valid, v: 2 },
       { ...valid, id: "" },
       { ...valid, ts: "not-a-date" },
+      { ...valid, turn: 0 },
       { ...valid, turn: -1 },
       { ...valid, turn: 1.5 },
       { ...valid, turn: Number.MAX_SAFE_INTEGER + 1 },
       { ...valid, op: "rename" },
       { ...valid, path: 42 },
       { ...valid, pathAbs: null },
+      { ...valid, pathAbs: "relative.txt" },
       { ...valid, before: "sha" },
       { ...valid, after: "A".repeat(64) },
       { ...valid, bytes: -1 },
@@ -65,6 +71,23 @@ describe("parseChangeEntry", () => {
       { ...valid, toBefore: "../bad" },
       { ...valid, targetId: null },
       { ...valid, skipped: "other" },
+      { ...valid, op: "move" },
+      { ...valid, op: "move", to: "b.txt", toBefore: "bad" },
+      { ...valid, op: "move", to: "b.txt", targetId: "ch_target" },
+      { ...valid, to: "b.txt" },
+      { ...valid, toBefore: null },
+      { ...valid, targetId: "ch_target" },
+      { ...valid, op: "delete", to: "b.txt" },
+      { ...valid, op: "undo" },
+      { ...valid, op: "undo", targetId: "" },
+      { ...valid, op: "undo", targetId: "ch_target", to: "b.txt" },
+      { ...valid, op: "undo", targetId: "ch_target", toBefore: null },
+      { ...valid, op: "evicted" },
+      { ...valid, op: "evicted", targetId: "" },
+      { ...valid, op: "evicted", targetId: "ch_target", to: "b.txt" },
+      { ...valid, skipped: "evicted" },
+      { ...valid, op: "move", to: "b.txt", skipped: "evicted" },
+      { ...valid, op: "undo", targetId: "ch_target", skipped: "evicted" },
     ];
     for (const value of malformed) {
       expect(parseChangeEntry(value)).toBeNull();

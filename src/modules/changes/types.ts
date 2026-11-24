@@ -1,3 +1,5 @@
+import { isAbsolute } from "node:path";
+
 export type ChangeOp = "write" | "delete" | "move" | "undo" | "evicted";
 
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
@@ -89,6 +91,12 @@ function isSafeNonNegativeInteger(value: unknown): value is number {
   );
 }
 
+function isSafePositiveInteger(value: unknown): value is number {
+  return (
+    typeof value === "number" && Number.isSafeInteger(value) && value >= 1
+  );
+}
+
 function isChangeOp(value: unknown): value is ChangeOp {
   return typeof value === "string" && CHANGE_OPS.has(value);
 }
@@ -110,12 +118,13 @@ export function parseChangeEntry(value: unknown): ChangeEntry | null {
     !isNonEmptyString(value.id) ||
     !isNonEmptyString(value.ts) ||
     Number.isNaN(Date.parse(value.ts)) ||
-    !isSafeNonNegativeInteger(value.turn) ||
+    !isSafePositiveInteger(value.turn) ||
     !isNonEmptyString(value.tool) ||
     !isNonEmptyString(value.callId) ||
     !isChangeOp(value.op) ||
     !isNonEmptyString(value.path) ||
     !isNonEmptyString(value.pathAbs) ||
+    !isAbsolute(value.pathAbs) ||
     !isNullableSha256(value.before) ||
     !isNullableSha256(value.after) ||
     !isSafeNonNegativeInteger(value.bytes)
@@ -135,6 +144,20 @@ export function parseChangeEntry(value: unknown): ChangeEntry | null {
   if (value.skipped !== undefined && !isSkippedReason(value.skipped)) {
     return null;
   }
+  const hasTo = value.to !== undefined;
+  const hasToBefore = value.toBefore !== undefined;
+  const hasTarget = value.targetId !== undefined;
+  if (value.op === "move") {
+    if (!hasTo || hasTarget) return null;
+  } else if (hasTo || hasToBefore) {
+    return null;
+  }
+  if (value.op === "undo" || value.op === "evicted") {
+    if (!hasTarget) return null;
+  } else if (hasTarget) {
+    return null;
+  }
+  if (value.skipped === "evicted" && value.op !== "evicted") return null;
   return {
     v: 1,
     id: value.id,

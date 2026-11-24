@@ -1,29 +1,10 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULTS } from "../../src/config/defaults";
 import type { AppConfig } from "../../src/config/types";
-import type { ChangesStore as ChangesStoreType } from "../../src/modules/changes/store";
+import { ChangesStore } from "../../src/modules/changes/store";
 import type { ChangeEntry } from "../../src/modules/changes/types";
 
-let storeModule: Promise<typeof import("../../src/modules/changes/store")> | undefined;
-
-/** Load the store without letting its encryption import touch the real config dir. */
-export function loadChangesStoreModule(): Promise<
-  typeof import("../../src/modules/changes/store")
-> {
-  if (!storeModule) {
-    const configRoot = mkdtempSync(join(tmpdir(), "mma-changes-config-"));
-    const previousConfigDir = process.env.MMA_CONFIG_DIR;
-    process.env.MMA_CONFIG_DIR = configRoot;
-    storeModule = import("../../src/modules/changes/store").finally(() => {
-      if (previousConfigDir === undefined) delete process.env.MMA_CONFIG_DIR;
-      else process.env.MMA_CONFIG_DIR = previousConfigDir;
-      rmSync(configRoot, { recursive: true, force: true });
-    });
-  }
-  return storeModule;
-}
+export { ChangesStore };
 
 export function changesConfig(root: string): AppConfig {
   const config = structuredClone(DEFAULTS) as AppConfig;

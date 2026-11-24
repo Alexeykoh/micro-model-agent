@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { createHash } from "node:crypto";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -11,12 +13,10 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import {
+  ChangesStore,
   changesConfig,
   createStore,
-  loadChangesStoreModule,
 } from "./store-test-helpers";
-
-const { ChangesStore } = await loadChangesStoreModule();
 
 let root: string;
 let store: InstanceType<typeof ChangesStore>;
@@ -82,13 +82,37 @@ describe("ChangesStore blob integrity", () => {
     expect(() => store.getBlob("s1", sha)).toThrow(/integrity|hash mismatch/i);
   });
 
-  it("bounds decompression by the configured blob budget", () => {
+  it("rejects oversized raw content on write using the per-file limit", () => {
     const config = changesConfig(root);
     config.changes!.maxFileBytes = 1024;
-    config.changes!.maxTotalBytes = 2048;
+    config.changes!.maxTotalBytes = 8192;
     store = createStore(ChangesStore, root, config);
-    const sha = store.putBlob("s1", Buffer.alloc(4096, 1));
+    expect(() => store.putBlob("s1", Buffer.alloc(4096, 1))).toThrow(
+      /per-file|maxFileBytes|too large/i,
+    );
+  });
+
+  it("bounds decompression by maxFileBytes even when maxTotalBytes is larger", () => {
+    const config = changesConfig(root);
+    config.changes!.maxFileBytes = 1024;
+    config.changes!.maxTotalBytes = 8192;
+    store = createStore(ChangesStore, root, config);
+    const content = Buffer.alloc(4096, 1);
+    const sha = createHash("sha256").update(content).digest("hex");
+    const file = blobFile(sha);
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, gzipSync(content).toString("base64"), "utf8");
     expect(() => store.getBlob("s1", sha)).toThrow(/blob.*(limit|large)/i);
+  });
+
+  it("verifies and atomically repairs an existing corrupt blob", () => {
+    const content = Buffer.from("hello");
+    const sha = store.putBlob("s1", content);
+    writeFileSync(blobFile(sha), "not-a-gzip-payload", "utf8");
+    expect(() => store.getBlob("s1", sha)).toThrow(/corrupt blob/i);
+
+    expect(store.putBlob("s1", content)).toBe(sha);
+    expect(store.getBlob("s1", sha)!.equals(content)).toBe(true);
   });
 
   it("stores plaintext blobs as decodable gzip-base64 without temp files", () => {

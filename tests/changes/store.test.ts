@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
   appendFileSync,
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -12,13 +13,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { writePrivateFileAtomic } from "../../src/modules/changes/store-fs";
 import {
+  ChangesStore,
   changeEntry,
   changesConfig,
   createStore,
-  loadChangesStoreModule,
 } from "./store-test-helpers";
-
-const { ChangesStore } = await loadChangesStoreModule();
 
 let root: string;
 let store: InstanceType<typeof ChangesStore>;
@@ -64,6 +63,9 @@ describe("ChangesStore", () => {
   it.skipIf(process.platform === "win32")("uses private directory and file permissions", () => {
     const sha = store.putBlob("s1", Buffer.from("hello"));
     store.append("s1", changeEntry(root, { before: sha, after: sha }));
+    const index = join(store.dir("s1"), "index.jsonl");
+    chmodSync(index, 0o644);
+    store.append("s1", changeEntry(root, { id: "ch_second" }));
     store.nextTurn("s1");
     const blob = join(
       store.dir("s1"),
