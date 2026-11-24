@@ -71,7 +71,7 @@ export function loadAssets(): WebUiAssets {
     // нет выделенного route, а `md.ts` импортирует их как `./md-copy.js`. Без
     // этого импорт отдавал бы 404 и весь ESM-граф (а с ним boot чата) падал.
     // Явные ключи `STATIC_ASSETS` (app/setup/md/smd/hljs) сюда не дублируем.
-    const explicit = new Set(["app.js", "setup.js", "md.js", "smd.js", "hljs.js"]);
+    const explicit = new Set(["app.js", "theme.js", "setup.js", "md.js", "smd.js", "hljs.js"]);
     for (const entry of readdirSync(ASSET_DIR, { withFileTypes: true })) {
       if (!entry.isFile()) continue;
       const key = entry.name.replace(/\.ts$/, ".js");
@@ -92,6 +92,7 @@ export function loadAssets(): WebUiAssets {
     metallicaLogo: read("metallica-logo.svg", ""),
     cssThemes: read("themes.css", ""),
     js: read("app.js", "// missing"),
+    themeJs: read("theme.js", "// missing"),
     setupJs: read("setup.js", "// missing"),
     mdJs: read("md.js", "// missing"),
     smdJs: read("smd.js", "// missing"),

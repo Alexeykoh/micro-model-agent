@@ -28,6 +28,7 @@ export type StaticAssetKey =
   | "metallicaLogo"
   | "cssThemes"
   | "js"
+  | "themeJs"
   | "setupJs"
   | "mdJs"
   | "smdJs"
@@ -45,6 +46,7 @@ export const STATIC_ASSETS: Record<string, { type: string; key: StaticAssetKey }
   "/metallica-logo.svg": { type: "image/svg+xml; charset=utf-8", key: "metallicaLogo" },
   "/themes.css": { type: "text/css; charset=utf-8", key: "cssThemes" },
   "/app.js": { type: "text/javascript; charset=utf-8", key: "js" },
+  "/theme.js": { type: "text/javascript; charset=utf-8", key: "themeJs" },
   "/setup.js": { type: "text/javascript; charset=utf-8", key: "setupJs" },
   "/md.js": { type: "text/javascript; charset=utf-8", key: "mdJs" },
   "/smd.js": { type: "text/javascript; charset=utf-8", key: "smdJs" },
