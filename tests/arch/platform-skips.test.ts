@@ -192,6 +192,11 @@ export const SKIP_MANIFEST: Array<{ file: string; key: string; reason: string }>
     key: "sandbox docker live (cert acceptance)",
     reason: "live-интеграция sandbox требует Docker daemon; без него — skip",
   },
+  {
+    file: "tests/changes/store.test.ts",
+    key: "uses private directory and file permissions",
+    reason: "POSIX mode bits 0700/0600 не имеют эквивалента на Windows",
+  },
 ];
 
 describe("gate: platform-conditional skips are declared with a reason (W6)", () => {
