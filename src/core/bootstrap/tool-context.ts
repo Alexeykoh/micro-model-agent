@@ -124,15 +124,20 @@ export function createChangesPort(
     sessionManager,
     getConfig,
     onDiagnostic,
-    log: (detail) => {
+    // Не расширяем произвольный detail: в лог попадают только типизированные
+    // поля изменения, иначе модель могла бы подсунуть чужие ключи (INV-15).
+    log: ({ path, op, targetId, tool }) => {
       sessionManager.appendLog({
         ts: new Date().toISOString(),
         type: "change",
         source: "module:changes",
         module: "changes",
         operation: "changes.undo",
-        ...detail,
-      } as never, sessionId);
+        ...(typeof path === "string" ? { path } : {}),
+        ...(typeof op === "string" ? { op } : {}),
+        ...(typeof targetId === "string" ? { targetId } : {}),
+        ...(typeof tool === "string" ? { tool } : {}),
+      }, sessionId);
     },
   });
 }

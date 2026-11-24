@@ -149,76 +149,76 @@ export class ToolExecutor {
     // TOCTOU-хук: мутирующий тул повторяет проверку прямо перед операцией.
     this.ctx.pathGuard = createPathGuard(this.ctx, tool, call);
 
-    // Снапшот до хендлера (после enforcement); порт ставит bootstrap, fail-open внутри.
+    // Снапшот до хендлера; дальше ровно один исход — commit или cancel в finally.
     this.ctx.fileChanges?.captureBefore(this.ctx, tool, call);
-
-    // Плагин-хуки сериализованы общим hookLock: параллельные форки-сиблинги
-    // не гоняют общее состояние плагинов (stuck-detector, lint, lsp) конкурентно.
-    // Лок берём ТОЛЬКО при наличии хука — иначе лишний await сдвигал бы старт
-    // хендлера на микрозадачу (ломало синхронный старт, напр. fake-timer тесты).
-    const plugins = this.pluginManager.getAllPlugins();
-    const beforePlugins = plugins.some((p) => p.onBeforeTool);
-    const blocked = beforePlugins
-      ? await this.hookLock.run(() => runBeforeToolPlugins(this.ctx, call, plugins))
-      : null;
-    if (blocked) {
-      // Хендлер не запускался — pending-снапшот снимаем, чтобы не утечь.
-      this.ctx.fileChanges?.cancel(call.id);
-      return blocked;
-    }
-
-    let result: ToolResult;
-    // Мемоизированный повтор детерминированного чтения (cacheable): хендлер
-    // пропускается, но общий хвост (post-плагины, логирование) идёт как обычно,
-    // чтобы мемо-хит был неотличим от свежего прогона.
-    const memoHit = tool.cacheable ? this.memoGet(call.name, call.arguments) : undefined;
+    let committed = false;
     try {
-      this.ctx.activeCallId = call.id;
-      this.ctx.abortSignal = signal;
-      if (tool.interactive) {
-        // Интерактивные тулы ждут ввода — без таймаута.
-        result = memoHit ?? (await tool.handler(this.ctx, call.arguments));
-      } else {
-        result = await runToolWithTimeout(this.ctx, tool, call, signal, memoHit);
+      // Плагин-хуки сериализованы общим hookLock: параллельные форки-сиблинги
+      // не гоняют общее состояние плагинов (stuck-detector, lint, lsp) конкурентно.
+      // Лок берём ТОЛЬКО при наличии хука — иначе лишний await сдвигал бы старт
+      // хендлера на микрозадачу (ломало синхронный старт, напр. fake-timer тесты).
+      const plugins = this.pluginManager.getAllPlugins();
+      const beforePlugins = plugins.some((p) => p.onBeforeTool);
+      const blocked = beforePlugins
+        ? await this.hookLock.run(() => runBeforeToolPlugins(this.ctx, call, plugins))
+        : null;
+      if (blocked) return blocked;
+
+      let result: ToolResult;
+      // Мемоизированный повтор детерминированного чтения (cacheable): хендлер
+      // пропускается, но общий хвост (post-плагины, логирование) идёт как обычно,
+      // чтобы мемо-хит был неотличим от свежего прогона.
+      const memoHit = tool.cacheable ? this.memoGet(call.name, call.arguments) : undefined;
+      try {
+        this.ctx.activeCallId = call.id;
+        this.ctx.abortSignal = signal;
+        if (tool.interactive) {
+          // Интерактивные тулы ждут ввода — без таймаута.
+          result = memoHit ?? (await tool.handler(this.ctx, call.arguments));
+        } else {
+          result = await runToolWithTimeout(this.ctx, tool, call, signal, memoHit);
+        }
+        result.toolCallId = call.id;
+      } catch (e: unknown) {
+        // INV-15: исключение хендлера — это деградация исполнения, а не
+        // содержательный отказ тула. Сигнал пишем здесь: `tool-batch-calls`
+        // исключения уже не увидит, оно превращено в failed-результат.
+        this.ctx.onDiagnostic?.({
+          source: `tool:${call.name}`,
+          operation: "tool.execute",
+          kind: "failed",
+          cause: e instanceof Error ? e.message : String(e),
+          recoverable: true,
+          detail: { toolCallId: call.id },
+        });
+        result = {
+          success: false,
+          output: `${t("error.prefix")}${e instanceof Error ? e.message : String(e)}`,
+          toolCallId: call.id,
+        };
       }
-      result.toolCallId = call.id;
-    } catch (e: unknown) {
-      // INV-15: исключение хендлера — это деградация исполнения, а не
-      // содержательный отказ тула. Сигнал пишем здесь: `tool-batch-calls`
-      // исключения уже не увидит, оно превращено в failed-результат.
-      this.ctx.onDiagnostic?.({
-        source: `tool:${call.name}`,
-        operation: "tool.execute",
-        kind: "failed",
-        cause: e instanceof Error ? e.message : String(e),
-        recoverable: true,
-        detail: { toolCallId: call.id },
-      });
-      result = {
-        success: false,
-        output: `${t("error.prefix")}${e instanceof Error ? e.message : String(e)}`,
-        toolCallId: call.id,
-      };
+
+      result = finalizeToolResult(this.ctx, tool, call, result);
+      committed = true;
+      this.ctx.fileChanges?.captureAfter(call.id, result.success);
+      this.memo.update(tool, call, result, memoHit);
+
+      // После аборта работа тула отбрасывается (цикл агента завершается без
+      // рендера/логирования), поэтому медленные post-плагины (LSP, lint, tsc)
+      // пропускаются целиком. Аборт посреди плагина виден ему через signal
+      // в контексте хука — плагин убьёт свои дочерние процессы.
+      const afterPlugins = plugins.some((p) => p.onAfterTool);
+      if (signal?.aborted) {
+        this.ctx.logger.debug(`Tool ${call.name}: abort, skipping onAfterTool plugins`);
+      } else if (afterPlugins) {
+        await this.hookLock.run(() => runAfterToolPlugins(this.ctx, call, result, signal, plugins));
+      }
+
+      logToolResult(this.ctx, call, result);
+      return result;
+    } finally {
+      if (!committed) this.ctx.fileChanges?.cancel(call.id);
     }
-
-    result = finalizeToolResult(this.ctx, tool, call, result);
-    // Все исполненные вызовы (успех, отказ тула, исключение) закрывают снапшот.
-    this.ctx.fileChanges?.captureAfter(call.id, result.success);
-    this.memo.update(tool, call, result, memoHit);
-
-    // После аборта работа тула отбрасывается (цикл агента завершается без
-    // рендера/логирования), поэтому медленные post-плагины (LSP, lint, tsc)
-    // пропускаются целиком. Аборт посреди плагина виден ему через signal
-    // в контексте хука — плагин убьёт свои дочерние процессы.
-    const afterPlugins = plugins.some((p) => p.onAfterTool);
-    if (signal?.aborted) {
-      this.ctx.logger.debug(`Tool ${call.name}: abort, skipping onAfterTool plugins`);
-    } else if (afterPlugins) {
-      await this.hookLock.run(() => runAfterToolPlugins(this.ctx, call, result, signal, plugins));
-    }
-
-    logToolResult(this.ctx, call, result);
-    return result;
   }
 
   /** Теги тулов, реально попавших в схему LLM (allowlist + overrides, гейт B12). */

@@ -53,6 +53,7 @@ export interface SessionLogEntry {
     | "subagent"
     | "command"
     | "instructions_updated"
+    | "change"
     | OnboardingEvent;
   /** Источник записи (INV-13); `llm_usage` пишет origin отдельно (W11). */
   source: Source;
@@ -66,6 +67,11 @@ export interface SessionLogEntry {
   instructionChanges?: InstructionChangeEntry[];
   subagent?: string;
   tool?: string;
+  /** `change` (откат правки): путь файла и операция журнала правок. */
+  path?: string;
+  op?: string;
+  /** `change`: id аннулированной версии файла. */
+  targetId?: string;
   tool_call_id?: string;
   tool_calls?: Array<{
     id: string;

@@ -2,7 +2,7 @@
 import type { AppConfig } from "../../config/types";
 import type { Diagnostic } from "../../output/types";
 import type { FileChangesPort } from "../../tools/types";
-import { ChangeCapture } from "./capture";
+import { ChangeCapture, MAX_PENDING, OP_BY_TOOL } from "./capture";
 import { ChangesStore } from "./store";
 import { ChangeUndo } from "./undo";
 
@@ -26,14 +26,31 @@ const evictFailure = (sessionId: string, err: unknown): Diagnostic => ({
 export function createFileChangesPort(deps: PortDeps): FileChangesPort {
   const store = new ChangesStore({ sessionManager: deps.sessionManager, getConfig: deps.getConfig });
   const capture = new ChangeCapture(store, deps.getConfig, deps.onDiagnostic);
-  const undoer = new ChangeUndo({ store, getConfig: deps.getConfig, baseDir: "", log: deps.log });
-  // callId → sessionId: нужен только чтобы знать, чью эвикцию запустить после
-  // успешного коммита. Не раскрывает pending-снапшоты самого capture.
+  const undoFor = (baseDir: string): ChangeUndo =>
+    new ChangeUndo({ store, getConfig: deps.getConfig, baseDir, log: deps.log });
+
+  // callId → sessionId только для тулов, у которых capture реально снимает
+  // снапшот. Ограничен по размеру, как и pending у самого capture.
   const sessions = new Map<string, string>();
+  const remember = (callId: string, sessionId: string): void => {
+    if (sessions.has(callId)) sessions.delete(callId);
+    else if (sessions.size >= MAX_PENDING) {
+      const oldest = sessions.keys().next().value;
+      if (oldest !== undefined) sessions.delete(oldest);
+    }
+    sessions.set(callId, sessionId);
+  };
+
   return {
     beginTurn: (sessionId) => { store.nextTurn(sessionId); },
     captureBefore: (ctx, tool, call) => {
-      if (ctx.sessionId) sessions.set(call.id, ctx.sessionId);
+      if (
+        ctx.sessionId &&
+        OP_BY_TOOL[call.name] &&
+        deps.getConfig().changes?.enabled !== false
+      ) {
+        remember(call.id, ctx.sessionId);
+      }
       capture.before(ctx, tool, call);
     },
     captureAfter: (callId, success) => {
@@ -55,13 +72,7 @@ export function createFileChangesPort(deps: PortDeps): FileChangesPort {
       sessions.clear();
       capture.clear();
     },
-    list: (options) => {
-      undoer.setBaseDir(options.baseDir);
-      return undoer.list(options);
-    },
-    undo: (options) => {
-      undoer.setBaseDir(options.baseDir);
-      return undoer.undo(options);
-    },
+    list: (options) => undoFor(options.baseDir).list(options),
+    undo: (options) => undoFor(options.baseDir).undo(options),
   };
 }

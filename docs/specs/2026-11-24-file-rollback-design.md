@@ -202,7 +202,7 @@ interface ChangeEntry {
 
 ### 6.3 Наблюдаемость
 
-- Каждый откат пишет событие `change` в `session.jsonl`: `{ type:"change", source:"module:changes", module:"changes", operation:"changes.undo", path, op, targetId }`. Тип добавляется в `src/core/types.ts`; запись — через `SessionManager.appendLog`.
+- Каждый откат пишет событие `change` в `session.jsonl`: `{ type:"change", source:"module:changes", module:"changes", operation:"changes.undo", path, op, targetId }`. Тип и поля (`path`, `op`, `targetId`, существующее `tool`) добавляются в схему `src/modules/session/log-types.ts`; запись — через `SessionManager.appendLog`.
 - События захвата в `session.jsonl` не пишутся (индекс — отдельный источник правды), чтобы не раздувать контекст; в лог попадают только ошибки и откаты.
 
 ## 7. Безопасность

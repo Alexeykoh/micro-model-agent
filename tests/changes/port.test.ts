@@ -40,4 +40,34 @@ describe("FileChangesPort", () => {
       expect(readFileSync(file, "utf8")).toBe("before");
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
+
+  it("does not evict for tools without snapshots or when capture is disabled", () => {
+    const root = mkdtempSync(join(tmpdir(), "mma-port-narrow-"));
+    try {
+      let dirCalls = 0;
+      const config = structuredClone(DEFAULTS) as AppConfig;
+      const sessionManager = {
+        getSessionDirectory: (id: string) => {
+          dirCalls++;
+          return join(root, "sessions", id);
+        },
+      };
+      const port = createFileChangesPort({ sessionManager, getConfig: () => config });
+      port.beginTurn("s1");
+      const ctx = { sessionId: "s1", baseDir: root } as ToolContext;
+      const readTool = { name: "read_file" } as ToolDefinition;
+      const writeTool = { name: "write_file" } as ToolDefinition;
+
+      dirCalls = 0;
+      port.captureBefore(ctx, readTool, { id: "c_read", name: "read_file", arguments: {} });
+      port.captureAfter("c_read", true);
+      expect(dirCalls).toBe(0); // evict would resolve the session directory
+
+      config.changes!.enabled = false;
+      dirCalls = 0;
+      port.captureBefore(ctx, writeTool, { id: "c_off", name: "write_file", arguments: {} });
+      port.captureAfter("c_off", true);
+      expect(dirCalls).toBe(0);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
 });
