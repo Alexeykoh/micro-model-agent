@@ -1,5 +1,6 @@
-import { existsSync, lstatSync, readFileSync, statSync } from "node:fs";
-import { relative, resolve } from "node:path";
+import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { dirname, relative, resolve } from "node:path";
+import { DEFAULTS } from "../../config/defaults";
 import type { AppConfig } from "../../config/types";
 import type { Diagnostic } from "../../output/types";
 import { isInsideDir, safeResolvePath } from "../../tools/path-utils";
@@ -7,11 +8,16 @@ import type { ToolCall, ToolContext, ToolDefinition } from "../../tools/types";
 import type { ChangesStore } from "./store";
 import type { ChangeEntry, ChangeOp } from "./types";
 
-/** File-mutating tools → journal operation and the arguments that hold paths. */
-export const OP_BY_TOOL: Record<
-  string,
-  { op: ChangeOp; pathArg: string; toArg?: string }
-> = {
+/** In-flight snapshot cap; the oldest is evicted with a diagnostic. */
+export const MAX_PENDING = 1000;
+
+type Plan = { op: ChangeOp; pathArg: string; toArg?: string };
+type Target = { toPathAbs: string; to: string };
+type Sink = (d: Diagnostic) => void;
+type Detail = Record<string, unknown>;
+
+/** File-mutating tools → journal operation and the arguments holding paths. */
+export const OP_BY_TOOL: Record<string, Plan> = {
   write_file: { op: "write", pathArg: "path" },
   edit_file: { op: "write", pathArg: "path" },
   patch_file: { op: "write", pathArg: "path" },
@@ -21,118 +27,115 @@ export const OP_BY_TOOL: Record<
   move_file: { op: "move", pathArg: "from", toArg: "to" },
 };
 
-/** Writers that carry pathArgs but are deliberately not snapshotted. */
+/** Writers with pathArgs that are deliberately not snapshotted. */
 export const EXCLUDED_TOOLS: Record<string, string> = {
   create_dir: "directory creation has no file content to snapshot",
   bash: "no pathArgs; shell mutations cannot be attributed reliably",
   restore_file: "undo writes are journaled as undo markers, not edit revisions",
 };
 
-type Plan = { op: ChangeOp; pathArg: string; toArg?: string };
-
 interface Pending {
   sessionId: string;
   entry: Omit<ChangeEntry, "after" | "bytes">;
+  guardPaths: string[];
+  pathGuard?: ToolContext["pathGuard"];
+  base: string;
   afterPathAbs: string | null;
   toPathAbs: string | null;
-  onDiagnostic?: (d: Diagnostic) => void;
+  sink?: Sink;
 }
 
-const shaOf = (
-  store: ChangesStore,
-  sessionId: string,
-  pathAbs: string | null,
-): string | null => {
-  if (!pathAbs || !existsSync(pathAbs)) return null;
-  return store.putBlob(sessionId, readFileSync(pathAbs));
+const message = (err: unknown): string => err instanceof Error ? err.message : String(err);
+const maxBytes = (c: AppConfig): number => c.changes?.maxFileBytes ?? DEFAULTS.changes!.maxFileBytes!;
+const shaOf = (store: ChangesStore, sid: string, p: string | null): string | null =>
+  !p || !existsSync(p) ? null : store.putBlob(sid, readFileSync(p));
+
+/** Reason a path is unsafe to read, or null when still contained (lstat + realpath). */
+const escapeCause = (base: string, target: string): string | null => {
+  if (lstatSync(target, { throwIfNoEntry: false })?.isSymbolicLink()) return "path is a symbolic link";
+  let realBase: string;
+  try { realBase = realpathSync(base); } catch { return null; } // virtual base
+  let probe = target;
+  for (;;) {
+    try {
+      const real = realpathSync(probe);
+      return real === realBase || isInsideDir(real, realBase) ? null : "path resolves outside the base directory";
+    } catch {
+      const parent = dirname(probe);
+      if (parent === probe) return null;
+      probe = parent;
+    }
+  }
+};
+
+/** A move destination, or a cause making the move unsafe to journal at all. */
+const moveTarget = (base: string, call: ToolCall, plan: Plan): Target | { cause: string } => {
+  if (!plan.toArg) return { cause: "move has no destination argument" };
+  const raw = String(call.arguments[plan.toArg] ?? "");
+  if (!raw) return { cause: "move destination is empty" };
+  const toPathAbs = safeResolvePath(base, raw);
+  if (!isInsideDir(toPathAbs, base)) return { cause: "move destination is outside the base directory" };
+  const to = relative(base, toPathAbs);
+  if (!to) return { cause: "move destination resolves to the base directory" };
+  const unsafe = escapeCause(base, toPathAbs);
+  return unsafe ? { cause: `move destination ${unsafe}` } : { toPathAbs, to };
 };
 
 /**
  * Snapshots file content around a tool call. `before` captures the pre-state;
- * `after` commits the entry only on success. All failures are fail-open and
- * reported as diagnostics — nothing thrown escapes either method.
+ * `after` commits only on success and re-validates paths (TOCTOU). Failures are
+ * fail-open: a diagnostic is emitted, nothing is thrown out.
  */
 export class ChangeCapture {
   private pending = new Map<string, Pending>();
-  private readonly getConfig: () => AppConfig;
 
   constructor(
     private readonly store: ChangesStore,
-    config: AppConfig | (() => AppConfig),
-    private readonly onDiagnostic?: (d: Diagnostic) => void,
-  ) {
-    this.getConfig = typeof config === "function" ? config : () => config;
-  }
+    private readonly getConfig: () => AppConfig,
+    private readonly onDiagnostic?: Sink,
+  ) {}
 
-  before(ctx: ToolContext, tool: ToolDefinition, call: ToolCall): void {
+  /** Drop one in-flight snapshot (executor early-return/abort, Task 5). */
+  cancel(callId: string): void { this.pending.delete(callId); }
+
+  /** Drop every in-flight snapshot (session teardown). */
+  clear(): void { this.pending.clear(); }
+
+  before(ctx: ToolContext, _tool: ToolDefinition, call: ToolCall): void {
+    const detail: Detail = { callId: call.id, sessionId: ctx.sessionId, path: "", call: call.name };
+    const sink = ctx.onDiagnostic;
     try {
-      const plan = OP_BY_TOOL[call.name] ?? OP_BY_TOOL[tool.name];
-      if (
-        !plan ||
-        !ctx.sessionId ||
-        this.getConfig().changes?.enabled === false
-      ) {
-        return;
-      }
+      const plan = OP_BY_TOOL[call.name];
+      if (!plan || !ctx.sessionId || this.getConfig().changes?.enabled === false) return;
       const base = resolve(ctx.baseDir);
       const path = String(call.arguments[plan.pathArg] ?? "");
+      detail.path = path;
       if (!path) return;
       const pathAbs = safeResolvePath(base, path);
       if (!isInsideDir(pathAbs, base)) return;
 
-      const link = lstatSync(pathAbs, { throwIfNoEntry: false });
-      if (link?.isSymbolicLink()) {
-        this.pending.set(call.id, {
-          sessionId: ctx.sessionId,
-          entry: this.skippedEntry(call, plan, path, pathAbs, "unsupported", base),
-          afterPathAbs: null,
-          toPathAbs: null,
-          onDiagnostic: ctx.onDiagnostic,
-        });
+      // An unusable move destination is never journaled — not even as skipped.
+      const target = plan.toArg ? moveTarget(base, call, plan) : null;
+      if (target && "cause" in target) {
+        this.emit("changes.capture.before", "skipped", target.cause, sink, detail);
         return;
       }
-
+      const unsafe = escapeCause(base, pathAbs);
+      if (unsafe) {
+        this.add(call.id, this.forCall(ctx, call, plan, path, pathAbs, base, target, null, "unsupported"), detail, sink);
+        this.emit("changes.capture.before", "skipped", `source ${unsafe}; snapshot skipped`, sink, detail);
+        return;
+      }
       const stat = statSync(pathAbs, { throwIfNoEntry: false });
-      const tooBig =
-        !!stat &&
-        stat.size > (this.getConfig().changes?.maxFileBytes ?? 2_097_152);
-      if (tooBig) {
-        this.pending.set(call.id, {
-          sessionId: ctx.sessionId,
-          entry: this.skippedEntry(call, plan, path, pathAbs, "too-large", base),
-          afterPathAbs: null,
-          toPathAbs: null,
-          onDiagnostic: ctx.onDiagnostic,
-        });
+      if (stat && stat.size > maxBytes(this.getConfig())) {
+        this.add(call.id, this.forCall(ctx, call, plan, path, pathAbs, base, target, null, "too-large"), detail, sink);
+        this.emit("changes.capture.before", "skipped", "source exceeds changes.maxFileBytes; snapshot skipped", sink, detail);
         return;
       }
-
       const before = stat ? shaOf(this.store, ctx.sessionId, pathAbs) : null;
-      const mode = stat?.mode;
-      const toPathAbs = plan.toArg
-        ? safeResolvePath(base, String(call.arguments[plan.toArg] ?? ""))
-        : null;
-      if (toPathAbs && !isInsideDir(toPathAbs, base)) return;
-      const toBefore =
-        toPathAbs && existsSync(toPathAbs)
-          ? shaOf(this.store, ctx.sessionId, toPathAbs)
-          : null;
-
-      this.pending.set(call.id, {
-        sessionId: ctx.sessionId,
-        entry: {
-          ...this.baseEntry(call, plan.op, path, pathAbs, before, undefined),
-          ...(mode !== undefined ? { mode } : {}),
-          ...(plan.toArg && toPathAbs
-            ? { to: relative(base, toPathAbs), toBefore }
-            : {}),
-        },
-        afterPathAbs: plan.op === "delete" ? null : pathAbs,
-        toPathAbs,
-        onDiagnostic: ctx.onDiagnostic,
-      });
+      this.add(call.id, this.forCall(ctx, call, plan, path, pathAbs, base, target, before, undefined), detail, sink);
     } catch (err) {
-      this.report("changes.capture.before", err, ctx.onDiagnostic);
+      this.emit("changes.capture.before", "failed", message(err), sink, detail);
     }
   }
 
@@ -140,81 +143,70 @@ export class ChangeCapture {
     const p = this.pending.get(callId);
     this.pending.delete(callId);
     if (!p || !success) return;
+    const detail: Detail = { callId, sessionId: p.sessionId, path: p.entry.path, call: p.entry.tool };
     try {
-      const sessionId = p.sessionId;
-      const after = shaOf(this.store, sessionId, p.afterPathAbs);
-      const bytes =
-        p.afterPathAbs && existsSync(p.afterPathAbs)
-          ? statSync(p.afterPathAbs).size
-          : 0;
-      this.store.append(sessionId, {
-        ...p.entry,
-        turn: this.store.loadTurn(sessionId) || 1,
-        after,
-        bytes,
-      });
+      for (const guarded of p.guardPaths) {
+        if (p.pathGuard?.recheck(guarded)) {
+          this.emit("changes.capture.after", "skipped", "path guard blocked the snapshot in after()", p.sink, detail);
+          return;
+        }
+      }
+      if (p.afterPathAbs) {
+        const unsafe = escapeCause(p.base, p.afterPathAbs);
+        if (unsafe) {
+          this.emit("changes.capture.after", "skipped", `source ${unsafe}; snapshot skipped`, p.sink, detail);
+          return;
+        }
+      }
+      if (p.toPathAbs) {
+        const unsafe = escapeCause(p.base, p.toPathAbs);
+        if (unsafe) {
+          this.emit("changes.capture.after", "skipped", `move destination ${unsafe}; snapshot skipped`, p.sink, detail);
+          return;
+        }
+      }
+      const after = shaOf(this.store, p.sessionId, p.afterPathAbs);
+      const bytes = p.afterPathAbs && existsSync(p.afterPathAbs) ? statSync(p.afterPathAbs).size : 0;
+      this.store.append(p.sessionId, { ...p.entry, turn: this.store.loadTurn(p.sessionId) || 1, after, bytes });
     } catch (err) {
-      this.report("changes.capture.after", err, p.onDiagnostic);
+      this.emit("changes.capture.after", "failed", message(err), p.sink, detail);
     }
   }
 
-  private baseEntry(
-    call: ToolCall,
-    op: ChangeOp,
-    path: string,
-    pathAbs: string,
-    before: string | null,
-    skipped: ChangeEntry["skipped"],
-  ): Omit<ChangeEntry, "after" | "bytes"> {
+  private baseEntry(call: ToolCall, op: ChangeOp, path: string, abs: string, before: string | null, skipped: ChangeEntry["skipped"]): Omit<ChangeEntry, "after" | "bytes"> {
+    return { v: 1, id: `ch_${Date.now()}_${call.id}`, ts: new Date().toISOString(), turn: 0, tool: call.name, callId: call.id, op, path, pathAbs: abs, before, ...(skipped ? { skipped } : {}) };
+  }
+
+  private forCall(ctx: ToolContext, call: ToolCall, plan: Plan, path: string, abs: string, base: string, target: Target | { cause: string } | null, before: string | null, skipped: ChangeEntry["skipped"]): Pending {
+    const toBefore = target && "toPathAbs" in target && existsSync(target.toPathAbs) ? shaOf(this.store, ctx.sessionId!, target.toPathAbs) : null;
+    const mode = skipped ? undefined : statSync(abs, { throwIfNoEntry: false })?.mode;
+    const toRaw = plan.toArg ? String(call.arguments[plan.toArg] ?? "") : "";
     return {
-      v: 1,
-      id: `ch_${Date.now()}_${call.id}`,
-      ts: new Date().toISOString(),
-      turn: 0,
-      tool: call.name,
-      callId: call.id,
-      op,
-      path,
-      pathAbs,
-      before,
-      ...(skipped ? { skipped } : {}),
+      sessionId: ctx.sessionId!,
+      entry: { ...this.baseEntry(call, plan.op, path, abs, before, skipped), ...(mode !== undefined ? { mode } : {}), ...(target && "to" in target ? { to: target.to, toBefore } : {}) },
+      guardPaths: toRaw ? [path, toRaw] : [path],
+      pathGuard: ctx.pathGuard,
+      base,
+      afterPathAbs: !skipped && plan.op !== "delete" ? abs : null,
+      toPathAbs: target && "toPathAbs" in target ? target.toPathAbs : null,
+      sink: ctx.onDiagnostic,
     };
   }
 
-  /** Keep skipped moves structurally valid (`to` is required by the journal). */
-  private skippedEntry(
-    call: ToolCall,
-    plan: Plan,
-    path: string,
-    pathAbs: string,
-    skipped: NonNullable<ChangeEntry["skipped"]>,
-    base: string,
-  ): Omit<ChangeEntry, "after" | "bytes"> {
-    const entry = this.baseEntry(call, plan.op, path, pathAbs, null, skipped);
-    if (plan.toArg) {
-      const toPath = safeResolvePath(
-        base,
-        String(call.arguments[plan.toArg] ?? ""),
-      );
-      if (isInsideDir(toPath, base)) {
-        return { ...entry, to: relative(base, toPath), toBefore: null };
+  private add(callId: string, pending: Pending, detail: Detail, sink?: Sink): void {
+    if (this.pending.has(callId)) {
+      this.emit("changes.capture.pending", "skipped", "duplicate call id replaced its pending snapshot", sink, detail);
+    } else if (this.pending.size >= MAX_PENDING) {
+      const oldest = this.pending.keys().next().value;
+      if (oldest !== undefined) {
+        this.pending.delete(oldest);
+        this.emit("changes.capture.pending", "skipped", `pending cap ${MAX_PENDING} reached; evicted oldest call ${oldest}`, sink, detail);
       }
     }
-    return entry;
+    this.pending.set(callId, pending);
   }
 
-  private report(
-    operation: string,
-    err: unknown,
-    sink?: (d: Diagnostic) => void,
-  ): void {
-    const diag: Diagnostic = {
-      source: "module:changes",
-      operation,
-      kind: "failed",
-      cause: err instanceof Error ? err.message : String(err),
-      recoverable: true,
-    };
-    (sink ?? this.onDiagnostic)?.(diag);
+  private emit(operation: string, kind: "failed" | "skipped", cause: string, sink: Sink | undefined, detail: Detail): void {
+    (sink ?? this.onDiagnostic)?.({ source: "module:changes", operation, kind, cause, recoverable: true, detail });
   }
 }

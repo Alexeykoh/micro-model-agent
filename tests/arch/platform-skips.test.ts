@@ -197,6 +197,11 @@ export const SKIP_MANIFEST: Array<{ file: string; key: string; reason: string }>
     key: "uses private directory and file permissions",
     reason: "POSIX mode bits 0700/0600 не имеют эквивалента на Windows",
   },
+  {
+    file: "tests/changes/capture.test.ts",
+    key: "journals a symlink move with a skipped reason but not an escaping destination",
+    reason: "симлинки файлов требуют прав ОС (на Windows без developer mode недоступны)",
+  },
 ];
 
 describe("gate: platform-conditional skips are declared with a reason (W6)", () => {
