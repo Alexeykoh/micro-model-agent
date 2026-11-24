@@ -4,8 +4,8 @@ import { lstatSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Command } from "commander";
 import { bootstrap } from "../core/bootstrap";
+import { createChangesPort } from "../core/bootstrap/tool-context";
 import { t } from "../i18n/index";
-import { createFileChangesPort } from "../modules/changes";
 import { matchProtectedPath } from "../modules/security/protected-paths";
 import { getDefaultChannel } from "../output";
 import { localizeOutput } from "../tools/restore-file";
@@ -38,10 +38,17 @@ function parseUndoArgs(args: string[]): Parsed {
   return out;
 }
 
+/** Тестовый шов: тот же рантайм, что у `bootstrap()`, без его побочных эффектов. */
+export type UndoRuntime = Pick<
+  Awaited<ReturnType<typeof bootstrap>>,
+  "sessionManager" | "config" | "baseDir"
+>;
+
 /** Откат правок: только явная цель (path или turn), список — `--list`. */
 export async function runUndo(
   args: string[],
   write: (line: string, stream?: "stderr") => void,
+  runtime?: UndoRuntime,
 ): Promise<void> {
   const parsed = parseUndoArgs(args);
   if (parsed.steps === 0) {
@@ -66,17 +73,20 @@ export async function runUndo(
     return;
   }
 
-  const boot = await bootstrap();
+  const boot = runtime ?? (await bootstrap());
   const sessionId = parsed.session ?? boot.sessionManager.getActive();
   if (!sessionId) {
     write(t("changes.no_session"), "stderr");
     return;
   }
   const baseDir = boot.baseDir;
-  const port = createFileChangesPort({
-    sessionManager: boot.sessionManager,
-    getConfig: () => boot.config,
-  });
+  // Общий порт с тулом: он пишет типизированное событие `change` в сессию.
+  const port = createChangesPort(
+    boot.sessionManager,
+    () => boot.config,
+    undefined,
+    sessionId,
+  );
 
   if (parsed.list) {
     const entries = port.list({ sessionId, baseDir, path: parsed.path, limit: 50 });
