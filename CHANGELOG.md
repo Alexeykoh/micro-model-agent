@@ -14,6 +14,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ## [0.26.1] - 2026-11-20
 
 ### Added
+- **Откат правок файлов агентом.** Перед каждым вызовом `write_file`/`edit_file`/`patch_file`/`append_file`/`download_file`/`delete_file`/`move_file` снимается снапшот в `<session>/changes/` (контент-адресуемые gzip-блобы, шифрование сессии, бюджет и вытеснение). Новые тулы `restore_file`/`list_file_changes`, CLI `mma undo`, slash `/undo`; откат по шагу и по явно указанному ходу, проверка хеша с `force` только для конфликта (политика путей не обходится). Типизированное событие `change` в `session.jsonl`. Спека: `docs/specs/2026-11-24-file-rollback-design.md`.
+- **Конфиг отката.** Добавлены ключи `changes.enabled`, `changes.maxFileBytes`, `changes.maxTotalBytes`, `changes.maxRevisionsPerFile` (одни источник значений — `defaults.ts`, домен в `CONFIG_DOMAINS`, панель настроек и en/ru-метки).
+- **Документация: сверка реестра долгов.** Закрыт долг `tool-output-double-injection` (оплачен ещё 0.13.3 флагом `contextBudget.toolDigest` и гвардом), обновлена сверка `debt.md` от 2026-11-23 и спека `2026-10-26-session-directive-log-design.md`.
 
 - **Web UI: редактирование возможностей модели.** В Settings → Model → Models у каждой модели кнопка открывает поп-ап с `vision/video/audio/pdf/tools` и `reasoningStrategy`/`reasoningOff`/`reasoningLevels`; Save пишет весь `modelCapabilities` одним `POST /api/config` с немедленным реконфигом провайдера, Reset сбрасывает оверрайд только этой модели. Таблица во вкладке Capabilities получила те же колонки, чтобы сохранение из неё не стирало reasoning-поля. Спека: `docs/specs/2026-11-20-web-model-capabilities-design.md`.
 
