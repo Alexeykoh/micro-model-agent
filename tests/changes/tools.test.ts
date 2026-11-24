@@ -13,7 +13,7 @@ import type {
   UndoOptions,
   UndoResult,
 } from "../../src/modules/changes/types";
-import type { FileChangesPort } from "../../src/tools/file-changes-port";
+import type { FileChangesPort } from "../../src/tools/types";
 import { listFileChangesTool, restoreFileTool } from "../../src/tools/index";
 
 const SESSION = "changes-tools-test";
@@ -246,5 +246,50 @@ describe("changes tools", () => {
     );
     expect(top.output).toContain(t("changes.reason.invalid_steps"));
     expect(top.output).not.toContain("invalid steps: expected a positive integer");
+  });
+
+  it("localizes blob and IO exception reasons under ru with no raw English fallback", async () => {
+    const sha = "a".repeat(64);
+    const reasons = [
+      `Missing blob ${sha} for session ${SESSION}`,
+      `Corrupt blob ${sha}: decode failed or the per-file decompression limit was exceeded`,
+      `Blob integrity check failed for ${sha}: raw-content hash mismatch (${"b".repeat(64)})`,
+      `Encoded blob ${sha} is too large: 1000 bytes exceeds limit 500`,
+      "move destination missing: /base/to.txt",
+      "Missing prior content for to.txt",
+      "EACCES: permission denied, open '/base/a.txt'",
+      "ENOENT: no such file or directory, open '/base/a.txt'",
+      "totally unexpected English text",
+    ];
+    const keys = ["blob_missing", "blob_corrupt", "blob_integrity", "blob_too_large",
+      "move_dest_missing", "prior_missing", "io_error", "io_error", "unknown"];
+    setLocale("ru");
+    const result: UndoResult = {
+      ok: false,
+      message: "",
+      items: reasons.map((reason, i) => ({ path: `f${i}.txt`, ok: false, reason })),
+    };
+    const res = await restoreFileTool.handler(
+      makeCtx({ fileChanges: portWith({ undo: () => result }) }),
+      { path: "f0.txt" },
+    );
+    for (const [i, key] of keys.entries()) {
+      expect(res.output).toContain(`f${i}.txt: ${t("changes.reason.skipped", { reason: t(`changes.reason.${key}`) })}`);
+    }
+    for (const raw of [
+      "Missing blob",
+      "Corrupt blob",
+      "Blob integrity check",
+      "Encoded blob",
+      "move destination missing",
+      "Missing prior content",
+      "EACCES",
+      "ENOENT",
+      "totally unexpected English text",
+      "skipped (",
+      "restored",
+    ]) {
+      expect(res.output).not.toContain(raw);
+    }
   });
 });

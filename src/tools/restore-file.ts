@@ -4,7 +4,7 @@ import type { UndoResult } from "../modules/changes/types";
 import { checkToolPath } from "./path-enforcement";
 import type { ToolDefinition } from "./types";
 
-/** Точные причины из `src/modules/changes/undo.ts`; неизвестные строки не трогаем. */
+/** Точные причины из `src/modules/changes/undo.ts`; остальные — по шаблонам ниже. */
 const REASON_KEYS: Readonly<Record<string, string>> = {
   "file changed since the snapshot": "changes.reason.file_changed",
   "move destination changed since the snapshot": "changes.reason.move_changed",
@@ -37,7 +37,38 @@ function localizeReason(reason: string): string {
   if (moveDest && REASON_KEYS[moveDest[1]!]) {
     return t("changes.reason.move_destination", { reason: localizeReason(moveDest[1]!) });
   }
-  return reason;
+
+  // Ошибки blob-хранилища и файловой системы приходят из catch-ветвей undo.ts.
+  // Никакие исходные строки (ни целиком, ни как плейсхолдер) в вывод не попадают.
+  if (/^Missing blob [a-f0-9]{64} for session .+$/.test(reason)) {
+    return t("changes.reason.blob_missing");
+  }
+  if (
+    /^Corrupt blob [a-f0-9]{64}: decode failed or the per-file decompression limit was exceeded$/.test(
+      reason,
+    )
+  ) {
+    return t("changes.reason.blob_corrupt");
+  }
+  if (/^Blob integrity check failed for [a-f0-9]{64}: raw-content hash mismatch \([^)]*\)$/.test(reason)) {
+    return t("changes.reason.blob_integrity");
+  }
+  if (/^Encoded blob [a-f0-9]{64} is too large: \d+ bytes exceeds limit \d+$/.test(reason)) {
+    return t("changes.reason.blob_too_large");
+  }
+  if (/^move destination missing: .+$/.test(reason)) return t("changes.reason.move_dest_missing");
+  if (/^Missing prior content for .+$/.test(reason)) return t("changes.reason.prior_missing");
+  if (
+    /^(?:EACCES|ENOENT|ENOSPC|EPERM|EISDIR|ENOTDIR|EIO|EEXIST|EBUSY|EMFILE|ENFILE|EROFS|ELOOP):/.test(
+      reason,
+    ) ||
+    /^(?:Permission denied|No such file or directory|Read-only file system|Operation not permitted)/i.test(
+      reason,
+    )
+  ) {
+    return t("changes.reason.io_error");
+  }
+  return t("changes.reason.unknown");
 }
 
 /** Локализованный результат undo: общий вывод для тула restore_file и CLI. */
