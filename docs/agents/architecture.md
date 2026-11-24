@@ -145,6 +145,19 @@ hook in `Agent.run()` (so REPL, web and one-shot all behave the same):
 - **Manual is sticky** — a session created with an explicit name or renamed by
   the user has `nameSource: "manual"` and is never overwritten.
 
+### File Rollback (change journal)
+
+> **Spec:** [file rollback design](../specs/2026-11-24-file-rollback-design.md) · Gate: `tests/arch/changes-coverage.test.ts`.
+
+Filesystem writes are snapshotted so they can be undone deterministically within a session:
+
+- **Port** — `ToolContext.fileChanges: FileChangesPort` (`src/tools/types.ts`) is built by both context builders (`src/core/bootstrap/tool-context.ts` and `src/core/bootstrap/session-runner-scope.ts`), one instance per context. `ToolExecutor.execute()` calls `captureBefore`/`captureAfter` around each tool call; `src/core/agent/turn-run.ts` calls `beginTurn()` on the turn boundary.
+- **Module** — `src/modules/changes/` (`capture.ts`, `store.ts`, `undo.ts`, `eviction.ts`, `index.ts`) owns the journal in `<sessionDir>/changes/` (`index.jsonl`, `state.json`, content-addressed `blobs/<sha>.gz`), encrypted with the session key when `security.sessionEncryption` is on.
+- **Tools** — `restore_file` and `list_file_changes` expose undo/list to the model through the normal registry; both go through the same `ChangeUndo` path as the CLI/slash surfaces.
+- **Surfaces** — `mma undo <path> [--steps N] [--force] | --turn [N] | --list [path]` (`src/cli/undo-command.ts`) and `/undo` (`SPEC_DEFS` in `src/core/commands/spec.ts`, handler in `repl-commands-session.ts`).
+- **Observability** — every successful restore appends a typed `change` entry to `session.jsonl` with `source: "module:changes"`, `module: "changes"`, `operation: "changes.undo"` and typed `path`/`op`/`targetId`/`tool` fields (INV-13); regression test `tests/changes/session-log.test.ts`.
+- **Coverage** — every fs-write tool with `pathArgs` must be snapshotted or listed with a reason in the module's `EXCLUDED` table; gated by `tests/arch/changes-coverage.test.ts`. Known v1 limits are in the [spec](../specs/2026-11-24-file-rollback-design.md#10-known-limitations-v1).
+
 ### Security Module
 
 > **Spec:** `docs/archive/specs/2025/2025-07-28-mma-v2-design.md#14-security-module` — Comprehensive security system for MMA v2.

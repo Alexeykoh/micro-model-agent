@@ -21,6 +21,7 @@ bun test tests/arch         # один набор
 | --- | --- |
 | Модуль не импортирует ядро напрямую (INV-3/4) | `tests/arch/module-boundaries.test.ts` |
 | Enforcement в одной точке (INV-9/10) | `tests/tools/security-decl.test.ts`, `tests/tools/enforcement-*.test.ts` |
+| Каждый fs-write тул с `pathArgs` покрыт снапшотом или явным исключением | `tests/arch/changes-coverage.test.ts` |
 | Единственный писатель терминала | `tests/output/no-direct-console.test.ts`, `tests/output/source-filled.test.ts` |
 | Дефолты не дублируются по коду | `tests/arch/default-single-source.test.ts` |
 | Файл ≤300 строк | `tests/arch/file-size.test.ts` |
