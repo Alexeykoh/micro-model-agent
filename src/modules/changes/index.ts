@@ -73,6 +73,8 @@ export function createFileChangesPort(deps: PortDeps): FileChangesPort {
       capture.clear();
     },
     list: (options) => undoFor(options.baseDir).list(options),
-    undo: (options) => undoFor(options.baseDir).undo(options),
+    // Копируем все поля опций (включая authorize), чтобы шов порта не терял
+    // новые возможности ChangeUndo при расширении UndoOptions.
+    undo: (options) => undoFor(options.baseDir).undo({ ...options }),
   };
 }
