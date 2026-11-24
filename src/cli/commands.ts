@@ -3,6 +3,7 @@
 import { Command } from "commander";
 import { t } from "../i18n/index";
 import { buildSessionCommands } from "./session-commands";
+import { buildUndoCommand } from "./undo-command";
 import { createSecurityCommand } from "./security-commands";
 import { createPluginCommand } from "./plugin-commands";
 import { createDoctorCommand } from "./doctor-command";
@@ -53,6 +54,7 @@ export function createProgram(): Command {
   buildMapCommand(program);
   buildProviderCommands(program);
   buildSessionCommands(program);
+  buildUndoCommand(program);
 
   createSecurityCommand(program);
   createPluginCommand(program);
