@@ -231,7 +231,10 @@ describe("ChangesStore", () => {
     expect(store.readEntries("s1")).toHaveLength(1);
 
     const enc = structuredClone(DEFAULTS) as AppConfig;
-    enc.security!.sessionEncryption = { enabled: true, encryptHistory: true, encryptSessionLog: true };
+    enc.security!.sessionEncryption = {
+      enabled: true, encryptHistory: true, encryptSessionLog: true,
+      keyPath: join(root, ".session-encryption-key"),
+    };
     const encrypted = new ChangesStore({
       sessionManager: { getSessionDirectory: () => join(root, "sessions", "s1") },
       getConfig: () => enc,
