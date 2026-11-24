@@ -42,6 +42,9 @@ export interface FileChangesPort {
   beginTurn(sessionId: string): void;
   captureBefore(ctx: ToolContext, tool: ToolDefinition, call: ToolCall): void;
   captureAfter(callId: string, success: boolean): void;
+  /** Удалить отложенный снапшот при early-return/abort до вызова хендлера. */
+  cancel(callId: string): void;
+  clear(): void;
   list(options: { sessionId: string; path?: string; limit?: number }): ChangeEntry[];
   undo(options: {
     sessionId: string;

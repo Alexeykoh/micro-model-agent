@@ -1072,6 +1072,8 @@ export function createFileChangesPort(deps: PortDeps): FileChangesPort {
     beginTurn: (sessionId) => { store.nextTurn(sessionId); },
     captureBefore: (ctx, tool, call) => capture.before(ctx, tool, call),
     captureAfter: (callId, success) => capture.after(callId, success),
+    cancel: (callId) => capture.cancel(callId),
+    clear: () => capture.clear(),
     list: (options) => {
       undoer.setBaseDir(options.baseDir);
       return undoer.list(options);
@@ -1096,6 +1098,8 @@ export interface FileChangesPort {
   beginTurn(sessionId: string): void;
   captureBefore(ctx: ToolContext, tool: ToolDefinition, call: ToolCall): void;
   captureAfter(callId: string, success: boolean): void;
+  cancel(callId: string): void;
+  clear(): void;
   list(options: ListOptions): ChangeEntry[];
   undo(options: UndoOptions): UndoResult;
 }
@@ -1121,6 +1125,8 @@ After `result = finalizeToolResult(this.ctx, tool, call, result);`:
 ```ts
     this.ctx.fileChanges?.captureAfter(call.id, result.success);
 ```
+
+To avoid leaking pending snapshots, call `this.ctx.fileChanges?.cancel(call.id)` on every early return between capture and the handler (plugin `blocked`, aborted signal) and on the exception path (`catch`), where `result` becomes a failed result. `captureAfter(call.id, false)` is also acceptable on those paths — both APIs remove the pending entry.
 
 - [ ] **Step 6: Wire turn boundary**
 
