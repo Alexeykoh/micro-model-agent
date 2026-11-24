@@ -129,6 +129,14 @@ export class LspConnection {
       key: this.key,
       onNotification: (method, params) => this.handleNotification(method, params),
       onMessage: (message) => this.handleMessage(message),
+      onProtocolFailure: (count, cause) => {
+        this.logger?.warn(
+          `LSP connection closed after ${count} protocol errors: ${cause}`,
+          { key: this.key, count, cause },
+        );
+        // Протокол сломан — корректный `shutdown` невозможен, закрываем-force.
+        void this.shutdown(true);
+      },
     });
     this.lifecycle = new ServerLifecycle({
       config,
@@ -172,9 +180,10 @@ export class LspConnection {
     return this.lifecycle.open();
   }
 
-  /** Корректно закрыть: `shutdown` → `exit` → пауза → tree-kill. */
-  shutdown(): Promise<void> {
-    return this.lifecycle.shutdown();
+  /** Корректно закрыть: `shutdown` → `exit` → пауза → tree-kill.
+   *  `force` — протокол сломан, корректный shutdown невозможен: сразу teardown. */
+  shutdown(force = false): Promise<void> {
+    return this.lifecycle.shutdown(force);
   }
 
   /** Показать серверу содержимое файла (didOpen или didChange-Full). */
