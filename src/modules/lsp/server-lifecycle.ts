@@ -99,12 +99,13 @@ export class ServerLifecycle {
     this.deps.touch();
   }
 
-  /** Корректно закрыть: `shutdown` → `exit` → пауза → tree-kill. */
-  async shutdown(): Promise<void> {
+  /** Корректно закрыть: `shutdown` → `exit` → пауза → tree-kill.
+   *  `force` — протокол сломан: сразу teardown без рукопожатия и паузы. */
+  async shutdown(force = false): Promise<void> {
     if (this.closing) return;
     this.closing = true;
     try {
-      if (this.process && this.initialized) {
+      if (!force && this.process && this.initialized) {
         // Ответ shutdown ждём, чтобы сервер успел закрыть файлы до kill.
         await this.deps.rpc.request("shutdown", null, 3000).catch((e) => {
           this.deps.logger?.debug(`LSP shutdown request failed: ${errMsg(e)}`);
