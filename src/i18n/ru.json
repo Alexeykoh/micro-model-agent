@@ -758,6 +758,8 @@
   "repl.rename_usage": "Использование: /rename <новое-имя>",
   "repl.delete": "Удалить сессию по id",
   "repl.delete_usage": "Использование: /delete <id-сессии>",
+  "repl.undo": "Отменить изменения файлов, сделанные инструментами в этой сессии",
+  "repl.undo_usage": "/undo <путь> [--steps N] [--force] | /undo --turn N | /undo --list [путь]",
   "repl.skill": "Управление скиллами (list, loaded, load, unload, search)",
   "repl.no_skills": "Нет доступных скиллов",
   "repl.available_skills": "Доступные скиллы:",

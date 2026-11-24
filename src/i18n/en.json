@@ -782,6 +782,8 @@
   "repl.rename_usage": "Usage: /rename <new-name>",
   "repl.delete": "Delete a session by id",
   "repl.delete_usage": "Usage: /delete <session-id>",
+  "repl.undo": "Undo file-tool changes made in this session",
+  "repl.undo_usage": "/undo <path> [--steps N] [--force] | /undo --turn N | /undo --list [path]",
   "repl.skill": "Manage skills (list, loaded, load, unload, search)",
   "repl.no_skills": "No skills available",
   "repl.available_skills": "Available skills:",
