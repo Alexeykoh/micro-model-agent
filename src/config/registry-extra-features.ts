@@ -192,25 +192,25 @@ export const FEATURE_DEFS: ConfigKeyDef[] = [
   bool("changes.enabled", "changes", false,
     (c) => c.changes?.enabled ?? DEFAULTS.changes!.enabled!,
     (c, v) => {
-      c.changes ??= structuredClone(DEFAULTS.changes!);
+      c.changes = { ...structuredClone(DEFAULTS.changes!), ...c.changes };
       c.changes.enabled = v as boolean;
     }),
   int("changes.maxFileBytes", "changes", 1024, 20_971_520, 1024, false,
     (c) => c.changes?.maxFileBytes ?? DEFAULTS.changes!.maxFileBytes!,
     (c, v) => {
-      c.changes ??= structuredClone(DEFAULTS.changes!);
+      c.changes = { ...structuredClone(DEFAULTS.changes!), ...c.changes };
       c.changes.maxFileBytes = v as number;
     }),
   int("changes.maxTotalBytes", "changes", 1_048_576, 536_870_912, 1_048_576, false,
     (c) => c.changes?.maxTotalBytes ?? DEFAULTS.changes!.maxTotalBytes!,
     (c, v) => {
-      c.changes ??= structuredClone(DEFAULTS.changes!);
+      c.changes = { ...structuredClone(DEFAULTS.changes!), ...c.changes };
       c.changes.maxTotalBytes = v as number;
     }),
   int("changes.maxRevisionsPerFile", "changes", 1, 200, 1, false,
     (c) => c.changes?.maxRevisionsPerFile ?? DEFAULTS.changes!.maxRevisionsPerFile!,
     (c, v) => {
-      c.changes ??= structuredClone(DEFAULTS.changes!);
+      c.changes = { ...structuredClone(DEFAULTS.changes!), ...c.changes };
       c.changes.maxRevisionsPerFile = v as number;
     }),
 ];
