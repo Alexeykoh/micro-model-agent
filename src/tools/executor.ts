@@ -149,6 +149,9 @@ export class ToolExecutor {
     // TOCTOU-хук: мутирующий тул повторяет проверку прямо перед операцией.
     this.ctx.pathGuard = createPathGuard(this.ctx, tool, call);
 
+    // Снапшот до хендлера (после enforcement); порт ставит bootstrap, fail-open внутри.
+    this.ctx.fileChanges?.captureBefore(this.ctx, tool, call);
+
     // Плагин-хуки сериализованы общим hookLock: параллельные форки-сиблинги
     // не гоняют общее состояние плагинов (stuck-detector, lint, lsp) конкурентно.
     // Лок берём ТОЛЬКО при наличии хука — иначе лишний await сдвигал бы старт
@@ -158,7 +161,11 @@ export class ToolExecutor {
     const blocked = beforePlugins
       ? await this.hookLock.run(() => runBeforeToolPlugins(this.ctx, call, plugins))
       : null;
-    if (blocked) return blocked;
+    if (blocked) {
+      // Хендлер не запускался — pending-снапшот снимаем, чтобы не утечь.
+      this.ctx.fileChanges?.cancel(call.id);
+      return blocked;
+    }
 
     let result: ToolResult;
     // Мемоизированный повтор детерминированного чтения (cacheable): хендлер
@@ -195,6 +202,8 @@ export class ToolExecutor {
     }
 
     result = finalizeToolResult(this.ctx, tool, call, result);
+    // Все исполненные вызовы (успех, отказ тула, исключение) закрывают снапшот.
+    this.ctx.fileChanges?.captureAfter(call.id, result.success);
     this.memo.update(tool, call, result, memoHit);
 
     // После аборта работа тула отбрасывается (цикл агента завершается без

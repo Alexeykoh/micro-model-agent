@@ -1,5 +1,4 @@
-/** Контракты тулов: определения, контекст, результаты, хуки плагинов. */
-/** Возможность тула, которую применяет `ToolExecutor.execute()` (INV-9/10). */
+/** Контракты тулов: определения, контекст, результаты, хуки плагинов. Возможность тула применяет `ToolExecutor.execute()` (INV-9/10). */
 export type ToolCapability =
   | { fs: "read" }
   | { fs: "write" }
@@ -241,6 +240,7 @@ export interface ToolContext {
    * `emit` вызывается через {@link emitSubagentEvent}, ошибки глотаются.
    */
   subagentRuns?: import("./subagent-runs").SubagentRunSink;
+  fileChanges?: import("./file-changes-port").FileChangesPort; // ставят оба билдера контекста
 }
 
 /** Результат тула: успех, вывод, вложения, артефакты. */
@@ -297,4 +297,4 @@ export interface ToolCall {
   name: string;
   arguments: Record<string, unknown>;
 }
-export type { PluginHook, PluginManager } from "./plugin-types";
+export type { PluginHook, PluginManager } from "./plugin-types"; export type { FileChangesPort } from "./file-changes-port";

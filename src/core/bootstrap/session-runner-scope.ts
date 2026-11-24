@@ -12,7 +12,7 @@ import { ToolExecutor } from "../../tools/executor";
 import { wrapExecutorWithOtel } from "../../modules/otel/decorate";
 import { ToolRegistry } from "../../tools/registry";
 import { PluginManager } from "../../modules/plugins/manager";
-import type { ToolContext, ToolDefinition } from "../../tools/types";
+import type { FileChangesPort, ToolContext, ToolDefinition } from "../../tools/types";
 import { ApprovalStore } from "../approvals";
 import { subagentLogEntry } from "../../tools/subagent-session-log";
 import type { DraftHost } from "../../modules/plugins/drafts";
@@ -22,7 +22,7 @@ import { registerOwnedTools } from "../module-host";
 import { pluginCapabilitiesBlock } from "../../modules/plugins/capabilities-block";
 import { BUILTIN_PROVIDERS } from "../../modules/providers/presets";
 import { resolveModelCapabilities } from "../../modules/providers/capabilities";
-import { admissionDiagnosticSink } from "./tool-context";
+import { admissionDiagnosticSink, createChangesPort } from "./tool-context";
 
 /** Тулы ExecutionModule — в раннер-реестре заменяются привязанными к своему трекеру. */
 const EXEC_TOOL_NAMES = new Set(["plan", "plan_step", "todo", "verify"]);
@@ -97,6 +97,8 @@ export interface RunnerToolCtxInput {
    * проектный, и вкладка веба пишет те же файлы, что и терминал.
    */
   draftHost?: DraftHost;
+  /** Тестовый/альтернативный порт; по умолчанию создаётся лениво. */
+  fileChanges?: FileChangesPort;
 }
 
 /**
@@ -175,6 +177,20 @@ export function buildRunnerToolCtx(input: RunnerToolCtxInput): {
   });
   Object.defineProperty(toolCtx, "sessionManager", {
     get: () => sessionManager,
+    configurable: true,
+  });
+  // Ленивый синглтон на ранер; appendLog явно адресует его сессию (а не активную).
+  let fileChanges = input.fileChanges;
+  Object.defineProperty(toolCtx, "fileChanges", {
+    get: () => {
+      fileChanges ??= createChangesPort(
+        sessionManager,
+        () => configRef.current,
+        admissionDiagnosticSink(sessionManager),
+        sessionId,
+      );
+      return fileChanges;
+    },
     configurable: true,
   });
   Object.defineProperty(toolCtx, "capabilities", {

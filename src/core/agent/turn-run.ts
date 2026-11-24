@@ -109,6 +109,21 @@ export async function runTurn(
   }
 
   const activeMeta = sessionManager?.getActiveMeta();
+  // Граница хода: новый номер ревизии для журнала правок. Fail-open — сбой
+  // счётчика не должен ломать ход, но обязан оставить причину (INV-12/15).
+  if (activeMeta) {
+    try {
+      deps.toolCtx?.fileChanges?.beginTurn(activeMeta.id);
+    } catch (err) {
+      deps.onDiagnostic?.({
+        source: "module:changes",
+        operation: "changes.turn.begin",
+        kind: "failed",
+        cause: err instanceof Error ? err.message : String(err),
+        recoverable: true,
+      });
+    }
+  }
   const isFirstMessage = !!activeMeta && activeMeta.messageCount === 0;
 
   const start = await ensureSessionStart(
