@@ -40,6 +40,7 @@ function makeAuditor(summary: string): FinalAuditHost["auditor"] {
       testRun: null,
       testNote: null,
       typecheckError: null,
+      typecheck: null,
     }),
   } as FinalAuditHost["auditor"];
 }

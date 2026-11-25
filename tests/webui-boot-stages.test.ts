@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 const read = (p: string): string => readFileSync(p, "utf8");
 const app = read("src/modules/webui/assets/app.ts");
 const html = read("src/modules/webui/assets/index.html");
+const themeJs = read("src/modules/webui/assets/theme.js");
 const css = read("src/modules/webui/assets/styles.css");
 const i18nEn = read("src/i18n/en.json");
 const i18nRu = read("src/i18n/ru.json");
@@ -58,7 +59,9 @@ describe("boot splash reports stages (A3)", () => {
     // Детерминированная полоса вместо бесконечного бегущего блока.
     expect(css).not.toContain("@keyframes mdlBar");
     expect(css).toContain("transition: width .35s ease");
-    expect(html).toContain("}, 12000)");
-    expect(html).toContain("Hard failsafe");
+    // Pre-paint bootstrap moved to theme.js (web CSP forbids inline scripts).
+    expect(themeJs).toContain("}, 12000)");
+    expect(themeJs).toMatch(/hard-failsafe/i);
+    expect(html).toContain('<script src="/theme.js"></script>');
   });
 });

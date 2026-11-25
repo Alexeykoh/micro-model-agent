@@ -5,6 +5,7 @@
 // других модулей: только `node:fs` / `node:path` + память.
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, relative } from "node:path";
+import type { Diagnostic } from "../../output/types";
 
 export interface LedgerEntry {
   /** Адрес: `path:line`, `path:§heading`, `url#section`. */
@@ -16,6 +17,12 @@ export interface LedgerEntry {
 const STALE_MARK = " (stale)";
 const INDEX_PREFIX = "[index]";
 const SEP = " — ";
+
+/** Причина fail-open: только код ошибки, без сырого текста пути в session.jsonl. */
+function ledgerFailureCause(err: unknown): string {
+  const code = err && typeof err === "object" && "code" in err ? String(err.code) : "";
+  return code ? `ledger write failed (${code})` : "ledger write failed";
+}
 
 /** File-префикс адреса: `path:line|:charN|:§heading` → path; `url#section` → url. */
 function filePrefix(address: string): string {
@@ -49,6 +56,7 @@ export class ContextLedger {
   constructor(
     private readonly filePath: string,
     private readonly max: number,
+    private readonly onDiagnostic?: (d: Diagnostic) => void,
   ) {}
 
   /** Загружает существующий файл (idempotent). Формат строки: `address — note`. */
@@ -199,10 +207,16 @@ export class ContextLedger {
     try {
       mkdirSync(dirname(this.filePath), { recursive: true });
       appendFileSync(this.filePath, `${address}${SEP}${note}${stale ? STALE_MARK : ""}\n`, "utf8");
-    } catch {
-      // FAIL-OPEN (INV-15). DEBT(ledger-write-diagnostics): провал записи
-      // (read-only/ENOSPC/права) проглатывается — в памяти запись уже есть,
-      // файл просто отстаёт; ход и компакция не должны падать.
+    } catch (err) {
+      // FAIL-OPEN (INV-15): в памяти запись уже есть, файл отстаёт — ход не
+      // падаем, но оставляем различимый сигнал с причиной.
+      this.onDiagnostic?.({
+        source: "core",
+        operation: "context.ledger.write",
+        kind: "failed",
+        cause: ledgerFailureCause(err),
+        recoverable: true,
+      });
     }
   }
 
@@ -226,9 +240,15 @@ export class ContextLedger {
     try {
       mkdirSync(dirname(this.filePath), { recursive: true });
       appendFileSync(this.filePath, `${INDEX_PREFIX} ${this.indexPath ?? ""}\n`, "utf8");
-    } catch {
-      // FAIL-OPEN (INV-15). DEBT(ledger-write-diagnostics): индекс-свёртка не
-      // записана, но в памяти она уже применена (см. persistLine).
+    } catch (err) {
+      // FAIL-OPEN (INV-15): индекс в памяти применён, файл отстаёт — сигнал обязателен.
+      this.onDiagnostic?.({
+        source: "core",
+        operation: "context.ledger.index",
+        kind: "failed",
+        cause: ledgerFailureCause(err),
+        recoverable: true,
+      });
     }
   }
 }

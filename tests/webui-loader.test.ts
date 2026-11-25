@@ -215,7 +215,9 @@ describe("boot splash asset", () => {
     // The canvas upgrade needs the ESM graph; the static fallback must already
     // look like a face instead of an empty bordered square.
     expect(html).toContain('<span class="eyes"><i class="eye left"></i>');
-    expect(html).toContain("Hard failsafe");
+    // The hard failsafe now lives in theme.js (CSP forbids inline scripts).
+    expect(html).toContain('<script src="/theme.js"></script>');
+    expect(readFileSync("src/modules/webui/assets/theme.js", "utf8")).toMatch(/hard-failsafe/i);
   });
 
   it("arms the splash cap before the setup probe", () => {

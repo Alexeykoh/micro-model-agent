@@ -35,6 +35,8 @@ export interface WebUiAssets {
   /** Пакет дополнительных тем (`/themes.css`): neon/paper/contrast + сезоны. */
   cssThemes?: string;
   js: string;
+  /** Bootstrap темы и splash-failsafe (`/theme.js`) — вместо инлайн-<script> в HTML. */
+  themeJs?: string;
   /**
    * Скрипт визарда первого запуска (`/setup.js`). Опционален, чтобы лёгкие
    * тестовые фикстуры только под чат оставались валидны.

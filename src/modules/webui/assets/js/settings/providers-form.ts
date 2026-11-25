@@ -6,6 +6,7 @@ import { t } from "../i18n.js";
 import { settings } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 import { pfield, providerInput, providerSelect, providerCheck } from "./form.js";
+import type { TypeControl } from "./provider-type-field.js";
 
 export interface BaseField {
   node: HTMLElement;
@@ -83,6 +84,7 @@ const CACHE_FLAG_KEYS = [
 export const PROVIDER_TYPES = [
   "openai-compat",
   "lmstudio",
+  "llamacpp",
   "openrouter",
   "openai",
   "anthropic",
@@ -134,7 +136,7 @@ export function wirePresetSync(
   presets: Dict[],
   presetSel: HTMLSelectElement | null,
   mode: string,
-  f: { type: HTMLSelectElement; label: HTMLInputElement; base: BaseField },
+  f: { type: TypeControl; label: HTMLInputElement; base: BaseField },
 ): void {
   if (!presetSel) return;
   presetSel.addEventListener("change", () => {
@@ -148,7 +150,8 @@ export function wirePresetSync(
     const sel = presets.find((x) => x.id === presetSel.value);
     if (!sel || f.type.value.trim() !== sel.type) presetSel.value = "";
   });
-  // The type control is a `<select>`: some browsers fire only `change`.
+  // The picker fires both `input` and `change`; native selects may fire only
+  // `change`, so keep both listeners (harmless duplication).
   f.type.addEventListener("change", () => {
     const sel = presets.find((x) => x.id === presetSel.value);
     if (!sel || f.type.value.trim() !== sel.type) presetSel.value = "";

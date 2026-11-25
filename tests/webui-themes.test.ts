@@ -12,6 +12,7 @@ const asset = (name: string): string =>
   readFileSync(join(root, "src/modules/webui/assets", name), "utf8");
 const css = ["console.css", "groovebox.css", "metallica.css", "omarchy.css", "themes.css"].map(asset).join("\n");
 const html = asset("index.html");
+const themeJs = asset("theme.js");
 const en = JSON.parse(readFileSync(join(root, "src/i18n/en.json"), "utf8")) as Record<
   string,
   string
@@ -35,7 +36,7 @@ describe("webui themes", () => {
   it("every themed id has a body selector and a pre-paint entry", () => {
     for (const id of UI_THEME_IDS) {
       expect(css).toContain(`body.${id}`);
-      expect(html).toContain(`"${id}"`);
+      expect(themeJs).toContain(`"${id}"`);
     }
     expect(UI_THEME_IDS).not.toContain("flat");
   });
@@ -71,7 +72,7 @@ describe("webui themes", () => {
     expect(theme?.group).toBe("os");
     expect(css).toContain("body.omarchy");
     expect(html).toContain("/omarchy.css");
-    expect(html).toContain('"omarchy"');
+    expect(themeJs).toContain('"omarchy"');
   });
 
   it("Omarchy squares UI corners, including the mascot", () => {

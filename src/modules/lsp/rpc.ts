@@ -9,6 +9,9 @@ import { fatalError } from "./connection-errors";
 import { findHeaderEnd, isAcceptableFrameLength, parseContentLength } from "./framing";
 import { errMsg } from "../../utils";
 
+/** Подряд идущих протокольных ошибок до закрытия соединения (как в DefaultErrorHandler). */
+export const MAX_CONSECUTIVE_PROTOCOL_ERRORS = 3;
+
 export interface RpcChannelDeps {
   /** Текущий процесс (null — соединение не поднято). */
   getProcess: () => ServerProcess | null;
@@ -19,6 +22,8 @@ export interface RpcChannelDeps {
   onNotification: (method: string, params: unknown) => void;
   /** Разобранное сообщение (ответ, запрос или нотификация). */
   onMessage: (message: Record<string, unknown>) => void;
+  /** Серия протокольных ошибок исчерпана: соединение нужно закрыть с причиной. */
+  onProtocolFailure?: (count: number, cause: string) => void;
 }
 
 interface PendingEntry {
@@ -30,6 +35,10 @@ export class RpcChannel {
   private readonly pending = new Map<number, PendingEntry>();
   private nextId = 1;
   private buffer = Buffer.alloc(0);
+  /** Подряд идущие ошибки записи; успешная запись сбрасывает счётчик. */
+  private protocolErrors = 0;
+  /** После порога писать больше нельзя: соединение закрывается. */
+  private protocolFailed = false;
 
   constructor(private readonly deps: RpcChannelDeps) {}
 
@@ -152,16 +161,24 @@ export class RpcChannel {
   }
 
   private write(message: string): void {
+    if (this.protocolFailed) return;
     const proc = this.deps.getProcess();
     if (!proc?.stdin?.writable) return;
     const header = `Content-Length: ${Buffer.byteLength(message)}\r\n\r\n`;
     try {
       proc.stdin.write(header + message);
+      this.protocolErrors = 0;
     } catch (e) {
-      // DEBT(lsp-protocol-error-counter): протокольная ошибка записи только
-      // логируется — счётчика «≤3 подряд, потом shutdown» (как в
-      // vscode-languageclient DefaultErrorHandler.error) ещё нет.
-      this.deps.logger?.debug(`LSP write error: ${errMsg(e)}`);
+      const cause = errMsg(e);
+      this.protocolErrors++;
+      this.deps.logger?.debug(
+        `LSP write error (${this.protocolErrors}): ${cause}`,
+        { key: this.deps.key, count: this.protocolErrors },
+      );
+      if (this.protocolErrors > MAX_CONSECUTIVE_PROTOCOL_ERRORS) {
+        this.protocolFailed = true;
+        this.deps.onProtocolFailure?.(this.protocolErrors, cause);
+      }
     }
   }
 }

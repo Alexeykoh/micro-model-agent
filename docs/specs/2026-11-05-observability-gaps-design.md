@@ -287,7 +287,7 @@ W4 также выполняет §3.1: модульные `new Logger(...)` з�
 | `webui/file/*-api.ts`                                     | `404` вместо ошибки чтения | `module_degraded` + `500`                                                       |
 | `updater/factory.ts:73-91`, `versions.ts`                 | сборка/prune молчит        | `app.jsonl` (`logSilent`)                                                       |
 | `execution/final-audit.ts:140-143`                        | аудит пропущен             | `audit` со `status:"skipped"`                                                   |
-| `execution/audit-test-run.ts:63-68`, `auditor.ts:207-212` | инфра-сбой = «чисто»       | `audit.testNote="inconclusive: …"`; оплата `DEBT(audit-typecheck-inconclusive)` |
+| `execution/audit-test-run.ts:63-68`, `auditor.ts:207-212` | инфра-сбой = «чисто»       | `audit.testNote="inconclusive: …"`; typecheck-половина оплачена 2026-11-24 (`audit.typecheck`) |
 | `pricing/index.ts:47-54`                                  | цена неизвестна            | `logStructured` (один раз на модель)                                            |
 
 Тесты: `tests/service/webhook-delivery-signal.test.ts`,
@@ -362,7 +362,9 @@ W0–W4 и часть W1/W2 смержены в `dev`. Остаток зарег
 [debt.md](../agents/debt.md):
 
 - **DEBT(observability-w5-w6)** — сигналы W5 и W6 из §4.
-- **DEBT(observability-false-success)** — пять поведенческих фиксов из §2.5.
+- **observability-false-success** — оплачен 2026-11-24: все пять исходов §2.5
+  (`process_kill` ранее, остальные четыре — `fix/observability-false-success`),
+  гвард `tests/tools/false-success.test.ts`.
 - §3.6/§5.4 (`health()` у шести модулей и гейт `tests/arch/health-coverage.test.ts`) —
   оплачено 2026-11-09 веткой `fix/observability-health-coverage`.
 

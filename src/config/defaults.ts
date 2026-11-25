@@ -13,6 +13,9 @@ import { LLM_REQUEST_TIMEOUT_MS } from "./timeouts";
  */
 export const WRAPPER_OVERHEAD_MS = 5000;
 
+/** Порог admission (OO-1) из замера §11: p95 300-строчного чтения = 3620. */
+export const DEFAULT_ADMIT_MAX_TOKENS = 4000;
+
 /** Дефолтная модель (эксперты наследуют её). */
 const DEFAULT_MODEL = "qwen/qwen3.5-9b";
 
@@ -119,7 +122,7 @@ export const DEFAULTS: AppConfig = {
     overflowCooldown: 3,
     toolResultKeep: 6,
     toolDigest: "full",
-    admitMaxTokens: 3000,
+    admitMaxTokens: DEFAULT_ADMIT_MAX_TOKENS,
     notesPath: ".mma/NOTES.md",
     ledgerMax: 200,
     calibrationWarmup: 3,

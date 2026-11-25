@@ -154,6 +154,7 @@ export function auditEntry(
   iteration: number,
   durationMs?: number,
   tests?: string,
+  typecheck?: LogEntry["typecheck"],
 ): LogEntry {
   return {
     type: "audit",
@@ -161,6 +162,7 @@ export function auditEntry(
     iteration,
     duration: durationMs,
     ...(tests ? { tests } : {}),
+    ...(typecheck ? { typecheck } : {}),
   };
 }
 
