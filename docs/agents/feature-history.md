@@ -847,7 +847,7 @@ retry-петля после блоков (перебор python/python3/bun/pip)
 Разбор живой сессии `ses_muwinhpk_2e69iq` (`mma web`, локальный 27B): критик молча
 пропускался после компакции, компакция не несла информации → петля переисследования,
 read-only петля без стопа, рассинхрон провайдера/контекста, выдуманный артефакт,
-редакция съедала URL в истории. План: [docs/plans/2026-10-06-harness-reliability-fixes.md](./docs/plans/2026-10-06-harness-reliability-fixes.md).
+редакция съедала URL в истории. План: `docs/plans/2026-10-06-harness-reliability-fixes.md` (удалён 2026-11-25).
 
 - **Критик после компакции** (`src/core/agent/critic-gate.ts`, `agent.ts`): маркер захода —
   монотонный `seq` сообщения в `WeakMap` (`ContextManager.beginTurn/seqOf`), а не индекс
@@ -899,7 +899,7 @@ read-only петля без стопа, рассинхрон провайдер�
   без `isWorkMutation` (browser/plan/todo больше не сбрасывают) → ловит browser/web-петли.
 - **`session_start` эффективное окно** (`src/core/agent.ts`): env-срез берёт `model`/`contextWindow`
   из живого конфига (probe), а не из bootstrap-снимка.
-- Проверено 12 живыми прогонами `prism-ml/bonsai-27b`; план — [docs/plans/2026-10-06-harness-reliability-fixes.md](./docs/plans/2026-10-06-harness-reliability-fixes.md).
+- Проверено 12 живыми прогонами `prism-ml/bonsai-27b`; план — `docs/plans/2026-10-06-harness-reliability-fixes.md` (удалён 2026-11-25).
 
 ### Web Live Context Metrics & Cache Reporting (2.22.0)
 

@@ -513,7 +513,7 @@ W1 и W2 дают эффект независимо от W5: после них �
 ## Связанные документы
 
 - [Аудит модулей 0.3.3](../analysis/2026-10-12-harness-module-audit.md)
-- [План фиксов аудита](../plans/2026-10-12-harness-module-audit-fixes.md)
+- `План фиксов аудита` (удалён 2026-11-25)
 - [feature-history.md](../agents/feature-history.md) — как реализовывались фичи
 - [architecture.md](../agents/architecture.md) — описание текущего состояния
 - [STYLE.md](../design/ui/STYLE.md) — канон стиля чат-вывода
