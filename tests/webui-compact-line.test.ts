@@ -46,6 +46,11 @@ describe("compact composer markup", () => {
     expect(CSS).toMatch(/\.sel\[data-sel="model"\]\s*\{\s*flex:\s*1 1 0/);
   });
 
+  it("spaces the first selector away from the mascot and always shows menu chevrons", () => {
+    expect(CSS).toMatch(/\.selectors > \.composer-face \{[^}]*margin-right:\s*\d+px/);
+    expect(CSS).not.toMatch(/\.selectors > \.sel > button > svg\.svg-icon:last-child \{[^}]*opacity:\s*0/);
+  });
+
   it("has a hint toggle for the compact hint row", () => {
     expect(HTML).toContain('id="hintMore"');
     expect(CSS).toMatch(/\.inp-meta\s+#hintShift\s*\{\s*display:\s*none/);

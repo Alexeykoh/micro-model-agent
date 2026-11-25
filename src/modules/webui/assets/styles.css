@@ -763,6 +763,7 @@ body.light .sel > button { border: 1px solid var(--border); }
 .menu .mi.on > .provider-icon { color: var(--accent); }
 /* Compact selector line (variant A): quiet text, `/` separators, no chip surface. */
 .selectors { gap: 0; flex-wrap: nowrap; }
+.selectors > .composer-face { margin-right: 10px; }
 .selector-sep { color: var(--dim-b); margin: 0 6px; flex: none; user-select: none; }
 .selector-sep[hidden] { display: none; }
 .selectors > .sel { flex: 0 1 auto; }
@@ -774,9 +775,9 @@ body.light .sel > button { border: 1px solid var(--border); }
 body.light .selectors > .sel > button { border: 0; }
 .selectors > .sel > button:hover { color: var(--fg); }
 .selectors > .sel > button b { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.selectors > .sel > button > svg.svg-icon:last-child { color: var(--dim-b); opacity: 0; }
+.selectors > .sel > button > svg.svg-icon:last-child { color: var(--dim-b); }
 .selectors > .sel > button:hover > svg.svg-icon:last-child,
-.selectors > .sel > button:focus-visible > svg.svg-icon:last-child { opacity: 1; }
+.selectors > .sel > button:focus-visible > svg.svg-icon:last-child { color: var(--fg); }
 /* Selector switch pending (boot + provider/model/context/reasoning writes):
    buttons and menus go inert while the mark shows. The mark stays a spinner;
    the old elapsed-time counter was removed in favor of a calmer UI. */
