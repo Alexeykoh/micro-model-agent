@@ -15,6 +15,10 @@ const WRITE = readFileSync(
   new URL("../src/modules/webui/assets/js/settings/selectors-write.ts", import.meta.url),
   "utf-8",
 );
+const LINE = readFileSync(
+  new URL("../src/modules/webui/assets/js/settings/selector-line.ts", import.meta.url),
+  "utf-8",
+);
 
 describe("composer chips on a phone (U19)", () => {
   it("keeps the selector row on one line", () => {
@@ -24,7 +28,8 @@ describe("composer chips on a phone (U19)", () => {
   });
 
   it("moves the hidden label into title and aria-label", () => {
-    expect(WRITE).toContain('btn.title = label + ": " + value');
-    expect(WRITE).toContain('btn.setAttribute("aria-label", btn.title)');
+    expect(LINE).toContain('btn.title = label + ": " + value');
+    expect(LINE).toContain('btn.setAttribute("aria-label", btn.title)');
+    expect(WRITE).toContain("setCompactLabel(");
   });
 });
