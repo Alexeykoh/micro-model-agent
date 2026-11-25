@@ -1,6 +1,6 @@
 # Agent Service API — Design Spec
 
-**Status:** Draft (2026-10-08)
+**Status:** Implemented (2026-10-08)
 **Ветка:** `docs/agent-service-api-design`
 **Тип:** продуктовая способность (новый рантайм), additive к ядру
 **References:** см. §17 (внешние источники, на которых основаны решения)

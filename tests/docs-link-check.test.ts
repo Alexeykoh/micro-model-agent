@@ -52,6 +52,21 @@ function exists(path: string): boolean {
   }
 }
 
+/**
+ * Только живые описания: история (`feature-history.md`) намеренно ссылается на
+ * удалённые файлы, а спеки — на запланированные тесты. Их не гейтим.
+ */
+const LIVE_DOC_PATHS = new Set([
+  "README.md",
+  "AGENTS.md",
+  "docs/agents/architecture.md",
+  "docs/agents/execution.md",
+  "docs/agents/lsp.md",
+  "docs/agents/modules.md",
+  "docs/agents/service-api.md",
+  "docs/agents/versioning.md",
+]);
+
 function checkFile(file: string, errors: string[]): void {
   const text = maskCode(readFileSync(file, "utf8"));
   const rel = relative(REPO_ROOT, file).replace(/\\/g, "/");
@@ -82,6 +97,14 @@ function checkFile(file: string, errors: string[]): void {
   // Текстовые (не markdown) пути к спекам и планам тоже не должны протухать.
   for (const m of text.matchAll(/docs\/(?:specs|plans)\/[A-Za-z0-9._/-]+\.md/g)) {
     if (!exists(join(REPO_ROOT, m[0]))) errors.push(`${rel}: ${m[0]}`);
+  }
+
+  // Живые описания модулей не должны ссылаться на несуществующие исходники.
+  // `maskCode` уже убрал примеры из блоков кода и inline-кода.
+  if (LIVE_DOC_PATHS.has(rel)) {
+    for (const m of text.matchAll(/\b(?:tests|src)\/[A-Za-z0-9._/-]+\.ts\b/g)) {
+      if (!exists(join(REPO_ROOT, m[0]))) errors.push(`${rel}: ${m[0]}`);
+    }
   }
 }
 

@@ -70,7 +70,7 @@ Messages are persisted to `history.jsonl` on each iteration. `session.jsonl` rec
 - `compaction` (enriched): `reason` (`interval`/`quality-triggered (N% < 40%)`/`overflow (N > M)`/`after_tool`), `tokensBefore`/`tokensAfter`, `qualityBefore`/`qualityAfter`, `messagesBefore`/`messagesAfter`, `removedTurns`/`keptTurns`, and `summary` — the actual `[Compressed: …]` block (task/files/errors/tried-and-failed). Tokens before/after come from `ContextManager.compact()` (which now returns a `CompactResult | null`, null when there is nothing to compact).
 - `llm_usage` (per LLM call): `promptTokens`/`completionTokens`/`totalTokens`, `source` (`api` when the backend returned `usage`, else `estimate` — llama.cpp streaming often omits `usage`, so estimates are marked explicitly), `durationMs`.
 
-Source: `ContextManager.getSnapshot()`/`compact()` in `src/modules/context/manager.ts`, `PromptBuilder.build()` block breakdown in `src/core/prompt-builder.ts`, logging in `src/core/session-logger.ts` (`logContext`/`logLlmUsage`/`logCompaction`).
+Source: `ContextManager.getSnapshot()`/`compact()` in `src/core/context/manager.ts`, `PromptBuilder.build()` block breakdown in `src/core/prompt-builder.ts`, logging in `src/core/session-logger.ts` (`logContext`/`logLlmUsage`/`logCompaction`).
 
 ## Project Map
 

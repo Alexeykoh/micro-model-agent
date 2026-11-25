@@ -51,7 +51,7 @@ Plans are stored in `<project>/.mma/plans/` with automatic history management:
 - **Duplicate-tool budget** (unreleased, `src/core/agent/tool-batch.ts`): consecutive batches where *every* call is an exact duplicate of a call already made this turn (canonical `(tool, args)` key, `src/core/agent/canonical-args.ts`) inject an "answer now" directive at `MAX_DUPLICATE_BATCHES` (8) and force a **tool-less final answer** at `HARD_STOP_DUPLICATE_BATCHES` (12). Broad exploration with new files/patterns never trips it — the predicate measures repetition, not "no mutation" (the old read-only budget killed legitimate read-only analysis, e.g. `ses_mv0pirf5_hnmbxj`). The same `finalizeWithoutTools` also covers the failed-batch honest-stop and `maxToolIterations` exhaustion; the reason rides `AgentResult.stopReason` and is shown in the web chat (`turn_end.error`).
 - **Reasoning on loops** (2.20.0): a repeated identical tool call raises reasoning effort to `high` (`policy:repetitive-tools`); previously it was lowered to `low`, starving the model of thinking right when it was stuck.
 - **In-loop critic** (2.20.0): its turn marker is a monotonic message `seq` (`ContextManager.beginTurn/seqOf`, stored in a `WeakMap`) rather than an array index, so it survives compaction — previously `gatherTurnToolEvents` saw an empty slice after compaction and the critic was silently skipped on the long, thrashing turns. The critic evidence pack also carries `webGrounding` (`attempted`/`verified`/`unverifiedClaims`): numeric/price claims asserted without a content-bearing `web_fetch` are flagged.
-- **Web-claim check** (2.20.0): a deterministic (no-LLM) gate re-checks that money amounts in the final answer appear in the text returned by a web tool (`checkWebClaims`, `src/modules/hallucination/web-claims.ts`); unmatched amounts get one bounded retry (`hall.claim_web_unverified`) rather than shipping fabricated figures.
+- **Web-claim check** (2.20.0): a deterministic (no-LLM) gate re-checks that money amounts in the final answer appear in the text returned by a web tool (`checkWebClaims`, `src/core/hallucination/web-claims.ts`); unmatched amounts get one bounded retry (`hall.claim_web_unverified`) rather than shipping fabricated figures.
 - **File-creation claim check** (2.20.0): when the task asked for a file and the answer claims it was saved but no `write_file`/`edit_file` ran that turn, one bounded retry (`hall.claim_file_not_created`). Guards (task file-intent, claim outside code fences/blockquotes, no article/documentation context) keep it from firing on a summary that merely mentions filenames.
 
 ### Auto-Verification
@@ -101,7 +101,7 @@ ERROR   → retry or escalate
 
 ### Chunked parallel queries (`chunk_query`)
 
-- `runChunkQuery()` + `splitTextIntoChunks()` (`src/modules/context/chunk-query.ts`): RLM-style `llm_query` semantics — plain LLM calls (no tool loop) per newline-aware chunk with a bounded-concurrency pool and an optional synthesis pass.
+- `runChunkQuery()` + `splitTextIntoChunks()` (`src/core/context/chunk-query.ts`): RLM-style `llm_query` semantics — plain LLM calls (no tool loop) per newline-aware chunk with a bounded-concurrency pool and an optional synthesis pass.
 - `chunk_query` tool (`src/tools/chunk-query.ts`): scope-checked `input_path` or inline `text`, params `chunk_chars`, `max_parallel`, `synthesize`, `max_chunk_tokens` (default 1024 — must fit reasoning + answer), `max_synthesis_tokens` (2048).
 - `timeoutMs` on `ToolDefinition` overrides the 60s executor timeout per tool (chunk_query uses 300s — multiple LLM calls on slow providers).
 - `LLMProvider.chat(messages, tools?, signal?, options?)` gained `ChatOptions.maxTokens` to cap generation per call.
@@ -117,7 +117,7 @@ LLM response → ConfidenceCheck (short/repetitive)
 
 Results: `pass` → show | `warn` → show with ⚠️ | `retry` → re-call LLM | `block` (3+ retries) → ask user
 
-- **Success-claim check** (`src/modules/hallucination/success-claim.ts`, wired in `src/core/agent/hallucination-gate.ts`): a strong completion claim together with error signals in the last 10 tool outputs and no hedging in the answer triggers exactly one bounded re-check (`MAX_CLAIM_CHECK_RETRIES = 1`, `hall.claim_contradiction`), then fails open (accept as-is) — never a block. Deterministic (regex + tool success flags, no LLM); Cyrillic-aware word boundaries (`\b` is ASCII-only in JS).
+- **Success-claim check** (`src/core/hallucination/success-claim.ts`, wired in `src/core/agent/hallucination-gate.ts`): a strong completion claim together with error signals in the last 10 tool outputs and no hedging in the answer triggers exactly one bounded re-check (`MAX_CLAIM_CHECK_RETRIES = 1`, `hall.claim_contradiction`), then fails open (accept as-is) — never a block. Deterministic (regex + tool success flags, no LLM); Cyrillic-aware word boundaries (`\b` is ASCII-only in JS).
 
 ## Migration Safety
 

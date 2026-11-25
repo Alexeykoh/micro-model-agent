@@ -78,3 +78,11 @@
 - [critic transparency and fixes](./2026-11-05-critic-transparency-and-fixes-design.md)
 - [monolith split](./2026-11-10-monolith-split-design.md) — полное разделение UI / runtime
 - [web search provider](./2026-11-18-web-search-provider-design.md) — выбор источника `web_search`: duckduckgo / tavily / searxng
+- [MMA — Управление качеством агента](./2026-11-20-agent-quality-control-design.md)
+- [Редактирование возможностей модели через `mma web`](./2026-11-20-web-model-capabilities-design.md)
+- [Recovery-сабагент на повторяющиеся ошибки тулов](./2026-11-21-recovery-subagent-design.md)
+- [Харнесс под локальные квантованные модели](./2026-11-22-local-model-harness-fit-design.md)
+- [Явное обновление списка моделей](./2026-11-23-models-force-refresh-design.md)
+- [Эффективность research-прогона](./2026-11-23-research-loop-efficiency-design.md)
+- [Web UI: вложения и capability-gated загрузки](./2026-11-23-webui-attachments-design.md)
+- [Откат правок файлов агентом](./2026-11-24-file-rollback-design.md)

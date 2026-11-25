@@ -36,6 +36,15 @@
 | [`design/ui/`](./design/ui)                                | Стиль чата и макеты                                                     | **Живое** |
 | [`testing/`](./testing)                                    | Ручные сценарии и наблюдения                                            | **Живое** |
 
+## Разовые аудиты
+
+- [agent logic audit](./analysis/2026-08-29-agent-logic-audit.md)
+- [MMA Web UI/UX audit](./analysis/2026-09-24-mma-web-ui-ux-audit.md)
+- [fallow security](./analysis/2026-09-25-fallow-security.md)
+- [waves B–E audit](./analysis/2026-09-25-waves-bcde-audit.md)
+- [indexer search ideas](./analysis/2026-10-04-indexer-search-ideas.md)
+- [architecture v2 live verification](./analysis/2026-10-12-architecture-v2-live-verification.md)
+- [system prompt audit](./analysis/2026-11-12-system-prompt-audit.md)
 ## Правило для спек
 
 1. Спека пишется **до кода**, если меняется контракт: путь данных, граница модуля,
