@@ -3,7 +3,7 @@
 Дата: 2026-11-09. Ветка: `feat/durable-checkpointer` (2/4 durable-state:
 thread_id закрыт, далее проверка retention/long-term store).
 Источник: `TODO.md §3 P0 Durable state`,
-[`2026-09-28-production-readiness`](../archive/specs/2026/2026-09-28-production-readiness-design.md) §4.
+``2026-09-28-production-readiness`` (удалено вместе с архивом 2026-11-25) §4.
 
 ## Что неправильно
 

@@ -4,7 +4,7 @@
 thread_id → checkpointer → retention → long-term store; по правилу 3
 каждый — отдельная ветка, здесь только thread_id).
 Источник: `TODO.md §3 P0 Durable state` и
-[`docs/archive/specs/2026/2026-09-28-production-readiness-design.md`](../archive/specs/2026/2026-09-28-production-readiness-design.md) §4.
+``docs/archive/specs/2026/2026-09-28-production-readiness-design.md (удалён 2026-11-25)`` (удалено вместе с архивом 2026-11-25) §4.
 
 ## Что неправильно
 

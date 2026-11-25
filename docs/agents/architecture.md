@@ -20,7 +20,7 @@ CLI (main.ts → commands.ts / repl.ts)
 
 ### Output Architecture
 
-> **Spec/plan:** `docs/archive/plans/2026/superpowers/plans/2026-09-18-output-architecture-refactor.md`
+> **Spec/plan:** `docs/archive/plans/2026/superpowers/plans/2026-09-18-output-architecture-refactor.md (удалён 2026-11-25)`
 
 All terminal output flows through `src/output/` as events, so the mode of the
 terminal (streaming / modal / quiet) and every machine surface see the same data.
@@ -160,7 +160,7 @@ Filesystem writes are snapshotted so they can be undone deterministically within
 
 ### Security Module
 
-> **Spec:** `docs/archive/specs/2025/2025-07-28-mma-v2-design.md#14-security-module` — Comprehensive security system for MMA v2.
+> **Spec:** `docs/archive/specs/2025/2025-07-28-mma-v2-design.md#14-security-module (удалён 2026-11-25)` — Comprehensive security system for MMA v2.
 > **Status:** implemented (Bash command validation, path restrictions, network filtering, content scanning, subagent recursion control; extended features — below).
 
 The security module provides multiple layers of protection:
@@ -307,7 +307,7 @@ mma security audit-stats         # Show audit notification statistics
 Каноническое описание — [docs/agents/testing.md § Model Certification](./testing.md#model-certification): команды, теги (`core`, `security`, `image`, `network`, `browser`, `shell`, `research`), сценарии и манифест. Реализация — `src/modules/certification/`.
 ### Agent-Level MoE
 
-> **Spec:** `docs/archive/specs/2025/2025-07-30-agent-level-moe.md` — Router + Expert-Agent + Expert-Tools, hierarchical recursive decomposition.
+> **Spec:** `docs/archive/specs/2025/2025-07-30-agent-level-moe.md (удалён 2026-11-25)` — Router + Expert-Agent + Expert-Tools, hierarchical recursive decomposition.
 >
 > Status: **partially implemented (MVP)**. When `moe.enabled: true` is set in config and an orchestrator model is configured, the agent uses a Router → plan → validate → execute (parallel waves) → verify/merge flow. Falls back to single-agent when MoE fails or is disabled.
 >
@@ -335,7 +335,7 @@ mma security audit-stats         # Show audit notification statistics
 
 ## Counter-Agent (In-Loop Critic)
 
-> **Spec:** `docs/archive/specs/2026/2026-09-25-session-autoname-and-critic-design.md` §4.
+> **Spec:** `docs/archive/specs/2026/2026-09-25-session-autoname-and-critic-design.md (удалён 2026-11-25)` §4.
 
 An evidence-grounded, event-triggered LLM verifier ("counter-agent") that reviews the single agent's
 in-progress work. It is a loop gate like `AuditGate`/`HallucinationGate` — the MoE path is untouched.
