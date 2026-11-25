@@ -104,6 +104,20 @@ DoD каждой волны: `bun test tests/docs-link-check.test.ts` зелён
 ## Не трогать
 
 - `AGENTS.md`, `docs/README.md`, `docs/agents/{architecture,gates,debt,feature-history}.md` — только точечные правки ссылок по волнам 2–4.
-- `docs/design/ui/STYLE.md`, `docs/testing/**`, архитектуру v2 + схемы, W1/W2/W3, `remove-moe` (INV-1…23), `monolith-split`, активные планы `2026-11-20-web-model-capabilities`, `2026-11-23-research-loop-efficiency`, `2026-11-24-file-rollback`.
+- `docs/design/ui/STYLE.md`, `docs/testing/**`, архитектуру v2 + схемы, W1/W2/W3, `remove-moe` (INV-1…23), `monolith-split`. Из планов оставлены `2026-11-23-research-loop-efficiency` (единственный по-настоящему активный) и этот план; остальные закрытые/поставленные планы удалены 2026-11-25 отдельной веткой.
 - `CHANGELOG.md` — без явной команды.
 - Несохранённые правки пользователя в рабочем дереве.
+
+---
+
+## Дополнительная уборка планов (2026-11-25)
+
+После основной уборки в `docs/plans/` осталось 7 файлов; проверка по коду и CHANGELOG показала, что только один из них активен. Удалены 5:
+
+- `2026-08-12-memory-quality-and-learning` — шапка «закрыт 2026-11-09», Phase B отменена;
+- `2026-10-06-harness-reliability-fixes` — три «осталось» из шапки от 2026-10-20 уже реализованы (`contentHash`, `compactionSummary: "llm"`, `validateWorkdir`);
+- `2026-10-12-harness-module-audit-fixes` — 180 КБ / 350 открытых чекбоксов, перечисленные пункты реализованы; два `DEBT(...)`-якоря из плана продублированы в `src/cli/repl-config-table.ts` и `src/modules/service/server.ts`, поэтому долги не осиротели;
+- `2026-11-20-web-model-capabilities` — фича поставлена (CHANGELOG + `model-capabilities-form.ts`);
+- `2026-11-24-file-rollback` — фича поставлена (CHANGELOG + `src/modules/changes/` + тулы `restore_file`/`list_file_changes`).
+
+Оставлены `2026-11-23-research-loop-efficiency` (нет записи в CHANGELOG, 34 открытых шага) и этот план. Связей с реестром долгов и `TODO.md` у обоих нет: в `debt.md` нет ссылок на планы, в `TODO.md` — только на спеки. Заодно помечен как удалённый хвост `debt.md:81` на план `2026-10-13-split-bloated-files-progress.md`.
