@@ -10,7 +10,8 @@ import { settings } from "../store.js";
 import type { Dict } from "../core/store/types.js";
 import { openConfirm, setIndicator } from "../dialog.js";
 import { loadConfig } from "./write.js";
-import { pfield, providerInput, providerSelect } from "./form.js";
+import { pfield, providerInput } from "./form.js";
+import { providerTypeField } from "./provider-type-field.js";
 import { openSubDialog, closeSubDialog } from "./subdialog.js";
 import {
   providerBaseField,
@@ -144,11 +145,13 @@ function providerForm(): HTMLElement {
   if (presetNode) box.appendChild(presetNode);
 
   const grid = el("div", "pform-grid");
-  const fType = providerSelect(PROVIDER_TYPES, editing.type);
+  const fType = providerTypeField(PROVIDER_TYPES, editing.type);
   const fLabel = providerInput(editing.label, "text", "my-provider");
   const fBase = providerBaseField(editing.baseUrl);
   const fKey = providerInput("", "password", editing.hasApiKey ? t("web.settings.provider_key_keep") : "");
-  grid.appendChild(pfield("web.settings.provider_type", fType));
+  const typeField = pfield("web.settings.provider_type", fType.node);
+  fType.setAttribute("aria-label", t("web.settings.provider_type"));
+  grid.appendChild(typeField);
   grid.appendChild(pfield("web.settings.provider_label_field", fLabel));
   grid.appendChild(pfield("web.settings.provider_baseurl", fBase.node));
   grid.appendChild(pfield("web.settings.provider_apikey", fKey));

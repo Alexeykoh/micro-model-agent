@@ -12,6 +12,7 @@ import { PANEL_SECTIONS } from "./controls.js";
 import { chip, renderSectionsInto, settingsSection } from "./panels.js";
 import { postConfig, loadModels, ensureModelsLoaded } from "./write.js";
 import { capabilityEditButton } from "./model-capabilities-form.js";
+import { providerIcon } from "./provider-icons.js";
 
 export interface ModelPanelDeps {
   /** Provider entries in display order (live config wins over the snapshot). */
@@ -140,7 +141,7 @@ function providersPane(entries: Dict[], activeName: string, sections: Dict[]): H
     const active = name === activeName;
     const item = el("div", "provider-item" + (active ? " active" : ""));
     const itemHead = el("div", "p-head");
-    itemHead.appendChild(el("span", "p-name", name));
+    itemHead.append(providerIcon(entry.type, name), el("span", "p-name", name));
     if (active) itemHead.appendChild(el("span", "badge on", t("web.settings.active")));
     item.appendChild(itemHead);
     const meta = deps.providerMeta(entry);
@@ -272,7 +273,6 @@ export function renderModelPanel(): void {
   };
 
   container.appendChild(activeCard(cfg, entries, activeName, select));
-
   const tabs = el("div", "model-tabs");
   tabs.setAttribute("role", "tablist");
   TABS.forEach(([key, labelKey]) => {

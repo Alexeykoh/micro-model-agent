@@ -758,6 +758,9 @@ body.light .codeblock { border: 1px solid var(--border); }
 body.light .sel > button { border: 1px solid var(--border); }
 .sel > button b { font-weight: 400; color: var(--purple); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .sel > button .svg-icon { width: 13px; height: 13px; color: var(--dim-a); }
+.sel > button .provider-icon { color: var(--fg); }
+.menu .mi > .provider-icon { width: 13px; height: 13px; flex: 0 0 auto; color: var(--dim-a); }
+.menu .mi.on > .provider-icon { color: var(--accent); }
 /* Selector switch pending (boot + provider/model/context/reasoning writes):
    buttons and menus go inert while the mark shows. The mark stays a spinner;
    the old elapsed-time counter was removed in favor of a calmer UI. */
@@ -2283,7 +2286,9 @@ body.light .toggle:not(.on) { background: var(--toggle-off); }
 .provider-list { display: flex; flex-direction: column; }
 .provider-item { padding: 8px 0; border-bottom: 1px solid var(--border-3); }
 .provider-item:last-child { border-bottom: none; }
-.provider-item .p-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.provider-item .p-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.provider-item .p-head > .provider-icon { width: 16px; height: 16px; flex: 0 0 auto; color: var(--dim-a); }
+.provider-item.active .p-head > .provider-icon { color: var(--accent); }
 .provider-item .p-name { color: var(--fg); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .provider-item .badge {
   flex: 0 0 auto; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em;
@@ -2312,6 +2317,30 @@ body.light .toggle:not(.on) { background: var(--toggle-off); }
   background: var(--input-surface); border: 1px solid var(--border-2); border-radius: 4px;
   color: var(--fg); font: inherit; font-size: 12.5px; padding: 6px 8px; width: 100%; min-width: 0;
 }
+/* Provider type: brand icons in the option list (a native <select> cannot show them). */
+.ptype { position: relative; min-width: 0; }
+.ptype-btn {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0;
+  background: var(--input-surface); border: 1px solid var(--border-2); border-radius: 4px;
+  color: var(--fg); font: inherit; font-size: 12.5px; padding: 6px 8px; text-align: left; cursor: pointer;
+}
+.ptype-btn .ptype-val { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ptype-btn .svg-icon { width: 15px; height: 15px; flex: 0 0 auto; color: var(--dim-a); }
+.ptype-btn .provider-icon { color: var(--fg); }
+.ptype-menu {
+  position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0;
+  max-height: 260px; overflow-y: auto; padding: 4px;
+  background: var(--surface); border: 1px solid var(--border-2); border-radius: 6px;
+}
+.ptype-menu[hidden] { display: none; }
+.ptype-opt {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  background: none; border: 0; border-radius: 4px; padding: 6px 8px;
+  color: var(--fg); font: inherit; font-size: 12.5px; text-align: left; cursor: pointer;
+}
+.ptype-opt:hover { background: var(--hover-bg-2); }
+.ptype-opt[aria-selected="true"] { background: var(--accent-bg); color: var(--accent); }
+.ptype-opt .svg-icon { width: 15px; height: 15px; flex: 0 0 auto; }
 /* base-URL field: the free-text input sits under the dropdown when "custom" */
 .pform-base { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 /* preset row sits above the field grid — keep it off the fields */
