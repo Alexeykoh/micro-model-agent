@@ -5,7 +5,7 @@
 формальный HTTP-контракт для внешних систем (боты, бэкенды, cron).
 
 Design spec: [../specs/2026-10-08-agent-service-api-design.md](../specs/2026-10-08-agent-service-api-design.md).
-Реализация: [../plans/2026-10-08-agent-service-api.md](../plans/2026-10-08-agent-service-api.md).
+Реализация: `../plans/2026-10-08-agent-service-api.md` (удалён 2026-11-25).
 
 ## Discovery: спека и страница
 

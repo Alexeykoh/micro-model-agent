@@ -4,7 +4,7 @@
 
 **Источник:** `TODO.md` §1.8, пункты **A1** и **A2**; разбор живой сессии
 `ses_mvqwky8y_cjcjhgbdigannujp`
-([`docs/plans/2026-10-27-agent-errors-session-analysis.md`](../plans/2026-10-27-agent-errors-session-analysis.md)).
+([`docs/plans/2026-10-27-agent-errors-session-analysis.md`](../analysis/2026-10-27-agent-errors-session-analysis.md)).
 
 Два дефекта одного контракта — «что такое запись скоупа субагента»:
 

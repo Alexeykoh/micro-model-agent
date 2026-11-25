@@ -2,8 +2,8 @@
 
 **Status:** Draft (2026-10-02)
 **Ветка:** `refactor/webui-modularize`
-**План:** [2026-10-02-webui-modularization.md](../../../plans/2026-10-02-webui-modularization.md)
-**Связано:** [WebUI Decompose (базовый, 2026-09-26)](../../../plans/2026-09-26-webui-decompose.md),
+**План:** `2026-10-02-webui-modularization.md` (удалён 2026-11-25)
+**Связано:** `WebUI Decompose (базовый, 2026-09-26)` (удалён 2026-11-25),
 [Web Session State](./2026-10-02-web-session-state-design.md),
 [Session-Scope Isolation](./2026-10-02-session-scope-isolation-design.md)
 

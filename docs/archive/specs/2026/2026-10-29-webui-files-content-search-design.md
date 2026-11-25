@@ -1,7 +1,7 @@
 # Поиск по содержимому во вкладке «Файлы»
 
 _Дата: 2026-10-29. Ветка: `fix/stress-register`. Закрывает `C-01` из
-[docs/plans/2026-10-27-mma-web-bug-register.md](../../../plans/2026-10-27-mma-web-bug-register.md)
+[`docs/plans/2026-10-27-mma-web-bug-register.md`](../../reports/2026-10-27-mma-web-bug-register.md)
 (волна 10)._
 
 **Статус:** реализовано.

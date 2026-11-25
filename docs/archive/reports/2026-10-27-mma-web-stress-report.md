@@ -10,7 +10,7 @@
 Предыстория в ветке: вмержен `fix/subagent-model-unavailable-hint` (читаемый хинт
 при `model is unavailable` у субагента) в локальный `master`, пуш отложен.
 
-**Сводный реестр всех находок:** [2026-10-27-mma-web-bug-register.md](./2026-10-27-mma-web-bug-register.md)
+**Сводный реестр всех находок:** [2026-10-27-mma-web-bug-register.md](2026-10-27-mma-web-bug-register.md)
 (100 пунктов: 4 K, 9 V, 52 M, 35 N + список «проверено, работает»).
 
 ## Критично / высоко

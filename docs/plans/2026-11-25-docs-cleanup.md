@@ -56,15 +56,16 @@ DoD каждой волны: `bun test tests/docs-link-check.test.ts` зелён
 - [x] `bun test tests/docs-link-check.test.ts` → 1 pass, 0 fail.
 - [x] Рабочее дерево чистое (кроме самого плана); незакоммиченных правок тулов/тестов больше нет.
 
-### Волна 1. Закрытые планы и снимки — удалить
+### Волна 1. Закрытые планы и снимки — удалить. Выполнено 2026-11-25
 
-- [ ] Удалить ~16 закрытых планов из `docs/plans/`: 11 с шапкой «исполнено 2026-10-20» (`2026-09-23-onboarding-meet-init`, `2026-09-24-webui-file-viewer-and-tab-persistence`, `2026-09-26-webui-decompose`, `2026-09-27-full-config-surfaces`, `2026-10-02-webui-modularization`, `2026-10-04-npm-build-optimization`, `2026-10-04-webui-frontend-ts`, `2026-10-07-web-event-sourced-state`, `2026-10-07-web-tool-images`, `2026-10-08-agent-service-api`, `2026-10-09-readonly-guard-finalize`), плюс `2026-10-07-plugin-draft-quality`, `2026-10-19-corporate-data-policy-plan`, `2026-11-17-web-setup-rework`, `2026-10-13-split-bloated-files-progress`, `2026-10-12-architecture-v2-handoff`.
-- [ ] Убрать входящие ссылки на удалённые планы из `AGENTS.md`, `docs/README.md`, `docs/agents/feature-history.md`, `docs/agents/versioning.md`, `docs/agents/debt.md`.
-- [ ] `2026-10-27-mma-web-stress-report.md` и `2026-10-27-mma-web-bug-register.md` → `docs/archive/reports/` (пока архив ещё есть); три `*-analysis.md` → `docs/analysis/` с переписыванием путей из живой спеки `2026-11-02-subagent-scope-entries-design.md`.
-- [ ] Удалить снимки `settings-inventory-v0_26_0.md` и `ui-controls-behavior-v0_26_0.md` (входящих ссылок нет).
-- [ ] Удалить `docs/specs/0.25.2/*` и пункт о них из `docs/specs/README.md`.
-- [ ] Удалить `docs/superpowers/{plans,specs}/*`.
-- [ ] Удалить `docs/specs/2026-10-23-knowledge-turn-guidance-design.md`; поправить входящие ссылки.
+- [x] Удалены 16 закрытых планов из `docs/plans/` (11 с шапкой «исполнено 2026-10-20», плюс `plugin-draft-quality`, `corporate-data-policy-plan`, `web-setup-rework`, `split-bloated-files-progress`, `architecture-v2-handoff`).
+- [x] Входящие ссылки переписаны в 17 файлах; в `AGENTS.md` и `docs/specs/README.md` пометки «удалён» убраны полностью. Гейт `tests/docs-link-check.test.ts` зелёный.
+- [x] `2026-10-27-mma-web-stress-report.md` и `2026-10-27-mma-web-bug-register.md` → `docs/archive/reports/`; три `*-analysis.md` → `docs/analysis/` с переписыванием путей.
+- [x] Удалены снимки `settings-inventory-v0_26_0.md` и `ui-controls-behavior-v0_26_0.md`.
+- [x] Удалена папка `docs/specs/0.25.2/` и раздел «Папки версий» из `docs/specs/README.md`.
+- [x] Удалены два закрытых файла `docs/superpowers/` (`2026-11-19-settings-ia-gaps-plan`, `2026-11-20-agent-control-precision-design`). **Отклонение от плана:** новые активные файлы `2026-11-25-compact-composer-*` от 2026-11-25 оставлены — они не устарели.
+- [x] Удалён `docs/specs/2026-10-23-knowledge-turn-guidance-design.md`; ссылка в `2026-10-31-live-data-grounding-guidance-design.md` переписана.
+- [x] `bun run quality` зелёный (линтер даёт только уже существующие warnings).
 
 ### Волна 2. Конфликтующие контракты
 

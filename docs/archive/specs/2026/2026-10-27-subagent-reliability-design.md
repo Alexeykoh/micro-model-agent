@@ -3,7 +3,7 @@
 **Дата:** 2026-10-27 · **Ветка:** `fix/subagent-reliability` · **Статус:** принято
 
 **Источник:** разбор живой сессии `ses_mvoac9q9_ukjrorvcgjrkhyrv` — дефекты D1 и D2 в
-[`docs/plans/2026-10-27-subagent-live-session-analysis.md`](../../../plans/2026-10-27-subagent-live-session-analysis.md)
+[`docs/plans/2026-10-27-subagent-live-session-analysis.md`](../../../analysis/2026-10-27-subagent-live-session-analysis.md)
 (лежит в ветке `docs/subagent-session-analysis`; ссылка оживёт после её слияния).
 
 Два независимых контракта, по одному коммиту каждый. Файлы пересекаются только в

@@ -462,7 +462,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 
 ### Onboarding Commands (2.1.0)
 
-Дизайн: [docs/archive/specs/2026/2026-09-23-onboarding-meet-init-design.md](../archive/specs/2026/2026-09-23-onboarding-meet-init-design.md); план: [docs/plans/2026-09-23-onboarding-meet-init.md](./docs/plans/2026-09-23-onboarding-meet-init.md).
+Дизайн: [docs/archive/specs/2026/2026-09-23-onboarding-meet-init-design.md](../archive/specs/2026/2026-09-23-onboarding-meet-init-design.md); план: `docs/plans/2026-09-23-onboarding-meet-init.md` (удалён 2026-11-25).
 
 - **`meet` / «Познакомимся»** (`src/modules/onboarding/meet.ts`, `mode.ts`, `prompts.ts`) — LLM-интервью о профиле использования (домен, имя, язык, стиль ответов, привычки, «не делать без спроса»), пишет **только в глобальную память** (`~/.mma/memory/preferences.json`, `facts.md`) через `remember`. REPL-режим: вход по `[Y/n]` после setup, `/meet` (алиас `/познакомимся`) или `mma meet`; выход — по sentinel-тулу `meet_done`. Домен-нейтрально (разработка, умный дом, ассистент, …), 1–3 вопроса за ход, turn cap, `Esc` — выход без записи.
 - **`agents init`** (`src/modules/onboarding/init.ts`) — LLM генерирует/улучшает `AGENTS.md` для любого workspace (код, доки, заметки, конфиги): скан через project map/read-only тулы, точечные вопросы, запись в `<baseDir>/AGENTS.md`; существующий файл улучшается **in place** с diff и подтверждением.
@@ -474,7 +474,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 
 ### Full Config Surfaces (2.10.0)
 
-Дизайн: [docs/plans/2026-09-27-full-config-surfaces.md](./docs/plans/2026-09-27-full-config-surfaces.md).
+Дизайн: `docs/plans/2026-09-27-full-config-surfaces.md` (удалён 2026-11-25).
 
 - **`/config` — все ключи** (`src/config/registry.ts` + `registry-extra.ts`): ~110 ключей, типы `string/int/share/bool/enum` + новые `json` (объекты, лимит 20K, `JSON.parse`) и `list` (массивы строк, в REPL — через запятую). `registry.ts` grandfathered (>300 строк) — новые дефы только в `registry-extra.ts`, мердж конкатом в `DEFINITIONS`; `allConfigNames()`/`configDefs()` подхватывают их автоматически (комплитер без правок).
 - **`mma config set <key> <value> [--force]`** (`src/cli/commands.ts`): по умолчанию валидация через `setConfigValue` (bad value → `cli.config_invalid`, запись не пишется); `--force` — сырая запись по dotted-пути без валидации (escape hatch для битых конфигов).
@@ -512,7 +512,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Activity rail (над композером, unreleased):** индикатор занятости агента (`js/rail.js`, leaf-модуль, подписан на свои слушатели SSE в `app.js` + `setBusy` в `reflectBusy`): живёт весь `busy`-период (in-feed `.busy` гаснет на первом `text`), без плана — indeterminate-сканер + вспышка на каждое `tool_*`/`text`/`plan`, с планом MoE — честный `done/total` и засечки шагов; фаза (thinking/tool/composing), таймер, счётчики тулов/событий, последний тул (`labelOf` из `format.js`). Раскладки `ui.activityRail` = `off|line`(default)|`meta|full` (меняются live в Settings → Chat output и через `/config`); спека: [docs/archive/specs/2026/2026-09-27-activity-rail-design.md](../archive/specs/2026/2026-09-27-activity-rail-design.md).
 - **Chat motion + sticky autoscroll (unreleased, ветка `fix/web-autoscroll`):** только opacity/transform, 100–200мс, всё гаснет под `prefers-reduced-motion` (существующий kill-switch в `styles.css`). Новое: entrance `rise` строк ленты (`.feed > *`), `▌`-каретка стрима (`.md.streaming::after` + имеющийся `blink`), пульс живых ярлыков (`.busy .lab`, `.think.live .think-h .lab`, `.rail-l1 .lab`, `.act.running .lab` — `live` снимает `finishThink`, `running` снимает `onToolEnd`/`onTurnEnd`, иначе «думаю» выглядит зависшим после хода), `pop` меню/диалогов, hover-переходы, `fade` сворачивания quiet-ран (`fold-out` + 160мс перед `remove`), edge-fades транскрипта (классы `scrolled/unfollowed` из скролл-хука), пилюля «↓ к новому» (`web.scroll.latest`, en+ru). Скролл липкий: флаг `follow` (`feed.js`) — у края пинимся на каждый аппенд, при уходе вверх не дёргаем; форс-пин на отправке/открытии таба/загрузке истории (`scrollToBottom`, экспорт в `tabs.js`); спиннер `showBusy` задержан на 180мс и не вспыхивает поверх стартовавшего стрима.
 - **Связь с `examples/plugins/web-ui`:** плагин остаётся примером, `mma web` — first-class core-режим.
-- **Структура после рефакторинга 2026-09-26:** backend — `body.ts` (`parseJsonBody`/`readJsonBody`, единый парсинг POST), `persist.ts` (`persistAndReconfigure`), `server.ts` — таблица `API_ROUTES` + `API_GROUPS` (правило #17), `host-state.ts` (снапшот/usage/plan), `run-agent.ts` (турн-раннер), `model-cache.ts`, `providers-view.ts` (read-модели); каждый файл ≤300 строк, `maxClients` живёт в `createWebUiState()`. Фронтенд — ES-модули `assets/js/` (с 2.17.1 на TS): `app.ts` (~240: boot/SSE/renderState) + `dom`/`api`/`i18n`/`store`/`format`/`feed`/`tabs`/`settings`/`dialog`; сервер отдаёт `/js/*` (`jsModules`, live-reload как остальная статика). DAG ацикличен: app → settings → tabs → {feed, dialog}; связь локали — хук `hooks.applyStaticI18n`. Дедуп: `planStepMark`, `makeToggle` (dom), `trapTab` (dialog), очередь тостов в `setIndicator`, `web.command.*` i18n для `/help`+`/api/commands`. План: [docs/plans/2026-09-26-webui-decompose.md](./docs/plans/2026-09-26-webui-decompose.md).
+- **Структура после рефакторинга 2026-09-26:** backend — `body.ts` (`parseJsonBody`/`readJsonBody`, единый парсинг POST), `persist.ts` (`persistAndReconfigure`), `server.ts` — таблица `API_ROUTES` + `API_GROUPS` (правило #17), `host-state.ts` (снапшот/usage/plan), `run-agent.ts` (турн-раннер), `model-cache.ts`, `providers-view.ts` (read-модели); каждый файл ≤300 строк, `maxClients` живёт в `createWebUiState()`. Фронтенд — ES-модули `assets/js/` (с 2.17.1 на TS): `app.ts` (~240: boot/SSE/renderState) + `dom`/`api`/`i18n`/`store`/`format`/`feed`/`tabs`/`settings`/`dialog`; сервер отдаёт `/js/*` (`jsModules`, live-reload как остальная статика). DAG ацикличен: app → settings → tabs → {feed, dialog}; связь локали — хук `hooks.applyStaticI18n`. Дедуп: `planStepMark`, `makeToggle` (dom), `trapTab` (dialog), очередь тостов в `setIndicator`, `web.command.*` i18n для `/help`+`/api/commands`. План: `docs/plans/2026-09-26-webui-decompose.md` (удалён 2026-11-25).
 - **E2E-покрытие фич** (`tests/e2e/`, `bun run test:e2e`, только по явной команде): `web-helpers.ts` + `web-commands`/`web-chat-tabs`/`web-settings` — все 13 slash-команд, чат (успех и чистая ошибка без LLM), табы/сессии/confirm, аттачи, file viewer, 11 панелей, тема, локаль, память, MCP; файлы гоняются последовательно (`maxWorkers: 1` в `vitest.e2e.config.ts`). Найденный там баг: web `/config locale` теперь применяет `setLocale` (`commands-shared.ts`, как REST).
 
 ### Web First-Run Setup (2.6.0)
@@ -709,7 +709,7 @@ retry-петля после блоков (перебор python/python3/bun/pip)
 
 ### WebUI Modularization (unreleased, phases 5–6)
 
-План: [docs/plans/2026-10-02-webui-modularization.md](./docs/plans/2026-10-02-webui-modularization.md);
+План: `docs/plans/2026-10-02-webui-modularization.md` (удалён 2026-11-25);
 спека: [docs/archive/specs/2026/2026-10-02-webui-modularization-design.md](../archive/specs/2026/2026-10-02-webui-modularization-design.md).
 Внутренний рефакторинг, контракты (SSE/REST/сессии/конфиг/plugin API) не менялись.
 
@@ -739,7 +739,7 @@ retry-петля после блоков (перебор python/python3/bun/pip)
 ### WebUI Frontend TypeScript Migration (2.17.1)
 
 Спека: [docs/archive/specs/2026/2026-10-04-webui-frontend-ts-design.md](../archive/specs/2026/2026-10-04-webui-frontend-ts-design.md);
-план: [docs/plans/2026-10-04-webui-frontend-ts.md](./docs/plans/2026-10-04-webui-frontend-ts.md).
+план: `docs/plans/2026-10-04-webui-frontend-ts.md` (удалён 2026-11-25).
 Весь наш браузерный фронтенд переведён на TypeScript со `strict: true`; контракты
 (URL/имена файлов, REST/SSE/сессии/конфиг) не менялись.
 
@@ -763,7 +763,7 @@ retry-петля после блоков (перебор python/python3/bun/pip)
 ### npm Build Optimization (2.17.1)
 
 Спека: [docs/archive/specs/2026/2026-10-04-npm-build-optimization-design.md](../archive/specs/2026/2026-10-04-npm-build-optimization-design.md);
-план: [docs/plans/2026-10-04-npm-build-optimization.md](./docs/plans/2026-10-04-npm-build-optimization.md).
+план: `docs/plans/2026-10-04-npm-build-optimization.md` (удалён 2026-11-25).
 Прод-пакет **8.17 MB → 1.73 MB**, `main.js` **7.68 MB → 1.11 MB**. Контракты не менялись.
 
 - **Внешние зависимости:** `build:bundle` = `bun build … --packages external`.
@@ -985,7 +985,7 @@ read-only петля без стопа, рассинхрон провайдер�
 ### Web Tool Images (2.28.0)
 
 Спека: [docs/archive/specs/2026/2026-10-07-web-tool-images-design.md](../archive/specs/2026/2026-10-07-web-tool-images-design.md);
-план: [docs/plans/2026-10-07-web-tool-images.md](./docs/plans/2026-10-07-web-tool-images.md).
+план: `docs/plans/2026-10-07-web-tool-images.md` (удалён 2026-11-25).
 Показ реальных изображений тулов (`browser` screenshot, `attach_image`) в ленте `mma web`
 вместо статичной заглушки, которая никогда не заполнялась.
 
@@ -1021,7 +1021,7 @@ read-only петля без стопа, рассинхрон провайдер�
 ### Event-Sourced Web State (2.24.0)
 
 Спека: [docs/archive/specs/2026/2026-10-07-web-event-sourced-state-design.md](../archive/specs/2026/2026-10-07-web-event-sourced-state-design.md);
-план: [docs/plans/2026-10-07-web-event-sourced-state.md](./docs/plans/2026-10-07-web-event-sourced-state.md).
+план: `docs/plans/2026-10-07-web-event-sourced-state.md` (удалён 2026-11-25).
 Убран двойной контур синхронизации сайдбара (SSE-счётчики + 2с-полл `/api/state`).
 
 - **Снапшот в событии** (`src/modules/webui/session/session-status.ts`): `pushState(s, sessionId?)`
@@ -1226,7 +1226,7 @@ read-only петля без стопа, рассинхрон провайдер�
 ### Plugin Draft Quality (2.29.1)
 
 Спека: [docs/archive/specs/2026/2026-10-07-plugin-draft-quality-design.md](../archive/specs/2026/2026-10-07-plugin-draft-quality-design.md);
-план: [docs/plans/2026-10-07-plugin-draft-quality.md](./docs/plans/2026-10-07-plugin-draft-quality.md).
+план: `docs/plans/2026-10-07-plugin-draft-quality.md` (удалён 2026-11-25).
 Черновики `define_capability` (код, который пишет малая модель) теперь проходят
 quality-gate и выглядят аккуратно.
 
@@ -1440,7 +1440,7 @@ quality-gate и выглядят аккуратно.
 Долгоживущий HTTP-сервис `mma serve` (`src/modules/service/`) — публичный
 версионируемый контракт для внешних систем поверх ядра. Не трогает петлю/REPL/
 `mma web`. Спека: [docs/specs/2026-10-08-agent-service-api-design.md](./docs/specs/2026-10-08-agent-service-api-design.md);
-план: [docs/plans/2026-10-08-agent-service-api.md](./docs/plans/2026-10-08-agent-service-api.md);
+план: `docs/plans/2026-10-08-agent-service-api.md` (удалён 2026-11-25);
 reference: [docs/agents/service-api.md](./docs/agents/service-api.md);
 user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mode (`mma serve`)»).
 
@@ -1642,7 +1642,7 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
 Разбор сессии `ses_mv0pirf5_hnmbxj` (`qwen3.8-9b-distill`, `mma web`): чисто read-only
 аналитическая задача была убита стражем на 24-й итерации, когда модель уже собиралась
 ответить. Спека: [docs/archive/specs/2026/2026-10-09-readonly-guard-finalize-design.md](../archive/specs/2026/2026-10-09-readonly-guard-finalize-design.md);
-план: [docs/plans/2026-10-09-readonly-guard-finalize.md](./docs/plans/2026-10-09-readonly-guard-finalize.md).
+план: `docs/plans/2026-10-09-readonly-guard-finalize.md` (удалён 2026-11-25).
 
 - **Прогресс = новое действие, а не мутация** (`src/core/agent/tool-batch.ts`): батч
   непрогрессивен, только если каждый вызов дословно повторяет уже сделанный за ход.
