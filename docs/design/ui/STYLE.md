@@ -131,8 +131,10 @@ error:    ✗ <what> — <short cause>
 Chat status lines keep the dim `·` separator. The compact web composer selector
 row is the deliberate exception: it uses `/` because it is shorter and does not
 collide with Windows paths (`\`) in the footer row. Icon roles stay unchanged —
-Lucide marks are chrome only (brand provider mark, `ruler` context, `brain`
-reasoning, `eye`/`wrench` capabilities); `◇`, `✦` and `·` remain textual.
+the provider brand mark remains its inlined brand SVG (`providerIcon`, not Lucide);
+Lucide chrome icons are `ruler` (context), `brain` (reasoning) and `eye`/`wrench`
+(capabilities). `◇`, `✦` and `·` remain textual. This is an explicit GUI exception
+to the guide's REPL scope.
 
 ## Localization
 
