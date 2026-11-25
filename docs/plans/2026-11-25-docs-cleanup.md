@@ -92,7 +92,7 @@ DoD каждой волны: `bun test tests/docs-link-check.test.ts` зелён
 - [x] Обновлены `docs/README.md` (убраны строки архива, правило «файл не удаляется», раздел «Архив»), `docs/specs/README.md`, `CONTRIBUTING.md`, `TODO.md`.
 - [x] Комментарий `tests/docs-link-check.test.ts` переписан под удаление; проверка текстовых путей `docs/(specs|plans)/**` и `.ts`-путей живых описаний сохранена.
 - [x] `git rm -r docs/archive/` — 139 файлов, включая `archive/README.md`.
-- [x] `bun test tests/docs-link-check.test.ts` зелёный после удаления; `bun test` — 7251 pass / 18 skip / 1 fail; `bun run quality` — 218 pass / 1 fail. Единственное падение — **`tests/arch/debt-register.test.ts`**: запись `answer-truncated-on-audit-fail` в `debt.md` не имеет `DEBT(id)`-якоря в коде. Проверено на `dev`: запись и отсутствие якоря там же, то есть падение **предшествует этой ветке** и правками документации не вызвано. В этой волне не чинится (нужна отдельная правка кода или решение по долгу).
+- [x] `bun test tests/docs-link-check.test.ts` зелёный после удаления; `bun test` — 7251 pass / 18 skip / 1 fail; `bun run quality` — 218 pass / 1 fail. Единственное падение — **`tests/arch/debt-register.test.ts`**: запись `answer-truncated-on-audit-fail` в `debt.md` не имела якоря-пометки в коде. Проверено на `dev`: запись и отсутствие якоря там же, то есть падение предшествует этой ветке. Исправлено отдельным коммитом: `DEBT(answer-truncated-on-audit-fail)` добавлен в `src/core/agent/loop-state.ts` рядом с `lastFinishReason`.
 - [x] `CHANGELOG.md` не тронут: 31 упоминание в backticks гейт не ломает; правка требует отдельной явной команды.
 
 ### Волна 5 (отдельная задача)
