@@ -176,6 +176,8 @@ export interface SessionLogEntry {
   recoverable?: boolean;
   /** `audit`: пометка тест-прогона — скип/inconclusive/кэш (INV-15). */
   tests?: string;
+  /** `audit`: статус проектного typecheck — ok/error/inconclusive с причиной и duration (INV-15). */
+  typecheck?: { status: "ok" | "error" | "inconclusive"; reason?: string; durationMs: number };
   // Поля reasoning_control; `level` — заодно severity персистентных output-событий
   level?: string;
   strategy?: string;

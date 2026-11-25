@@ -115,11 +115,16 @@ finish within 90s — result unknown, not a pass"` и `durationMs`. Тот же 
   (читатели не ломаются, `webui`-маппинг его игнорирует).
 - Видимых строк в чат не добавлено — i18n не требуется (STYLE: quiet by default).
 
-## 7. Что осталось (новый долг)
+## 7. Typecheck: оплачено 2026-11-24
 
-`tsc --noEmit` всё ещё возвращает `string | null`: таймаут и «ошибок нет»
-неразличимы, проверка может стоить до 90 с. Оплата — `DEBT(audit-typecheck-inconclusive)`
-в `audit-runners.ts` (тип результата вместо `string|null`, пометка в `audit`-записи).
+`runTypecheck()` возвращает `TypecheckResult` (`status: "ok" | "error" |
+"inconclusive"`, `error`/`reason`, `durationMs`) вместо `string | null`. Таймаут,
+отсутствие tsc и сбой раннера дают `inconclusive` с причиной и не блокируют ход;
+только `error` (`error TS…`) делает вердикт провальным. `AuditResult.typecheck`
+пробрасывается через `FinalAuditResult` в `AuditGate` и пишется в `session.jsonl`
+в `audit`-записи полем `typecheck: { status, reason?, durationMs }` — аддитивно
+к `tests`/`content`, читатели не ломаются. Гвард:
+`tests/modules/execution/audit-typecheck.test.ts`. Якорь долга снят.
 
 ## 8. Гварды
 

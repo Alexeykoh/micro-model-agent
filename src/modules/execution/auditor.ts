@@ -3,7 +3,7 @@ import { t } from "../../i18n/index";
 import type { Plan } from "./planner";
 import { extractFileLikeTokens, stripUrls } from "../../core/hallucination/js-identifiers";
 import { findTypecheckRoot, runTypecheck } from "./audit-runners";
-import type { TestRunCheck } from "./audit-runners";
+import type { TestRunCheck, TypecheckResult } from "./audit-runners";
 import { resolveTestRun, testRunNote } from "./audit-test-run";
 import { findExistingFile } from "./file-resolve";
 
@@ -68,6 +68,8 @@ export interface AuditResult {
   testNote: string | null;
   /** Первая строка `error TS…` из реального `tsc --noEmit`, или null. */
   typecheckError: string | null;
+  /** Статус проверки (ok/error/inconclusive) с причиной и длительностью. */
+  typecheck: TypecheckResult | null;
 }
 
 /** Аудитор: проверяет done-шаги плана — файлы, тесты, typecheck. */
@@ -145,17 +147,23 @@ export class Auditor {
     // baseDir или резолвленных файлов шагов И файловые проверки уже прошли —
     // обречённому на missing/leftover аудиту 90s tsc-спавн не платим.
     // Inconclusive-результаты не блокируют.
-    let typecheckError: string | null = null;
+    let typecheck: TypecheckResult | null = null;
     if (missingFiles.length === 0 && leftoverFiles.length === 0) {
       const root = findTypecheckRoot(this.baseDir, existingFiles);
       if (root) {
         try {
-          typecheckError = await runTypecheck(root);
-        } catch {
-          typecheckError = null;
+          typecheck = await runTypecheck(root);
+        } catch (e) {
+          // Сбой раннера — тоже inconclusive, а не «проверка прошла».
+          typecheck = {
+            status: "inconclusive",
+            reason: `typecheck runner failed: ${e instanceof Error ? e.message : String(e)}`,
+            durationMs: 0,
+          };
         }
       }
     }
+    const typecheckError = typecheck?.status === "error" ? (typecheck.error ?? null) : null;
 
     const doneSteps = plan.steps.filter((s) => s.status === "done").length;
     // done + skipped — оба осознанные терминальные состояния: `done` заявляет
@@ -179,7 +187,7 @@ export class Auditor {
     // Блокирует только реальный фейл: `inconclusive` и `skipped` — не фейл,
     // завершение на них по-прежнему не блокируется (но видно в `testNote`).
     const testsFailing = testRun !== null && testRun.status === "failed";
-    const typecheckFailing = typecheckError !== null;
+    const typecheckFailing = typecheck?.status === "error";
     const passed =
       missingFiles.length === 0 && leftoverFiles.length === 0 && !testsFailing && !typecheckFailing;
     // Сводка "Task complete ✓" для незаконченного плана — ложь, которую модель
@@ -240,6 +248,7 @@ export class Auditor {
       testRun,
       testNote,
       typecheckError,
+      typecheck,
     };
   }
 }

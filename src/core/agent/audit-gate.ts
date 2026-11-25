@@ -20,6 +20,12 @@ export interface FinalAuditResult {
   summary: string;
   /** Пометка тестового прогона (скип/inconclusive/кэш) для `session.jsonl`. */
   testNote?: string | null;
+  /** Статус проектного typecheck с причиной и длительностью (INV-15). */
+  typecheck?: {
+    status: "ok" | "error" | "inconclusive";
+    reason?: string;
+    durationMs: number;
+  } | null;
 }
 
 /** Вердикт аудита: принять ответ, переспросить или завершить неуспехом. */
@@ -82,7 +88,13 @@ export class AuditGate {
       // INV-15: скип/кэш/неокончательный тест-прогон обязаны быть видны в
       // журнале даже при вердикте «принят» (спека 2026-10-30).
       if (audit?.testNote) {
-        deps.slog.logAudit(audit.summary, deps.iteration, durationMs, audit.testNote);
+        deps.slog.logAudit(
+          audit.summary,
+          deps.iteration,
+          durationMs,
+          audit.testNote,
+          audit.typecheck ?? undefined,
+        );
       }
       return { action: "pass" };
     }
@@ -99,7 +111,13 @@ export class AuditGate {
         steps,
       })}</system-summary>`,
     });
-    deps.slog.logAudit(audit.summary, deps.iteration, durationMs, audit.testNote ?? undefined);
+    deps.slog.logAudit(
+      audit.summary,
+      deps.iteration,
+      durationMs,
+      audit.testNote ?? undefined,
+      audit.typecheck ?? undefined,
+    );
 
     state.auditRetries++;
     state.lastAuditSummary = audit.summary;
