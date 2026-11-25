@@ -1,7 +1,7 @@
 # Живые данные — не «общие знания»
 
 _Дата: 2026-10-31. Ветка: `fix/weather-grounding-guidance`. Уточняет
-[`2026-10-23-knowledge-turn-guidance-design.md`](./2026-10-23-knowledge-turn-guidance-design.md)._
+``2026-10-23-knowledge-turn-guidance-design.md`` (удалён 2026-11-25)._
 
 ## Что случилось (наблюдение)
 

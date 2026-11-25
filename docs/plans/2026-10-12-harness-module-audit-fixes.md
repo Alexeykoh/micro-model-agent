@@ -1,7 +1,7 @@
 # Harness Module Audit — Implementation Plan
 
 > **Статус:** исполнено частично (сверка 2026-10-20). Волны W1–W4 из
-> [architecture-v2-handoff](./2026-10-12-architecture-v2-handoff.md) закрыли часть находок
+> `architecture-v2-handoff` (удалён 2026-11-25) закрыли часть находок
 > другими механизмами; сам план в `master` не слит. **Открытые пункты** (проверено по коду):
 >
 > - **W0.2** — метрика прогресса хода (`novelToolKeys`/`totalBatches`/`progress` в `llm_usage`).

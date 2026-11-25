@@ -4,7 +4,7 @@
 адаптер `gen_ai.*` + OTLP-экспорт + метрики; W5/W6-сигналы и
 faithfulness-судья — 2/2).
 Источник: `TODO.md §3 P0 Observability`,
-[`2026-09-28-production-readiness`](../archive/specs/2026/2026-09-28-production-readiness-design.md) §5.
+``2026-09-28-production-readiness`` (удалено вместе с архивом 2026-11-25) §5.
 
 ## Что неправильно
 

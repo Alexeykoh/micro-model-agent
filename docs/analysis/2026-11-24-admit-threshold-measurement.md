@@ -2,7 +2,7 @@
 
 **Дата:** 2026-11-24 · **Ветка:** `fix/admit-threshold-unmeasured`
 **Закрывает:** открытый вопрос §11 в
-[спеке out-of-context corpus](../archive/specs/2026/2026-10-14-out-of-context-corpus-design.md)
+`спеке out-of-context corpus` (удалено вместе с архивом 2026-11-25)
 и долг `admit-threshold-unmeasured`.
 
 ## Метод

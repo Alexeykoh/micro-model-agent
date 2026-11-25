@@ -457,7 +457,7 @@ docs/
 
 ```bash
 bun test                              # Unit + component tests
-bun test tests/agent.test.ts          # A single file
+bun test tests/core/agent.test.ts          # A single file
 bun run test:integration              # Integration tests (need an LLM backend)
 bun run typecheck                     # Type check
 ```

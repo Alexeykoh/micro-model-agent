@@ -112,7 +112,7 @@ Existing entries are read from `<memoryDir>/<category>.md` lines starting with `
 
 > Удалена из очереди решением пользователя; задачи ниже — исторические, не выполняются.
 
-> **Spec:** `docs/archive/specs/2026/2026-08-11-self-learning-design.md` (Phase 2 — gated error learning — design-only, NOT implemented).
+> **Spec:** `docs/archive/specs/2026/2026-08-11-self-learning-design.md (удалён 2026-11-25)` (Phase 2 — gated error learning — design-only, NOT implemented).
 
 ### Task 7: Learning types + TraceReader
 

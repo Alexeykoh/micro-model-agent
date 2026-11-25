@@ -3,7 +3,7 @@
 **Date:** 2026-11-17
 **Branch:** `feat/web-setup-rework`
 **Status:** Approved (implementation)
-**Related:** [`2026-09-25-web-first-run-design.md`](../archive/specs/2026/2026-09-25-web-first-run-design.md),
+**Related:** ``2026-09-25-web-first-run-design.md`` (удалено вместе с архивом 2026-11-25),
 [`2026-10-30-webui-theme-persistence-design.md`](./2026-10-30-webui-theme-persistence-design.md),
 [`2026-10-31-webui-sounds-design.md`](./2026-10-31-webui-sounds-design.md)
 

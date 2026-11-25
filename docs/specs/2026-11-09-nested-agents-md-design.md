@@ -2,7 +2,7 @@
 
 ## Проблема
 
-Отчёт `docs/archive/reports/web-agent-test-report-2026-11-02.md`:
+Отчёт `docs/archive/reports/web-agent-test-report-2026-11-02.md (удалён 2026-11-25)`:
 
 - **F-01.** Вложенный `AGENTS.md` (Next 16) не читается: `agentsMdPaths()` в
   `src/core/bootstrap/state.ts` ищет только корень `baseDir`, проектный `.mma`

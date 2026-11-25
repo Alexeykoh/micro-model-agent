@@ -4,7 +4,7 @@
 скоркард + trajectory-чекер + eval-gate в CI; ensemble-судья + staged
 rollout — 2/2).
 Источник: `TODO.md §3 P0 Evals в контуре`,
-[`2026-09-28-production-readiness`](../archive/specs/2026/2026-09-28-production-readiness-design.md) §6.
+``2026-09-28-production-readiness`` (удалено вместе с архивом 2026-11-25) §6.
 
 ## Что неправильно
 

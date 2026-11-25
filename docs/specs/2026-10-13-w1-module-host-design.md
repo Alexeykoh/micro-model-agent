@@ -3,7 +3,7 @@
 **Дата:** 2026-10-13 · **Ветка:** `docs/w1-module-host-spec` (в рамках architecture v2)
 **Статус:** ✅ реализовано (W1.1–W1.6; решения §4 подтверждены в handoff §5)
 **Нормативная база:** [architecture v2](./2026-10-12-architecture-v2-design.md) §3.3
-(`ModuleHost`), INV-1/2/5/7/8/16 · [handoff](../plans/2026-10-12-architecture-v2-handoff.md) §4–5
+(`ModuleHost`), INV-1/2/5/7/8/16 · `handoff` (удалён 2026-11-25) §4–5
 
 **Причина.** Сегодня у модуля **нет контракта с ядром** — есть `AgentModule`
 (`src/modules/types.ts`: `name` + три геттера) и россыпь ad-hoc швов:
