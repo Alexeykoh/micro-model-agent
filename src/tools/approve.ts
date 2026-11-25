@@ -64,8 +64,16 @@ export const approveTool: ToolDefinition = {
       : await askChoice(question, options);
     if (indexes[0] !== 0) return { success: false, output: t("tool.rejected") };
     if (!rawPath) return { success: true, output: t("tool.approved") };
+    // Без ApprovalStore нечем минтить одноразовое разрешение: «одобрено» было бы ложью.
+    if (!ctx.approvals) {
+      return {
+        success: false,
+        output: t("tool.approve_no_store"),
+        errorMeta: { code: "approval_store_unavailable", retryable: false },
+      };
+    }
     // Абсолютный путь — тот же, что увидит enforcement (safeResolvePath).
-    ctx.approvals?.grant(safeResolvePath(ctx.baseDir, rawPath), action);
+    ctx.approvals.grant(safeResolvePath(ctx.baseDir, rawPath), action);
     return { success: true, output: t("tool.approved_path", { path: rawPath }) };
   },
 };
