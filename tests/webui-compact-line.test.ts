@@ -34,6 +34,9 @@ describe("compact composer markup", () => {
     for (const id of ["selProviderMenu", "selModelMenu", "selContextMenu", "selReasoningMenu"]) {
       expect(HTML).toContain(`id="${id}"`);
     }
+    // The chip must live inside model .sel: a hidden chip as the separator's
+    // immediate sibling would hide the `/` while capabilities are unknown.
+    expect(HTML).toMatch(/id="capsChip"[^<]*<\/span>\s*<\/div>\s*<span class="selector-sep"/);
   });
 
   it("drops chip surfaces and keeps the phone one-row rule", () => {
