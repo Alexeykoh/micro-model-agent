@@ -20,7 +20,7 @@ describe("webSearchTool", () => {
     expect(result.output).toContain("disabled");
   });
 
-  it("allows calls when the master switch is absent (default on)", async () => {
+  it("reports unparsed results when the master switch is absent (default on)", async () => {
     const origFetch = globalThis.fetch;
     globalThis.fetch = (async () => ({
       ok: true,
@@ -31,7 +31,9 @@ describe("webSearchTool", () => {
     try {
       const ctx: any = { config: {}, sessionContext: undefined };
       const result = await webSearchTool.handler(ctx, { query: "test" });
-      expect(result.success).toBe(true); // empty HTML → no results, still a successful call
+      // Пустая выдача — не успех: INV-15 / observability §2.5.
+      expect(result.success).toBe(false);
+      expect(result.errorMeta?.code).toBe("search_unparsed");
     } finally {
       globalThis.fetch = origFetch;
     }

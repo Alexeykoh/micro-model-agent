@@ -362,7 +362,9 @@ W0–W4 и часть W1/W2 смержены в `dev`. Остаток зарег
 [debt.md](../agents/debt.md):
 
 - **DEBT(observability-w5-w6)** — сигналы W5 и W6 из §4.
-- **DEBT(observability-false-success)** — пять поведенческих фиксов из §2.5.
+- **observability-false-success** — оплачен 2026-11-24: все пять исходов §2.5
+  (`process_kill` ранее, остальные четыре — `fix/observability-false-success`),
+  гвард `tests/tools/false-success.test.ts`.
 - §3.6/§5.4 (`health()` у шести модулей и гейт `tests/arch/health-coverage.test.ts`) —
   оплачено 2026-11-09 веткой `fix/observability-health-coverage`.
 

@@ -234,7 +234,11 @@ export const webSearchTool: ToolDefinition = {
       };
     }
     if (outcome.results.length === 0) {
-      return { success: true, output: t("tool.no_results", { query }) };
+      return {
+        success: false,
+        output: t("tool.no_results", { query }),
+        errorMeta: { code: "search_unparsed", retryable: false },
+      };
     }
     // Картинки выдачи (webSearch.images): скачиваем серверно и отдаём в
     // пайплайн ToolResult.imageFiles — модель получает только текст, веб
