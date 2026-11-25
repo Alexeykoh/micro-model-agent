@@ -241,4 +241,12 @@ export const ICONS: Record<string, IconSpec> = {
     ["path",{d:"m14 10 7-7"}], ["path",{d:"M20 4h-6v6"}],
     ["path",{d:"m3 21 7-7"}], ["path",{d:"M4 20h6v-6"}],
   ],
+  // Compact composer: context window size.
+  ruler: [
+    ["path", { d: "M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.4 8.4a2.4 2.4 0 0 1 0-3.4l2.6-2.6a2.4 2.4 0 0 1 3.4 0z" }],
+    ["path", { d: "m14.5 5.5 4 4" }],
+    ["path", { d: "m11.5 8.5 4 4" }],
+    ["path", { d: "m8.5 11.5 4 4" }],
+    ["path", { d: "m5.5 14.5 4 4" }],
+  ],
 };

@@ -13,6 +13,13 @@ import { setIndicator } from "../dialog.js";
 import { requestModelsRefresh } from "./models-load.js";
 import { reasoningStatus } from "./reasoning-status.js";
 import { renderCapsChip } from "./caps-chip-render.js";
+import { renderProviderSelector } from "./provider-selector.js";
+import {
+  setCompactLabel,
+  syncSelectorSeparators,
+  installModelFit,
+  leadingIcon,
+} from "./selector-line.js";
 import {
   postConfig,
   loadModels,
@@ -20,17 +27,6 @@ import {
   setSelectorRenderer,
   openSettingsPanel,
 } from "./write.js";
-
-function setSelButton(btn: HTMLElement | null, label: string, value: string): void {
-  if (!btn) return;
-  btn.textContent = label + ":";
-  btn.appendChild(el("b", "", value));
-  btn.appendChild(icon("chevron-down"));
-  // U19: on a phone the text prefix is hidden (one-row chips), so the full
-  // "label: value" must live somewhere: title + accessible name.
-  btn.title = label + ": " + value;
-  btn.setAttribute("aria-label", btn.title);
-}
 
 function menuItem(label: string, sub: string, active: boolean, onClick: () => void): HTMLButtonElement {
   const mi = el("button", "mi" + (active ? " on" : ""));
@@ -69,7 +65,7 @@ export function renderSelectors(): void {
   const cfg: Dict = settings.config || {};
   const provider: Dict = cfg.provider || {};
 
-  setSelButton(document.getElementById("selModelBtn"), t("web.selectors.model"), cfg.model || "—");
+  setCompactLabel(document.getElementById("selModelBtn"), t("web.selectors.model"), cfg.model || "—");
   const modelMenu = document.getElementById("selModelMenu") as HTMLElement;
   modelMenu.textContent = "";
   // Search row stays outside the filtered list: `drawModelList` only touches
@@ -148,17 +144,12 @@ export function renderSelectors(): void {
     }),
   );
 
-  setSelButton(document.getElementById("selProviderBtn"), t("web.selectors.provider"), provider.active || provider.type || "—");
-  const provMenu = document.getElementById("selProviderMenu") as HTMLElement;
-  provMenu.textContent = "";
-  const entries = Array.isArray(provider.entries) && provider.entries.length
-    ? provider.entries
-    : [{ label: provider.active || provider.type, type: provider.type }];
-  entries.forEach((entry: Dict) => {
-    const name = entry.label || entry.type;
-    if (!name) return;
-    provMenu.appendChild(menuItem(name, entry.type || "", name === (provider.active || provider.type), () => void postConfig("provider.active", name, true)));
-  });
+  renderProviderSelector(
+    document.getElementById("selProviderBtn"),
+    document.getElementById("selProviderMenu"),
+    provider,
+    (name) => void postConfig("provider.active", name, true),
+  );
 
   // auto — первый пункт: окно берётся у провайдера для активной модели
   // (`POST /api/config {contextAuto:true}` пробует бэкенд сразу). Пока auto
@@ -166,10 +157,11 @@ export function renderSelectors(): void {
   // горели бы два активных пункта. Boot (config === null): режим ещё не
   // известен — кнопка честно показывает «—», пункт auto неактивен.
   const auto = !!settings.config && cfg.contextAuto !== false;
-  setSelButton(
+  setCompactLabel(
     document.getElementById("selContextBtn"),
     t("web.selectors.context"),
     auto ? t("web.selectors.auto") : contextLabel(),
+    leadingIcon("ruler"),
   );
   const ctxMenu = document.getElementById("selContextMenu") as HTMLElement;
   ctxMenu.textContent = "";
@@ -234,6 +226,10 @@ export function renderSelectors(): void {
   renderReasoningSelector();
   renderCapsChip();
 
+  const selectorsRow = document.querySelector<HTMLElement>(".selectors");
+  if (selectorsRow) syncSelectorSeparators(selectorsRow);
+  installModelFit();
+
   // Keep the pending paint in sync: boot (config === null) and an in-flight
   // switch both show the mark; a mid-switch re-read must not clear it.
   paintSelectorPending();
@@ -256,7 +252,7 @@ function renderReasoningSelector(): void {
   }
   wrap.hidden = false;
   const mode = (settings.config && getPath(settings.config, "reasoning.mode")) || info.mode || "auto";
-  setSelButton(btn, t("web.selectors.reasoning"), String(mode));
+  setCompactLabel(btn, t("web.selectors.reasoning"), String(mode), leadingIcon("brain"));
   menu.textContent = "";
   const status = reasoningStatus(info);
   if (status.noteKey) {
