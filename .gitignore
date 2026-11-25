@@ -21,3 +21,12 @@ tmp/
 # Local agent scratch space (plans, notes) — not shared project config.
 .opencode/plans/
 release-manifest.json
+
+# Local diagnostics / command-output dumps.
+.diagnostics/
+/*-help.txt
+/*-cfgpath.txt
+/*-config.txt
+/*-full.txt
+/dbg-*.txt
+/final-check.txt
