@@ -13,6 +13,7 @@ import { setIndicator } from "../dialog.js";
 import { requestModelsRefresh } from "./models-load.js";
 import { reasoningStatus } from "./reasoning-status.js";
 import { renderCapsChip } from "./caps-chip-render.js";
+import { renderProviderSelector } from "./provider-selector.js";
 import {
   postConfig,
   loadModels,
@@ -148,17 +149,12 @@ export function renderSelectors(): void {
     }),
   );
 
-  setSelButton(document.getElementById("selProviderBtn"), t("web.selectors.provider"), provider.active || provider.type || "—");
-  const provMenu = document.getElementById("selProviderMenu") as HTMLElement;
-  provMenu.textContent = "";
-  const entries = Array.isArray(provider.entries) && provider.entries.length
-    ? provider.entries
-    : [{ label: provider.active || provider.type, type: provider.type }];
-  entries.forEach((entry: Dict) => {
-    const name = entry.label || entry.type;
-    if (!name) return;
-    provMenu.appendChild(menuItem(name, entry.type || "", name === (provider.active || provider.type), () => void postConfig("provider.active", name, true)));
-  });
+  renderProviderSelector(
+    document.getElementById("selProviderBtn"),
+    document.getElementById("selProviderMenu"),
+    provider,
+    (name) => void postConfig("provider.active", name, true),
+  );
 
   // auto — первый пункт: окно берётся у провайдера для активной модели
   // (`POST /api/config {contextAuto:true}` пробует бэкенд сразу). Пока auto

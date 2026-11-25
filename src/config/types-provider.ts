@@ -64,7 +64,7 @@ export interface ModelCapabilities {
 
 /** Одна настроенная запись провайдера (из возможных многих). */
 export interface ProviderEntry {
-  /** Тип из реестра: "openai-compat" | "openrouter" | "openai" | "opencode-zen" | ... */
+  /** Тип из реестра: "openai-compat" | "lmstudio" | "llamacpp" | "openrouter" | "openai" | "opencode-zen" | ... */
   type: string;
   /** Имя для пользователя (пустое = тип). */
   label?: string;
