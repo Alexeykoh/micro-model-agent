@@ -126,6 +126,14 @@ error:    ✗ <what> — <short cause>
 - **action** — glyph and label share the category color; the separator and arguments
   are dim. Meta (`✓`, duration) closes the line.
 
+### Web composer exception
+
+Chat status lines keep the dim `·` separator. The compact web composer selector
+row is the deliberate exception: it uses `/` because it is shorter and does not
+collide with Windows paths (`\`) in the footer row. Icon roles stay unchanged —
+Lucide marks are chrome only (brand provider mark, `ruler` context, `brain`
+reasoning, `eye`/`wrench` capabilities); `◇`, `✦` and `·` remain textual.
+
 ## Localization
 
 - All user-facing strings go through `t()`; `en` and `ru` stay in parity.
