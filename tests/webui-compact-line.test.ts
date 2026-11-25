@@ -48,6 +48,7 @@ describe("compact composer markup", () => {
 
   it("spaces the first selector away from the mascot and always shows menu chevrons", () => {
     expect(CSS).toMatch(/\.selectors > \.composer-face \{[^}]*margin-right:\s*\d+px/);
+    expect(CSS).toMatch(/\.selectors > \.speed-chip \{[^}]*margin-left:\s*\d+px/);
     expect(CSS).toMatch(/\.selectors > \.tools-btn \{[^}]*margin-left:\s*\d+px/);
     expect(CSS).not.toMatch(/\.selectors > \.sel > button > svg\.svg-icon:last-child \{[^}]*opacity:\s*0/);
   });

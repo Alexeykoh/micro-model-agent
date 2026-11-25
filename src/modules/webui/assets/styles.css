@@ -764,7 +764,7 @@ body.light .sel > button { border: 1px solid var(--border); }
 /* Compact selector line (variant A): quiet text, `/` separators, no chip surface. */
 .selectors { gap: 0; flex-wrap: nowrap; }
 .selectors > .composer-face { margin-right: 10px; }
-.selectors > .speed-chip { margin-left: auto; }
+.selectors > .speed-chip { margin-left: 14px; }
 .selectors > .tools-btn { margin-left: 16px; }
 .selector-sep { color: var(--dim-b); margin: 0 6px; flex: none; user-select: none; }
 .selector-sep[hidden] { display: none; }
