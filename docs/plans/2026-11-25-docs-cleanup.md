@@ -67,14 +67,14 @@ DoD каждой волны: `bun test tests/docs-link-check.test.ts` зелён
 - [x] Удалён `docs/specs/2026-10-23-knowledge-turn-guidance-design.md`; ссылка в `2026-10-31-live-data-grounding-guidance-design.md` переписана.
 - [x] `bun run quality` зелёный (линтер даёт только уже существующие warnings).
 
-### Волна 2. Конфликтующие контракты
+### Волна 2. Конфликтующие контракты. Выполнено 2026-11-25
 
-- [ ] Model Certification: канонический источник — `docs/agents/testing.md`; секцию в `docs/agents/architecture.md:305` заменить ссылкой; выровнять теги (`moe` против `shell,research`) по коду.
-- [ ] `docs/agents/feature-history.md`: удалить хвост `### Changelog` / `### Versioning Rules` / `Current Version`, заменить ссылкой на `docs/agents/versioning.md`.
-- [ ] Свести версии к `0.26.1`: `docs/mma-features-overview.md` (`0.10.x`) и `feature-history.md` (`0.3.2`).
-- [ ] `docs/agents/versioning.md`: дедуплицировать записи 29/30.
-- [ ] `gh-pages/docs.html`: дубли команд установки заменить ссылкой на `docs/install.md`.
-- [ ] Желательный гейт: проверка расхождения тегов и версий в `agents/architecture.md`, `agents/testing.md`, `agents/versioning.md`, `mma-features-overview.md`.
+- [x] Model Certification: канонический источник — `docs/agents/testing.md`; секция в `docs/agents/architecture.md` заменена ссылкой. Теги выровнены по коду (`src/modules/certification/types.ts`: `shell`, `research`; `moe` удалён).
+- [x] `docs/agents/feature-history.md`: удалён хвост `Current Version / Changelog / Versioning Rules` (50 строк), заменён ссылкой на `versioning.md`.
+- [x] `docs/mma-features-overview.md`: версия `0.10.x` → `0.26.1`.
+- [x] `docs/agents/versioning.md`: удалена вторая пара записей 29/30.
+- [x] Гейт `tests/docs-consistency.test.ts`: проверяет единственность списка тегов и отсутствие старых версий в живых доках (падал бы до правки).
+- [ ] **Отложено в волну 5:** `gh-pages/docs.html` — дубли команд установки. Удалять команды из публичной страницы сразу нельзя (потеря копируемых инструкций); правильное решение — генерация страницы из `docs/install.md`.
 
 ### Волна 3. Индексы и статусы
 

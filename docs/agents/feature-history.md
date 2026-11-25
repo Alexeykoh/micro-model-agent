@@ -1971,53 +1971,6 @@ line (path / MoE / version / update) now renders.
   `tests/webui-themes.test.ts` (enum реестра = `UI_THEMES`),
   `tests/webui-busy-guard.test.ts`, `tests/config-registry-extra.test.ts`.
 
-### Current Version: 0.3.2 (beta)
+### Versioning
 
-> **В бете:** `1.0.0` не выпускается, пока проект в бете; версии ходят внутри `0.x.y` (см. «Versioning Rules»).
-
-GitHub Releases distribution: one-line bootstrap installer, self-contained per-OS tarballs,
-manifest-driven updater (npm removed from the install path), MIT license (see the section above).
-
-Landing page on GitHub Pages (`gh-pages/`, see the section above): a static, build-free
-showcase with MMART, ru/en and dark/light.
-
-Web answer panel, quiet reasoning, fixed latest pill, user-attachment persistence (2.40.0).
-
-Self-describing service contract (see the section above): `mma serve` serves its
-own OpenAPI 3.1 document and human docs page from one `OPERATIONS` table.
-
-### Changelog
-
-Все изменения документируются в `CHANGELOG.md` (формат [Keep a Changelog](https://keepachangelog.com/)).
-
-**Правило:** при каждом релизе (MINOR/PATCH) — добавляй запись в `CHANGELOG.md` в секцию `## [X.Y.Z] - YYYY-MM-DD`. Группируй по Added/Fixed/Changed/Removed. Пиши на английском, кратко и по существу. Формат ссылок: `**Module**: description`.
-
-При релизе: обнови `CHANGELOG.md` и `package.json` версию, поставь тег `vX.Y.Z` — GitHub Actions
-(`.github/workflows/release.yml`) соберёт артефакты под все платформы и опубликует GitHub Release
-с `latest.json` (см. «Distribution & Bootstrap»). npm больше не используется для раздачи.
-
-### Versioning Rules
-
-Версии — **вехи**, а не счётчик PR. Один MAJOR на пакет ломающих изменений, а не на каждую итерацию.
-
-> **🔒 Бета-политика (обязательно).** Пока MMA в бете (major = `0`), релизы идут **только**
-> внутри `0.x.y`, и **`1.0.0` выпускать нельзя**. Любое **автоматическое** повышение версии
-> до `1.x.x` запрещено. Выход из беты — отдельное осознанное решение, которое снимает запрет:
-> только тогда (руками) ставится `1.0.0`, и этот раздел + баннер вверху файла обновляются.
-> Машинный гвард: `tests/version-beta.test.ts` падает, если `package.json` version ≥ `1.0.0`.
-
-**PATCH** (`0.0.Z`) — bug fixes, i18n, docs, tests, performance, non-breaking dependency updates.
-
-**MINOR** (`0.Y.0`) — new CLI/REPL commands, new tools, new modules, new config options, new behavior; **renaming with a working deprecation alias**; additive `--json` fields.
-
-**MAJOR** (`X.0.0`) — **в бете запрещён** (зарезервирован под выход из беты). После выхода из беты — только реальная поломка **без пути совместимости**:
-- несовместимая схема конфига / нечитаемые старые сессии;
-- удаление команды/тула/модуля **без алиаса**, выпущенных в опубликованном релизе;
-- ломающее изменение `LLMProvider` / plugin API / `--json` контракта;
-- architecture rewrite, меняющий контракты поведения.
-
-**Правила сдержанности:**
-1. В бете MAJOR **не бампается вообще** — ни вручную, ни автоматикой. `1.0.0` = конец беты.
-2. MAJOR требует хотя бы одной записи в `### Removed` / `### Changed (breaking)` CHANGELOG — иначе не MAJOR.
-3. Предпочитать **алиас + MINOR** вместо жёсткого переименования + MAJOR.
-4. Не более одного MAJOR на пакет ломающих изменений; не бампать MAJOR без явного запроса.
+Актуальная версия — в `package.json`; правила — в [versioning.md](./versioning.md), история изменений — в `CHANGELOG.md`.
