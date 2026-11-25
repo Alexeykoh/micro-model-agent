@@ -758,6 +758,9 @@ body.light .codeblock { border: 1px solid var(--border); }
 body.light .sel > button { border: 1px solid var(--border); }
 .sel > button b { font-weight: 400; color: var(--purple); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .sel > button .svg-icon { width: 13px; height: 13px; color: var(--dim-a); }
+.sel > button .provider-icon { color: var(--fg); }
+.menu .mi > .provider-icon { width: 13px; height: 13px; flex: 0 0 auto; color: var(--dim-a); }
+.menu .mi.on > .provider-icon { color: var(--accent); }
 /* Selector switch pending (boot + provider/model/context/reasoning writes):
    buttons and menus go inert while the mark shows. The mark stays a spinner;
    the old elapsed-time counter was removed in favor of a calmer UI. */

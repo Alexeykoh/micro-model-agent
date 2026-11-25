@@ -302,6 +302,8 @@ git add src/modules/webui/assets/js/icons.ts src/modules/webui/assets/js/setting
 git commit -m "feat(webui): render compact composer selectors with semantic icons"
 ```
 
+> **Deviation note (Task 2):** `provider-selector.ts` and `provider-icons.ts` were absent from this `dev`-based branch; they were restored from `88ee8b1b1` because the approved design requires the real llama.cpp brand mark. The three brand-icon CSS rules were restored too. A later merge with `feat/provider-icons` must keep this branch's compact button version (built via `setCompactLabel`), not the upstream labelled one.
+
 ---
 
 ### Task 3: Markup, CSS and the hint toggle

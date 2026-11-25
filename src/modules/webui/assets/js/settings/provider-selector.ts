@@ -34,7 +34,7 @@ export function renderProviderSelector(
     item.setAttribute("aria-pressed", on ? "true" : "false");
     item.appendChild(providerIcon(entry.type, name));
     item.appendChild(el("span", "", name));
-    item.appendChild(el("span", "sub", entry.type || ""));
+    if (entry.type) item.appendChild(el("span", "sub", entry.type));
     item.addEventListener("click", (ev) => {
       ev.stopPropagation();
       closeAllMenus();
