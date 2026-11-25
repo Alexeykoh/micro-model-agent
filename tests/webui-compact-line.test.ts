@@ -28,20 +28,21 @@ const CSS = read("../src/modules/webui/assets/styles.css");
 describe("compact composer markup", () => {
   it("separates selectors with `/` and keeps every menu", () => {
     expect(HTML).toContain('<span class="selector-sep" aria-hidden="true">/</span>');
+    expect(HTML.match(/class="selector-sep"/g)).toHaveLength(3);
     for (const name of ["provider", "model", "context", "reasoning"]) {
       expect(HTML).toContain(`data-sel="${name}"`);
     }
     for (const id of ["selProviderMenu", "selModelMenu", "selContextMenu", "selReasoningMenu"]) {
       expect(HTML).toContain(`id="${id}"`);
     }
-    // The chip must live inside model .sel: a hidden chip as the separator's
-    // immediate sibling would hide the `/` while capabilities are unknown.
-    expect(HTML).toMatch(/id="capsChip"[^<]*<\/span>\s*<\/div>\s*<span class="selector-sep"/);
   });
 
   it("drops chip surfaces and keeps the phone one-row rule", () => {
     expect(CSS).toMatch(/\.selectors\s*\{[^}]*flex-wrap:\s*nowrap/);
     expect(CSS).toMatch(/\.selectors > \.sel > button\s*\{[^}]*background:\s*none/);
+    expect(CSS).toContain("body.light .selectors > .sel > button { border: 0; }");
+    expect(CSS).toMatch(/\.selectors > \.sel\[data-sel="model"\] \{ display: flex; align-items: center;/);
+    expect(CSS).toMatch(/\.selectors > \.sel\[data-sel="model"\] > \.caps-chip \{ flex: none;/);
     expect(CSS).toMatch(/\.sel\[data-sel="model"\]\s*\{\s*flex:\s*1 1 0/);
   });
 

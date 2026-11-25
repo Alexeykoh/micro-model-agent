@@ -767,7 +767,11 @@ body.light .sel > button { border: 1px solid var(--border); }
 .selector-sep[hidden] { display: none; }
 .selectors > .sel { flex: 0 1 auto; }
 .selectors > .sel[data-sel="model"] { flex: 1 1 auto; min-width: 0; }
+.selectors > .sel[data-sel="model"] { display: flex; align-items: center; min-width: 0; }
+.selectors > .sel[data-sel="model"] > button { flex: 1 1 auto; min-width: 0; }
+.selectors > .sel[data-sel="model"] > .caps-chip { flex: none; }
 .selectors > .sel > button { background: none; border: 0; padding: 2px 0; color: var(--muted); }
+body.light .selectors > .sel > button { border: 0; }
 .selectors > .sel > button:hover { color: var(--fg); }
 .selectors > .sel > button b { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .selectors > .sel > button > svg.svg-icon:last-child { color: var(--dim-b); opacity: 0; }
