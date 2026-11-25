@@ -31,6 +31,30 @@ describe("compact selector line", () => {
     expect(btn.querySelectorAll("svg.svg-icon")).toHaveLength(1);
   });
 
+  it("fits a long model label without losing its tail", () => {
+    setupHappyDom(`<div class="selectors">
+      <div class="sel" data-sel="model"><button></button></div>
+    </div>`);
+    const root = document.querySelector<HTMLElement>(".selectors") as HTMLElement;
+    const btn = root.querySelector<HTMLElement>("button") as HTMLElement;
+    const full = "[heretic/38ts] ornith-1.5-9b-uncensored";
+    line.setCompactLabel(btn, "модель", full);
+    const b = btn.querySelector<HTMLElement>("b") as HTMLElement;
+    // Narrow enough to force truncation; tailLabel drops the whole author tag
+    // first, so the recognisable model name still fits and is kept.
+    Object.defineProperty(b, "clientWidth", { configurable: true, value: 175 });
+
+    line.fitModelLabel(btn);
+    const shown = b.querySelector("span")?.textContent ?? "";
+    expect(shown.startsWith("…")).toBe(true);
+    expect(shown.endsWith("ornith-1.5-9b-uncensored")).toBe(true);
+    expect(shown.length).toBeLessThan(full.length);
+    expect(btn.title).toContain(full);
+
+    expect(() => line.installModelFit(root)).not.toThrow();
+    expect(b.querySelector("span")?.textContent).toBe(shown);
+  });
+
   it("hides a separator next to a hidden selector", () => {
     setupHappyDom(`<div class="selectors">
       <div class="sel" data-sel="context"></div>
