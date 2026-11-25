@@ -128,20 +128,23 @@
       <div class="selectors">
         <span class="composer-face" id="composerFace"></span>
         <div class="sel" data-sel="provider">
-          <button id="selProviderBtn">provider: <b>—</b> ▾</button>
+          <button id="selProviderBtn">— ▾</button>
           <div class="menu" id="selProviderMenu"></div>
         </div>
+        <span class="selector-sep" aria-hidden="true">/</span>
         <div class="sel" data-sel="model">
-          <button id="selModelBtn">model: <b>—</b> ▾</button>
+          <button id="selModelBtn">— ▾</button>
           <div class="menu" id="selModelMenu"></div>
         </div>
         <span class="caps-chip" id="capsChip" hidden></span>
+        <span class="selector-sep" aria-hidden="true">/</span>
         <div class="sel" data-sel="context">
-          <button id="selContextBtn">context: <b>—</b> ▾</button>
+          <button id="selContextBtn">— ▾</button>
           <div class="menu" id="selContextMenu"></div>
         </div>
+        <span class="selector-sep" aria-hidden="true">/</span>
         <div class="sel" data-sel="reasoning">
-          <button id="selReasoningBtn">reasoning: <b>—</b> ▾</button>
+          <button id="selReasoningBtn">— ▾</button>
           <div class="menu" id="selReasoningMenu"></div>
         </div>
         <span class="speed-chip" id="speedChip" hidden></span>
@@ -161,7 +164,7 @@
           <button class="skills-btn" id="skillsBtn" type="button" hidden aria-label="Loaded skills"></button>
           <button class="send-btn" id="sendBtn" type="button" aria-label="send">↑</button>
         </div>
-        <div class="inp-meta"><span id="hintEnter">Enter — send</span><span id="hintShift">Shift+Enter — newline</span><span id="hintEsc" hidden>Esc — stop</span><span id="hintAttach">Ctrl+V — attach</span><span id="hintShort">Ctrl+K — sessions · Ctrl+P — files</span><span id="hintTouch">tap ↑ — send</span></div>
+        <div class="inp-meta"><span id="hintEnter">Enter — send</span><span id="hintShift">Shift+Enter — newline</span><span id="hintEsc" hidden>Esc — stop</span><span id="hintAttach">Ctrl+V — attach</span><span id="hintShort">Ctrl+K — sessions · Ctrl+P — files</span><span id="hintTouch">tap ↑ — send</span><button class="hint-more" id="hintMore" type="button" title="?" aria-label="?" aria-expanded="false">?</button></div>
       </div>
       <div class="ws-line" id="wsLine" hidden></div>
     </div>

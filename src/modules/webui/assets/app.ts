@@ -71,6 +71,7 @@ import {
 import { insertIntoDraft, submitPrompt } from "./js/session/composer.js";
 import { openFilePreview } from "./js/file-view.js";
 import { initShortcuts } from "./js/shortcuts.js";
+import { initHintToggle } from "./js/session/hint-toggle.js";
 import { drainQueuedTurn } from "./js/session/queue.js";
 import { initCursor, loaderStateFor, setFaceState } from "./js/loader.js";
 import {
@@ -94,7 +95,6 @@ import {
   resyncAfterReconnect,
 } from "./app-state.js";
 import { applyStaticI18n } from "./app-i18n.js";
-
 declare global {
   interface Window {
     MmaSetup?: { maybeOpen: () => Promise<boolean> };
@@ -253,7 +253,7 @@ async function boot(): Promise<void> {
     initComposerFace();
     initSidebar();
     initSidebarDrawer();
-    initShortcuts();
+    initShortcuts(); initHintToggle();
     initSubagentView(); initToolsPanel();
     applySidebarI18n();
     initFiles({ insertPath: (p) => insertIntoDraft("@" + p + " ") });

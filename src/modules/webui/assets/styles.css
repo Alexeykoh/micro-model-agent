@@ -761,6 +761,18 @@ body.light .sel > button { border: 1px solid var(--border); }
 .sel > button .provider-icon { color: var(--fg); }
 .menu .mi > .provider-icon { width: 13px; height: 13px; flex: 0 0 auto; color: var(--dim-a); }
 .menu .mi.on > .provider-icon { color: var(--accent); }
+/* Compact selector line (variant A): quiet text, `/` separators, no chip surface. */
+.selectors { gap: 0; flex-wrap: nowrap; }
+.selector-sep { color: var(--dim-b); margin: 0 6px; flex: none; user-select: none; }
+.selector-sep[hidden] { display: none; }
+.selectors > .sel { flex: 0 1 auto; }
+.selectors > .sel[data-sel="model"] { flex: 1 1 auto; min-width: 0; }
+.selectors > .sel > button { background: none; border: 0; padding: 2px 0; color: var(--muted); }
+.selectors > .sel > button:hover { color: var(--fg); }
+.selectors > .sel > button b { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.selectors > .sel > button > svg.svg-icon:last-child { color: var(--dim-b); opacity: 0; }
+.selectors > .sel > button:hover > svg.svg-icon:last-child,
+.selectors > .sel > button:focus-visible > svg.svg-icon:last-child { opacity: 1; }
 /* Selector switch pending (boot + provider/model/context/reasoning writes):
    buttons and menus go inert while the mark shows. The mark stays a spinner;
    the old elapsed-time counter was removed in favor of a calmer UI. */
@@ -829,6 +841,13 @@ body.light .sel > button { border: 1px solid var(--border); }
 .input-area.switching .send-btn { cursor: progress; }
 .inp::placeholder { color: var(--dim-a); }
 .inp-meta { display: flex; gap: 14px; margin-top: 4px; padding: 0 6px; color: var(--dim-b); font-size: 11.5px; flex-wrap: wrap; }
+.inp-meta .hint-more {
+  margin-left: auto; color: var(--dim-a); background: none; border: 0;
+  padding: 0 2px; font: inherit; font-size: 11.5px; cursor: pointer;
+}
+.inp-meta .hint-more:hover { color: var(--fg); }
+.inp-meta #hintShift { display: none; }
+.inp-meta.expanded #hintShift { display: inline; }
 
 /* composer: [attach] [textarea] [send/stop] on the top row, hints underneath —
    all inside one bordered surface, so the controls read as part of the field. */
@@ -2789,6 +2808,7 @@ button.toggle:disabled { opacity: .5; cursor: default; }
 @media (pointer: coarse) {
   .inp-meta > span { display: none; }
   .inp-meta { gap: 0; }
+  .inp-meta .hint-more { display: none; }
 }
 
 /* --- First-run setup gate ---------------------------------------------------

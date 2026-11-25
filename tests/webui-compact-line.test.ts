@@ -21,3 +21,29 @@ describe("compact selectors wiring", () => {
     expect(PROVIDER).toContain("setCompactLabel(");
   });
 });
+
+const HTML = read("../src/modules/webui/assets/index.html");
+const CSS = read("../src/modules/webui/assets/styles.css");
+
+describe("compact composer markup", () => {
+  it("separates selectors with `/` and keeps every menu", () => {
+    expect(HTML).toContain('<span class="selector-sep" aria-hidden="true">/</span>');
+    for (const name of ["provider", "model", "context", "reasoning"]) {
+      expect(HTML).toContain(`data-sel="${name}"`);
+    }
+    for (const id of ["selProviderMenu", "selModelMenu", "selContextMenu", "selReasoningMenu"]) {
+      expect(HTML).toContain(`id="${id}"`);
+    }
+  });
+
+  it("drops chip surfaces and keeps the phone one-row rule", () => {
+    expect(CSS).toMatch(/\.selectors\s*\{[^}]*flex-wrap:\s*nowrap/);
+    expect(CSS).toMatch(/\.selectors > \.sel > button\s*\{[^}]*background:\s*none/);
+    expect(CSS).toMatch(/\.sel\[data-sel="model"\]\s*\{\s*flex:\s*1 1 0/);
+  });
+
+  it("has a hint toggle for the compact hint row", () => {
+    expect(HTML).toContain('id="hintMore"');
+    expect(CSS).toMatch(/\.inp-meta\s+#hintShift\s*\{\s*display:\s*none/);
+  });
+});
