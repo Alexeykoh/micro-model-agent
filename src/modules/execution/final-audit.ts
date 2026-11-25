@@ -9,6 +9,7 @@ import { extractFileLikeTokens, stripUrls } from "../../core/hallucination/js-id
 import { findExistingFile } from "./auditor";
 import { provablyStale } from "./step-advance";
 import type { Auditor } from "./auditor";
+import type { TypecheckResult } from "./audit-runners";
 import type { PlanTracker } from "./tracker";
 import type { PlanStore } from "./plan-store";
 import type { Plan, PlanStep } from "./planner";
@@ -24,6 +25,8 @@ export interface FinalAuditResult {
   summary: string;
   /** Пометка тестового прогона (скип/inconclusive/кэш) для лога, либо null. */
   testNote?: string | null;
+  /** Статус проектного typecheck с причиной и длительностью (INV-15). */
+  typecheck?: TypecheckResult | null;
 }
 
 /** Мутабельный вид `ExecutionModule`, которым владеет финальный аудит. */
@@ -166,6 +169,7 @@ export async function runFinalAudit(d: FinalAuditHost): Promise<FinalAuditResult
       missingFiles: audit.missingFiles,
       summary: summaryWithPending(done, plan.steps.length, pendingSteps, audit.summary),
       testNote: audit.testNote,
+      typecheck: audit.typecheck,
     };
   }
   if (d.auditSkipsRemaining > 0) {
@@ -189,5 +193,6 @@ export async function runFinalAudit(d: FinalAuditHost): Promise<FinalAuditResult
     missingFiles: audit.missingFiles,
     summary: summaryWithPending(done, plan.steps.length, pendingSteps, audit.summary),
     testNote: audit.testNote,
+    typecheck: audit.typecheck,
   };
 }

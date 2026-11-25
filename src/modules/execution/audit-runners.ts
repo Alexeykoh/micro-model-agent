@@ -256,19 +256,39 @@ export function findTypecheckRoot(baseDir: string, existingFiles: string[] = [])
   return best?.root ?? null;
 }
 
-/** Прогоняет `tsc --noEmit --skipLibCheck` (бюджет аудита). Null, если проверить нельзя/таймаут. */
-export async function runTypecheck(baseDir: string): Promise<string | null> {
+/** Статус проектного typecheck: «ошибок нет» и «проверить не удалось» — разные исходы (INV-15). */
+export interface TypecheckResult {
+  status: "ok" | "error" | "inconclusive";
+  /** Первая строка `error TS…` при `status: "error"`. */
+  error?: string;
+  /** Причина неопределённости: нет tsc / таймаут / сбой раннера. */
+  reason?: string;
+  durationMs: number;
+}
+
+/** Прогоняет `tsc --noEmit --skipLibCheck` (бюджет аудита) с честным статусом. */
+export async function runTypecheck(baseDir: string): Promise<TypecheckResult> {
+  const started = Date.now();
+  const elapsed = (): number => Date.now() - started;
   // Локальный tsc напрямую: npx-обёртка добавляет секунды и без локального
   // пакета уходит в сеть. Нет tsc — проверка невозможна, не блокируем.
   const tsc = resolveTscCommand(baseDir);
-  if (!tsc) return null;
+  if (!tsc) {
+    return { status: "inconclusive", reason: "tsc not found", durationMs: elapsed() };
+  }
   const entry = processRegistry.start(`${tsc} --noEmit --skipLibCheck`, baseDir);
   const exited = await processRegistry.waitForExit(entry.id, AUDIT_TYPECHECK_BUDGET_MS);
   const output = entry.log.join("\n");
   processRegistry.remove(entry.id);
-  // DEBT(audit-typecheck-inconclusive): таймаут tsc и «ошибок нет» одинаково
-  // возвращают null — в сводке/`session.jsonl` они неразличимы (INV-15).
-  // Оплата — отдельная волна: нужен тип результата вместо string|null.
-  if (!exited) return null;
-  return parseTypecheckErrors(output);
+  if (!exited) {
+    return {
+      status: "inconclusive",
+      reason: `tsc timeout after ${AUDIT_TYPECHECK_BUDGET_MS}ms`,
+      durationMs: elapsed(),
+    };
+  }
+  const error = parseTypecheckErrors(output);
+  return error
+    ? { status: "error", error, durationMs: elapsed() }
+    : { status: "ok", durationMs: elapsed() };
 }

@@ -287,7 +287,7 @@ W4 также выполняет §3.1: модульные `new Logger(...)` з�
 | `webui/file/*-api.ts`                                     | `404` вместо ошибки чтения | `module_degraded` + `500`                                                       |
 | `updater/factory.ts:73-91`, `versions.ts`                 | сборка/prune молчит        | `app.jsonl` (`logSilent`)                                                       |
 | `execution/final-audit.ts:140-143`                        | аудит пропущен             | `audit` со `status:"skipped"`                                                   |
-| `execution/audit-test-run.ts:63-68`, `auditor.ts:207-212` | инфра-сбой = «чисто»       | `audit.testNote="inconclusive: …"`; оплата `DEBT(audit-typecheck-inconclusive)` |
+| `execution/audit-test-run.ts:63-68`, `auditor.ts:207-212` | инфра-сбой = «чисто»       | `audit.testNote="inconclusive: …"`; typecheck-половина оплачена 2026-11-24 (`audit.typecheck`) |
 | `pricing/index.ts:47-54`                                  | цена неизвестна            | `logStructured` (один раз на модель)                                            |
 
 Тесты: `tests/service/webhook-delivery-signal.test.ts`,

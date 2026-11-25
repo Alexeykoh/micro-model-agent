@@ -67,6 +67,7 @@ describe("AuditGate", () => {
       3,
       expect.any(Number),
       "skipped: no file mutations this turn",
+      undefined,
     );
   });
 });

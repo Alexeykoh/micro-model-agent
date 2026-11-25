@@ -226,9 +226,9 @@ export class SessionLogger {
     });
   }
 
-  /** Пишет вердикт финального аудита; `tests` — пометка тест-прогона (INV-15). */
-  logAudit(summary: string, iteration: number, durationMs?: number, tests?: string): void {
-    this.log(auditEntry(summary, iteration, durationMs, tests));
+  /** Пишет вердикт финального аудита; `tests`/`typecheck` — пометки прогонов (INV-15). */
+  logAudit(summary: string, iteration: number, durationMs?: number, tests?: string, typecheck?: SessionLogEntry["typecheck"]): void {
+    this.log(auditEntry(summary, iteration, durationMs, tests, typecheck));
   }
 
   /** Агрегат гейтов хода (`gate_timing`): сколько стояли hallucination/critic/audit, мс (A15). */
