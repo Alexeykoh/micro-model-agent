@@ -87,3 +87,4 @@
 - [Эффективность research-прогона](./2026-11-23-research-loop-efficiency-design.md)
 - [Web UI: вложения и capability-gated загрузки](./2026-11-23-webui-attachments-design.md)
 - [Откат правок файлов агентом](./2026-11-24-file-rollback-design.md)
+- [Стартовый контекст: лог, конфиг, карта и тулы](./2026-11-26-startup-context-prompt-design.md) — разбор 8VJYKE; три волны фиксов
