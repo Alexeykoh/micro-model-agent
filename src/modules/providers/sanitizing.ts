@@ -8,9 +8,9 @@
  * точке покрывает оба пути (R17). Слой провайдеров НЕ импортирует security —
  * только структурный контракт guard (INV-3).
  *
- * DEBT(streaming-tail-holdback): `openai-compat` отдаёт аргументы тула одним
- * чанком, поэтому hold-back «хвоста» не нужен; для почанковых провайдеров —
- * отдельная задача.
+ * Стрим `openai-compat` собирает аргументы тула из дельт и отдаёт одним чанком;
+ * универсальный hold-back «хвоста» поэтому не нужен (проверено тестами
+ * `tests/llm/split-token-stream.test.ts`).
  */
 import type { ChatOptions, Chunk, LLMProvider, Message, ToolDefinition } from "../../llm/provider";
 
