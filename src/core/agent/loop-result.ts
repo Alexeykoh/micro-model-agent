@@ -10,6 +10,7 @@ import type { TokenTracker } from "./token-tracker";
 import type { CostTracker } from "../../modules/pricing/index";
 import { computeCacheStats } from "./cache-stats";
 import { t } from "../../i18n/index";
+import { markTruncatedAnswer } from "./truncated-answer";
 
 /** Мутабельный вид `Agent`, которым владеет сборка результата. */
 export interface LoopResultHost {
@@ -45,6 +46,7 @@ export function buildLoopResult(
         }
       : undefined;
 
+  const finalText = markTruncatedAnswer(state.lastText, state.lastFinishReason, state.auditFailed);
   const stopError =
     state.stopReason && !state.finalAnswerAccepted
       ? state.stopReason === "duplicate"
@@ -63,7 +65,7 @@ export function buildLoopResult(
   if (maxItersExhausted) {
     return {
       success: false,
-      text: state.lastText,
+      text: finalText,
       error: stopError ?? t("error.max_iters", { max: config.maxToolIterations }),
       stopReason: state.stopReason ?? "max_iters",
       iterationCount: state.iteration,
@@ -87,7 +89,7 @@ export function buildLoopResult(
   return {
     success: !(shutdown || state.emptyResponseExhausted || state.auditFailed || !!stopError),
     interrupted: shutdown || undefined,
-    text: state.lastText,
+    text: finalText,
     stopReason: state.stopReason ?? undefined,
     error: stopError
       ? stopError
