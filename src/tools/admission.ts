@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import type { Dirent } from "node:fs";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { estimateTokens } from "../llm/token-counter";
 import { t } from "../i18n/index";
@@ -26,6 +26,14 @@ const DEFAULT_SPILL_DIR = ".mma/context";
 const SPILL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** Кап файлов в одной сессии — защита от бесконечного роста при частых admission. */
 const SPILL_MAX_PER_SESSION = 50;
+
+/**
+ * Стабильный идентификатор артефакта: путь от рабочего каталога с прямыми
+ * слешами. Не зависит от разделителей ОС и остаётся тем же после компакции.
+ */
+export function artifactHandle(baseDir: string, artifact: string): string {
+  return relative(resolve(baseDir), resolve(artifact)).replace(/\\/g, "/");
+}
 
 /** Параметры уборки спиллов; `skipDir` — сессия, которая сейчас пишет. */
 export interface SpillGcOptions {
@@ -143,14 +151,17 @@ export function admitToolResult(result: ToolResult, opts: AdmitOptions): ToolRes
     previewRaw.length > PREVIEW_MAX_CHARS
       ? `${previewRaw.slice(0, PREVIEW_MAX_CHARS).trimEnd()}…`
       : previewRaw;
+  const digest = createHash("sha256").update(output).digest("hex");
   const descriptor = t("tool.output_admitted", {
     tokens: String(tokens),
     lines: String(lines),
+    bytes: String(Buffer.byteLength(output, "utf8")),
     artifact,
+    handle: artifactHandle(baseRoot, artifact),
+    digest,
     source: opts.source ?? "-",
     preview,
   });
-  // DEBT(descriptor-fields-deferred): пока строка-дескриптор; handle/digest/bytes — позже.
   return {
     ...result,
     output: descriptor,
