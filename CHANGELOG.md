@@ -6,10 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- Docs: add build composition design spec for declarative editions, ordered patch layers and build events (docs/specs/2026-11-26-build-composition-design.md).
+- Service/web: daemon settings panels, server command catalog and meta channel are available over /v1/host (tests/service/host-settings-wire.test.ts).
+- LSP: lifecycle events are written to app.jsonl and session.jsonl with phase and duration (tests/lsp/session-events.test.ts).
+- Context: admission descriptor carries handle, digest and bytes for stable spill references (tests/tools/admission-descriptor-fields.test.ts).
+- Documents: add core ImageResizePort seam for vision reads; document_read reports resized images (docs/specs/2026-11-26-vision-image-core-seam-design.md).
+
 ### Fixed
 
+- DLP: validate Belarus UNP and personal number checksums to raise confidence on valid IDs and lower it on invalid ones (tests/security/by-checksums.test.ts).
+- Instructions: HTTPS instruction sources are preloaded before prompt assembly with SSRF checks and a 5s timeout (tests/core/remote-instructions.test.ts).
+- Agent: audit-failed answers hitting finish=length are explicitly marked as truncated (tests/core/answer-truncated-marker.test.ts).
+- Context: admission spill GC prunes files older than 7 days and caps 50 per session (tests/tools/admission-spill-gc.test.ts).
 - Docs: CHANGELOG structure - restored descending order of the 0.24-0.26 release sections and merged duplicate subsection headings in 0.14.0, 0.4.0 and 2.37.0; the health guard now checks both.
 - **Docs: CHANGELOG integrity.** Removed a CP866-mojibaked duplicate block and the duplicate `### Fixed` heading in 0.24.4; restored the missing `0.26.0` release heading and the 0.25.0 notes absorbed by 0.25.1; added a health guard for encoding, empty version sections and release headings.
+
+### Security
+
+- Security: sensitivePathReason resolves symlinks, junctions and $MMA_CONFIG_DIR expansions so workspace paths cannot reach /config secrets (tests/security/sensitive-paths.test.ts).
+- Security: plugin output without declared pathArgs is tagged file-content at the tool post-processing seam (tests/tools/file-content-tag-plugin.test.ts).
+
+### Tests
+
+- Tests: pin split-token streaming of tool-call deltas and text chunks in openai-compat (tests/llm/split-token-stream.test.ts).
 
 ## [0.26.1] - 2026-11-20
 
