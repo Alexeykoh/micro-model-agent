@@ -5,6 +5,7 @@ import {
   resetRequestSnapshotSeq,
   subscribeRequestSnapshots,
   SNAPSHOT_LIMITS,
+  SYSTEM_HASH_HEX,
   type LlmRequestSnapshot,
 } from "../../src/llm/request-snapshot";
 
@@ -78,6 +79,18 @@ describe("снимок исходящего запроса (U20)", () => {
     expect(snap.messages[0].clipped).toBe(true);
     expect(snap.messages[0].text).toContain("truncated from");
     expect(snap.truncated).toBe(true);
+  });
+
+  it("сохраняет длину и hash полного system даже при обрезке", () => {
+    const full = "S".repeat(SNAPSHOT_LIMITS.system + 10);
+    const snap = buildRequestSnapshot(
+      { messages: [{ role: "system", content: full }], tools: [] },
+      { model: "m", stream: false },
+    );
+    expect(snap.system.length).toBeLessThanOrEqual(SNAPSHOT_LIMITS.system + 40);
+    expect(snap.systemClipped).toBe(true);
+    expect(snap.systemChars).toBe(full.length);
+    expect(snap.systemSha256).toMatch(new RegExp(`^[0-9a-f]{${SYSTEM_HASH_HEX}}$`));
   });
 
   it("не отдаёт token id: псевдоним DLP заменяется меткой класса", () => {

@@ -11,6 +11,16 @@
  * Fail-open: снимок не имеет права уронить вызов модели.
  */
 
+import { createHash } from "node:crypto";
+
+/** Длина hex-префикса SHA-256 в корреляторе системного промпта. */
+export const SYSTEM_HASH_HEX = 16;
+
+/** Коррелятор полного system: короткий hex SHA-256 (не токен безопасности). */
+export function systemHash(text: string): string {
+  return createHash("sha256").update(text).digest("hex").slice(0, SYSTEM_HASH_HEX);
+}
+
 /** Пределы снимка: агрегат для разбора, а не дамп. */
 export const SNAPSHOT_LIMITS = {
   /** Символов на одно сообщение. */
@@ -61,6 +71,12 @@ export interface LlmRequestSnapshot {
   params: SnapshotParams;
   /** Системный промпт (склеенные сообщения `role: system`). */
   system: string;
+  /** Системный промпт был обрезан по капу снимка. */
+  systemClipped?: boolean;
+  /** Длина полного system до обрезки. */
+  systemChars?: number;
+  /** SHA-256 полного (после DLP) system, первые 16 hex. */
+  systemSha256?: string;
   /** Остальные сообщения в порядке отправки. */
   messages: SnapshotMessage[];
   tools: SnapshotTool[];
@@ -182,7 +198,8 @@ export function buildRequestSnapshot(
     messages.push({ role, text: capped.text, ...(capped.clipped ? { clipped: true } : {}) });
   }
 
-  const systemClip = clip(systemParts.join("\n\n"), SNAPSHOT_LIMITS.system);
+  const systemFull = maskTokenIds(systemParts.join("\n\n"));
+  const systemClip = clip(systemFull, SNAPSHOT_LIMITS.system);
   if (systemClip.clipped) truncated = true;
 
   const tools: SnapshotTool[] = [];
@@ -234,6 +251,9 @@ export function buildRequestSnapshot(
     stream: meta.stream,
     params,
     system: systemClip.text,
+    systemClipped: systemClip.clipped || undefined,
+    systemChars: systemFull.length,
+    systemSha256: systemHash(systemFull),
     messages,
     tools,
     truncated,
