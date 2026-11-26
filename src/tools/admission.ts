@@ -1,8 +1,16 @@
 // Admission результата тула (OO-1): крупный вывод не входит в контекст
 // дословно — спилл в .mma/context/<session>/ + дескриптор с превью и путём.
-import { mkdirSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import type { Dirent } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { estimateTokens } from "../llm/token-counter";
 import { t } from "../i18n/index";
 import { DEFAULT_ADMIT_MAX_TOKENS } from "../config/defaults";
@@ -14,7 +22,71 @@ const PREVIEW_LINES = 12;
 const PREVIEW_MAX_CHARS = 2000;
 /** Каталог спилла относительно baseDir. */
 const DEFAULT_SPILL_DIR = ".mma/context";
-// DEBT(admission-spill-no-gc): спилл не чистится между прогонами (нет retention).
+/** Возраст спилла, после которого он считается мусором. */
+const SPILL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+/** Кап файлов в одной сессии — защита от бесконечного роста при частых admission. */
+const SPILL_MAX_PER_SESSION = 50;
+
+/** Параметры уборки спиллов; `skipDir` — сессия, которая сейчас пишет. */
+export interface SpillGcOptions {
+  now?: number;
+  skipDir?: string;
+  ttlMs?: number;
+  maxPerSession?: number;
+}
+
+function removeQuietly(path: string): boolean {
+  try {
+    rmSync(path, { force: true });
+    return true;
+  } catch {
+    // Файл мог исчезнуть в параллельном прогоне — уборка идемпотентна.
+    return false;
+  }
+}
+
+/**
+ * Retention для `.mma/context/<session>/`: удаляет старые файлы и лишние
+ * сверх капа в чужих сессиях. Текущую сессию не трогаем — её артефакты ещё
+ * можно открыть по дескриптору из активного контекста.
+ */
+export function pruneSpills(spillRoot: string, opts: SpillGcOptions = {}): { removed: number } {
+  const now = opts.now ?? Date.now();
+  const ttl = opts.ttlMs ?? SPILL_TTL_MS;
+  const cap = opts.maxPerSession ?? SPILL_MAX_PER_SESSION;
+  let removed = 0;
+  let sessions: Dirent[];
+  try {
+    sessions = readdirSync(spillRoot, { withFileTypes: true });
+  } catch {
+    return { removed };
+  }
+  for (const session of sessions) {
+    if (!session.isDirectory()) continue;
+    const dir = join(spillRoot, session.name);
+    if (opts.skipDir && resolve(dir) === resolve(opts.skipDir)) continue;
+    let files: Array<{ path: string; mtime: number }>;
+    try {
+      files = readdirSync(dir, { withFileTypes: true })
+        .filter((f) => f.isFile())
+        .map((f) => {
+          const path = join(dir, f.name);
+          return { path, mtime: statSync(path).mtimeMs };
+        })
+        .sort((a, b) => a.mtime - b.mtime);
+    } catch {
+      continue;
+    }
+    for (const file of files) {
+      if (now - file.mtime > ttl && removeQuietly(file.path)) removed++;
+    }
+    const alive = files.filter((f) => existsSync(f.path));
+    for (const file of alive.slice(0, Math.max(0, alive.length - cap))) {
+      if (removeQuietly(file.path)) removed++;
+    }
+  }
+  return { removed };
+}
 
 export interface AdmitOptions {
   baseDir: string;
@@ -57,6 +129,8 @@ export function admitToolResult(result: ToolResult, opts: AdmitOptions): ToolRes
     throw new Error(`admitToolResult: spill path escapes baseDir: ${dir}`);
   }
 
+  // Уборка чужих сессий перед записью: спиллы не копятся между прогонами.
+  pruneSpills(dirname(dir), { now: Date.now(), skipDir: dir });
   mkdirSync(dir, { recursive: true });
   // randomUUID-суффикс: два admission в одну миллисекунду не перезатрут друг друга.
   const artifact = join(dir, `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}.txt`);
