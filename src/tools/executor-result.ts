@@ -4,7 +4,11 @@
  */
 import type { ToolContext, ToolResult, ToolCall } from "./types";
 import type { RegisteredTool } from "./registry";
-import { tagBlockedFileContent, tagShellFileContent } from "./file-content-tag";
+import {
+  tagBlockedFileContent,
+  tagShellFileContent,
+  tagUndeclaredPluginRead,
+} from "./file-content-tag";
 import { admitFromContext } from "./admission";
 import { fileOpsBudgetNote } from "./file-ops-budget";
 
@@ -20,6 +24,8 @@ export function finalizeToolResult(
   let out = tagBlockedFileContent(tool, call, result, ctx);
   // `bash`: путь в самой команде (§4.8) — тоже источник file-content.
   out = tagShellFileContent(tool, call, out, ctx);
+  // Плагин с fs:read без pathArgs: путь неизвестен — метим весь вывод.
+  out = tagUndeclaredPluginRead(tool, out, ctx);
   // Субагент: его ответ производен от защищённых файлов дочернего контекста.
   if (out.taint) ctx.contextManager?.markNextToolTainted?.();
 
