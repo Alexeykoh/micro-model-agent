@@ -162,6 +162,24 @@ export function llmUsageEntry(iteration: number, usage: LlmUsageLogInfo): LogEnt
  * `error`/fail-open диагностика: `content` = причина (совместимо со старыми
  * читателями лога), `source`/`module`/`operation`/`errorKind` — по INV-13/14.
  */
+/** LSP-событие: фаза в `op`, длительность — из durMs/duration/budgetMs. */
+export function lspEntry(
+  op: string,
+  message: string,
+  meta?: Record<string, unknown>,
+): Omit<SessionLogEntry, "ts" | "source"> {
+  const raw = meta?.durMs ?? meta?.duration ?? meta?.budgetMs;
+  const duration = typeof raw === "number" && Number.isFinite(raw) ? raw : undefined;
+  return {
+    type: "lsp",
+    module: "lsp",
+    op,
+    content: message,
+    duration,
+    success: meta?.success === false ? false : undefined,
+  };
+}
+
 export function diagnosticEntry(
   type: "error" | DiagnosticEvent,
   diag: Diagnostic,

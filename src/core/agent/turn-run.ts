@@ -15,6 +15,7 @@ import { deriveSessionName, generateSessionTitle, TITLE_MAX_TOKENS, type TitleCh
 import { ensureSessionStart } from "./session-start";import type { SystemPromptBuild } from "./prompt-phase";
 import { refreshInstructionBlocks } from "../prompt-instructions";
 import { stopTurnProcesses } from "./turn-process-cleanup";
+import { getModule } from "./surface";
 
 /** Мутабельный вид `Agent`, которым владеет координатор хода. */
 export interface TurnRunHost {
@@ -87,6 +88,13 @@ export async function runTurn(
   const { config, llmProvider, pluginManager, contextManager, logger, sessionManager } = deps;
 
   const slog = new SessionLoggerCtor(sessionManager, logger, () => host.callerProvenance());
+
+  // LSP-события жизненного цикла идут в session.jsonl с границы хода, когда
+  // SessionLogger уже существует (модуль без реестра работает как раньше).
+  const lsp = getModule<{
+    setSessionSink?: (sink: (op: string, msg: string, meta?: Record<string, unknown>) => void) => void;
+  }>(deps.moduleRegistry, "lsp");
+  lsp?.setSessionSink?.((op, msg, meta) => slog.logLsp(op, msg, meta));
 
   // AGENTS.md — живой источник: перечитываем на ГРАНИЦЕ ХОДА, внутри хода
   // промпт имутабелен (KV-кеш). system заменяется на месте ниже, в
