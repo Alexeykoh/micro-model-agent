@@ -4,6 +4,8 @@ release/
 sbom.json
 blog_api_test/
 .mma/
+.env
+.env.*
 .opencode/plugins/*/token.txt
 .mimocode/
 *.log
