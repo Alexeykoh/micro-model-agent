@@ -1,5 +1,5 @@
 // Дефолты безопасности и мерж с пользовательскими настройками.
-import type { SecurityConfig, } from "./types";
+import type { AppConfig, SecurityConfig } from "./types";
 import { DEFAULT_DATA_POLICY } from "../modules/security/data-policy/defaults";
 import { DANGEROUS_COMMANDS } from "../modules/security/security-lists";
 
@@ -186,6 +186,33 @@ export const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
   // Корпоративный слой DLP (спека 2026-10-19).
   dataPolicy: DEFAULT_DATA_POLICY,
 };
+
+/** Команды, которые в local-trusted — рутина, а не угроза (интерпретаторы). */
+const LOCAL_TRUSTED_MUNDANE_COMMANDS = new Set([
+  "node", "python", "python3", "perl", "ruby",
+]);
+
+function sameList(a: readonly string[] | undefined, b: readonly string[]): boolean {
+  return Array.isArray(a) && a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+/**
+ * LM-3: доверенный хост-профиль не должен блокировать mundane-команды.
+ * Явная пользовательская настройка (список отличается от дефолта) уважается:
+ * релаксируем только нетронутые дефолты. sandbox и legacy-профили не трогаем.
+ */
+export function applyLocalTrustedBashPolicy(config: AppConfig): void {
+  if (config.execution?.profile !== "local-trusted" || !config.security?.bash) return;
+  const defaults = DEFAULT_SECURITY_CONFIG.bash;
+  if (sameList(config.security.bash.dangerousOperators, defaults.dangerousOperators)) {
+    config.security.bash.dangerousOperators = [];
+  }
+  if (sameList(config.security.bash.blacklist, defaults.blacklist)) {
+    config.security.bash.blacklist = (defaults.blacklist ?? []).filter(
+      (c) => !LOCAL_TRUSTED_MUNDANE_COMMANDS.has(c.toLowerCase()),
+    );
+  }
+}
 
 /**
  * Мержит пользовательский конфиг безопасности с дефолтами.

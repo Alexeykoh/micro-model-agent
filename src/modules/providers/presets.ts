@@ -88,6 +88,40 @@ const LMSTUDIO: ProviderSpec = {
   create: openaiCompat,
 };
 
+/** llama.cpp / llama-swap на localhost:8080: тот же OpenAI-транспорт, но свой
+ *  type — фиксированный URL и локальное кеш-поведение едут с пресетом, как у
+ *  LM Studio. Точка входа может быть как голым llama-server, так и llama-swap
+ *  с несколькими моделями (`/v1/models` отдаёт id и ctx каждой). */
+const LLAMACPP: ProviderSpec = {
+  type: "llamacpp",
+  label: "llama.cpp (localhost:8080)",
+  baseUrl: "http://localhost:8080/v1",
+  capabilities: {
+    streaming: true,
+    tools: true,
+    // Без mmproj сервер не примет картинки; конкретную модель решает проба
+    // (`capabilities.vision`) или override в `modelCapabilities`.
+    vision: false,
+    // llama.cpp с `--jinja` принимает `reasoning_effort`; бэкенд без него
+    // игнорирует поле, поэтому дефолт безопасен и для «голого» сервера.
+    reasoningStrategy: "openai-effort",
+    listModels: true,
+    requiresKey: false,
+    auth: "bearer",
+    cache: {
+      mechanism: "local",
+      report: "openai",
+      sessionHeader: false,
+      requestCachePrompt: false,
+      requestPromptCacheKey: false,
+      requestSessionId: false,
+      requestCacheControl: false,
+      requestStreamUsage: true,
+    },
+  },
+  create: openaiCompat,
+};
+
 const OPENROUTER: ProviderSpec = {
   type: "openrouter",
   label: "OpenRouter (openrouter.ai)",
@@ -233,6 +267,7 @@ const OPENCODE_GO: ProviderSpec = {
 export const BUILTIN_PROVIDERS: ProviderSpec[] = [
   OPENAI_COMPAT,
   LMSTUDIO,
+  LLAMACPP,
   OPENROUTER,
   OPENAI,
   ANTHROPIC,

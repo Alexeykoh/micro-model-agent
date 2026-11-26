@@ -3,10 +3,9 @@
 > **Актуально на 2026-11-09** (сверено с кодом; `dev`).
 >
 > Здесь только **открытая** работа. Закрытые пункты с обоснованиями и ссылками на
-> гейты сохранены снимками в [`docs/archive/`](./docs/archive/) — последний
-> полный снимок [`todo-2026-11-04.md`](./docs/archive/todo-2026-11-04.md);
-> архивы закрытых 1.1–1.14 (вкл. webui-UX 1.13 и harness 1.14, закрыты 2026-11-09)
-> — в git-истории TODO.md и по спеке
+> гейты остались в git-истории (`git log --all -- TODO.md`): последний полный
+> снимок `todo-2026-11-04.md` и закрытые 1.1–1.14
+> (вкл. webui-UX 1.13 и harness 1.14, закрыты 2026-11-09). См. также спеки
 > [`2026-11-06-webui-pause-resume`](./docs/specs/2026-11-06-webui-pause-resume-design.md) /
 > [`2026-11-08-agent-harness`](./docs/specs/2026-11-08-agent-harness-design.md) /
 > [`2026-11-09-nested-agents-md`](./docs/specs/2026-11-09-nested-agents-md-design.md).
@@ -48,7 +47,7 @@
 
 ## 3. Дорожная карта до продакшена
 
-> Полный gap-анализ: [`docs/archive/specs/2026/2026-09-28-production-readiness-design.md`](./docs/archive/specs/2026/2026-09-28-production-readiness-design.md).
+> Полный gap-анализ: `docs/archive/specs/2026/2026-09-28-production-readiness-design.md (удалён 2026-11-25)` (удалён вместе с архивом 2026-11-25, доступно в git).
 > Пункты — отдельные ветки от `dev`; каждый требует зелёных `bun test` + `bun run quality`.
 > `master` не коммитим/не пушим (ветка релиза).
 

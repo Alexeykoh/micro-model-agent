@@ -143,6 +143,7 @@ describe("Agent.finalizeWithoutTools", () => {
     const t = createMockDeps(textThenDone("Final answer from gathered evidence."));
     const agent = new Agent(t.deps);
     const state = createLoopState();
+    state.toolCallsThisTurn = -100; // BCP-3: нейтрализуем мягкий бюджет в этом тесте
     state.iteration = 3;
     const chunks: string[] = [];
     const text = await (agent as any).finalizeWithoutTools(state, tokenTrackerStub, (c: string) =>
@@ -160,6 +161,7 @@ describe("Agent.finalizeWithoutTools", () => {
     const t = createMockDeps(() => (async function* () {})());
     const agent = new Agent(t.deps);
     const state = createLoopState();
+    state.toolCallsThisTurn = -100; // BCP-3: нейтрализуем мягкий бюджет в этом тесте
     state.iteration = 3;
     await (agent as any).finalizeWithoutTools(state, tokenTrackerStub);
     expect(state.finalAnswerAccepted).toBe(false);
@@ -179,6 +181,7 @@ describe("Agent.finalizeWithoutTools", () => {
     );
     const agent = new Agent(t.deps);
     const state = createLoopState();
+    state.toolCallsThisTurn = -100; // BCP-3: нейтрализуем мягкий бюджет в этом тесте
     state.iteration = 3;
     const calls: string[] = [];
     const tt = {

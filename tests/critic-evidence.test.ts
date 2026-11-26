@@ -6,9 +6,23 @@ import { join } from "path";
 import { buildEvidencePack, isWorkMutation } from "../src/modules/critic/evidence";
 import { renderPack } from "../src/modules/critic/client-render";
 
+/**
+ * Env без переменных репозитория. Git экспортирует `GIT_DIR`/`GIT_WORK_TREE`
+ * хукам, и унаследованный `GIT_DIR` уводит `git init/add/commit` из temp-каталога
+ * в НАСТОЯЩИЙ репозиторий (инцидент 2026-10-24: pre-push сделал его bare и
+ * закоммитил пустое дерево в master).
+ */
+function gitEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  for (const key of Object.keys(env)) {
+    if (key.startsWith("GIT_")) delete env[key];
+  }
+  return env;
+}
+
 function gitAvailable(): boolean {
   try {
-    execFileSync("git", ["--version"], { stdio: "ignore" });
+    execFileSync("git", ["--version"], { stdio: "ignore", env: gitEnv() });
     return true;
   } catch {
     return false;
@@ -139,7 +153,7 @@ describe("critic evidence", () => {
     });
 
     function initRepo(): void {
-      const opts = { cwd: tmpDir, stdio: "ignore" } as const;
+      const opts = { cwd: tmpDir, stdio: "ignore", env: gitEnv() } as const;
       execFileSync("git", ["init"], opts);
       execFileSync("git", ["config", "user.email", "t@t.t"], opts);
       execFileSync("git", ["config", "user.name", "t"], opts);
@@ -201,6 +215,24 @@ describe("critic evidence web grounding", () => {
       ],
     });
     expect(pack.webGrounding).toEqual({ attempted: 1, verified: true });
+  });
+
+  it("puts successful web fetch excerpts into the pack so figures can be checked", () => {
+    const pack = buildEvidencePack({
+      task: "prices",
+      toolEvents: [
+        {
+          tool: "web_fetch",
+          args: { url: "https://www.gym24.by/stoimost/" },
+          ok: true,
+          output: "STRUCTURED PAGE DATA: Подписка GYM24 | 99 BYN | первый месяц 199 руб. Разовое посещение | 29 BYN",
+        },
+      ],
+      answerText: "99 руб. и 199 руб. подтверждены страницей.",
+    });
+    expect(pack.webExcerpts?.length).toBe(1);
+    expect(pack.webExcerpts?.[0]).toContain("gym24.by/stoimost");
+    expect(pack.webExcerpts?.[0]).toContain("99 BYN");
   });
 
   it("omits web grounding when no web tools were used", () => {

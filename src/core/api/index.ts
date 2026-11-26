@@ -14,6 +14,10 @@ export { redactContextSecrets } from "../agent/context-log";
 export { summarizeToolArgs } from "../agent/tool-output";
 // Структурный ключ аргументов тула (execution/stuck-detector).
 export { canonicalArgsKey } from "../agent/canonical-args";
+// RCV-1: классификация ошибок валидации для recovery-модуля.
+export { isValidationFailure } from "../agent/validation-failure";
+// RCV-9: тип состояния цикла для recovery-модуля (только тип, рантайм-цикла нет).
+export type { LoopState } from "../agent/loop-state";
 // Калибровка контекста (context-модуль).
 export { ContextCalibrator, isImplausibleJump } from "../agent/context-calibration";
 export type { CalibrationState } from "../agent/context-calibration";
@@ -21,3 +25,6 @@ export type { CalibrationState } from "../agent/context-calibration";
 export type { Agent } from "../agent";
 // Мягкий reload источников (`/reload` на проводных поверхностях): тип отчёта.
 export type { ReloadSourcesResult } from "../sources-reload";
+// Vision-порт для модуля документов (INV-D7): ресайз + data URL из ядра.
+export type { ImageResizePort, PreparedVisionImage } from "./image-resize";
+export { coreImageResize } from "../vision-image";

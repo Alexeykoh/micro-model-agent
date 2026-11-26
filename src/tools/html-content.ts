@@ -8,6 +8,70 @@
  * много (признак JS-рендеринга).
  */
 
+/** Сколько Offer-ов из JSON-LD показывать перед обрезкой вывода web_fetch. */
+const MAX_STRUCTURED_OFFERS = 20;
+/** Длина описания Offer-а в компактной строке. */
+const MAX_OFFER_DESCRIPTION = 100;
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/**
+ * Достаёт цены/тарифы из JSON-LD (`OfferCatalog`), которые лежат в `<script>`
+ * и потому теряются при извлечении видимого текста. Сессия GYM24 искала
+ * «4 посещения» по агрегаторам только потому, что нужные офферы были ниже
+ * порога `${\"… (N more lines)\"}` и модель их не видела.
+ */
+export function extractStructuredOffers(html: string): string {
+  const lines: string[] = [];
+  const scriptRe = /<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = scriptRe.exec(html)) !== null && lines.length < MAX_STRUCTURED_OFFERS) {
+    let data: unknown;
+    try {
+      data = JSON.parse(match[1]);
+    } catch {
+      continue; // битый JSON-LD — не повод ронять загрузку страницы
+    }
+    const root = asRecord(data);
+    if (!root) continue;
+    const graph = Array.isArray(root["@graph"]) ? root["@graph"] : [data];
+    for (const node of graph) {
+      const rec = asRecord(node);
+      if (!rec) continue;
+      let offers: unknown[] = [];
+      if (rec["@type"] === "OfferCatalog" && Array.isArray(rec.itemListElement)) {
+        offers = rec.itemListElement.map((entry) => asRecord(entry)?.item ?? entry);
+      } else if (Array.isArray(rec.offers)) {
+        offers = rec.offers;
+      }
+      for (const offer of offers) {
+        const o = asRecord(offer);
+        if (!o || o["@type"] !== "Offer" || typeof o.name !== "string") continue;
+        const price = o.price === undefined ? "" : `${String(o.price)} ${String(o.priceCurrency ?? "")}`.trim();
+        const description =
+          typeof o.description === "string"
+            ? o.description.replace(/\s+/g, " ").trim().slice(0, MAX_OFFER_DESCRIPTION)
+            : "";
+        lines.push(`- ${o.name}${price ? ` | ${price}` : ""}${description ? ` | ${description}` : ""}`);
+        if (lines.length >= MAX_STRUCTURED_OFFERS) break;
+      }
+    }
+  }
+  return lines.join("\n");
+}
+
+/** Добавляет структурированные офферы в начало текста, который увидит модель. */
+function withStructuredOffers(html: string, text: string): string {
+  const offers = extractStructuredOffers(html);
+  return offers
+    ? `STRUCTURED PAGE DATA (JSON-LD offers):\n${offers}\n\n${text}`
+    : text;
+}
+
 /** Ниже этого объёма текста страница считается «без содержательного контента». */
 export const MIN_CONTENT_CHARS = 200;
 /** Страница с таким объёмом HTML, но без текста — почти наверняка JS-шелл. */
@@ -79,18 +143,16 @@ export function extractReadableContent(html: string): ReadableContent {
   }
 
   if (candidates.length > 0) {
-    return {
-      text: bestText,
-      shell: looksLikeShell(html, bestText),
-      source: "main",
-    };
+    const shell = looksLikeShell(html, bestText);
+    return { text: withStructuredOffers(html, bestText), shell, source: "main" };
   }
 
   const bodyM = /<body\b[^>]*>([\s\S]*?)<\/body>/i.exec(html);
   const whole = htmlToText(bodyM ? bodyM[1] : html);
+  const shell = looksLikeShell(html, whole);
   return {
-    text: whole,
-    shell: looksLikeShell(html, whole),
+    text: withStructuredOffers(html, whole),
+    shell,
     source: whole.length > 0 ? "body" : "none",
   };
 }

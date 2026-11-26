@@ -2,11 +2,11 @@
 // consumed by the stream/turn clusters and re-exported by `feed.js`. Imports
 // the container primitives it needs from `core.js`, so the edge stays one-way.
 import { el } from "../dom.js";
-import { t, pluralCount } from "../i18n.js";
+import { t } from "../i18n.js";
 import { streamStateFor } from "../store.js";
 import type { FeedStreamState } from "../store.js";
-import { formatMs, verbosity } from "../format.js";
 import { createFace } from "../loader.js";
+import { foldRun } from "./activity-group.js";
 import {
   activityLabel,
   activityStart,
@@ -87,39 +87,20 @@ export function showBusy(feed?: HTMLElement | null): void {
   st.busyTimer = setInterval(update, 1000);
 }
 
+/**
+ * Close the open step group. The folding itself (summary row, expand/collapse)
+ * lives in `activity-group.ts`; this stays the single call site for live turns.
+ */
 export function flushRun(feed?: HTMLElement | null): void {
   feed = feed || liveFeed();
   if (!feed) return;
-  const st = streamStateFor(feed);
-  if (st.runCount <= 0) {
-    resetRun(st);
-    return;
-  }
-  // Quiet: a run of successful read-only actions folds into one summary line,
-  // replacing the per-action lines (mirrors `Renderer.flushRecon`). `normal`
-  // and `verbose` keep the individual action lines and add nothing.
-  if (verbosity() === "quiet" && st.runReconOnly && st.runFails === 0 && st.runCount > 1) {
-    // Fade the folded lines out instead of snapping them away.
-    const folding = st.runNodes.slice();
-    folding.forEach((node) => node.classList.add("fold-out"));
-    window.setTimeout(() => folding.forEach((node) => node.remove()), 160);
-    const line = el("div", "grouped");
-    line.appendChild(el("span", "pipe", "│"));
-    const dur = formatMs(st.runDuration);
-    line.appendChild(
-      document.createTextNode(
-        " " + pluralCount("web.action.actions", st.runCount) + " ✓" + (dur ? " · " + dur : ""),
-      ),
-    );
-    appendTo(feed, line);
-  }
-  resetRun(st);
+  foldRun(feed);
+  resetRun(streamStateFor(feed));
 }
 
 function resetRun(st: FeedStreamState): void {
   st.runCount = 0;
   st.runFails = 0;
-  st.runReconOnly = true;
   st.runNodes = [];
   st.runDuration = 0;
 }

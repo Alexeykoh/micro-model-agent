@@ -14,6 +14,7 @@ import { readFileTool } from "./read-file";
 import { writeFileTool } from "./write-file";
 import { appendFileTool } from "./append-file";
 import { editFileTool } from "./edit-file";
+import { patchFileTool } from "./patch-file";
 import { globTool } from "./glob-tool";
 import { grepTool } from "./grep-tool";
 import { listDirTool } from "./list-dir";
@@ -21,6 +22,8 @@ import { createDirTool } from "./create-dir";
 import { deleteFileTool } from "./delete-file";
 import { moveFileTool } from "./move-file";
 import { fileInfoTool } from "./file-info";
+import { listFileChangesTool } from "./list-file-changes";
+import { restoreFileTool } from "./restore-file";
 import { bashTool } from "./bash";
 import { gitTool } from "./git";
 import { processListTool } from "./process-list";
@@ -63,6 +66,7 @@ export {
   writeFileTool,
   appendFileTool,
   editFileTool,
+  patchFileTool,
   globTool,
   grepTool,
   listDirTool,
@@ -70,6 +74,8 @@ export {
   deleteFileTool,
   moveFileTool,
   fileInfoTool,
+  listFileChangesTool,
+  restoreFileTool,
   bashTool,
   gitTool,
   subagentTool,
@@ -111,6 +117,7 @@ export function registerAllTools(
     writeFileTool,
     appendFileTool,
     editFileTool,
+    patchFileTool,
     globTool,
     grepTool,
     listDirTool,
@@ -118,6 +125,8 @@ export function registerAllTools(
     deleteFileTool,
     moveFileTool,
     fileInfoTool,
+    listFileChangesTool,
+    restoreFileTool,
     bashTool,
     gitTool,
     subagentTool,

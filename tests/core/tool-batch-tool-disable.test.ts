@@ -48,7 +48,8 @@ describe("ToolBatchExecutor per-turn tool disable", () => {
     await run("browser");
     expect(state.disabledTools.has("browser")).toBe(true);
     expect(state.toolDisabledNudged.has("browser")).toBe(true);
-    expect(added.some((m) => m.includes("browser") && m.toLowerCase().includes("disabled"))).toBe(true);
+    // RCV-6: директива говорит «unavailable», а не «DISABLED … stop and tell».
+    expect(added.some((m) => m.includes("browser") && m.toLowerCase().includes("unavailable"))).toBe(true);
   });
 
   it("does not disable a transient web tool (its failures are normal)", async () => {
@@ -84,7 +85,7 @@ describe("ToolBatchExecutor per-turn tool disable", () => {
       await run("read_file");
     }
     // Only the standing directive, not the per-call "not executed" tool results.
-    const directives = added.filter((m) => m.includes("browser") && m.includes("Stop and tell"));
+    const directives = added.filter((m) => m.includes("browser") && m.includes("Continue the task"));
     expect(directives).toHaveLength(1);
   });
 });

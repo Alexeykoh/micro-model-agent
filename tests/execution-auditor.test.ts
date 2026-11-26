@@ -357,8 +357,12 @@ describe("Auditor", () => {
       .spyOn(auditRunners, "runTypecheck")
       .mockImplementation(async (dir) =>
         existsSync(join(dir, "tsconfig.json"))
-          ? "error TS2322: Type 'string' is not assignable to type 'number'."
-          : null,
+          ? {
+              status: "error" as const,
+              error: "error TS2322: Type 'string' is not assignable to type 'number'.",
+              durationMs: 1,
+            }
+          : { status: "ok" as const, durationMs: 1 },
       );
 
     const plan = PlanCreator.createPlan("test", ["Create src/broken.ts with content"], tmpDir);
@@ -382,8 +386,12 @@ describe("Auditor", () => {
       .spyOn(auditRunners, "runTypecheck")
       .mockImplementation(async (dir) =>
         existsSync(join(dir, "tsconfig.json"))
-          ? "error TS2322: Type 'string' is not assignable to type 'number'."
-          : null,
+          ? {
+              status: "error" as const,
+              error: "error TS2322: Type 'string' is not assignable to type 'number'.",
+              durationMs: 1,
+            }
+          : { status: "ok" as const, durationMs: 1 },
       );
 
     const plan = PlanCreator.createPlan("test", ["Create src/broken.ts with content"], tmpDir);

@@ -22,10 +22,7 @@
 | ---------------------------------------------------------- | ----------------------------------------------------------------------- | --------- |
 | [`specs/`](./specs)                                        | Контракты: архитектура, enforcement, провайдеры, тулы, web, service     | **Живое** |
 | [`ideas/`](./ideas)                                        | Идеи и картины продукта без нормативных контрактов                      | Черновик  |
-| [`archive/specs/`](./archive/specs)                        | Завершённые спеки, сгруппированные по году                              | История   |
-| [`plans/`](./plans)                                        | Планы активных работ                                                    | Рабочее   |
 | [`development/`](./development)                            | Развитие: что позаимствовать у других harness'ов, приоритеты и гейты    | Рабочее   |
-| [`archive/plans/`](./archive/plans)                        | Закрытые планы и планы из старых воркфлоу                               | История   |
 | [`agents/`](./agents)                                      | Описание текущего состояния подсистем                                   | **Живое** |
 | [`agents/architecture.md`](./agents/architecture.md)       | Текущее устройство: Output, Host-seam, Security, контракт `LLMProvider` | **Живое** |
 | [`agents/gates.md`](./agents/gates.md)                     | Инвариант → гейт, ворота CI                                             | **Живое** |
@@ -36,17 +33,26 @@
 | [`design/ui/`](./design/ui)                                | Стиль чата и макеты                                                     | **Живое** |
 | [`testing/`](./testing)                                    | Ручные сценарии и наблюдения                                            | **Живое** |
 
+## Разовые аудиты
+
+- [agent logic audit](./analysis/2026-08-29-agent-logic-audit.md)
+- [MMA Web UI/UX audit](./analysis/2026-09-24-mma-web-ui-ux-audit.md)
+- [fallow security](./analysis/2026-09-25-fallow-security.md)
+- [waves B–E audit](./analysis/2026-09-25-waves-bcde-audit.md)
+- [indexer search ideas](./analysis/2026-10-04-indexer-search-ideas.md)
+- [architecture v2 live verification](./analysis/2026-10-12-architecture-v2-live-verification.md)
+- [system prompt audit](./analysis/2026-11-12-system-prompt-audit.md)
+
 ## Правило для спек
 
 1. Спека пишется **до кода**, если меняется контракт: путь данных, граница модуля,
    точка enforcement, формат события, схема конфига. Файл:
    `docs/specs/<YYYY-MM-DD>-<тема>-design.md`.
 2. Пока спека описывает живой контракт — она лежит в `docs/specs/`.
-3. Когда контракт заменён или фича закрыта — спека переезжает в
-   `docs/archive/specs/<год>/`. Ссылки обновляются, файл не удаляется: на него
-   ссылаются `debt.md`, `feature-history.md` и релизные заметки.
+3. Когда контракт заменён или фича закрыта — спека удаляется. История остаётся в git:
+   `git log --all -- docs/specs/<файл>`.
 4. Планы (`docs/plans/`) — рабочий артефакт, а не контракт. После закрытия задачи
-   план уезжает в `docs/archive/plans/<год>/`.
+   план удаляется; история — в git.
 
 Нормативный список живых спек — в [specs/README.md](./specs/README.md).
 
@@ -54,8 +60,4 @@
 
 Ссылки в Markdown проверяются тестом
 [`tests/docs-link-check.test.ts`](../tests/docs-link-check.test.ts). Он входит в
-`bun test`, поэтому битая ссылка после переноса файла не переживёт CI.
-
-## Архив
-
-Структура и правила — в [archive/README.md](./archive/README.md).
+`bun test`, поэтому битая ссылка после удаления файла не переживёт CI.

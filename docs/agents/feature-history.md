@@ -201,7 +201,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 
 ### Session ↔ Plan Binding (2.12.0)
 
-Спека: [docs/archive/specs/2026/2026-09-29-session-plan-binding-design.md](../archive/specs/2026/2026-09-29-session-plan-binding-design.md).
+Спека: `docs/archive/specs/2026/2026-09-29-session-plan-binding-design.md (удалён 2026-11-25)` (удалено вместе с архивом 2026-11-25).
 
 - **План следует за сессией:** активный план лежит в per-session слоте
   `.mma/plans/sessions/<sessionId>/active.json` (`PlanStore.save/load/clearSessionActive`;
@@ -462,7 +462,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 
 ### Onboarding Commands (2.1.0)
 
-Дизайн: [docs/archive/specs/2026/2026-09-23-onboarding-meet-init-design.md](../archive/specs/2026/2026-09-23-onboarding-meet-init-design.md); план: [docs/plans/2026-09-23-onboarding-meet-init.md](./docs/plans/2026-09-23-onboarding-meet-init.md).
+Дизайн: `docs/archive/specs/2026/2026-09-23-onboarding-meet-init-design.md (удалён 2026-11-25)` (удалено вместе с архивом 2026-11-25); план: `docs/plans/2026-09-23-onboarding-meet-init.md` (удалён 2026-11-25).
 
 - **`meet` / «Познакомимся»** (`src/modules/onboarding/meet.ts`, `mode.ts`, `prompts.ts`) — LLM-интервью о профиле использования (домен, имя, язык, стиль ответов, привычки, «не делать без спроса»), пишет **только в глобальную память** (`~/.mma/memory/preferences.json`, `facts.md`) через `remember`. REPL-режим: вход по `[Y/n]` после setup, `/meet` (алиас `/познакомимся`) или `mma meet`; выход — по sentinel-тулу `meet_done`. Домен-нейтрально (разработка, умный дом, ассистент, …), 1–3 вопроса за ход, turn cap, `Esc` — выход без записи.
 - **`agents init`** (`src/modules/onboarding/init.ts`) — LLM генерирует/улучшает `AGENTS.md` для любого workspace (код, доки, заметки, конфиги): скан через project map/read-only тулы, точечные вопросы, запись в `<baseDir>/AGENTS.md`; существующий файл улучшается **in place** с diff и подтверждением.
@@ -474,7 +474,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 
 ### Full Config Surfaces (2.10.0)
 
-Дизайн: [docs/plans/2026-09-27-full-config-surfaces.md](./docs/plans/2026-09-27-full-config-surfaces.md).
+Дизайн: `docs/plans/2026-09-27-full-config-surfaces.md` (удалён 2026-11-25).
 
 - **`/config` — все ключи** (`src/config/registry.ts` + `registry-extra.ts`): ~110 ключей, типы `string/int/share/bool/enum` + новые `json` (объекты, лимит 20K, `JSON.parse`) и `list` (массивы строк, в REPL — через запятую). `registry.ts` grandfathered (>300 строк) — новые дефы только в `registry-extra.ts`, мердж конкатом в `DEFINITIONS`; `allConfigNames()`/`configDefs()` подхватывают их автоматически (комплитер без правок).
 - **`mma config set <key> <value> [--force]`** (`src/cli/commands.ts`): по умолчанию валидация через `setConfigValue` (bad value → `cli.config_invalid`, запись не пишется); `--force` — сырая запись по dotted-пути без валидации (escape hatch для битых конфигов).
@@ -488,7 +488,7 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 
 ### Browser Mode (`mma web`) (2.2.0, Phase 3 — 2.4.0)
 
-Дизайн: [docs/archive/specs/2026/2026-09-23-mma-web/design.md](../archive/specs/2026/2026-09-23-mma-web/design.md).
+Дизайн: `docs/archive/specs/2026/2026-09-23-mma-web/design.md (удалён 2026-11-25)` (удалено вместе с архивом 2026-11-25).
 
 - **`mma web [--port N] [--host H] [--token T] [--no-open]`** — браузерный чат **без TTY**: тот же `bootstrap()`/`Agent`/сессии, вторая реализация `Host` (`WebHost`, `src/core/web-host.ts`) поверх `src/modules/webui/`. Терминальный REPL не меняется; терминал и веб — отдельные процессы.
 - **Env:** `MMA_WEBUI_PORT` (default random), `MMA_WEBUI_HOST` (`127.0.0.1`), `MMA_WEBUI_TOKEN`, `MMA_WEBUI_OPEN=0`, `MMA_WEBUI_MAX_CLIENTS`.
@@ -506,18 +506,18 @@ INIT → THINK → ACT → OBSERVE → OUTPUT → ERROR
 - **Вопросы:** в web-режиме `question`/`approve` зарегистрированы и используют web-`PromptIO` (SSE `question` + `POST /api/answer`); в терминале остаются выключены. Мультивыбор (подсказка + send) и «own answer…» (`CUSTOM_INDEX = -1` → follow-up free-text) поддержаны.
 - **i18n:** `GET /api/i18n` отдаёт словари, chrome веб-UI локализуется и переключается при смене `locale`; SSE-reconnect с ресинком; статика с `Cache-Control: no-store`.
 - **Настройки:** адаптивная модалка; локализованные подписи конфига (`config.key.*`) и enum (`config.enum.*`); read-only `version`; Security-тумблеры (`security.enabled/paths.enabled/contentScan.enabled/sessionEncryption.enabled`) + маскированный web-токен; провайдеры `GET/POST /api/providers` + `DELETE /api/providers/:name`; MCP `POST /api/mcp/:id` (применяется со следующего запуска); плагины — read-only (enable/disable через файлы).
-- **Панель «Модель и провайдер» (2.7.0):** две секции `.settings-section` — «Модель» (поиск + скроллируемый `.model-list`, активная выделена) и «Провайдеры» (кнопка `.sec-add` в шапке секции, строка `.provider-item` с бейджем `[активный]`, dim-строкой метаданных и чипсами `make active`/`edit`/`delete`). Дублирующей строки «активный провайдер» нет. Форма добавления/правки (`providerForm`) открывается **inline** в секции (без новых модалок), обязательные поля сверху, опциональные (context/priority/rpm/parallel) — в `<details> «дополнительно»`; `datalist` подсказывает типы провайдеров и base URL. Спек: `docs/archive/specs/2026/2026-09-25-webui-provider-settings-design.md`.
+- **Панель «Модель и провайдер» (2.7.0):** две секции `.settings-section` — «Модель» (поиск + скроллируемый `.model-list`, активная выделена) и «Провайдеры» (кнопка `.sec-add` в шапке секции, строка `.provider-item` с бейджем `[активный]`, dim-строкой метаданных и чипсами `make active`/`edit`/`delete`). Дублирующей строки «активный провайдер» нет. Форма добавления/правки (`providerForm`) открывается **inline** в секции (без новых модалок), обязательные поля сверху, опциональные (context/priority/rpm/parallel) — в `<details> «дополнительно»`; `datalist` подсказывает типы провайдеров и base URL. Спек: `docs/archive/specs/2026/2026-09-25-webui-provider-settings-design.md (удалён 2026-11-25)`.
 - **Multi-provider (2.7.0):** `provider.models[name]` помнит последнюю модель каждого провайдера (`setConfigValue` в `src/config/registry.ts`): `model` → запись под активным, `provider.active` → восстановление; веб `postConfig` после смены провайдера/модели перечитывает `/api/config` + `/api/models`. Имена провайдеров уникальны (`providerNameTaken`, `src/modules/providers/naming.ts`): коллизия label/type → `409 name-conflict` в web и `cli.provider_name_conflict` в CLI; правка из web шлёт `originalName`, поэтому запись может сохранить своё имя. Удаление активного по-прежнему запрещено (`active-provider`) — сначала переключись.
 - **Пресеты провайдеров в форме (2.7.0):** `GET /api/providers` отдаёт `presets` (`buildProviderPresets`): `BUILTIN_PROVIDERS` с фиксированными `baseUrl` + именованные локальные (**LM Studio / Ollama / vLLM** → `openai-compat` с известными URL). В форме `providerForm` селект «шаблон» одним кликом заполняет `type`/`name`/`baseUrl` — ни хостед, ни локальный провайдер не требуют вводить URL руками (`web.settings.provider_preset/provider_custom`).
-- **Activity rail (над композером, unreleased):** индикатор занятости агента (`js/rail.js`, leaf-модуль, подписан на свои слушатели SSE в `app.js` + `setBusy` в `reflectBusy`): живёт весь `busy`-период (in-feed `.busy` гаснет на первом `text`), без плана — indeterminate-сканер + вспышка на каждое `tool_*`/`text`/`plan`, с планом MoE — честный `done/total` и засечки шагов; фаза (thinking/tool/composing), таймер, счётчики тулов/событий, последний тул (`labelOf` из `format.js`). Раскладки `ui.activityRail` = `off|line`(default)|`meta|full` (меняются live в Settings → Chat output и через `/config`); спека: [docs/archive/specs/2026/2026-09-27-activity-rail-design.md](../archive/specs/2026/2026-09-27-activity-rail-design.md).
+- **Activity rail (над композером, unreleased):** индикатор занятости агента (`js/rail.js`, leaf-модуль, подписан на свои слушатели SSE в `app.js` + `setBusy` в `reflectBusy`): живёт весь `busy`-период (in-feed `.busy` гаснет на первом `text`), без плана — indeterminate-сканер + вспышка на каждое `tool_*`/`text`/`plan`, с планом MoE — честный `done/total` и засечки шагов; фаза (thinking/tool/composing), таймер, счётчики тулов/событий, последний тул (`labelOf` из `format.js`). Раскладки `ui.activityRail` = `off|line`(default)|`meta|full` (меняются live в Settings → Chat output и через `/config`); спека: `docs/archive/specs/2026/2026-09-27-activity-rail-design.md (удалён 2026-11-25)` (удалено вместе с архивом 2026-11-25).
 - **Chat motion + sticky autoscroll (unreleased, ветка `fix/web-autoscroll`):** только opacity/transform, 100–200мс, всё гаснет под `prefers-reduced-motion` (существующий kill-switch в `styles.css`). Новое: entrance `rise` строк ленты (`.feed > *`), `▌`-каретка стрима (`.md.streaming::after` + имеющийся `blink`), пульс живых ярлыков (`.busy .lab`, `.think.live .think-h .lab`, `.rail-l1 .lab`, `.act.running .lab` — `live` снимает `finishThink`, `running` снимает `onToolEnd`/`onTurnEnd`, иначе «думаю» выглядит зависшим после хода), `pop` меню/диалогов, hover-переходы, `fade` сворачивания quiet-ран (`fold-out` + 160мс перед `remove`), edge-fades транскрипта (классы `scrolled/unfollowed` из скролл-хука), пилюля «↓ к новому» (`web.scroll.latest`, en+ru). Скролл липкий: флаг `follow` (`feed.js`) — у края пинимся на каждый аппенд, при уходе вверх не дёргаем; форс-пин на отправке/открытии таба/загрузке истории (`scrollToBottom`, экспорт в `tabs.js`); спиннер `showBusy` задержан на 180мс и не вспыхивает поверх стартовавшего стрима.
 - **Связь с `examples/plugins/web-ui`:** плагин остаётся примером, `mma web` — first-class core-режим.
-- **Структура после рефакторинга 2026-09-26:** backend — `body.ts` (`parseJsonBody`/`readJsonBody`, единый парсинг POST), `persist.ts` (`persistAndReconfigure`), `server.ts` — таблица `API_ROUTES` + `API_GROUPS` (правило #17), `host-state.ts` (снапшот/usage/plan), `run-agent.ts` (турн-раннер), `model-cache.ts`, `providers-view.ts` (read-модели); каждый файл ≤300 строк, `maxClients` живёт в `createWebUiState()`. Фронтенд — ES-модули `assets/js/` (с 2.17.1 на TS): `app.ts` (~240: boot/SSE/renderState) + `dom`/`api`/`i18n`/`store`/`format`/`feed`/`tabs`/`settings`/`dialog`; сервер отдаёт `/js/*` (`jsModules`, live-reload как остальная статика). DAG ацикличен: app → settings → tabs → {feed, dialog}; связь локали — хук `hooks.applyStaticI18n`. Дедуп: `planStepMark`, `makeToggle` (dom), `trapTab` (dialog), очередь тостов в `setIndicator`, `web.command.*` i18n для `/help`+`/api/commands`. План: [docs/plans/2026-09-26-webui-decompose.md](./docs/plans/2026-09-26-webui-decompose.md).
+- **Структура после рефакторинга 2026-09-26:** backend — `body.ts` (`parseJsonBody`/`readJsonBody`, единый парсинг POST), `persist.ts` (`persistAndReconfigure`), `server.ts` — таблица `API_ROUTES` + `API_GROUPS` (правило #17), `host-state.ts` (снапшот/usage/plan), `run-agent.ts` (турн-раннер), `model-cache.ts`, `providers-view.ts` (read-модели); каждый файл ≤300 строк, `maxClients` живёт в `createWebUiState()`. Фронтенд — ES-модули `assets/js/` (с 2.17.1 на TS): `app.ts` (~240: boot/SSE/renderState) + `dom`/`api`/`i18n`/`store`/`format`/`feed`/`tabs`/`settings`/`dialog`; сервер отдаёт `/js/*` (`jsModules`, live-reload как остальная статика). DAG ацикличен: app → settings → tabs → {feed, dialog}; связь локали — хук `hooks.applyStaticI18n`. Дедуп: `planStepMark`, `makeToggle` (dom), `trapTab` (dialog), очередь тостов в `setIndicator`, `web.command.*` i18n для `/help`+`/api/commands`. План: `docs/plans/2026-09-26-webui-decompose.md` (удалён 2026-11-25).
 - **E2E-покрытие фич** (`tests/e2e/`, `bun run test:e2e`, только по явной команде): `web-helpers.ts` + `web-commands`/`web-chat-tabs`/`web-settings` — все 13 slash-команд, чат (успех и чистая ошибка без LLM), табы/сессии/confirm, аттачи, file viewer, 11 панелей, тема, локаль, память, MCP; файлы гоняются последовательно (`maxWorkers: 1` в `vitest.e2e.config.ts`). Найденный там баг: web `/config locale` теперь применяет `setLocale` (`commands-shared.ts`, как REST).
 
 ### Web First-Run Setup (2.6.0)
 
-Дизайн: [docs/archive/specs/2026/2026-09-25-web-first-run-design.md](../archive/specs/2026/2026-09-25-web-first-run-design.md).
+Дизайн: `docs/archive/specs/2026/2026-09-25-web-first-run-design.md (удалён 2026-11-25)` (удалено вместе с архивом 2026-11-25).
 
 - **Общее ядро setup** (`src/modules/setup/`): `answers.ts` (`SetupAnswers`, `SETUP_LANGUAGES`,
   `SETUP_DEFAULTS`, `buildSetupDisplay()`), `apply.ts` (`applyAnswersToConfig` + `SECURITY_BASH_BLOCKLIST`),
@@ -709,8 +709,8 @@ retry-петля после блоков (перебор python/python3/bun/pip)
 
 ### WebUI Modularization (unreleased, phases 5–6)
 
-План: [docs/plans/2026-10-02-webui-modularization.md](./docs/plans/2026-10-02-webui-modularization.md);
-спека: [docs/archive/specs/2026/2026-10-02-webui-modularization-design.md](../archive/specs/2026/2026-10-02-webui-modularization-design.md).
+План: `docs/plans/2026-10-02-webui-modularization.md` (удалён 2026-11-25);
+спека: `docs/archive/specs/2026/2026-10-02-webui-modularization-design.md (удалён 2026-11-25)` (удалено вместе с архивом 2026-11-25).
 Внутренний рефакторинг, контракты (SSE/REST/сессии/конфиг/plugin API) не менялись.
 
 - **Фронтенд-раскладка (barrel + подпапки).** `assets/js/feed.ts` — barrel над
@@ -738,8 +738,8 @@ retry-петля после блоков (перебор python/python3/bun/pip)
 
 ### WebUI Frontend TypeScript Migration (2.17.1)
 
-Спека: [docs/archive/specs/2026/2026-10-04-webui-frontend-ts-design.md](../archive/specs/2026/2026-10-04-webui-frontend-ts-design.md);
-план: [docs/plans/2026-10-04-webui-frontend-ts.md](./docs/plans/2026-10-04-webui-frontend-ts.md).
+Спека: `docs/archive/specs/2026/2026-10-04-webui-frontend-ts-design.md (удалён 2026-11-25)` (удалено вместе с архивом 2026-11-25);
+план: `docs/plans/2026-10-04-webui-frontend-ts.md` (удалён 2026-11-25).
 Весь наш браузерный фронтенд переведён на TypeScript со `strict: true`; контракты
 (URL/имена файлов, REST/SSE/сессии/конфиг) не менялись.
 
@@ -762,8 +762,8 @@ retry-петля после блоков (перебор python/python3/bun/pip)
 
 ### npm Build Optimization (2.17.1)
 
-Спека: [docs/archive/specs/2026/2026-10-04-npm-build-optimization-design.md](../archive/specs/2026/2026-10-04-npm-build-optimization-design.md);
-план: [docs/plans/2026-10-04-npm-build-optimization.md](./docs/plans/2026-10-04-npm-build-optimization.md).
+Спека: `docs/archive/specs/2026/2026-10-04-npm-build-optimization-design.md (удалён 2026-11-25)` (удалено вместе с архивом 2026-11-25);
+план: `docs/plans/2026-10-04-npm-build-optimization.md` (удалён 2026-11-25).
 Прод-пакет **8.17 MB → 1.73 MB**, `main.js` **7.68 MB → 1.11 MB**. Контракты не менялись.
 
 - **Внешние зависимости:** `build:bundle` = `bun build … --packages external`.
@@ -820,7 +820,7 @@ retry-петля после блоков (перебор python/python3/bun/pip)
 
 ### Harness Hardening (2.19.0)
 
-Спека: [docs/archive/specs/2026/2026-10-05-harness-hardening-design.md](../archive/specs/2026/2026-10-05-harness-hardening-design.md).
+Спека: `docs/archive/specs/2026/2026-10-05-harness-hardening-design.md (удалён 2026-11-25)` (удалено вместе с архивом 2026-11-25).
 Правки харнесса (не модели), обобщённые; фазы 0→4, по коммиту на фазу.
 
 - **Калибровка контекста** (`src/core/agent/context-calibration.ts`): оценка токенов
@@ -847,7 +847,7 @@ retry-петля после блоков (перебор python/python3/bun/pip)
 Разбор живой сессии `ses_muwinhpk_2e69iq` (`mma web`, локальный 27B): критик молча
 пропускался после компакции, компакция не несла информации → петля переисследования,
 read-only петля без стопа, рассинхрон провайдера/контекста, выдуманный артефакт,
-редакция съедала URL в истории. План: [docs/plans/2026-10-06-harness-reliability-fixes.md](./docs/plans/2026-10-06-harness-reliability-fixes.md).
+редакция съедала URL в истории. План: `docs/plans/2026-10-06-harness-reliability-fixes.md` (удалён 2026-11-25).
 
 - **Критик после компакции** (`src/core/agent/critic-gate.ts`, `agent.ts`): маркер захода —
   монотонный `seq` сообщения в `WeakMap` (`ContextManager.beginTurn/seqOf`), а не индекс
@@ -899,7 +899,7 @@ read-only петля без стопа, рассинхрон провайдер�
   без `isWorkMutation` (browser/plan/todo больше не сбрасывают) → ловит browser/web-петли.
 - **`session_start` эффективное окно** (`src/core/agent.ts`): env-срез берёт `model`/`contextWindow`
   из живого конфига (probe), а не из bootstrap-снимка.
-- Проверено 12 живыми прогонами `prism-ml/bonsai-27b`; план — [docs/plans/2026-10-06-harness-reliability-fixes.md](./docs/plans/2026-10-06-harness-reliability-fixes.md).
+- Проверено 12 живыми прогонами `prism-ml/bonsai-27b`; план — `docs/plans/2026-10-06-harness-reliability-fixes.md` (удалён 2026-11-25).
 
 ### Web Live Context Metrics & Cache Reporting (2.22.0)
 
@@ -926,8 +926,8 @@ read-only петля без стопа, рассинхрон провайдер�
 
 Вкладка **Files** в сайдбаре `mma web`: ленивое дерево файлов workspace, read-only просмотр
 в приложении и attach файла в чат вставкой пути. Спеки:
-[2026-10-07-webui-files-tab-design.md](../archive/specs/2026/2026-10-07-webui-files-tab-design.md),
-[2026-10-08-webui-files-split-design.md](../archive/specs/2026/2026-10-08-webui-files-split-design.md).
+`2026-10-07-webui-files-tab-design.md` (удалено вместе с архивом 2026-11-25),
+`2026-10-08-webui-files-split-design.md` (удалено вместе с архивом 2026-11-25).
 
 - **Листинг** (`src/modules/webui/file/files-api.ts`): новый `GET /api/files?path=<rel>` — JSON
   одной директории (папки сверху, затем файлы; кап `MAX_DIR_ENTRIES`, флаг `truncated`).
@@ -984,8 +984,8 @@ read-only петля без стопа, рассинхрон провайдер�
 
 ### Web Tool Images (2.28.0)
 
-Спека: [docs/archive/specs/2026/2026-10-07-web-tool-images-design.md](../archive/specs/2026/2026-10-07-web-tool-images-design.md);
-план: [docs/plans/2026-10-07-web-tool-images.md](./docs/plans/2026-10-07-web-tool-images.md).
+Спека: `docs/archive/specs/2026/2026-10-07-web-tool-images-design.md (удалён 2026-11-25)` (удалено вместе с архивом 2026-11-25);
+план: `docs/plans/2026-10-07-web-tool-images.md` (удалён 2026-11-25).
 Показ реальных изображений тулов (`browser` screenshot, `attach_image`) в ленте `mma web`
 вместо статичной заглушки, которая никогда не заполнялась.
 
@@ -1020,8 +1020,8 @@ read-only петля без стопа, рассинхрон провайдер�
 
 ### Event-Sourced Web State (2.24.0)
 
-Спека: [docs/archive/specs/2026/2026-10-07-web-event-sourced-state-design.md](../archive/specs/2026/2026-10-07-web-event-sourced-state-design.md);
-план: [docs/plans/2026-10-07-web-event-sourced-state.md](./docs/plans/2026-10-07-web-event-sourced-state.md).
+Спека: `docs/archive/specs/2026/2026-10-07-web-event-sourced-state-design.md (удалён 2026-11-25)` (удалено вместе с архивом 2026-11-25);
+план: `docs/plans/2026-10-07-web-event-sourced-state.md` (удалён 2026-11-25).
 Убран двойной контур синхронизации сайдбара (SSE-счётчики + 2с-полл `/api/state`).
 
 - **Снапшот в событии** (`src/modules/webui/session/session-status.ts`): `pushState(s, sessionId?)`
@@ -1045,7 +1045,7 @@ read-only петля без стопа, рассинхрон провайдер�
 
 ### Parallel Subagents in a Tool Batch (2.25.0)
 
-Спека: [docs/archive/specs/2026/2026-10-07-parallel-subagents-design.md](../archive/specs/2026/2026-10-07-parallel-subagents-design.md).
+Спека: `docs/archive/specs/2026/2026-10-07-parallel-subagents-design.md (удалён 2026-11-25)` (удалено вместе с архивом 2026-11-25).
 Разбор живой сессии `ses_muxqw12h_6uk4cq`: два `subagent`-вызова одного хода шли строго
 последовательно (сумма длительностей), хотя описание тула обещало «parallel work».
 
@@ -1213,7 +1213,7 @@ read-only петля без стопа, рассинхрон провайдер�
 - **Честные ограничения (зафиксированы в доках и UI):** disable ≠ sandbox (модуль уже
   `require`-нут, код верхнего уровня уже выполнился); `permissions` — декларация для показа, а не
   enforcement. Настоящая изоляция/доверие — открытый P1 в
-  `docs/archive/specs/2026/2026-09-28-production-readiness-design.md`.
+  `docs/archive/specs/2026/2026-09-28-production-readiness-design.md (удалён 2026-11-25)`.
 - **Тесты:** `tests/plugin-records.test.ts`, `tests/plugin-enabled.test.ts`,
   `tests/plugin-reload.test.ts`, `tests/plugin-tools.test.ts`, `tests/plugin-drafts.test.ts`,
   `tests/skills-reload.test.ts`,
@@ -1225,8 +1225,8 @@ read-only петля без стопа, рассинхрон провайдер�
 
 ### Plugin Draft Quality (2.29.1)
 
-Спека: [docs/archive/specs/2026/2026-10-07-plugin-draft-quality-design.md](../archive/specs/2026/2026-10-07-plugin-draft-quality-design.md);
-план: [docs/plans/2026-10-07-plugin-draft-quality.md](./docs/plans/2026-10-07-plugin-draft-quality.md).
+Спека: `docs/archive/specs/2026/2026-10-07-plugin-draft-quality-design.md (удалён 2026-11-25)` (удалено вместе с архивом 2026-11-25);
+план: `docs/plans/2026-10-07-plugin-draft-quality.md` (удалён 2026-11-25).
 Черновики `define_capability` (код, который пишет малая модель) теперь проходят
 quality-gate и выглядят аккуратно.
 
@@ -1255,7 +1255,7 @@ quality-gate и выглядят аккуратно.
 локальный `package.json` был `2.37.0`, npm `latest` — `2.36.0`, поэтому `semverGt()`
 честно возвращал «апдейта нет» (система не предлагает обновление назад). Второй —
 настоящий: в вебе автообновление **никогда не работало**, а панель настроек это
-скрывала. Спека: [docs/archive/specs/2026/2026-10-09-updater-web-design.md](../archive/specs/2026/2026-10-09-updater-web-design.md).
+скрывала. Спека: `docs/archive/specs/2026/2026-10-09-updater-web-design.md (удалён 2026-11-25)` (удалено вместе с архивом 2026-11-25).
 
 - **Причина мёртвого веба:** `runWeb` идёт с `exitOnComplete=true`
   (`web-command.ts:65`), а `main.ts:280` читал `exitOnComplete ? undefined :
@@ -1300,7 +1300,7 @@ quality-gate и выглядят аккуратно.
 
 ### MoE Indicator (2.30.0)
 
-Спека: [docs/archive/specs/2026/2026-10-08-moe-indicator-design.md](../archive/specs/2026/2026-10-08-moe-indicator-design.md).
+Спека: `docs/archive/specs/2026/2026-10-08-moe-indicator-design.md (удалён 2026-11-25)` (удалено вместе с архивом 2026-11-25).
 Пользователь видит, что ход ведёт оркестрация: одна строка в чате на ход + чип
 режима в футере `mma web`.
 
@@ -1440,7 +1440,7 @@ quality-gate и выглядят аккуратно.
 Долгоживущий HTTP-сервис `mma serve` (`src/modules/service/`) — публичный
 версионируемый контракт для внешних систем поверх ядра. Не трогает петлю/REPL/
 `mma web`. Спека: [docs/specs/2026-10-08-agent-service-api-design.md](./docs/specs/2026-10-08-agent-service-api-design.md);
-план: [docs/plans/2026-10-08-agent-service-api.md](./docs/plans/2026-10-08-agent-service-api.md);
+план: `docs/plans/2026-10-08-agent-service-api.md` (удалён 2026-11-25);
 reference: [docs/agents/service-api.md](./docs/agents/service-api.md);
 user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mode (`mma serve`)»).
 
@@ -1502,7 +1502,7 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
 
 ### MMART — the Web Mascot (Loader Faces, unreleased)
 
-Спека: [docs/archive/specs/2026/2026-10-08-loader-webui-design.md](../archive/specs/2026/2026-10-08-loader-webui-design.md).
+Спека: `docs/archive/specs/2026/2026-10-08-loader-webui-design.md (удалён 2026-11-25)` (удалено вместе с архивом 2026-11-25).
 Агент получил «лицо» (squircle + анимированные глаза), одно на все поверхности.
 **Маскот называется MMART** (MMA + art) — экспорт `MMART_NAME` в `loader.ts`.
 
@@ -1597,7 +1597,7 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
 
 Разбор для TUI показал: фронтенд-независимого ядра достаточно, но три шва
 упирались в терминал. Все три закрыты; поведение пользователя не менялось.
-**TUI по итогам разбора отложен** (спека `docs/archive/specs/2026/2026-10-10-tui-frontend-design.md`,
+**TUI по итогам разбора отложен** (спека `docs/archive/specs/2026/2026-10-10-tui-frontend-design.md (удалён 2026-11-25)`,
 §0): без постоянной панели он = REPL в альт-экране, что отнимает scrollback
 и не окупается. Но сами швы полезны независимо — `mma serve` импортировал
 проекцию состояния из веб-модуля, и это теперь исправлено. Спека TUI — не
@@ -1641,8 +1641,8 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
 
 Разбор сессии `ses_mv0pirf5_hnmbxj` (`qwen3.8-9b-distill`, `mma web`): чисто read-only
 аналитическая задача была убита стражем на 24-й итерации, когда модель уже собиралась
-ответить. Спека: [docs/archive/specs/2026/2026-10-09-readonly-guard-finalize-design.md](../archive/specs/2026/2026-10-09-readonly-guard-finalize-design.md);
-план: [docs/plans/2026-10-09-readonly-guard-finalize.md](./docs/plans/2026-10-09-readonly-guard-finalize.md).
+ответить. Спека: `docs/archive/specs/2026/2026-10-09-readonly-guard-finalize-design.md (удалён 2026-11-25)` (удалено вместе с архивом 2026-11-25);
+план: `docs/plans/2026-10-09-readonly-guard-finalize.md` (удалён 2026-11-25).
 
 - **Прогресс = новое действие, а не мутация** (`src/core/agent/tool-batch.ts`): батч
   непрогрессивен, только если каждый вызов дословно повторяет уже сделанный за ход.
@@ -1674,7 +1674,7 @@ user guide: [docs/serve-mode.md](./docs/serve-mode.md) (README → «Service mod
 server: каждый `checkFile` (каждая запись файла, каждый файл `lsp_check`, 5 файлов
 стартового чека) спавнил `npx → node → tsserver` и убивал его после первой публикации
 диагностик. Плюс несоответствия спеке 3.17. Спека:
-[docs/archive/specs/2026/2026-10-09-lsp-persistent-client-design.md](../archive/specs/2026/2026-10-09-lsp-persistent-client-design.md).
+`docs/archive/specs/2026/2026-10-09-lsp-persistent-client-design.md (удалён 2026-11-25)` (удалено вместе с архивом 2026-11-25).
 
 - **Тёплые соединения** (`src/modules/lsp/connection.ts`, `pool.ts`): одно соединение =
   один процесс сервера, ключ `(serverKey, projectRoot)`. Документы синкатся
@@ -1709,7 +1709,7 @@ server: каждый `checkFile` (каждая запись файла, кажд
 
 ### Web: favicon, Subagents/MCP tabs, compact rail (unreleased, ветка `feat/webui-sidebar-favicon`)
 
-Спека: [2026-10-27-webui-sidebar-favicon-design.md](../archive/specs/2026/2026-10-27-webui-sidebar-favicon-design.md).
+Спека: `2026-10-27-webui-sidebar-favicon-design.md` (удалено вместе с архивом 2026-11-25).
 
 - **Favicon** (`webui/favicon.ts`, `index.html`): `GET /api/favicon` ищет
   `favicon.{ico,png,svg,webp,gif}` в корне и типовых static-каталогах workspace
@@ -1971,53 +1971,6 @@ line (path / MoE / version / update) now renders.
   `tests/webui-themes.test.ts` (enum реестра = `UI_THEMES`),
   `tests/webui-busy-guard.test.ts`, `tests/config-registry-extra.test.ts`.
 
-### Current Version: 0.3.2 (beta)
+### Versioning
 
-> **В бете:** `1.0.0` не выпускается, пока проект в бете; версии ходят внутри `0.x.y` (см. «Versioning Rules»).
-
-GitHub Releases distribution: one-line bootstrap installer, self-contained per-OS tarballs,
-manifest-driven updater (npm removed from the install path), MIT license (see the section above).
-
-Landing page on GitHub Pages (`gh-pages/`, see the section above): a static, build-free
-showcase with MMART, ru/en and dark/light.
-
-Web answer panel, quiet reasoning, fixed latest pill, user-attachment persistence (2.40.0).
-
-Self-describing service contract (see the section above): `mma serve` serves its
-own OpenAPI 3.1 document and human docs page from one `OPERATIONS` table.
-
-### Changelog
-
-Все изменения документируются в `CHANGELOG.md` (формат [Keep a Changelog](https://keepachangelog.com/)).
-
-**Правило:** при каждом релизе (MINOR/PATCH) — добавляй запись в `CHANGELOG.md` в секцию `## [X.Y.Z] - YYYY-MM-DD`. Группируй по Added/Fixed/Changed/Removed. Пиши на английском, кратко и по существу. Формат ссылок: `**Module**: description`.
-
-При релизе: обнови `CHANGELOG.md` и `package.json` версию, поставь тег `vX.Y.Z` — GitHub Actions
-(`.github/workflows/release.yml`) соберёт артефакты под все платформы и опубликует GitHub Release
-с `latest.json` (см. «Distribution & Bootstrap»). npm больше не используется для раздачи.
-
-### Versioning Rules
-
-Версии — **вехи**, а не счётчик PR. Один MAJOR на пакет ломающих изменений, а не на каждую итерацию.
-
-> **🔒 Бета-политика (обязательно).** Пока MMA в бете (major = `0`), релизы идут **только**
-> внутри `0.x.y`, и **`1.0.0` выпускать нельзя**. Любое **автоматическое** повышение версии
-> до `1.x.x` запрещено. Выход из беты — отдельное осознанное решение, которое снимает запрет:
-> только тогда (руками) ставится `1.0.0`, и этот раздел + баннер вверху файла обновляются.
-> Машинный гвард: `tests/version-beta.test.ts` падает, если `package.json` version ≥ `1.0.0`.
-
-**PATCH** (`0.0.Z`) — bug fixes, i18n, docs, tests, performance, non-breaking dependency updates.
-
-**MINOR** (`0.Y.0`) — new CLI/REPL commands, new tools, new modules, new config options, new behavior; **renaming with a working deprecation alias**; additive `--json` fields.
-
-**MAJOR** (`X.0.0`) — **в бете запрещён** (зарезервирован под выход из беты). После выхода из беты — только реальная поломка **без пути совместимости**:
-- несовместимая схема конфига / нечитаемые старые сессии;
-- удаление команды/тула/модуля **без алиаса**, выпущенных в опубликованном релизе;
-- ломающее изменение `LLMProvider` / plugin API / `--json` контракта;
-- architecture rewrite, меняющий контракты поведения.
-
-**Правила сдержанности:**
-1. В бете MAJOR **не бампается вообще** — ни вручную, ни автоматикой. `1.0.0` = конец беты.
-2. MAJOR требует хотя бы одной записи в `### Removed` / `### Changed (breaking)` CHANGELOG — иначе не MAJOR.
-3. Предпочитать **алиас + MINOR** вместо жёсткого переименования + MAJOR.
-4. Не более одного MAJOR на пакет ломающих изменений; не бампать MAJOR без явного запроса.
+Актуальная версия — в `package.json`; правила — в [versioning.md](./versioning.md), история изменений — в `CHANGELOG.md`.

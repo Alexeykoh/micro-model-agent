@@ -14,6 +14,9 @@ import { seedToolTags } from "../../tools/auto-tags";
 import { deriveSessionName, generateSessionTitle, TITLE_MAX_TOKENS, type TitleChat } from "../../modules/session/auto-name";
 import { ensureSessionStart } from "./session-start";import type { SystemPromptBuild } from "./prompt-phase";
 import { refreshInstructionBlocks } from "../prompt-instructions";
+import { stopTurnProcesses } from "./turn-process-cleanup";
+import { getModule } from "./surface";
+import { preloadRemoteInstructions } from "../bootstrap/remote-instructions";
 
 /** Мутабельный вид `Agent`, которым владеет координатор хода. */
 export interface TurnRunHost {
@@ -87,9 +90,22 @@ export async function runTurn(
 
   const slog = new SessionLoggerCtor(sessionManager, logger, () => host.callerProvenance());
 
+  // LSP-события жизненного цикла идут в session.jsonl с границы хода, когда
+  // SessionLogger уже существует (модуль без реестра работает как раньше).
+  const lsp = getModule<{
+    setSessionSink?: (sink: (op: string, msg: string, meta?: Record<string, unknown>) => void) => void;
+  }>(deps.moduleRegistry, "lsp");
+  lsp?.setSessionSink?.((op, msg, meta) => slog.logLsp(op, msg, meta));
+
   // AGENTS.md — живой источник: перечитываем на ГРАНИЦЕ ХОДА, внутри хода
   // промпт имутабелен (KV-кеш). system заменяется на месте ниже, в
   // ensureSessionStart → refreshSystemPrompt, без новой записи в историю.
+  // Граница хода: обновляем HTTPS-источники до синхронной пересборки промпта.
+  await preloadRemoteInstructions(
+    config.instructions?.sources ?? [],
+    config.security?.network,
+  );
+
   const refreshed = refreshInstructionBlocks(
     deps.baseDir,
     deps.configDir,
@@ -108,6 +124,21 @@ export async function runTurn(
   }
 
   const activeMeta = sessionManager?.getActiveMeta();
+  // Граница хода: новый номер ревизии для журнала правок. Fail-open — сбой
+  // счётчика не должен ломать ход, но обязан оставить причину (INV-12/15).
+  if (activeMeta) {
+    try {
+      deps.toolCtx?.fileChanges?.beginTurn(activeMeta.id);
+    } catch (err) {
+      deps.onDiagnostic?.({
+        source: "module:changes",
+        operation: "changes.turn.begin",
+        kind: "failed",
+        cause: err instanceof Error ? err.message : String(err),
+        recoverable: true,
+      });
+    }
+  }
   const isFirstMessage = !!activeMeta && activeMeta.messageCount === 0;
 
   const start = await ensureSessionStart(
@@ -238,6 +269,7 @@ export async function runTurn(
     throw err;
   } finally {
     invalidateTurnCheckpoint(sessionManager, deps);
+    stopTurnProcesses(sessionManager, deps, startedAt);
   }
 }
 

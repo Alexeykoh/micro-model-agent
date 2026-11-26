@@ -125,4 +125,4 @@
 - Qwen Code — [репозиторий](https://github.com/QwenLM/qwen-code), [документация](https://qwenlm.github.io/qwen-code-docs/)
 - Codex CLI — [репозиторий](https://github.com/openai/codex), [docs/](https://github.com/openai/codex/tree/main/docs)
 - Pi — [репозиторий](https://github.com/earendil-works/pi), [pi.dev](https://pi.dev)
-- Внутренние: [best-practices audit](../analysis/2026-08-07-harness-best-practices-audit.md), [enterprise idea](../ideas/2026-11-05-mma-enterprise.md), [monolith split](../specs/2026-11-10-monolith-split-design.md), [handoff](../plans/2026-10-12-architecture-v2-handoff.md)
+- Внутренние: [best-practices audit](../analysis/2026-08-07-harness-best-practices-audit.md), [enterprise idea](../ideas/2026-11-05-mma-enterprise.md), [monolith split](../specs/2026-11-10-monolith-split-design.md), `handoff` (удалён 2026-11-25)

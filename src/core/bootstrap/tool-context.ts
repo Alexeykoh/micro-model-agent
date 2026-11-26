@@ -8,11 +8,12 @@ import type { SessionManager } from "../../modules/session/index";
 import type { DraftHost } from "../../modules/plugins/drafts";
 import type { AppConfig, ModelCapabilities } from "../../config/types";
 import type { Logger } from "../../logger/app-logger";
-import type { ToolContext } from "../../tools/types";
+import type { FileChangesPort, ToolContext } from "../../tools/types";
 import { ApprovalStore } from "../approvals";
 import { subagentLogEntry } from "../../tools/subagent-session-log";
 import type { Diagnostic, DiagnosticEvent } from "../../output/types";
 import { moduleOf } from "../../output";
+import { createFileChangesPort } from "../../modules/changes";
 
 /** Зависимости сборки ToolContext. */
 export interface ToolContextInput {
@@ -25,6 +26,8 @@ export interface ToolContextInput {
   configRef: { current: AppConfig };
   capabilitiesRef: { probe?: ModelCapabilities };
   draftHost?: DraftHost;
+  /** Тестовый/альтернативный порт; по умолчанию создаётся лениво. */
+  fileChanges?: FileChangesPort;
 }
 
 /**
@@ -66,6 +69,7 @@ const OPERATION_PREFIXES: Array<[string, DiagnosticEvent]> = [
   ["skill.", "module_degraded"],
   ["memory.", "module_degraded"],
   ["browser.", "module_degraded"],
+  ["changes.", "module_degraded"],
   ["updater.", "module_degraded"],
   ["plan.", "module_degraded"],
   ["webui.", "module_degraded"],
@@ -103,6 +107,39 @@ export function admissionDiagnosticSink(
       recoverable: diag.recoverable,
     });
   };
+}
+
+/**
+ * Порт правок файлов — общий для основного контекста и раннеров. Один инстанс
+ * на контекст (иначе `captureBefore`/`captureAfter` попадут в разные pending),
+ * лог отката пишется в сессию с явным source/module (INV-13).
+ */
+export function createChangesPort(
+  sessionManager: SessionManager,
+  getConfig: () => AppConfig,
+  onDiagnostic?: (d: Diagnostic) => void,
+  sessionId?: string,
+): FileChangesPort {
+  return createFileChangesPort({
+    sessionManager,
+    getConfig,
+    onDiagnostic,
+    // Не расширяем произвольный detail: в лог попадают только типизированные
+    // поля изменения, иначе модель могла бы подсунуть чужие ключи (INV-15).
+    log: ({ path, op, targetId, tool }) => {
+      sessionManager.appendLog({
+        ts: new Date().toISOString(),
+        type: "change",
+        source: "module:changes",
+        module: "changes",
+        operation: "changes.undo",
+        ...(typeof path === "string" ? { path } : {}),
+        ...(typeof op === "string" ? { op } : {}),
+        ...(typeof targetId === "string" ? { targetId } : {}),
+        ...(typeof tool === "string" ? { tool } : {}),
+      }, sessionId);
+    },
+  });
 }
 
 /**
@@ -188,6 +225,20 @@ export function createToolContext(input: ToolContextInput): ToolContext {
   });
   Object.defineProperty(toolCtx, "sessionManager", {
     get: () => sessionManager,
+    configurable: true,
+  });
+  // Журнал правок: ленивый синглтон на контекст. Форки исполнителя копируют
+  // дескриптор, поэтому субагенты наследуют тот же порт (и ту же сессию).
+  let fileChanges = input.fileChanges;
+  Object.defineProperty(toolCtx, "fileChanges", {
+    get: () => {
+      fileChanges ??= createChangesPort(
+        sessionManager,
+        () => configRef.current,
+        admissionDiagnosticSink(sessionManager),
+      );
+      return fileChanges;
+    },
     configurable: true,
   });
   // Возможности активной модели — LIVE: пресет + native-probe + конфиг-оверрайд

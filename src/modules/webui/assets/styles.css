@@ -189,6 +189,10 @@ body[data-font="large"] { font-size: 17px; }
 .conn.stale .linkbtn { font-size: 11.5px; }
 .tabstrip {
   display: flex; gap: 4px; align-items: center; overflow-x: auto;
+  /* overflow-x:auto делает overflow-y вычисляемым auto — из-за этого в хэдере
+     появляется лишний вертикальный скролл. Горизонтальная прокрутка вкладок
+     сохраняется, вертикальная явно запрещена. */
+  overflow-y: hidden;
   flex: 1; min-width: 0;
 }
 .tabstrip::-webkit-scrollbar { height: 5px; }
@@ -286,15 +290,19 @@ body[data-font="large"] { font-size: 17px; }
 @keyframes skelSweep { to { background-position: -200% 0; } }
 .feed > * { flex-shrink: 0; min-height: fit-content; }
 .u {
-  color: var(--u-fg); background: var(--u-bg); border-left: 2px solid var(--u-border);
-  padding: 7px 12px; border-radius: 0 4px 4px 0; margin-top: 6px;
+  color: var(--u-fg); background: var(--u-bg);
+  padding: 7px 12px; border-radius: 4px; margin-top: 6px;
   user-select: text; overflow-wrap: anywhere;
 }
 /* The `> ` prompt marker belongs to the text line. Attachments (if any) sit in
    a strip above it — see `.u-attach` — so the marker never floats over them. */
 /* Переносы пользователя сохраняем: сообщение рендерится textContent, и без
    pre-wrap многострочный промпт схлопывался в одну строку (B-36). */
-.u-text { overflow-wrap: anywhere; white-space: pre-wrap; }
+/* Hanging indent: the `> ` marker is inline content on the first line only,
+   so wrapped lines would otherwise start under the marker. Push every line
+   right by the marker width (2ch in the monospace UI) and pull just the first
+   line back, so all text lines line up under the prompt text. */
+.u-text { overflow-wrap: anywhere; white-space: pre-wrap; padding-left: 2ch; text-indent: -2ch; }
 .u-text::before { content: "> "; color: var(--u-border); }
 .u-attach { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 /* agent text = calmer, dimmer than user block */
@@ -331,9 +339,12 @@ body[data-font="large"] { font-size: 17px; }
    действия остаётся акцентным. Не наследует `.warn`. */
 .metaln.retract { color: var(--dim-b); }
 .metaln.retract::before { content: "⟳ "; color: var(--cyan); }
-.act { display: flex; gap: 8px; min-width: 0; line-height: 1.35; }
+.act { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; min-width: 0; line-height: 1.35; }
 .act .lab { white-space: nowrap; }
-.act .args { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.act .args { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; min-width: 8ch; }
+/* Бейдж длительности — неделимый: при нехватке места переносится целиком
+   на строку ниже, а не разрывается на «✓» и «276ms». */
+.act .ok { white-space: nowrap; flex: none; }
 .act.recon .g, .act.recon .lab { color: var(--cyan); }
 .act.mut .g, .act.mut .lab { color: var(--purple); }
 .act.exe .g, .act.exe .lab { color: var(--accent); }
@@ -393,17 +404,20 @@ body.light .code { border: 1px solid var(--border); }
 .toolout .more { color: var(--dim-b); cursor: pointer; font-size: 12px; }
 .toolout .more:hover { color: var(--dim-a); }
 
-/* markdown answers (streamed by md.js) — lines and glyphs, no boxes.
-   The finished answer mirrors the user's `> ` block: a quiet accent rail plus a
-   muted, translucent accent backdrop (`--ans-bg`), so it reads instantly apart
-   from the dim work process (tool/think/meta rows stay plain). Scoped to
-   `.feed >` — code blocks inside keep their own styling. No drawn frames: the
-   separation is fill + a single rail, never a card border. */
+/* markdown answers (streamed by md.js) — lines and glyphs, no boxes, no rails.
+   Финальный ответ отличается от процесса только приглушённым полупрозрачным
+   акцентным фоном (`--ans-bg`); никакой полосы слева ни у одного блока. */
 .feed > .md, .feed > .ans {
-  border-left: 2px solid var(--accent);
   background: var(--ans-bg);
   padding: 12px 18px 14px;
-  border-radius: 0 6px 6px 0;
+  border-radius: 6px;
+}
+/* Промежуточные ответы (`streaming` — текст ещё идёт, `interim` — уже дописан,
+   но за ним были инструменты/размышления/статус) получают нейтральный `--surface`
+   вместо акцентного фона финального. Полосы нет ни у тех, ни у других. */
+.feed > .md.streaming, .feed > .md.interim {
+  background: var(--surface);
+  border-radius: 6px;
 }
 .md { color: var(--ans); overflow-wrap: anywhere; line-height: 1.68; }
 .md > * { flex-shrink: 0; }
@@ -565,6 +579,41 @@ body.light .codeblock { border: 1px solid var(--border); }
 .json-err { color: var(--err); overflow-wrap: anywhere; }
 .grouped { color: var(--dim-a); padding-left: 8px; overflow-wrap: anywhere; }
 .grouped .pipe { color: var(--pipe); }
+/* Collapsed agent steps: one dim line, Lucide `+` affordance, counts that
+   ellipsize instead of wrapping. No box — only indentation and dim text
+   (STYLE.md). The chevron is an affordance, not a status glyph. */
+.group-sum {
+  /* Own reset (not the generic `button.*` list): that list sets
+     `color: inherit`/`width: auto` with higher specificity and would undo the
+     dim color and full-width hit area here. */
+  font: inherit; color: var(--dim-b); background: none; border: none;
+  text-align: left; padding: 0; cursor: pointer;
+  display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0;
+  font-size: 12.5px; line-height: 1.35;
+  user-select: none; white-space: nowrap; overflow: hidden;
+}
+.group-sum:hover, .group-sum:hover .tog { color: var(--dim-a); }
+.group-sum .g { display: inline-flex; flex: 0 0 auto; color: var(--pipe); }
+.group-sum .g .svg-icon { width: 13px; height: 13px; }
+.group-sum .parts { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.group-sum .part { display: inline-flex; align-items: center; gap: 4px; }
+.group-sum .part .svg-icon { width: 12px; height: 12px; color: var(--dim-b); }
+.group-sum .meta { flex: 0 0 auto; margin-left: auto; color: var(--dim-a); }
+.group-sum .tog { display: inline-flex; flex: 0 0 auto; color: var(--dim-c); }
+.group-sum .tog .svg-icon { width: 13px; height: 13px; animation: chevIn .16s ease-out; }
+/* State changes stay quiet: short fade/slide, no bounce (killed by the global
+   prefers-reduced-motion block). */
+@keyframes groupIn { from { opacity: 0; transform: translateY(-3px); } }
+@keyframes groupBump { 0% { opacity: .5; } 100% { opacity: 1; } }
+@keyframes chevIn { from { opacity: 0; transform: translateX(-2px); } }
+.group-sum.enter { animation: groupIn .16s ease-out; }
+.group-sum .parts.bump { animation: groupBump .22s ease-out; }
+.group-detail {
+  padding-left: 12px; opacity: 1; transform: none;
+  transition: display .16s allow-discrete, opacity .16s ease-out, transform .16s ease-out;
+}
+.group-detail.hidden { display: none; opacity: 0; transform: translateY(-2px); }
+@starting-style { .group-detail:not(.hidden) { opacity: 0; transform: translateY(-2px); } }
 .msgs .busy { color: var(--think); display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; }
 .busy .spin { display: inline-block; animation: spin 1s linear infinite; }
 .busy .busytime { color: var(--dim-a); }
@@ -709,6 +758,28 @@ body.light .codeblock { border: 1px solid var(--border); }
 body.light .sel > button { border: 1px solid var(--border); }
 .sel > button b { font-weight: 400; color: var(--purple); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .sel > button .svg-icon { width: 13px; height: 13px; color: var(--dim-a); }
+.sel > button .provider-icon { color: var(--fg); }
+.menu .mi > .provider-icon { width: 13px; height: 13px; flex: 0 0 auto; color: var(--dim-a); }
+.menu .mi.on > .provider-icon { color: var(--accent); }
+/* Compact selector line (variant A): quiet text, `/` separators, no chip surface. */
+.selectors { gap: 0; flex-wrap: nowrap; }
+.selectors > .composer-face { margin-right: 10px; }
+.selectors > .speed-chip { margin-left: 14px; }
+.selectors > .tools-btn { margin-left: 16px; }
+.selector-sep { color: var(--dim-b); margin: 0 6px; flex: none; user-select: none; }
+.selector-sep[hidden] { display: none; }
+.selectors > .sel { flex: 0 1 auto; }
+.selectors > .sel[data-sel="model"] { flex: 1 1 auto; min-width: 0; }
+.selectors > .sel[data-sel="model"] { display: flex; align-items: center; min-width: 0; }
+.selectors > .sel[data-sel="model"] > button { flex: 1 1 auto; min-width: 0; }
+.selectors > .sel[data-sel="model"] > .caps-chip { flex: none; }
+.selectors > .sel > button { background: none; border: 0; padding: 2px 0; color: var(--muted); }
+body.light .selectors > .sel > button { border: 0; }
+.selectors > .sel > button:hover { color: var(--fg); }
+.selectors > .sel > button b { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.selectors > .sel > button > svg.svg-icon:last-child { color: var(--dim-b); }
+.selectors > .sel > button:hover > svg.svg-icon:last-child,
+.selectors > .sel > button:focus-visible > svg.svg-icon:last-child { color: var(--fg); }
 /* Selector switch pending (boot + provider/model/context/reasoning writes):
    buttons and menus go inert while the mark shows. The mark stays a spinner;
    the old elapsed-time counter was removed in favor of a calmer UI. */
@@ -777,6 +848,13 @@ body.light .sel > button { border: 1px solid var(--border); }
 .input-area.switching .send-btn { cursor: progress; }
 .inp::placeholder { color: var(--dim-a); }
 .inp-meta { display: flex; gap: 14px; margin-top: 4px; padding: 0 6px; color: var(--dim-b); font-size: 11.5px; flex-wrap: wrap; }
+.inp-meta .hint-more {
+  margin-left: auto; color: var(--dim-a); background: none; border: 0;
+  padding: 0 2px; font: inherit; font-size: 11.5px; cursor: pointer;
+}
+.inp-meta .hint-more:hover { color: var(--fg); }
+.inp-meta #hintShift { display: none; }
+.inp-meta.expanded #hintShift { display: inline; }
 
 /* composer: [attach] [textarea] [send/stop] on the top row, hints underneath —
    all inside one bordered surface, so the controls read as part of the field. */
@@ -2234,7 +2312,9 @@ body.light .toggle:not(.on) { background: var(--toggle-off); }
 .provider-list { display: flex; flex-direction: column; }
 .provider-item { padding: 8px 0; border-bottom: 1px solid var(--border-3); }
 .provider-item:last-child { border-bottom: none; }
-.provider-item .p-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.provider-item .p-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.provider-item .p-head > .provider-icon { width: 16px; height: 16px; flex: 0 0 auto; color: var(--dim-a); }
+.provider-item.active .p-head > .provider-icon { color: var(--accent); }
 .provider-item .p-name { color: var(--fg); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .provider-item .badge {
   flex: 0 0 auto; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em;
@@ -2263,6 +2343,30 @@ body.light .toggle:not(.on) { background: var(--toggle-off); }
   background: var(--input-surface); border: 1px solid var(--border-2); border-radius: 4px;
   color: var(--fg); font: inherit; font-size: 12.5px; padding: 6px 8px; width: 100%; min-width: 0;
 }
+/* Provider type: brand icons in the option list (a native <select> cannot show them). */
+.ptype { position: relative; min-width: 0; }
+.ptype-btn {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0;
+  background: var(--input-surface); border: 1px solid var(--border-2); border-radius: 4px;
+  color: var(--fg); font: inherit; font-size: 12.5px; padding: 6px 8px; text-align: left; cursor: pointer;
+}
+.ptype-btn .ptype-val { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ptype-btn .svg-icon { width: 15px; height: 15px; flex: 0 0 auto; color: var(--dim-a); }
+.ptype-btn .provider-icon { color: var(--fg); }
+.ptype-menu {
+  position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0;
+  max-height: 260px; overflow-y: auto; padding: 4px;
+  background: var(--surface); border: 1px solid var(--border-2); border-radius: 6px;
+}
+.ptype-menu[hidden] { display: none; }
+.ptype-opt {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  background: none; border: 0; border-radius: 4px; padding: 6px 8px;
+  color: var(--fg); font: inherit; font-size: 12.5px; text-align: left; cursor: pointer;
+}
+.ptype-opt:hover { background: var(--hover-bg-2); }
+.ptype-opt[aria-selected="true"] { background: var(--accent-bg); color: var(--accent); }
+.ptype-opt .svg-icon { width: 15px; height: 15px; flex: 0 0 auto; }
 /* base-URL field: the free-text input sits under the dropdown when "custom" */
 .pform-base { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 /* preset row sits above the field grid — keep it off the fields */
@@ -2372,6 +2476,43 @@ body.light .toggle:not(.on) { background: var(--toggle-off); }
 .table-row .table-rm { color: var(--dim-a); }
 .table-row .table-rm:hover { color: var(--red-strong); }
 .table-body:empty::after { content: "—"; color: var(--dim-b); font-size: 12px; }
+
+/* Per-model capabilities popup: grouped fields, one forced-override note and a
+   multi-select for reasoning levels instead of a free-form comma string. */
+.caps-form { display: flex; flex-direction: column; gap: 14px; min-width: min(520px, 88vw); }
+.caps-note {
+  display: flex; gap: 8px; align-items: flex-start; font-size: 12px; line-height: 1.45;
+  color: var(--dim-b); padding: 8px 10px; background: var(--hover-bg);
+  border-left: 2px solid var(--accent);
+}
+.caps-note .svg-icon { width: 14px; height: 14px; flex: 0 0 auto; margin-top: 1px; }
+.caps-group { display: flex; flex-direction: column; }
+.caps-levels { position: relative; min-width: 196px; }
+.caps-levels-btn {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px;
+  font: inherit; font-size: 12px; text-align: left; cursor: pointer;
+  color: var(--fg); background: var(--input-surface);
+  border: 1px solid var(--border-2); border-radius: 4px;
+}
+.caps-levels-btn:hover { border-color: var(--accent); }
+.caps-levels-value { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.caps-levels-btn .tog { display: inline-flex; flex: 0 0 auto; color: var(--dim-a); }
+.caps-levels-btn .svg-icon { width: 13px; height: 13px; }
+.caps-levels-pop {
+  position: absolute; z-index: 5; right: 0; top: calc(100% + 4px); width: 228px;
+  display: flex; flex-direction: column; gap: 2px; padding: 6px;
+  max-height: 184px; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--border-2);
+  border-radius: 5px; box-shadow: var(--shadow-modal);
+}
+/* The popup is absolute, so reserve room in the scrolling host while it is open. */
+.caps-form:has(.caps-levels-pop:not([hidden])) { padding-bottom: 196px; }
+.caps-levels-pop[hidden] { display: none; }
+.caps-levels-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 4px 6px; font-size: 12px; color: var(--muted); cursor: default;
+}
+.caps-levels-row:hover { background: var(--hover-bg); }
 
 /* settings search */
 .set-search {
@@ -2700,6 +2841,7 @@ button.toggle:disabled { opacity: .5; cursor: default; }
 @media (pointer: coarse) {
   .inp-meta > span { display: none; }
   .inp-meta { gap: 0; }
+  .inp-meta .hint-more { display: none; }
 }
 
 /* --- First-run setup gate ---------------------------------------------------
@@ -3668,9 +3810,9 @@ body.light .c-dim { --face-c: var(--panel); }
 }
 
 .critic-block .critic-summary { color: var(--fg); margin-bottom: 6px; white-space: normal; }
-/* Шапка свёрнутого критика: на узкой ширине длинная строка (web.feed.critic_head
-   + статус) не должна наезжать на тоггл — глиф и тоггл фиксированы, лейбл
-   сжимается до эллипсиса (тот же паттерн, что у .trc .lab). */
+/* Шапка свёрнутого критика: на узкой ширине длинная строка
+   (web.feed.critic_head + статус) не должна наезжать на тоггл — глиф и тоггл
+   фиксированы, лейбл сжимается до эллипсиса (тот же паттерн, что у .trc .lab). */
 .critic-block .think-h .g, .critic-block .think-h .tog { flex: 0 0 auto; }
 .critic-block .think-h .lab { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .critic-block .critic-meta { color: var(--dim-c); margin-bottom: 8px; }
@@ -3678,10 +3820,10 @@ body.light .c-dim { --face-c: var(--panel); }
 .critic-block .critic-none { color: var(--dim-c); }
 .critic-block .critic-issue { margin: 0 0 8px; padding-left: 8px; border-left: 2px solid var(--line); white-space: normal; }
 .critic-block .critic-issue-head { display: flex; gap: 8px; align-items: baseline; }
-.critic-block .critic-sev { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; }
+.critic-block .critic-sev { flex: 0 0 auto; white-space: nowrap; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; }
+.critic-block .critic-claim { min-width: 0; overflow-wrap: anywhere; }
 .critic-block .critic-sev.sev-critical { color: var(--danger, #d9534f); }
 .critic-block .critic-sev.sev-concern { color: var(--warn, #d9a441); }
-.critic-block .critic-problem, .critic-block .critic-suggestion, .critic-block .critic-evidence { color: var(--dim-c); margin-top: 2px; }
 .critic-block .critic-check { margin: 0 0 6px; white-space: normal; }
 .critic-block .critic-check-mark { display: inline-block; width: 14px; }
 .critic-block .critic-check-tool { color: var(--fg); }

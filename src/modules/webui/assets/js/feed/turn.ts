@@ -55,7 +55,6 @@ export function onToolStart(data: Dict): void {
   line.classList.add("running");
   appendTo(feed, line);
   st.toolNodes.set(data.toolCallId, { status, line });
-  if (categoryOf(data.name) !== "recon") st.runReconOnly = false;
   st.runCount++;
 }
 
@@ -71,9 +70,14 @@ export function onTurnEnd(data: Dict): void {
   const feed = feedForEvent(data.sessionId);
   clearBusy(feed);
   finishThink(feed);
-  finishMd(feed);
-  flushRun(feed);
+  finishMd(feed, true);
   const st = feed ? streamStateFor(feed) : null;
+  // Статус проверки/критик мог закрыть финальный ответ ещё до `turn_end` —
+  // тогда `finishMd` пометил его как черновик. Последний текстовый блок хода
+  // и есть итоговый ответ: снимаем с него метку промежуточности.
+  if (st && st.turnRoots.length) {
+    st.turnRoots[st.turnRoots.length - 1].classList.remove("interim");
+  }
   // Interrupted tools never get `tool_end`: drop their pulse so nothing
   // looks alive after the turn is over.
   if (st) {
@@ -121,6 +125,9 @@ export function onTurnEnd(data: Dict): void {
   }
   const plain = st.turnRoots.map((r) => r.innerText || r.textContent || "").join("\n\n");
   appendActionsRow(feed, plain, st.turnMd);
+  // Close the group only after the turn's error/metric/status rows landed, so
+  // they join the current step run instead of spawning one-row summaries.
+  flushRun(feed);
   resetTurnText(feed);
 }
 

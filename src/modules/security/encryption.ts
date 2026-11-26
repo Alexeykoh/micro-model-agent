@@ -241,21 +241,27 @@ export function decryptSensitiveFields<T extends Record<string, unknown>>(obj: T
 
 /** Обёртка шифрования/расшифровки значений конфига. */
 export class ConfigEncryptor {
-  private key: Buffer;
+  private key?: Buffer;
+  private readonly config?: EncryptionConfig;
 
   constructor(config?: EncryptionConfig) {
-    this.key = getOrCreateEncryptionKey(config);
+    this.config = config;
+  }
+
+  private loadKey(): Buffer {
+    this.key ??= getOrCreateEncryptionKey(this.config);
+    return this.key;
   }
 
   encrypt<T extends Record<string, unknown>>(config: T): T {
-    return encryptSensitiveFields(config, this.key);
+    return encryptSensitiveFields(config, this.loadKey());
   }
 
   decrypt<T extends Record<string, unknown>>(config: T): T {
-    return decryptSensitiveFields(config, this.key);
+    return decryptSensitiveFields(config, this.loadKey());
   }
 
   getKey(): Buffer {
-    return this.key;
+    return this.loadKey();
   }
 }

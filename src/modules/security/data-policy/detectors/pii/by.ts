@@ -1,11 +1,13 @@
 /**
  * Правила PII РБ: телефон +375, УНП (9 цифр), личный номер (14 симв.), серия
- * паспорта. УНП и личный номер — без контрольной суммы → пониженный confidence
- * (DEBT(research-by-checksum)).
+ * паспорта. УНП и личный номер проверяются контрольной суммой: верная даёт
+ * высокий confidence, неверная остаётся находкой с пониженным confidence —
+ * математическая проверка не отбрасывает кандидата молча.
  */
 import type { Finding } from "../../types";
 import type { Range } from "../../normalize";
 import { runRules, type PiiRule } from "./util";
+import { byIdValid, unpValid } from "./checksums";
 
 /** Серии паспорта РБ (регион выдачи). Список неполный — контекстный детектор. */
 const BY_PASSPORT_SERIES = [
@@ -32,5 +34,10 @@ const BY_RULES: readonly PiiRule[] = [
 
 /** Находки PII РБ. */
 export function detectByPii(text: string, excluded: readonly Range[]): Finding[] {
-  return runRules(text, BY_RULES, excluded);
+  return runRules(text, BY_RULES, excluded).map((finding) => {
+    if (finding.kind !== "unp" && finding.kind !== "by-id") return finding;
+    const candidate = text.slice(finding.start, finding.end);
+    const valid = finding.kind === "unp" ? unpValid(candidate) : byIdValid(candidate);
+    return { ...finding, confidence: valid ? 0.85 : finding.kind === "unp" ? 0.25 : 0.3 };
+  });
 }

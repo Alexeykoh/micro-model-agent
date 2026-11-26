@@ -18,6 +18,15 @@ import type { NetworkSecurityConfig } from "../config/types";
 
 /** Максимум символов до обрезки вывода тула. */
 const MAX_CHARS = 5000;
+/**
+ * Сессия GYM24: модель видела «… (91 more lines)», решала, что страница
+ * неполная, и уходила перезапрашивать её и искать цены на агрегаторах.
+ * Подсказка даёт детерминированный выход и остаётся внутри капа вывода.
+ */
+const PARTIAL_HINT =
+  "\n[PAGE PARTIALLY SHOWN — structured page data, if any, is listed first. " +
+  "Need the rest? Use download_file + read_file(offset/limit) on the saved page; " +
+  "do NOT re-fetch the same URL or hunt aggregators.]";
 
 /** Параметры загрузки URL: конфиг сети, подмена fetch (тесты), сессия для аудита. */
 export interface WebFetchOptions {
@@ -82,7 +91,8 @@ export async function performWebFetch(
 
     let content: string;
     if (cleaned.length > maxChars) {
-      content = cleaned.slice(0, maxChars) + t("file.truncated");
+      const budget = Math.max(1, maxChars - t("file.truncated").length - PARTIAL_HINT.length);
+      content = cleaned.slice(0, budget) + t("file.truncated") + PARTIAL_HINT;
     } else {
       content = cleaned;
     }
@@ -129,7 +139,7 @@ export const webFetchTool: ToolDefinition = {
   icon: "⬇️",
   description:
     'Fetch a URL and convert its content to markdown. Use for reading documentation, APIs, web pages. This is a plain HTTP request without a browser engine — it does NOT run JavaScript, so JS-rendered single-page apps (weather sites, dashboards, modern SPAs) return empty or near-empty content; use the "browser" tool for those.',
-  tags: ["research"],
+  tags: ["web", "research"],
   parameters: {
     type: "object",
     properties: {

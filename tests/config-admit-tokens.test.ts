@@ -4,13 +4,13 @@ import { getConfigValue, setConfigValue } from "../src/config/registry";
 import type { AppConfig } from "../src/config/types";
 
 describe("contextBudget.admitMaxTokens", () => {
-  it("defaults to 3000 tokens", () => {
-    expect(DEFAULTS.contextBudget.admitMaxTokens).toBe(3000);
+  it("defaults to 4000 tokens (measured in §11)", () => {
+    expect(DEFAULTS.contextBudget.admitMaxTokens).toBe(4000);
   });
 
   it("round-trips through the registry and rejects out-of-range", () => {
     const c = structuredClone(DEFAULTS) as AppConfig;
-    expect(getConfigValue(c, "contextBudget.admitMaxTokens").value).toBe(3000);
+    expect(getConfigValue(c, "contextBudget.admitMaxTokens").value).toBe(4000);
     expect(setConfigValue(c, "contextBudget.admitMaxTokens", "2000").ok).toBe(true);
     expect(getConfigValue(c, "contextBudget.admitMaxTokens").value).toBe(2000);
     expect(setConfigValue(c, "contextBudget.admitMaxTokens", "999999").ok).toBe(false);

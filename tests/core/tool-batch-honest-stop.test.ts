@@ -68,7 +68,9 @@ const sameCall = { id: "1", name: "read_file", arguments: { path: "src/a.ts" } }
 function makeCase() {
   const added: string[] = [];
   const ex = new ToolBatchExecutor(stubDeps(() => fail, added));
-  return { added, ex, state: createLoopState() };
+  const state = createLoopState();
+  state.toolCallsThisTurn = -100; // BCP-3: нейтрализуем мягкий бюджет в этом тесте
+  return { added, ex, state };
 }
 
 describe("ToolBatchExecutor honest-stop", () => {
@@ -116,6 +118,7 @@ describe("ToolBatchExecutor honest-stop", () => {
     const added: string[] = [];
     const ex = new ToolBatchExecutor(stubDeps(() => blocked, added));
     const state = createLoopState();
+    state.toolCallsThisTurn = -100; // BCP-3: нейтрализуем мягкий бюджет в этом тесте
     await runBatch(ex, state, [fail]);
     expect(state.consecutiveFailedBatches).toBe(1);
     await runSingleBatch(ex, state);
@@ -130,6 +133,7 @@ describe("ToolBatchExecutor honest-stop", () => {
     const blocked = { success: false, blocked: true, output: "refused" };
     const ex = new ToolBatchExecutor(stubDeps(() => blocked, added));
     const state = createLoopState();
+    state.toolCallsThisTurn = -100; // BCP-3: нейтрализуем мягкий бюджет в этом тесте
     await runSingleBatch(ex, state);
     await runSingleBatch(ex, state);
     expect(state.consecutiveFailedBatches).toBe(2);
@@ -147,6 +151,7 @@ describe("ToolBatchExecutor honest-stop", () => {
     };
     const blocking = new ToolBatchExecutor(stubDeps(() => blocked, added));
     const state = createLoopState();
+    state.toolCallsThisTurn = -100; // BCP-3: нейтрализуем мягкий бюджет в этом тесте
     await runSingleBatch(blocking, state);
     expect(state.sawSecurityBlock).toBe(true);
 
@@ -237,6 +242,7 @@ describe("ToolBatchExecutor failure-memory gating", () => {
   it("does not record transient web tool failures to memory", async () => {
     const ex = new ToolBatchExecutor(stubDeps(() => fail, []));
     const state = createLoopState();
+    state.toolCallsThisTurn = -100; // BCP-3: нейтрализуем мягкий бюджет в этом тесте
     await failTool(ex, state, "web_fetch", 4);
     expect(state.memoryRuleRecorded.has("web_fetch")).toBe(false);
   });
@@ -244,6 +250,7 @@ describe("ToolBatchExecutor failure-memory gating", () => {
   it("records a per-tool rule for one repeatedly failing tool", async () => {
     const ex = new ToolBatchExecutor(stubDeps(() => fail, []));
     const state = createLoopState();
+    state.toolCallsThisTurn = -100; // BCP-3: нейтрализуем мягкий бюджет в этом тесте
     await failTool(ex, state, "bash", 4);
     expect(state.memoryRuleRecorded.has("bash")).toBe(true);
   });
@@ -253,6 +260,7 @@ describe("ToolBatchExecutor failure-memory gating", () => {
     const appendRule = vi.fn();
     (ex as any).deps.memoryStore = { appendRule };
     const state = createLoopState();
+    state.toolCallsThisTurn = -100; // BCP-3: нейтрализуем мягкий бюджет в этом тесте
     const systemic = () =>
       appendRule.mock.calls.some((c) => String(c[1]).includes("consecutive tool failures"));
 

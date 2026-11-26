@@ -2,7 +2,7 @@
 
 Дата: 2026-11-09. Ветка: `feat/compaction-llm`.
 Источник задачи: `TODO.md §1.5`; план WS5 в
-[`2026-10-06-harness-reliability-fixes.md`](../plans/2026-10-06-harness-reliability-fixes.md)
+`2026-10-06-harness-reliability-fixes.md` (удалён 2026-11-25)
 (Task 5.4/5.5 — отмечены [x], но не реализованы: в конфиге до сих пор `off|ledger`).
 
 ## Что неправильно

@@ -14,6 +14,7 @@ import {
   e2e,
   withE2E,
   waitForLiveTab,
+  openSidebarTab,
   apiGet,
   apiPost,
   artifactsDirFor,
@@ -44,7 +45,7 @@ describe("web e2e: plugins tab", () => {
         const before = await pluginRows(srv.baseUrl);
         expect(before.length).toBeGreaterThan(0);
 
-        await page.click('.sb-tab[data-tab="plugins"]');
+        await openSidebarTab(page, "plugins");
         await page.waitForSelector("#pane-plugins .plg-row", { timeout: 10_000 });
         await expect.poll(() => page.locator("#pane-plugins .plg-row").count()).toBeGreaterThan(0);
         // vitest `expect` has no Playwright `toContainText`; poll the text.
@@ -91,7 +92,7 @@ describe("web e2e: plugins tab", () => {
       const dir = artifactsDirFor("web-plugins-info");
       await withE2E(dir, async (srv, { page, errors }: Launched) => {
         await waitForLiveTab(page);
-        await page.click('.sb-tab[data-tab="plugins"]');
+        await openSidebarTab(page, "plugins");
         await page.waitForSelector("#pane-plugins .plg-row", { timeout: 10_000 });
         await page.locator("#pane-plugins .plg-row").first().click();
         await page.waitForSelector("#subOverlay.open", { timeout: 10_000 });

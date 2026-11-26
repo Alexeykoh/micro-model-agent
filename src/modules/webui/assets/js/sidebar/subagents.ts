@@ -7,6 +7,7 @@ import { api } from "../api.js";
 import { el } from "../dom.js";
 import { t } from "../i18n.js";
 import { formatMs } from "../format.js";
+import { formatDuration } from "../duration.js";
 import type { Dict } from "../core/store/types.js";
 import { openRun } from "../feed/subagent.js";
 import { mergeSnapshot } from "../feed/subagent-buffer.js";
@@ -45,7 +46,7 @@ function durationText(run: RunRow): string {
   if (!start) return "";
   if (!run.status || run.status === "running") {
     const secs = Math.max(0, Math.round((Date.now() - start) / 1000));
-    return t("web.subagents.running_for", { secs: String(secs) });
+    return t("web.subagents.running_for", { duration: formatDuration(secs * 1000) });
   }
   const end = typeof run.endedAt === "number" ? run.endedAt : start;
   return formatMs(end - start);

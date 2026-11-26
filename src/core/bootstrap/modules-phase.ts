@@ -36,6 +36,7 @@ import { setMemoryEncryptor } from "../../modules/memory/at-rest";
 import { SessionFileEncryptor } from "../../modules/security/session-encryption";
 import type { PromptBlock } from "../types";
 import { readMmaVersion } from "../version";
+import { preloadRemoteInstructions } from "./remote-instructions";
 import { isOneShotMode, registerBuiltinPlugin, shouldAutocreateSession } from "./state";
 import { ModuleHost, registerOwnedTools } from "../module-host";
 import { restoreStartupPlanFrom } from "./startup-plan";
@@ -78,6 +79,11 @@ export async function setupModulesPhase(input: ModulesPhaseInput): Promise<Modul
   await moduleHost.setup();
   registerModuleToolsAndPlugins(input, moduleHost);
 
+  // HTTPS-источники инструкций: фильтр SSRF + таймаут до сборки промпта.
+  await preloadRemoteInstructions(
+    input.config.instructions?.sources ?? [],
+    input.config.security?.network,
+  );
   const promptBlocks = buildStaticPromptBlocks(input, moduleHost, core.execModule);
   // Read-only CLI-команды (config show, session list, doctor, plugins list …)
   // не запускают агента: «будет суммаризован перед первым запуском» — ложь.

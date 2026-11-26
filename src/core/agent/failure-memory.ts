@@ -8,6 +8,7 @@ import type { ContextManager } from "../context/manager";
 import type { LoopState } from "./loop-state";
 import { issueDirective } from "./directives";
 import { diagnoseRepeatedFailures } from "./failure-diagnosis";
+import { isValidationFailure } from "./validation-failure";
 import {
   MAX_TOOL_FAILURES_PER_TURN,
   MIN_REPEATED_TOOL_FAILURES,
@@ -43,15 +44,27 @@ export function recordRepeatedToolFailure(
   result: ToolResult,
   deps: FailureMemoryDeps,
 ): void {
-  if (
-    result.success ||
-    result.blocked ||
-    INFO_TOOLS.has(call.name) ||
-    TRANSIENT_TOOLS.has(call.name)
-  ) {
+  if (result.success) {
+    // RCV-8: успех доказывает, что тул рабочий — дальше ломаются только
+    // аргументы. Такой тул нельзя отключать до конца хода.
+    state.succeededToolsThisTurn.add(call.name);
+    // BCP-7: успешный повтор аннулирует stale-правило «тул падает».
+    const removed = deps.memoryStore?.deleteEntriesMatching("errors", `${call.name} failed`) ?? 0;
+    if (removed > 0) {
+      deps.logger.diagnostic(
+        "info",
+        `Removed ${removed} stale error rule(s) for ${call.name} after success (BCP-7)`,
+      );
+    }
     return;
   }
+  if (
+    isValidationFailure(result) ||
+    INFO_TOOLS.has(call.name) ||
+    TRANSIENT_TOOLS.has(call.name)
+  ) return;
   const key = call.name;
+  state.wastefulToolCalls++;
   const prev = state.toolFailureCounts.get(key) ?? { count: 0, error: "", samples: [] };
   prev.count++;
   const errText = String(result.output ?? "");
@@ -63,7 +76,11 @@ export function recordRepeatedToolFailure(
   state.toolFailureCounts.set(key, prev);
 
   // Мёртвый тул отключаем на остаток хода (счётчик суммарный, не стрик).
-  if (prev.count >= MAX_TOOL_FAILURES_PER_TURN && !state.toolDisabledNudged.has(key)) {
+  if (
+    prev.count >= MAX_TOOL_FAILURES_PER_TURN &&
+    !state.succeededToolsThisTurn.has(key) &&
+    !state.toolDisabledNudged.has(key)
+  ) {
     state.toolDisabledNudged.add(key);
     state.disabledTools.add(key);
     deps.logger.diagnostic(

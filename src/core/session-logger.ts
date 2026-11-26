@@ -40,6 +40,7 @@ import {
   contextEntry,
   diagnosticEntry,
   llmUsageEntry,
+  lspEntry,
   type CompactionLogInfo,
   type ContextLogInfo,
   type LlmUsageLogInfo,
@@ -226,9 +227,9 @@ export class SessionLogger {
     });
   }
 
-  /** Пишет вердикт финального аудита; `tests` — пометка тест-прогона (INV-15). */
-  logAudit(summary: string, iteration: number, durationMs?: number, tests?: string): void {
-    this.log(auditEntry(summary, iteration, durationMs, tests));
+  /** Пишет вердикт финального аудита; `tests`/`typecheck` — пометки прогонов (INV-15). */
+  logAudit(summary: string, iteration: number, durationMs?: number, tests?: string, typecheck?: SessionLogEntry["typecheck"]): void {
+    this.log(auditEntry(summary, iteration, durationMs, tests, typecheck));
   }
 
   /** Агрегат гейтов хода (`gate_timing`): сколько стояли hallucination/critic/audit, мс (A15). */
@@ -246,9 +247,12 @@ export class SessionLogger {
     this.log(toolChannelEvent("directive", event, detail, iteration));
   }
 
-  /**
-   * Первая запись `session.jsonl`: окружение, LSP-проба, плагины, скиллы.
-   */
+  /** LSP-событие жизненного цикла: фаза в `op`, длительность в `duration`. */
+  logLsp(op: string, message: string, meta?: Record<string, unknown>): void {
+    this.log(lspEntry(op, message, meta));
+  }
+
+  /** Первая запись session.jsonl: окружение, LSP-проба, плагины, скиллы. */
   logSessionStart(data: SessionStartData): void {
     // REPL мог уже записать session_start (вместе с LSP-пробой) — не дублируем.
     if (sessionStartAlreadyLogged(this.session)) return;
@@ -276,11 +280,7 @@ export class SessionLogger {
     this.log(onboardingEntry(event, data));
   }
 
-  /**
-   * Пишет отклонение уже отстримленного черновика гейтом (hallucination /
-   * success-claim / artifact-claim / output-claim): без этого в session.jsonl
-   * дырка (llm_usage без assistant), а в ленте — дубль при переответе.
-   */
+  /** Отклонение отстримленного черновика гейтом (иначе дырка в session.jsonl). */
   logClaimRetry(data: { kind: string; reason: string; iteration: number }): void {
     this.log(claimRetryEntry(data));
   }

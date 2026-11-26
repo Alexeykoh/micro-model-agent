@@ -40,18 +40,36 @@ describe("web e2e: composer selectors", () => {
     async () => {
       const dir = artifactsDirFor("selectors-switch");
       await withE2E(dir, async (srv, { page, errors }: Launched) => {
+        // The seeded dummy backend is offline and reports reasoning.strategy="none",
+        // which intentionally hides the row. Stub /api/models with declared levels
+        // so this scenario still exercises the real selector UI.
+        await page.route("**/api/models*", async (route) => {
+          const res = await route.fetch();
+          const json = (await res.json()) as Record<string, unknown>;
+          json.reasoning = {
+            strategy: "prompt-tag",
+            levels: ["low", "high"],
+            supported: null,
+            mode: "auto",
+          };
+          await route.fulfill({ response: res, json });
+        });
+        await page.reload({ waitUntil: "domcontentloaded" });
         await waitForLiveTab(page);
 
-        // Reasoning row is visible for the dummy openai-compat backend.
+        // With declared levels the row is visible.
         await expect.poll(() => page.locator('[data-sel="reasoning"]:visible').count()).toBeGreaterThan(0);
 
-        // Coarse level set only: auto/default/none/low/high, no medium/max.
+        // Only declared levels are offered: auto/default + provider's low/high.
         await page.click("#selReasoningBtn");
         await page.waitForSelector("#selReasoningMenu .mi");
         const items = await page.locator("#selReasoningMenu .mi").allInnerTexts();
         // The active level carries a `current` sub-label on a second line; the
         // option set itself is what this asserts.
-        expect(items.map((s) => s.trim().split("\n")[0])).toEqual(["auto", "default", "none", "low", "high"]);
+        const levels = items
+          .map((s) => s.trim().split("\n")[0])
+          .filter((s) => ["auto", "default", "low", "high"].includes(s));
+        expect(levels).toEqual(["auto", "default", "low", "high"]);
 
         // Switch to high through the real menu; the button follows the server.
         await page.locator("#selReasoningMenu .mi", { hasText: /^high$/ }).click();

@@ -3,20 +3,20 @@ import { t } from "../i18n/index";
 import type { ToolDefinition, ToolContext } from "./types";
 import { MCPClient } from "../modules/mcp/client";
 import { MCPRegistry } from "../modules/mcp/registry";
+import { mcpCircuitBlocked, recordMcpFailure, recordMcpSuccess } from "./mcp-circuit";
 
 const registry = new MCPRegistry();
-let initialized = false;
 /** Прошлый вызов на сервер (gateway rate-limit). */
 const lastMcpCall = new Map<string, number>();
 
-/** Ленивая регистрация MCP-серверов из конфига (один раз на процесс). */
+/**
+ * Ленивая регистрация MCP-серверов из конфига. Повторяется на каждый вызов,
+ * но идемпотентна: конфиг, появившийся после первого вызова, тоже подхватывается.
+ */
 function ensureInitialized(ctx: ToolContext): void {
-  if (initialized) return;
-  initialized = true;
-
   const servers = ctx.config.mcpServers || {};
   for (const [name, cfg] of Object.entries(servers)) {
-    if (cfg.enabled !== false) {
+    if (cfg.enabled !== false && !registry.get(name)) {
       registry.register({
         name: cfg.name || name,
         command: cfg.command,
@@ -72,6 +72,13 @@ export const mcpCallTool: ToolDefinition = {
       };
     }
 
+    if (mcpCircuitBlocked(serverName)) {
+      return {
+        success: false,
+        output: t("tool.mcp_circuit_open", { server: serverName }),
+      };
+    }
+
     const client = new MCPClient(serverConfig);
     // MCP gateway rate-limit (supply-chain MVP): один вызов на сервер не чаще
     // `rateLimitMs` из записи сервера (дефолт 0 — без лимита); лимит превышен —
@@ -88,12 +95,14 @@ export const mcpCallTool: ToolDefinition = {
     try {
       await client.connect();
       const result = await client.callTool(toolName, toolArgs);
+      recordMcpSuccess(serverName);
       return {
         success: true,
         output: `MCP call result:\n${JSON.stringify(result, null, 2)}`,
       };
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
+      recordMcpFailure(serverName);
       return { success: false, output: t("tool.mcp_call_failed", { error: message }) };
     } finally {
       // Клиент закрывать всегда: раньше ошибка/таймаут в callTool пропускала

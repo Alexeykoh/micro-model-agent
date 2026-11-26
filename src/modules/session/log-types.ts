@@ -52,7 +52,9 @@ export interface SessionLogEntry {
     | "llm_request"
     | "subagent"
     | "command"
+    | "lsp"
     | "instructions_updated"
+    | "change"
     | OnboardingEvent;
   /** Источник записи (INV-13); `llm_usage` пишет origin отдельно (W11). */
   source: Source;
@@ -66,6 +68,11 @@ export interface SessionLogEntry {
   instructionChanges?: InstructionChangeEntry[];
   subagent?: string;
   tool?: string;
+  /** `change` (откат правки): путь файла и операция журнала правок. */
+  path?: string;
+  op?: string;
+  /** `change`: id аннулированной версии файла. */
+  targetId?: string;
   tool_call_id?: string;
   tool_calls?: Array<{
     id: string;
@@ -148,7 +155,12 @@ export interface SessionLogEntry {
   cacheWriteTokens?: number;
   /** Источник кеш-данных: api | derived. */
   cacheSource?: string;
-  progress?: { totalBatches: number; novelTools: number; duplicateBatches: number };
+  progress?: {
+    totalBatches: number;
+    novelTools: number;
+    duplicateBatches: number;
+    wastefulToolCalls?: number;
+  };
   environment?: Record<string, unknown>;
   lspProbe?: {
     ok: Array<{ language: string; durationMs: number }>;
@@ -165,6 +177,8 @@ export interface SessionLogEntry {
   recoverable?: boolean;
   /** `audit`: пометка тест-прогона — скип/inconclusive/кэш (INV-15). */
   tests?: string;
+  /** `audit`: статус проектного typecheck — ok/error/inconclusive с причиной и duration (INV-15). */
+  typecheck?: { status: "ok" | "error" | "inconclusive"; reason?: string; durationMs: number };
   // Поля reasoning_control; `level` — заодно severity персистентных output-событий
   level?: string;
   strategy?: string;

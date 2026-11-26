@@ -1,7 +1,7 @@
 # Стратегия reasoning — одна точка назначения (W3)
 
 _Дата: 2026-10-15. Ветка: `feat/reasoning-strategy-single-source`._
-_Волна W3 плана [2026-10-15-harness-bug-detection-plan.md](../archive/plans/2026/2026-10-15-harness-bug-detection-plan.md)._
+_Волна W3 плана `2026-10-15-harness-bug-detection-plan.md` (удалено вместе с архивом 2026-11-25)._
 _Долг `reasoning-hard-switch` (`docs/agents/debt.md`) оплачен этой волной и снят._
 
 ## 1. Что не так (текущее состояние, с адресами)

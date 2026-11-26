@@ -10,6 +10,7 @@ import { join } from "path";
 
 const ROOT = process.cwd();
 const HTML = readFileSync(join(ROOT, "src/modules/webui/assets/index.html"), "utf-8");
+const THEME_JS = readFileSync(join(ROOT, "src/modules/webui/assets/theme.js"), "utf-8");
 const THEME_TS = readFileSync(
   join(ROOT, "src/modules/webui/assets/js/settings/theme.ts"),
   "utf-8",
@@ -21,8 +22,9 @@ describe("web ui color scheme (U10)", () => {
   });
 
   it("the pre-paint script sets colorScheme and theme-color", () => {
-    expect(HTML).toMatch(/documentElement\.style\.colorScheme\s*=/);
-    expect(HTML).toMatch(/meta\[name="theme-color"\]/);
+    expect(THEME_JS).toMatch(/documentElement\.style\.colorScheme\s*=/);
+    expect(THEME_JS).toMatch(/meta\[name="theme-color"\]/);
+    expect(HTML).toContain('<script src="/theme.js"></script>');
   });
 
   it("runtime theme switches keep the browser in sync", () => {

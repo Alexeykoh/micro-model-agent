@@ -138,7 +138,9 @@ describe("web e2e: config surfaces", () => {
           .toBe(origRetries);
 
         // list key → tag editor: chips + inline adder (not a comma field).
+        // Agent panel now opens on the "critic" tab; tools live on their own tab.
         await openPanel(page, "agent");
+        await page.locator('[data-panel="agent"] .settings-tab', { hasText: "Tools & skills" }).click();
         const tags = panelRow(page, "agent", "default tool tags");
         const adder = tags.locator(".tags-add input");
         await adder.fill("e2eprobe");
@@ -204,13 +206,12 @@ describe("web e2e: config surfaces", () => {
         const form = page.locator("#subHost .pform");
         await form.waitFor({ timeout: 10_000 });
 
-        // New fields from this branch exist.
-        expect(await form.locator('input[placeholder="8192"]').count()).toBe(1);
-        expect(await form.locator('select[aria-label="cache mechanism"]').count()).toBe(1);
-        expect(await form.locator('select[aria-label="cache report format"]').count()).toBe(1);
-
-        // Advanced fields live inside a collapsed <details> — expand it.
+        // Advanced fields live inside a collapsed <details> — expand it first.
         await form.locator("details.pform-adv > summary").click();
+        // The form is rebuilt after config/i18n load; poll instead of a single read.
+        await expect.poll(() => form.locator('input[placeholder="8192"]').count()).toBe(1);
+        await expect.poll(() => form.locator('select[aria-label="cache mechanism"]').count()).toBe(1);
+        await expect.poll(() => form.locator('select[aria-label="cache report format"]').count()).toBe(1);
         await form.locator('input[placeholder="8192"]').waitFor({ state: "visible", timeout: 10_000 });
 
         await fillProviderForm(page, {
@@ -264,8 +265,10 @@ describe("web e2e: config surfaces", () => {
         await openSettings(page);
         await openPanel(page, "plugins");
 
+        // Plugins panel has internal tabs (plugins / MCP / LSP) and opens on "plugins".
+        await page.locator('[data-panel="plugins"] .settings-tab', { hasText: "MCP" }).click();
         // MCP create through the nested dialog (stdio needs a command only).
-        await page.locator('[data-panel="plugins"] button', { hasText: "add MCP server" }).click();
+        await page.locator("#settings-mcp .sec-add").click();
         const mcpForm = page.locator("#subHost .pform");
         await mcpForm.waitFor({ timeout: 10_000 });
         await mcpForm.locator('input[placeholder="my-server"]').fill("e2e-mcp-probe");
@@ -279,7 +282,7 @@ describe("web e2e: config surfaces", () => {
         };
         await expect.poll(mcpNames, { timeout: 15_000 }).toContain("e2e-mcp-probe");
         // Delete it again through the row control.
-        const mcpRow = page.locator('[data-panel="plugins"] .list-line', { hasText: "e2e-mcp-probe" });
+        const mcpRow = page.locator('#settings-mcp .list-line', { hasText: "e2e-mcp-probe" });
         await mcpRow.locator("button", { hasText: "delete" }).click();
         await expect.poll(mcpNames, { timeout: 15_000 }).not.toContain("e2e-mcp-probe");
 
@@ -290,7 +293,8 @@ describe("web e2e: config surfaces", () => {
           };
           return (body.servers ?? []).find((s) => s.lang === lang)?.timeout;
         };
-        const lspRow = page.locator('[data-panel="plugins"] .list-line', { hasText: "typescript" }).first();
+        await page.locator('[data-panel="plugins"] .settings-tab', { hasText: "LSP" }).click();
+        const lspRow = page.locator('.settings-pane[data-pane="lsp"] .list-line', { hasText: "typescript" }).first();
         await lspRow.waitFor({ timeout: 10_000 });
         const origTimeout = await lspTimeout("typescript");
         await lspRow.locator("button", { hasText: "edit" }).click();
@@ -413,12 +417,23 @@ describe("web e2e: config surfaces", () => {
     "settings search finds a deep key and navigates to its panel",
     async () => {
       const dir = artifactsDirFor("cfg-search");
-      await withE2E(dir, async (_srv, { page, errors }: Launched) => {
+      await withE2E(dir, async (srv, { page, errors }: Launched) => {
         await openSettings(page);
+        // searchRows comes from the async /api/config registry. Wait until the
+        // server has it AND the settings overlay has rendered actual rows.
+        await expect
+          .poll(async () => {
+            const { json } = await apiGet(srv.baseUrl, "/api/config");
+            return ((json as { registry?: unknown[] }).registry ?? []).length;
+          }, { timeout: 30_000 })
+          .toBeGreaterThan(100);
+        await expect
+          .poll(() => page.locator('[data-panel="general"] .row').count(), { timeout: 30_000 })
+          .toBeGreaterThan(5);
         const search = page.locator("#setSearch");
         await search.fill("compaction");
         const results = page.locator("#setResults .set-result");
-        await expect.poll(() => results.count(), { timeout: 10_000 }).toBeGreaterThan(0);
+        await expect.poll(() => results.count(), { timeout: 30_000 }).toBeGreaterThan(0);
         // Result rows carry the human label, the owning panel and the raw key.
         await expect.poll(() => results.first().innerText(), { timeout: 10_000 }).toMatch(/compaction/i);
         // Picking a result switches to the owning panel and highlights the row.

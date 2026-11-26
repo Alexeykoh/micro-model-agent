@@ -1,5 +1,5 @@
 /** Тул дописывания файла: скоуп, security-скан, инкрементальный вывод. */
-import { appendFileSync, mkdirSync, existsSync } from "fs";
+import { appendFileSync, mkdirSync, existsSync, readFileSync } from "fs";
 import { dirname } from "path";
 import { t } from "../i18n/index";
 import type { ToolDefinition } from "./types";
@@ -9,6 +9,7 @@ import { getSessionSecurityConfig } from "../modules/security/session-isolation"
 import { safeResolvePath } from "./path-utils";
 import { assertWritable, recheckWrite } from "./path-guards";
 import { errMsg } from "../utils";
+import { preValidateSyntax } from "./syntax-validator";
 
 /** Дописывает контент в файл, создавая его и parent-dirs; для длинного вывода. */
 export const appendFileTool: ToolDefinition = {
@@ -17,13 +18,18 @@ export const appendFileTool: ToolDefinition = {
   icon: "➕",
   boundedOutput: true,
   description:
-    "Append content to a file (creating it and parent directories if needed). Use to build a long output incrementally instead of rewriting the whole file.",
+    "Append content to a file (creating it and parent directories if needed). Prefer patch_file for existing code files. " +
+    "When building a file in chunks, pass final:true on the LAST chunk to validate the whole file's syntax.",
   tags: ["file", "code"],
   parameters: {
     type: "object",
     properties: {
       path: { type: "string", description: "File path" },
       content: { type: "string", description: "Content to append" },
+      final: {
+        type: "boolean",
+        description: "Set true on the last chunk to validate the whole file's syntax",
+      },
     },
     required: ["path", "content"],
   },
@@ -86,6 +92,19 @@ export const appendFileTool: ToolDefinition = {
 
     const unsafe = recheckWrite(resolved, ctx);
     if (unsafe) return unsafe;
+
+    // AQC-6: промежуточные куски могут быть синтаксически неполными, но
+    // последний обязан оставить валидный файл. Проверяем ДО записи.
+    if (args.final === true) {
+      const existing = existsSync(resolved) ? readFileSync(resolved, "utf-8") : "";
+      const validation = await preValidateSyntax(resolved, existing + content, ctx.baseDir);
+      if (!validation.valid) {
+        return {
+          success: false,
+          output: t("file.syntax_error", { path, error: validation.error || "Unknown syntax error" }),
+        };
+      }
+    }
     try {
       appendFileSync(resolved, content, "utf-8");
     } catch (err) {

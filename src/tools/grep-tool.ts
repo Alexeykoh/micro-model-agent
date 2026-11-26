@@ -7,6 +7,21 @@ import { logBashCommand } from "../modules/security/audit-log";
 import { MAX_PREVIEW_LINES } from "./preview";
 import { searchWithJs } from "./grep-js";
 
+/** Потолок длины одной строки вывода: JSON-LD на страницах бывает >200k символов. */
+export const MAX_PREVIEW_LINE_CHARS = 300;
+
+/** Усекает каждую строку до MAX_PREVIEW_LINE_CHARS символов. */
+export function truncateMatchLines(output: string): string {
+  return output
+    .split("\n")
+    .map((line) =>
+      line.length > MAX_PREVIEW_LINE_CHARS
+        ? `${line.slice(0, MAX_PREVIEW_LINE_CHARS)}… [line truncated]`
+        : line,
+    )
+    .join("\n");
+}
+
 /** Обрезает вывод до MAX_PREVIEW_LINES строк. */
 function truncateLines(output: string): string {
   const lines = output.split("\n");
@@ -98,7 +113,10 @@ async function runExternalEngine(
   logBashCommand(ctx.sessionId, `${bin} ${argv.join(" ")}`, false, "grep-tool");
   try {
     const output = await runSearch(bin, argv, ctx.baseDir);
-    return { success: true, output: truncateLines(output || t("file.no_matches")) };
+    return {
+      success: true,
+      output: truncateLines(truncateMatchLines(output || t("file.no_matches"))),
+    };
   } catch (e: unknown) {
     return classifySearchError(e);
   }
@@ -132,7 +150,10 @@ function runJsEngine(
       include,
       maxFiles: ctx.config?.indexer?.maxFiles,
     });
-    return { success: true, output: truncateLines(output || t("file.no_matches")) };
+    return {
+      success: true,
+      output: truncateLines(truncateMatchLines(output || t("file.no_matches"))),
+    };
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : String(e);
     return { success: false, output: t("error.grep_failed", { message }) };

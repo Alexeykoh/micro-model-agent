@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { extractMainContent, looksLikeShell } from "../../src/tools/html-content";
+import {
+  extractMainContent,
+  extractStructuredOffers,
+  looksLikeShell,
+} from "../../src/tools/html-content";
 import { unwrapDdgUrl } from "../../src/tools/web-search";
 
 describe("extractMainContent", () => {
@@ -25,6 +29,51 @@ describe("extractMainContent", () => {
     expect(text).not.toContain("var x");
     expect(text).not.toContain("color:red");
     expect(text).toContain("Real text");
+  });
+});
+
+describe("extractStructuredOffers (JSON-LD)", () => {
+  it("surfaces offers that live in a script tag far below the preview cut", () => {
+    const html = `<html><head>
+      <script type="application/ld+json" class="yoast-schema-graph">${JSON.stringify({
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "OfferCatalog",
+            itemListElement: [
+              {
+                item: {
+                  "@type": "Offer",
+                  name: "Разовое посещение",
+                  price: "29",
+                  priceCurrency: "BYN",
+                  description: "Одно посещение в любое время суток, один клуб.",
+                },
+              },
+              {
+                item: {
+                  "@type": "Offer",
+                  name: "Подписка GYM24",
+                  price: "99",
+                  priceCurrency: "BYN",
+                  description: "Первый месяц — 199 руб. (активация 100 + 99).",
+                },
+              },
+            ],
+          },
+        ],
+      })}</script>
+    </head><body><main><p>Catalog visible text.</p></main></body></html>`;
+    const offers = extractStructuredOffers(html);
+    expect(offers).toContain("Разовое посещение | 29 BYN");
+    expect(offers).toContain("Подписка GYM24 | 99 BYN");
+    expect(offers).toContain("199");
+    // Offer-блок должен попасть в текст, который видит web_fetch до обрезки.
+    expect(extractMainContent(html).startsWith("STRUCTURED PAGE DATA")).toBe(true);
+  });
+
+  it("returns an empty string for pages without structured offers", () => {
+    expect(extractStructuredOffers("<html><body><p>plain</p></body></html>")).toBe("");
   });
 });
 

@@ -13,16 +13,13 @@ import type { LoopState } from "./loop-state";
 import type { CompactionService } from "./compaction";
 import { ToolCallRunner } from "./tool-batch-calls";
 import { applyBatchSignals } from "./tool-batch-signals";
+import { isRecoverableTerminal, resetFailureCounters } from "../../modules/recovery/terminal";
+import { RECOVERY_MAX_TERMINALS } from "../../modules/recovery/constants";
 
 /** Дефолтный кап конкурентных тулов одного batch'а (см. security.rateLimits). */
 const DEFAULT_MAX_PARALLEL_TOOLS = 5;
 
-/**
- * Прогоняет `fn` по `items` с лимитом одновременных запусков, сохраняя порядок
- * результатов (results[i] соответствует items[i]). Пул воркеров, а не
- * `Promise.all` пачками — ровный кап без простоя. `fn` наружу release-хуков не
- * требует; если он бросит, промис отклонится (как serial `await`).
- */
+/** Пул воркеров с лимитом и сохранением порядка результатов (results[i] = items[i]). */
 async function runWithConcurrency<T, R>(
   items: T[],
   limit: number,
@@ -61,6 +58,8 @@ export interface ToolBatchDeps {
   isShutdownRequested: () => boolean;
   /** Переустановка tool scope перед каждым вызовом тула. */
   setScope: () => void;
+  /** RCV-3/9: recovery-сабагент на ошибки валидации и failure-терминалы. */
+  recovery?: import("../../modules/recovery/gate").RecoveryGate;
 }
 
 /** Итог пакета: прервана ли итерация по shutdown (цикл должен выйти). */
@@ -210,6 +209,20 @@ export class ToolBatchExecutor {
       return { interrupted: true };
     }
 
+    // RCV-3: исправление повторяющейся ошибки валидации через сабагента.
+    // Выполняется тем же runner'ом → тот же enforcement, контекст и события.
+    if (this.deps.recovery && !this.deps.isShutdownRequested()) {
+      const candidate = runner.recoveryCandidate;
+      if (candidate) {
+        await this.deps.recovery.maybeRecover(candidate.call, candidate.result, input, async (corrected) => {
+          runner.prepare(corrected);
+          const exec = await runner.execute(corrected, this.deps.toolExecutor);
+          if (!exec.shutdown) await runner.finalize(corrected, exec);
+          return exec.result;
+        });
+      }
+    }
+
     // Recovery-сигналы: неудачи, повторы, разведка, окно фейлов, молчание.
     const signals = applyBatchSignals({
       state,
@@ -223,11 +236,54 @@ export class ToolBatchExecutor {
       batchHasSuccess: runner.hadSuccess,
       memoryStore: this.deps.memoryStore,
     });
-    if (signals.finalize) return { interrupted: false, finalize: signals.finalize };
+    if (signals.finalize) {
+      // RCV-9: «застрял» ≠ «задача закончена». Маленькие модели путаются в
+      // ошибках — отдаём терминал сабагенту, сбрасываем стрики и продолжаем.
+      let recovered = false;
+      const candidate = runner.recoveryCandidate;
+      if (
+        isRecoverableTerminal(signals.finalize) &&
+        this.deps.recovery &&
+        candidate &&
+        !this.deps.isShutdownRequested()
+      ) {
+        recovered = await this.deps.recovery.recoverTerminal(
+          signals.finalize,
+          state,
+          input,
+          candidate.call,
+          candidate.result,
+          async (corrected) => {
+            runner.prepare(corrected);
+            const exec = await runner.execute(corrected, this.deps.toolExecutor);
+            if (!exec.shutdown) await runner.finalize(corrected, exec);
+            return exec.result;
+          },
+        );
+        if (recovered) {
+          resetFailureCounters(state);
+        } else if (
+          this.deps.recovery.terminalAttempts() < RECOVERY_MAX_TERMINALS &&
+          !this.deps.isShutdownRequested() &&
+          // Отключённый тул ({ code: "TOOL_DISABLED", retryable: false }) починить
+          // невозможно — там честный forced final, а не бесконечный ретрай.
+          candidate.result.errorMeta?.code !== "TOOL_DISABLED"
+        ) {
+          // RCV-9b: сабагент не предложил правку — НЕ сдаёмся. Отдаём модели
+          // точный текст ошибки, сбрасываем стрики и даём ещё попытку. Ход
+          // завершается только после исчерпания капа.
+          summaries.push(
+            `Recovery could not auto-fix the failure. Fix it yourself and continue — do NOT end the turn.\n` +
+              `Error: ${String(candidate.result.output ?? "").slice(0, 800)}`,
+          );
+          resetFailureCounters(state);
+          recovered = true;
+        }
+      }
+      if (!recovered) return { interrupted: false, finalize: signals.finalize };
+    }
 
-    // Статусная строка плана после каждого пакета тулов. Заменяет динамический
-    // plan-блок, который жил в system prompt (удалён ради KV-cache — план
-    // меняется каждую итерацию).
+    // Статус плана после батча (динамический plan-блок убран ради KV-cache).
     const planLine = this.deps.planSummary?.();
     if (planLine) summaries.push(planLine);
 

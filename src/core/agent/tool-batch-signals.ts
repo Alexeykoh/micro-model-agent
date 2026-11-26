@@ -1,9 +1,4 @@
-/**
- * Recovery-сигналы после пакета тулов: серии неудач, повторов, веб-разведки,
- * окно фейлов и молчание. Вынесено из `tool-batch.ts` (правило 6): функция
- * применяет блоки строго в исходном порядке и возвращает терминальный
- * `finalize`, если петля должна выйти; иначе `{}` — цикл продолжается.
- */
+/** Recovery-сигналы пакета тулов: неудачи, повторы, разведка, окно фейлов, молчание. */
 import { t } from "../../i18n/index";
 import type { ContextManager } from "../../core/context/manager";
 import type { Logger } from "../../logger/app-logger";
@@ -32,13 +27,9 @@ import { clearDirective, issueDirective } from "./directives";
 import { resetSilenceStreak } from "./silence-streak";
 import { canonicalArgsKey } from "./canonical-args";
 import { countDistinctFailingTools } from "./failure-memory";
+import { softBudgetDue } from "./tool-batch-budget";
 
-/**
- * Внешние веб-тулы: пакет только из них — «веб-разведка». Длинная серия таких
- * пакетов без единого не-web действия питает одноразовую директиву «сведи к
- * результату» (`MAX_RESEARCH_BATCHES`). Набор узкий (внешние запросы, не чтение
- * локального кода), поэтому легитимный локальный анализ не задевает.
- */
+/** Внешние веб-тулы: длинная серия без не-web действий — «веб-разведка». */
 const RESEARCH_TOOLS = new Set([
   "web_search",
   "web_fetch",
@@ -76,8 +67,11 @@ export interface BatchSignalsResult {
 
 /** Применяет recovery-сигналы пакета в порядке приоритета. */
 export function applyBatchSignals(inp: BatchSignalsInput): BatchSignalsResult {
-  const { state, contextManager, logger, slog, input, textContent, toolCalls } = inp;
-  const { anyToolFailed, batchHasSuccess } = inp;
+  const { state, contextManager, logger, slog, input, textContent, toolCalls, anyToolFailed, batchHasSuccess } = inp;
+  // BCP-3: всего вызовов тулов в текущем ходе.
+  state.toolCallsThisTurn += toolCalls.length;
+  // AQC-4: блок спарен со стопом через общий failed-batch счётчик.
+  const blockedCall = toolCalls.some((c) => state.disabledTools.has(c.name));
 
   // Последовательные неудачи: recovery-сообщение + правило в память.
   if (anyToolFailed) {
@@ -120,13 +114,8 @@ export function applyBatchSignals(inp: BatchSignalsInput): BatchSignalsResult {
     }
   }
 
-  // Honest-stop полностью провальных пакетов: каждый вызов пакета — неудача
-  // или tool-level блок (в отличие от consecutiveToolFailures выше, блоки
-  // ВХОДЯТ в учёт — перебор вариантов заблокированной команды это та же
-  // петля). Смешанные пакеты и успехи сбрасывают стрик: связка
-  // «упал → поправил → упал» (дебаг) под него не попадает.
-  // Plugin-level блоки (result.blocked, guard-rails) — не успех, но для
-  // honest-stop это неудача: серия отказов гарда без прогресса тоже петля.
+  // Honest-stop: полностью провальный пакет (блоки тоже считаются неудачей).
+  // Смешанные пакеты и успехи сбрасывают стрик — чередующийся дебаг не ловим.
   if (anyToolFailed && !batchHasSuccess) {
     state.consecutiveFailedBatches++;
   } else if (batchHasSuccess) {
@@ -152,7 +141,7 @@ export function applyBatchSignals(inp: BatchSignalsInput): BatchSignalsResult {
   if (state.consecutiveFailedBatches >= HARD_STOP_FAILED_BATCHES) {
     logger.diagnostic(
       "warn",
-      `Retry loop terminated after ${state.consecutiveFailedBatches} consecutive failed batches — forcing final answer`,
+      `Retry loop terminated after ${state.consecutiveFailedBatches} consecutive failed batches${blockedCall ? " (blocked tool retry)" : ""} — forcing final answer`,
     );
     return { finalize: "failed_batches" };
   }
@@ -293,6 +282,12 @@ export function applyBatchSignals(inp: BatchSignalsInput): BatchSignalsResult {
       `Silent loop terminated after ${state.consecutiveSilentBatches} batches without text — forcing final answer`,
     );
     return { finalize: "silent" };
+  }
+
+  // BCP-3: мягкий бюджет исчерпан — структурный tool-less финал.
+  if (softBudgetDue(state)) {
+    logger.diagnostic("warn", `Soft tool budget reached (${state.toolCallsThisTurn}) — forcing final answer`);
+    return { finalize: "soft_tool_budget" };
   }
 
   return {};

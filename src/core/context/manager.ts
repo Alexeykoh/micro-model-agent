@@ -7,6 +7,7 @@ import type { ContextBudget as ConfigContextBudget } from "../../config/types";
 import type { TokenCounter } from "../../llm/token-counter";
 import type { ContextBreakdown, ContextQualityBreakdown } from "../../core/types";
 import { ContextLedger } from "./ledger";
+import type { Diagnostic } from "../../output/types";
 import type { ProgressDiagnostic } from "./compaction-progress";
 import { extractTriedAndFailed } from "./message-analysis";
 import type { Message } from "./message";
@@ -61,8 +62,12 @@ export class ContextManager {
   set onCompact(fn: ((summary: Message) => void) | null) { this.s.onCompact = fn; }
 
   /** OO-3: подключить durable леджер адресов (путь из contextBudget.notesPath). */
-  configureLedger(filePath: string, max: number): void {
-    this.s.ledger = new ContextLedger(filePath, max);
+  configureLedger(
+    filePath: string,
+    max: number,
+    onDiagnostic?: (d: Diagnostic) => void,
+  ): void {
+    this.s.ledger = new ContextLedger(filePath, max, onDiagnostic);
     this.s.ledger.load();
   }
 
@@ -176,6 +181,9 @@ export class ContextManager {
 
   /** Число сообщений в истории. */
   getMessageCount(): number { return this.s.messages.length; }
+
+  /** Размер окна модели — нужен для ранней компакции на маленьких моделях (AQC-5). */
+  getContextWindow(): number { return this.s.contextWindow; }
 
   /** Ёмкость истории: окно минус reserve, system и тулы; не выше конфигурной доли. */
   getHistoryLimit(): number { return historyLimit(this.s); }

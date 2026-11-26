@@ -9,10 +9,13 @@ import {
   FORCED_COMPACTION_COOLDOWN,
   RECOVERY_DIRECTIVE_REFRESH,
   RECOVERY_MEMORY_RULE_REFRESH,
+  SOFT_TOOL_BUDGET,
 } from "./constants";
 import { createArtifactChurnState } from "./artifact-progress";
+import { resetWebRepeat } from "./web-repeat";
 
-export function createLoopState(): LoopState {
+export function createLoopState(softToolBudget: number = SOFT_TOOL_BUDGET): LoopState {
+  resetWebRepeat();
   return {
     iteration: 0,
     lastText: "",
@@ -50,12 +53,14 @@ export function createLoopState(): LoopState {
     seenToolCalls: new Set<string>(),
     totalBatches: 0,
     duplicateBatches: 0,
+    wastefulToolCalls: 0,
     novelToolKeys: new Set<string>(),
     finalizeReason: null,
     stopReason: null,
     consecutiveToolSuccesses: 0,
     repeatedToolCount: 0,
     toolFailureCounts: new Map(),
+    succeededToolsThisTurn: new Set(),
     memoryRuleRecorded: new Set(),
     disabledTools: new Set(),
     toolDisabledNudged: new Set(),
@@ -84,6 +89,12 @@ export function createLoopState(): LoopState {
     lastAuditSummary: "",
     criticCalls: 0,
     criticRepairCycles: 0,
+    criticDegradedCycles: 0,
+    blockedClaimCycles: 0,
+    toolCallsThisTurn: 0,
+    softToolBudget,
+    reasoningDegradationLogged: false,
+    toolcallHintLogged: false,
     mutationsSinceCritic: 0,
     criticHistoryMark: 0,
     seenCriticIssues: new Set(),

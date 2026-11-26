@@ -6,6 +6,34 @@ import type { ConfigKeyDef } from "./registry";
 import { DEFAULTS } from "./defaults";
 import { DEFAULT_LSP_CONFIG } from "../modules/lsp/config";
 import { bool, enumOf, int, isNonNegNum, isRecord, jsonShape } from "./registry-extra-factories";
+import { REBUILD } from "./effects";
+
+const REASONING_STRATEGIES = [
+  "openai-effort",
+  "template-kwarg",
+  "prompt-tag",
+  "none",
+] as const;
+
+function validCapabilityEntry(e: unknown): boolean {
+  if (!isRecord(e)) return false;
+  for (const key of ["vision", "video", "audio", "pdf", "tools", "reasoningOff"] as const) {
+    if (e[key] !== undefined && typeof e[key] !== "boolean") return false;
+  }
+  if (
+    e.reasoningStrategy !== undefined &&
+    !REASONING_STRATEGIES.includes(e.reasoningStrategy as (typeof REASONING_STRATEGIES)[number])
+  ) {
+    return false;
+  }
+  if (
+    e.reasoningLevels !== undefined &&
+    !(Array.isArray(e.reasoningLevels) && e.reasoningLevels.every((v) => typeof v === "string"))
+  ) {
+    return false;
+  }
+  return true;
+}
 
 export const CAPABILITY_DEFS: ConfigKeyDef[] = [
   jsonShape("pricing.overrides", "pricing",
@@ -31,27 +59,33 @@ export const CAPABILITY_DEFS: ConfigKeyDef[] = [
       ],
     }),
 
-  jsonShape("modelCapabilities", "provider",
-    (c) => c.modelCapabilities ?? {},
-    (c, v) => { c.modelCapabilities = v as AppConfig["modelCapabilities"]; },
-    (v) => isRecord(v) && Object.values(v).every((e) =>
-      isRecord(e) &&
-      (e.vision === undefined || typeof e.vision === "boolean") &&
-      (e.video === undefined || typeof e.video === "boolean") &&
-      (e.audio === undefined || typeof e.audio === "boolean") &&
-      (e.pdf === undefined || typeof e.pdf === "boolean") &&
-      (e.tools === undefined || typeof e.tools === "boolean")),
-    {
-      kind: "table",
-      columns: [
-        { key: "name" },
-        { key: "vision", type: "bool", optional: true },
-        { key: "video", type: "bool", optional: true },
-        { key: "audio", type: "bool", optional: true },
-        { key: "pdf", type: "bool", optional: true },
-        { key: "tools", type: "bool", optional: true },
-      ],
-    }),
+  {
+    ...jsonShape("modelCapabilities", "provider",
+      (c) => c.modelCapabilities ?? {},
+      (c, v) => { c.modelCapabilities = v as AppConfig["modelCapabilities"]; },
+      (v) => isRecord(v) && Object.values(v).every(validCapabilityEntry),
+      {
+        kind: "table",
+        layout: "stack",
+        columns: [
+          { key: "name" },
+          { key: "vision", type: "bool", optional: true },
+          { key: "video", type: "bool", optional: true },
+          { key: "audio", type: "bool", optional: true },
+          { key: "pdf", type: "bool", optional: true },
+          { key: "tools", type: "bool", optional: true },
+          {
+            key: "reasoningStrategy",
+            optional: true,
+            options: [...REASONING_STRATEGIES],
+          },
+          { key: "reasoningOff", type: "bool", optional: true },
+          { key: "reasoningLevels", optional: true, array: true },
+        ],
+      },
+    ),
+    effects: REBUILD,
+  },
 
   jsonShape("experts", "agent",
     (c) => c.experts,

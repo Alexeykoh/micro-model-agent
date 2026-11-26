@@ -56,6 +56,7 @@ export const CONFIG_DOMAINS: Record<string, (keyof AppConfig)[]> = {
   service: ["service", "otel"],
   hitl: ["hitl"],
   compliance: ["compliance"],
+  changes: ["changes"],
 };
 
 /** Вырезает подмножество ключей домена из полного AppConfig. */

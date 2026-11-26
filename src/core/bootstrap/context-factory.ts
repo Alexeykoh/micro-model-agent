@@ -4,6 +4,7 @@ import type { ProgressDiagnostic } from "../context/compaction-progress";
 import { TokenCounter } from "../../llm/token-counter";
 import type { AppConfig } from "../../config/types";
 import type { SessionManager } from "../../modules/session/index";
+import { admissionDiagnosticSink } from "./tool-context";
 
 /** Дефолт леджера — внутри `.mma/` (gitignored), не в корне репозитория. */
 const DEFAULT_NOTES = ".mma/NOTES.md";
@@ -67,9 +68,13 @@ export function createContextManager(
     config.contextBudget,
     new TokenCounter(config.model),
   );
+  const ledgerSink = sessionManager
+    ? admissionDiagnosticSink(sessionManager, "context_degraded")
+    : undefined;
   manager.configureLedger(
     containedNotesPath(baseDir, config.contextBudget.notesPath ?? DEFAULT_NOTES),
     config.contextBudget.ledgerMax ?? 200,
+    ledgerSink,
   );
   if (sessionManager) {
     manager.setProgressDiagnosticSink(contextDegradedSink(sessionManager));

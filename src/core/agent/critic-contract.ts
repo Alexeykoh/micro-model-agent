@@ -15,6 +15,8 @@ export interface CriticGateDeps {
   contextManager: ContextManager;
   slog: SessionLogger;
   task: string;
+  /** Рабочая директория — нужна для проверки файловых утверждений критика (BCP-1). */
+  baseDir?: string;
   planSummary?: string;
   /** Незакрытые шаги плана (S5): критик видит, что работа не завершена. */
   planPendingSteps?: string[];
@@ -39,8 +41,12 @@ export interface CriticGateDeps {
   onMeta?: OnMeta;
 }
 
-/** Действие вентиля: пропустить или переспросить модель. */
-export type CriticAction = "pass" | "retry";
+/**
+ * Действие вентиля: пропустить, переспросить или сообщить о деградации.
+ * `degraded` (AQC-3) возвращается только когда есть шаг плана с check-контрактом:
+ * чат-доставка сохраняет fail-open с записью (INV-15).
+ */
+export type CriticAction = "pass" | "retry" | "degraded";
 
 /** Опции вентиля: лимиты, верификатор и сборщик evidence-пакета. */
 export interface CriticGateOptions {

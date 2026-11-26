@@ -103,7 +103,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
             type: "array",
             items: { type: "string", enum: ["static", "behavioral"] },
             description:
-              'Optional on create/re-plan, aligned 1:1 with steps. Declare "behavioral" for a step that changes observable behavior/UI — static checks (file-exists/file-modified/build) will then be rejected on done. The model decides from the step itself, not from wording. Omit for static steps.',
+              'Optional on create/re-plan, aligned 1:1 with steps. Declare "static" explicitly ONLY for a step whose result is fully proven by compilation/file contents. Missing value means "behavioral": static checks (file-exists/file-modified/build) are rejected on done. The model decides from the step itself, not from wording. Do not downgrade behavioral to static on re-plan.',
           },
           step: { type: "number" },
           status: { type: "string", enum: ["done", "failed", "skipped"] },

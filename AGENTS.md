@@ -328,8 +328,7 @@ scope/protected-путей, SSRF и rate-limit (INV-9/10). Новый тул о�
 [versioning](./docs/agents/versioning.md) · [observability](./docs/agents/observability.md) ·
 [ModuleHost](./docs/specs/2026-10-13-w1-module-host-design.md) ·
 [enforcement](./docs/specs/2026-10-13-w2-enforcement-design.md) ·
-[reasoning](./docs/specs/2026-10-15-reasoning-strategy-design.md) ·
-[handoff](./docs/plans/2026-10-12-architecture-v2-handoff.md).
+[reasoning](./docs/specs/2026-10-15-reasoning-strategy-design.md).
 
 ---
 

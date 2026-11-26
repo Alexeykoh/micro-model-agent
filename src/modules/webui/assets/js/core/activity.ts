@@ -6,6 +6,7 @@
 // «пишу», а секунды считались от разных стартов. Здесь состояние одно на
 // сессию, и обе поверхности читают его.
 import { t } from "../i18n.js";
+import { formatDuration } from "../duration.js";
 
 /** Что агент делает прямо сейчас. */
 export type ActivityPhase = "thinking" | "composing" | "tool";
@@ -108,7 +109,7 @@ export function activitySeconds(key: string, now = Date.now()): number {
 
 /** Время хода в одном формате — одинаково на ленте и на рельсе. */
 export function activityTimeText(key: string, now = Date.now()): string {
-  return activitySeconds(key, now).toFixed(1) + "s";
+  return formatDuration(activitySeconds(key, now) * 1000);
 }
 
 /** Подпись фазы — одна на все поверхности (лента и рельс). */

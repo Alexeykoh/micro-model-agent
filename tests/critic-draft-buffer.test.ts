@@ -2,6 +2,7 @@
 // одобрения critic/audit.
 import { describe, expect, it, vi } from "vitest";
 import { createDraftSink } from "../src/core/agent/draft-buffer";
+import { DEFAULTS } from "../src/config/defaults";
 import { runFinalGates, type GatesInput } from "../src/core/agent/loop-gates";
 import { createLoopState } from "../src/core/agent/loop-state";
 import type { AgentDeps } from "../src/core/agent";
@@ -17,6 +18,16 @@ describe("draft buffer", () => {
     expect(out).toEqual(["a", "b"]);
     draft.flush();
     expect(out).toEqual(["a", "b"]);
+  });
+
+  it("default config holds the answer back until the gates release it", () => {
+    const out: string[] = [];
+    const draft = createDraftSink((chunk) => out.push(chunk), DEFAULTS.ui.draftMode);
+    draft.onText?.("final answer");
+    // Дефолт больше не показывает черновик до вердикта критика/аудита.
+    expect(out).toEqual([]);
+    draft.flush();
+    expect(out).toEqual(["final answer"]);
   });
 
   it("after-review holds text until flush and drops it on discard", () => {

@@ -21,11 +21,14 @@ import {
   userBlock,
 } from "./core.js";
 import { buildRetractBlock } from "./retract-block.js";
+import { foldHistory } from "./activity-group.js";
 
-function renderAssistantText(feed: HTMLElement, text: unknown): void {
+function renderAssistantText(feed: HTMLElement, text: unknown, interim = false): void {
   const raw = String(text == null ? "" : text);
   if (!raw.trim()) return;
   const root = renderMarkdown(feed, raw, mdOpts());
+  // Как и в живой ленте: только последний ответ хода получает рейку/фон.
+  if (interim) root.classList.add("interim");
   appendActionsRow(feed, root.innerText || root.textContent || "", raw);
 }
 
@@ -94,14 +97,28 @@ function renderHistoryResult(
 
 function renderHistory(feed: HTMLElement, entries: Dict[]): void {
   const statusNodes = new Map<string, HTMLElement>();
-  entries.forEach((entry) => {
+  // Последний assistant в ходе — финальный ответ (рейка/фон); всё, что было
+  // до него в том же ходе, — промежуточные ответы и остаются без полосы слева.
+  const finalAssistant = new Set<number>();
+  let lastInTurn = -1;
+  entries.forEach((entry, i) => {
+    if (!entry || typeof entry.kind !== "string") return;
+    if (entry.kind === "user") {
+      if (lastInTurn >= 0) finalAssistant.add(lastInTurn);
+      lastInTurn = -1;
+    } else if (entry.kind === "assistant") {
+      lastInTurn = i;
+    }
+  });
+  if (lastInTurn >= 0) finalAssistant.add(lastInTurn);
+  entries.forEach((entry, i) => {
     if (!entry || typeof entry.kind !== "string") return;
     switch (entry.kind) {
       case "user":
         feed.appendChild(userBlock(entry.text || "", entry.images));
         break;
       case "assistant":
-        renderAssistantText(feed, entry.text || "");
+        renderAssistantText(feed, entry.text || "", !finalAssistant.has(i));
         break;
       case "reasoning":
         renderThinkBlock(feed, entry.text || "");
@@ -139,6 +156,9 @@ function renderHistory(feed: HTMLElement, entries: Dict[]): void {
         break;
     }
   });
+  // Replayed rows are all in the DOM now: fold consecutive step runs into the
+  // same collapsible summary the live feed produces.
+  foldHistory(feed);
 }
 
 /** Скелетон ленты: строки-заглушки, пока история не едет (INV-W8). */

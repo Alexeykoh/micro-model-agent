@@ -250,6 +250,13 @@ const SPEC_DEFS: readonly CommandSpecDef[] = [
     surfaces: ["terminal", "tui", "daemon"],
   },
   {
+    name: "undo",
+    descriptionKey: "repl.undo",
+    usageKey: "repl.undo_usage",
+    examples: ["/undo <path>", "/undo <path> --steps 2", "/undo --turn N", "/undo --list [path]"],
+    group: "session",
+  },
+  {
     name: "diagnostics",
     descriptionKey: "repl.diagnostics",
     usageKey: "repl.diagnostics_usage",

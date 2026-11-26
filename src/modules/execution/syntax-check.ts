@@ -84,7 +84,17 @@ export async function checkSyntax(filePath: string, deps: SyntaxDeps): Promise<b
     try {
       await deps.run(`node --check "${filePath}"`, deps.baseDir, 5000);
       return true;
-    } catch {
+    } catch (err: unknown) {
+      const rec = err as { status?: unknown } | null | undefined;
+      const msg = err instanceof Error ? err.message : String(err);
+      // Нет компилятора — это деградация проверки, а не синтаксическая ошибка.
+      if (rec?.status === 127 || /not found|ENOENT|not recognized/i.test(msg)) {
+        deps.degrade(
+          "verify.syntax",
+          `syntax check could not run for ${filePath}: ${msg.slice(0, 200)}`,
+        );
+        return true;
+      }
       return false;
     }
   }

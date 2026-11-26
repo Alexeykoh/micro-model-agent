@@ -10,6 +10,7 @@ import { renderTable } from "../ui/table";
 import { getMessageText } from "../llm/provider";
 import { sessionAge } from "./session-age";
 import { registerSessionExportCommands } from "./repl-commands-export";
+import { runUndo } from "./undo-command";
 import type { ReplContext } from "./repl-commands";
 
 export function registerSessionCommands(ctx: ReplContext): void {
@@ -226,6 +227,15 @@ function registerSessionCoreCommands(ctx: ReplContext): void {
         /* best-effort */
       }
       ctx.output.writeLine(`${t("session.deleted", { id: match.id })}: ${match.name}`);
+    },
+  });
+
+  ctx.registerCommand({
+    name: "undo",
+    description: t("repl.undo"),
+    usage: t("repl.undo_usage"),
+    action: async (args) => {
+      await runUndo(args, (line, stream) => ctx.output.writeLine(line, stream));
     },
   });
 }

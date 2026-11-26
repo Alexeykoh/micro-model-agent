@@ -25,7 +25,7 @@ export const downloadFileTool: ToolDefinition = {
   icon: "⬇️",
   description:
     "Download a file (image, archive, binary, font, etc.) from a URL and save it to disk. Returns only the path, size and content type — read the saved file with read_file/attach_image afterwards. Use this for binary files; web_fetch/web_browse return text only and cannot save bytes.",
-  tags: ["research"],
+  tags: ["web", "research"],
   parameters: {
     type: "object",
     properties: {
@@ -104,8 +104,19 @@ export const downloadFileTool: ToolDefinition = {
         };
       }
 
-      mkdirSync(dirname(resolved), { recursive: true });
-      writeFileSync(resolved, buffer);
+      try {
+        mkdirSync(dirname(resolved), { recursive: true });
+        writeFileSync(resolved, buffer);
+      } catch (e) {
+        // Ошибка записи — не сетевая: сеть уже успела, виноват диск/права.
+        const message = e instanceof Error ? e.message : String(e);
+        logFileWrite(ctx.sessionId, resolved, false, message);
+        return {
+          success: false,
+          output: t("tool.download_write_failed", { message }),
+          errorMeta: { code: "fs_write_failed", retryable: false },
+        };
+      }
 
       const contentType = response.headers.get("content-type")?.split(";")[0]?.trim() || "unknown";
 

@@ -1,5 +1,5 @@
 // Покрытие плана: упомянутые в задаче файлы обязаны встречаться в шагах.
-import { stripUrls } from "../../core/hallucination/js-identifiers";
+import { isTechnologyName, stripUrls } from "../../core/hallucination/js-identifiers";
 
 /**
  * Coverage-allow-list расширений. Считаются только реальные типы deliverable-
@@ -31,6 +31,12 @@ export function extractFilePaths(text: string): string[] {
   for (const m of stripUrls(text).matchAll(FILE_PATH_RE)) {
     const p = m[0].replace(/[.,;:)\]>]+$/g, "");
     if (!p) continue;
+    // Общий список technology-имен (`next.js`, `node.js`, …): они выглядят
+    // как `word.ext`, но не являются deliverable-файлами. Раньше здесь был
+    // свой regex, из-за чего план трижды не проходил coverage на задаче
+    // «Создай проект next.js». Полную isFilePathLike здесь нельзя применять:
+    // в прозе `string.ts`/`math.ts` — настоящие файлы, а не member access.
+    if (isTechnologyName(p)) continue;
     // Требуем настоящее имя: непустой stem перед расширением в последнем
     // сегменте (сегменты `tsx/.ts` / `.env` — не "файлы").
     const slash = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));

@@ -26,7 +26,6 @@ export interface FeedStreamState {
   curThink: ThinkState | null;
   runCount: number;
   runFails: number;
-  runReconOnly: boolean;
   runNodes: HTMLElement[];
   runDuration: number;
   // biome-ignore lint/suspicious/noExplicitAny: opaque timer handle.
@@ -66,7 +65,6 @@ function createStreamState(): FeedStreamState {
     curThink: null,
     runCount: 0,
     runFails: 0,
-    runReconOnly: true,
     runNodes: [],
     runDuration: 0,
     busyTimer: null,

@@ -39,6 +39,7 @@ export const UNCOVERED_CONTEXT_METHODS: Record<string, string> = {
   compactAdaptive: "адаптивная компакция; отдельные тесты с реальным ContextManager",
   getBreakdown: "структура бюджета для web; покрыта getQuality-тестами с реальным менеджером",
   getContextTokens: "единственный вход порогов (W4); покрыт budget-тестами, в цикле считает дубль",
+  getContextWindow: "ранняя компакция AQC-5 для окон ≤64K; покрыта tests/core/compaction-early-small.test.ts с реальным ContextManager",
   getHistoryLimit:
     "ёмкость истории для порогов компакции (2026-11-01-capacity); покрыта tests/core/compaction-tool-budget.test.ts, в дубле overflow не срабатывает",
   hardDropOldest:

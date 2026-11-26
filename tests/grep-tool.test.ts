@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { runSearch, classifySearchError } from "../src/tools/grep-tool";
+import { runSearch, classifySearchError, truncateMatchLines } from "../src/tools/grep-tool";
 
 /**
  * Platform-independent runner: `grep` and `sleep` do not exist in a default
@@ -40,6 +40,18 @@ describe("grep async runSearch", () => {
     }
     expect(msg).toMatch(/timed out/i);
   }, 10000);
+});
+
+describe("grep output truncation", () => {
+  it("caps a single long matching line (JSON-LD script) without touching short lines", () => {
+    const out = truncateMatchLines(`${"a".repeat(5_000)}\nshort\n${"b".repeat(400)}`);
+    const lines = out.split("\n");
+    expect(lines).toHaveLength(3);
+    expect(lines[0].length).toBeLessThanOrEqual(320);
+    expect(lines[0]).toContain("[line truncated]");
+    expect(lines[1]).toBe("short");
+    expect(lines[2].length).toBeLessThanOrEqual(320);
+  });
 });
 
 describe("grep external engine failure classification", () => {

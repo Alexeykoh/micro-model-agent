@@ -1,4 +1,5 @@
 // План и шаги: типы, создание, re-plan, прогресс, промпт-блок.
+import { inferDefaultEvidence } from "./plan-checks";
 /** Статус шага плана. */
 export type StepStatus = "pending" | "in_progress" | "done" | "failed" | "skipped";
 
@@ -94,6 +95,8 @@ export class PlanCreator {
     evidence?: (StepEvidence | undefined)[],
   ): Plan {
     const stepCount = stepDescriptions.length;
+    // AQC-1: пропущенное evidence выводится из check, а не из слов описания.
+    const resolvedEvidence = evidence ?? inferDefaultEvidence(stepDescriptions, checks);
     return {
       id: generatePlanId(),
       title: `[${stepCount}] ${title}`,
@@ -104,7 +107,7 @@ export class PlanCreator {
         kind: kinds?.[i] ?? "create",
         ...(checks?.[i] ? { check: checks[i] } : {}),
         ...(baselines?.[i] !== undefined ? { checkBaseline: baselines[i] ?? null } : {}),
-        ...(evidence?.[i] ? { evidence: evidence[i] } : {}),
+        ...(resolvedEvidence[i] ? { evidence: resolvedEvidence[i] } : {}),
       })),
       createdAt: new Date().toISOString(),
       baseDir,
@@ -124,15 +127,30 @@ export class PlanCreator {
     const baseTitle = plan.title.replace(/^\[\d+[^]]*\]\s*/, "");
     const newTitle = title || baseTitle;
     const totalSteps = kept.length + newSteps.length;
-    const added: PlanStep[] = newSteps.map((desc, i) => ({
-      id: -1, // перенумеруется ниже
-      description: desc,
-      status: "pending" as StepStatus,
-      kind: "create",
-      ...(newChecks?.[i] ? { check: newChecks[i] } : {}),
-      ...(newBaselines?.[i] !== undefined ? { checkBaseline: newBaselines[i] ?? null } : {}),
-      ...(newEvidence?.[i] ? { evidence: newEvidence[i] } : {}),
-    }));
+    // AQC-1: шаг, который уже был объявлен behavioral, нельзя переобъявить
+    // static при re-plan — иначе проверка поведения исчезает по пути.
+    const behavioralBefore = new Set(
+      plan.steps
+        .filter((s) => s.evidence === "behavioral")
+        .map((s) => s.description.trim().toLowerCase()),
+    );
+    const resolvedEvidence = newEvidence ?? inferDefaultEvidence(newSteps, newChecks);
+    const added: PlanStep[] = newSteps.map((desc, i) => {
+      const declared = resolvedEvidence[i];
+      const evidence =
+        declared === "static" && behavioralBefore.has(desc.trim().toLowerCase())
+          ? "behavioral"
+          : declared;
+      return {
+        id: -1, // перенумеруется ниже
+        description: desc,
+        status: "pending" as StepStatus,
+        kind: "create",
+        ...(newChecks?.[i] ? { check: newChecks[i] } : {}),
+        ...(newBaselines?.[i] !== undefined ? { checkBaseline: newBaselines[i] ?? null } : {}),
+        ...(evidence ? { evidence } : {}),
+      };
+    });
     // Перенумеровываем все шаги (сохранённые + новые) подряд. Сохранённые держат
     // статус и kind, но их id могут коллизить с новыми, если исходный план
     // пропускал/пендил шаги в середине (напр. done 1, done 3 → сохранённые

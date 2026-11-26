@@ -51,9 +51,9 @@ async function checkBootPage(page: Page, errors: string[], dir: string): Promise
 /** Nested-overlay chrome: open via "+ add", close via Esc, close via backdrop. */
 async function checkOverlayChrome(page: Page, dir: string): Promise<void> {
   await openModelPanel(page);
-  await page.waitForSelector(".sec-add", { timeout: 10_000 });
+  await page.waitForSelector('[data-panel="model"] .sec-add', { timeout: 10_000 });
 
-  await page.click(".sec-add");
+  await page.click('[data-panel="model"] .sec-add');
   await page.waitForSelector("#subOverlay.open", { timeout: 10_000 });
   expect(await page.locator("#overlay.open").count()).toBe(1);
   await page.screenshot({ path: join(dir, "dialog-open.png") });
@@ -62,7 +62,7 @@ async function checkOverlayChrome(page: Page, dir: string): Promise<void> {
   await page.waitForSelector("#subOverlay.open", { state: "hidden", timeout: 10_000 });
   expect(await page.locator("#overlay.open").count()).toBe(1);
 
-  await page.click(".sec-add");
+  await page.click('[data-panel="model"] .sec-add');
   await page.waitForSelector("#subOverlay.open", { timeout: 10_000 });
   await page.mouse.click(5, 5);
   await page.waitForSelector("#subOverlay.open", { state: "hidden", timeout: 10_000 });
@@ -70,8 +70,11 @@ async function checkOverlayChrome(page: Page, dir: string): Promise<void> {
 
 /** Fill the provider form, save, and assert the list grew by one. */
 async function saveNewProvider(page: Page, baseUrl: string, dir: string): Promise<string> {
+  await expect
+    .poll(() => page.locator(".provider-item").count(), { timeout: 10_000 })
+    .toBeGreaterThan(0);
   const before = await page.locator(".provider-item").count();
-  await page.click(".sec-add");
+  await page.click('[data-panel="model"] .sec-add');
   await page.waitForSelector("#subOverlay.open", { timeout: 10_000 });
   const label = `e2e-prov-${Date.now().toString(36)}`;
   await fillProviderForm(page, { type: "openai-compat", label, baseUrl: "http://127.0.0.1:9/v1" });
@@ -80,8 +83,9 @@ async function saveNewProvider(page: Page, baseUrl: string, dir: string): Promis
   await page.locator(".pform-actions button").first().click();
   await page.waitForSelector("#subOverlay.open", { state: "hidden", timeout: 10_000 });
   await expect.poll(() => page.locator(".provider-item").count(), { timeout: 10_000 }).toBe(before + 1);
-  const names = await page.locator(".provider-item").allInnerTexts();
-  expect(names.some((t) => t.includes(label))).toBe(true);
+  await expect
+    .poll(async () => (await page.locator(".provider-item .p-name").allInnerTexts()).some((t) => t.includes(label)), { timeout: 10_000 })
+    .toBe(true);
   await page.screenshot({ path: join(dir, "dialog-saved.png") });
 
   // The isolated config actually persisted the new entry.

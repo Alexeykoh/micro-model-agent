@@ -38,10 +38,7 @@ export const AUDIT_SLOW_NOTICE_MS = 3_000;
  * честность вердикта и отсутствие прогона, когда сломать тесты нечем.
  */
 export const AUDIT_TEST_RUN_BUDGET_MS = 90_000;
-/**
- * Бюджет `tsc --noEmit` финального аудита (см.
- * DEBT(audit-typecheck-inconclusive) в `audit-runners.ts`).
- */
+/** Бюджет `tsc --noEmit` финального аудита; таймаут даёт inconclusive с причиной. */
 export const AUDIT_TYPECHECK_BUDGET_MS = 90_000;
 /** TTL кэша каталога models.dev: перечитывать после 24 часов (models-dev). */
 export const MODELS_DEV_CATALOG_TTL_MS = 24 * 60 * 60 * 1000;

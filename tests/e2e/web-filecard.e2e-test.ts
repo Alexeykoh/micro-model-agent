@@ -25,8 +25,8 @@ describe("web e2e (isolated MMA_CONFIG_DIR)", () => {
         await expectNonVirgin(srv.baseUrl);
 
         const js = await page.evaluate(async () => {
-          // File-row rendering lives in the split `feed/turn.js` cluster.
-          const r = await fetch("/js/feed/turn.js");
+          // File-row rendering moved from `feed/turn.js` to `feed/tool-render.js`.
+          const r = await fetch("/js/feed/tool-render.js");
           return await r.text();
         });
         expect(js).toContain('"filerow');

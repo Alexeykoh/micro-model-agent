@@ -1,7 +1,7 @@
 # Web UI Sidebar Tabs — Session / Map / Trace
 
 Дата: 2026-09-30
-Статус: approved (визуально), в работе
+Статус: реализовано
 Ветка: `feat/webui-sidebar-tabs`
 Макеты: `.superpowers/brainstorm/sidebar-tabs/content/02-real-ui.html`,
 `04-trace-detail.html`, `05-trace-full.html` (собраны на реальном `styles.css`)

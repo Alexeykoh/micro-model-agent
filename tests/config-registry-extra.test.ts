@@ -100,13 +100,14 @@ describe("registry keys", () => {
     expect(cfg.ui.fontSize).toBe("large");
   });
 
-  it("defaults ui.draftMode to live and validates it", () => {
+  it("defaults ui.draftMode to after-review so the draft waits for the critic", () => {
     const cfg = freshCfg();
+    expect(cfg.ui.draftMode).toBe("after-review");
+    expect(getConfigValue(cfg, "ui.draftMode").value).toBe("after-review");
+    expect(setConfigValue(cfg, "ui.draftMode", "live").ok).toBe(true);
     expect(cfg.ui.draftMode).toBe("live");
-    expect(setConfigValue(cfg, "ui.draftMode", "after-review").ok).toBe(true);
-    expect(cfg.ui.draftMode).toBe("after-review");
     expect(setConfigValue(cfg, "ui.draftMode", "never").ok).toBe(false);
-    expect(cfg.ui.draftMode).toBe("after-review");
+    expect(cfg.ui.draftMode).toBe("live");
   });
 
   it("defaults the web theme to console/auto and validates both keys", () => {
@@ -214,6 +215,29 @@ describe("registry editor metadata", () => {
     expect(cols.find((c) => c.key === "provider")?.optional).toBe(true);
   });
 
+  it("declares reasoning columns for the modelCapabilities table", () => {
+    const editor = resolveConfigKey("modelCapabilities")?.editor;
+    expect(editor?.layout).toBe("stack");
+    const columns = (editor?.columns ?? []) as Array<Record<string, unknown>>;
+    expect(columns.map((c) => c.key)).toEqual([
+      "name",
+      "vision",
+      "video",
+      "audio",
+      "pdf",
+      "tools",
+      "reasoningStrategy",
+      "reasoningOff",
+      "reasoningLevels",
+    ]);
+    const strategy = columns.find((c) => c.key === "reasoningStrategy");
+    expect(strategy?.options).toEqual([
+      "openai-effort", "template-kwarg", "prompt-tag", "none",
+    ]);
+    expect(columns.find((c) => c.key === "reasoningOff")?.type).toBe("bool");
+    expect(columns.find((c) => c.key === "reasoningLevels")?.array).toBe(true);
+  });
+
   it("labels every option and column in both locales", () => {
     const dicts = getFlatDicts();
     for (const def of configDefs()) {
@@ -226,5 +250,44 @@ describe("registry editor metadata", () => {
         expect(typeof dicts.ru[`config.field.${col.key}`], `${def.key}: ${col.key} (ru)`).toBe("string");
       }
     }
+  });
+});
+
+describe("modelCapabilities overrides", () => {
+  it("rebuilds the provider when a capability override is written", () => {
+    expect(resolveConfigKey("modelCapabilities")?.effects).toContain("provider.rebuild");
+  });
+
+  it("accepts reasoning fields and arbitrary subsets", () => {
+    const cfg = freshCfg();
+    const raw = JSON.stringify({
+      "bonsai-2-27b-pq2": {
+        vision: true,
+        tools: true,
+        reasoningStrategy: "openai-effort",
+        reasoningOff: true,
+        reasoningLevels: ["low", "medium", "xhigh"],
+      },
+      "bonsai-2-27b": { reasoningStrategy: "none" },
+      "empty-levels": { reasoningLevels: [] },
+    });
+    expect(setConfigValue(cfg, "modelCapabilities", raw).ok).toBe(true);
+    expect(cfg.modelCapabilities?.["bonsai-2-27b-pq2"].reasoningLevels).toEqual([
+      "low", "medium", "xhigh",
+    ]);
+  });
+
+  it("rejects invalid reasoning shapes without changing config", () => {
+    const cfg = freshCfg();
+    expect(
+      setConfigValue(cfg, "modelCapabilities", '{"m":{"reasoningStrategy":"banana"}}').ok,
+    ).toBe(false);
+    expect(
+      setConfigValue(cfg, "modelCapabilities", '{"m":{"reasoningLevels":[1,2]}}').ok,
+    ).toBe(false);
+    expect(
+      setConfigValue(cfg, "modelCapabilities", '{"m":{"reasoningOff":"yes"}}').ok,
+    ).toBe(false);
+    expect(cfg.modelCapabilities).toEqual({});
   });
 });

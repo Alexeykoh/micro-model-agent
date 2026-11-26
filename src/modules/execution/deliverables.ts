@@ -59,20 +59,21 @@ export function noActivePlanMessage(store: PlanStore): string {
 }
 
 /**
- * Достаёт исходную формулировку задачи из первого user-сообщения истории.
- * Нужно для валидации покрытия плана против требований. Первое user-сообщение
- * может быть инжектированным <system-summary> (блок компакции) — это НЕ
- * задача: покрытие сравнивает план с реальной инструкцией модели.
+ * BCP-5: формулировка ЗАДАЧИ — это последнее пользовательское сообщение,
+ * а не первое в сессии. Первое сообщение относится к прошлому запросу, и его
+ * файлы не должны блокировать новый план (живой прогон: note.txt из прошлого
+ * хода заставил модель добавлять фиктивный шаг).
+ * Инжектированные <system-summary> и компакции пропускаются.
  */
 export function getTaskText(ctx: ToolContext | undefined): string {
   const manager = ctx?.contextManager;
   if (!manager) return "";
   const history = manager.getActiveHistory();
-  const firstUser = history.find((m) => {
+  const users = history.filter((m) => {
     if (m.role !== "user") return false;
     const text = getMessageText(m.content);
     return !text.startsWith("<system-summary>") && !text.includes("[Compressed:");
   });
-  if (!firstUser) return "";
-  return getMessageText(firstUser.content).trim();
+  const current = users[users.length - 1];
+  return current ? getMessageText(current.content).trim() : "";
 }

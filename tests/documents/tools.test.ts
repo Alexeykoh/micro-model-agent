@@ -3,6 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { t } from "../../src/i18n/index";
+import { coreImageResize } from "../../src/core/api/index";
 import { buildRegistry } from "../../src/modules/documents/registry";
 import { MAX_VISION_BYTES } from "../../src/modules/documents/media";
 import { csvHandler } from "../../src/modules/documents/handlers/csv";
@@ -75,7 +76,7 @@ describe("doc tools", () => {
     );
   });
   it("document_read: найденный раздел", async () => {
-    const res = await documentReadTool(mdReg).handler(ctx(), {
+    const res = await documentReadTool(mdReg, coreImageResize).handler(ctx(), {
       path: "b.md",
       selector: "section:B",
     });
@@ -83,7 +84,7 @@ describe("doc tools", () => {
     expect(String(res.output)).toContain("world");
   });
   it("document_read: display называет диапазон блоков", async () => {
-    const res = await documentReadTool(mdReg).handler(ctx(), {
+    const res = await documentReadTool(mdReg, coreImageResize).handler(ctx(), {
       path: "b.md",
       selector: "blocks:2-3",
     });
@@ -91,19 +92,19 @@ describe("doc tools", () => {
     expect(res.display).toBe(t("documents.read_blocks", { from: "2", to: "3" }));
   });
   it("document_read: display называет раздел", async () => {
-    const res = await documentReadTool(mdReg).handler(ctx(), {
+    const res = await documentReadTool(mdReg, coreImageResize).handler(ctx(), {
       path: "b.md",
       selector: "section:B",
     });
     expect(res.display).toBe(t("documents.read_section", { title: "B" }));
   });
   it("document_read: полное чтение не добавляет display", async () => {
-    const res = await documentReadTool(mdReg).handler(ctx(), { path: "b.md" });
+    const res = await documentReadTool(mdReg, coreImageResize).handler(ctx(), { path: "b.md" });
     expect(res.display).toBe("");
   });
   it("document_read: отсутствующий раздел — явный fail-open со списком и записью", async () => {
     const onDiagnostic = vi.fn();
-    const bad = await documentReadTool(mdReg).handler(ctx(onDiagnostic), {
+    const bad = await documentReadTool(mdReg, coreImageResize).handler(ctx(onDiagnostic), {
       path: "b.md",
       selector: "section:nope",
     });
@@ -121,14 +122,14 @@ describe("doc tools", () => {
   it("тулы несут security.fs=read и pathArgs", () => {
     expect(documentMapTool(reg).security.caps).toContainEqual({ fs: "read" });
     expect(documentMapTool(reg).security.pathArgs).toContain("path");
-    expect(documentReadTool(reg).security.pathArgs).toContain("path");
+    expect(documentReadTool(reg, coreImageResize).security.pathArgs).toContain("path");
   });
 });
 
 describe("document_read: vision-путь растра (W4)", () => {
   it("без vision — fail-open с причиной documents.needs_vision и записью (INV-D5)", async () => {
     const onDiagnostic = vi.fn();
-    const res = await documentReadTool(imgReg).handler(
+    const res = await documentReadTool(imgReg, coreImageResize).handler(
       visionCtx({ contextManager: {}, onDiagnostic }),
       { path: "p.png" },
     );
@@ -145,7 +146,7 @@ describe("document_read: vision-путь растра (W4)", () => {
   });
 
   it("vision=true без contextManager — тоже fail-open", async () => {
-    const res = await documentReadTool(imgReg).handler(
+    const res = await documentReadTool(imgReg, coreImageResize).handler(
       visionCtx({ capabilities: { vision: true } }),
       { path: "p.png" },
     );
@@ -154,7 +155,7 @@ describe("document_read: vision-путь растра (W4)", () => {
   });
 
   it("vision=true + contextManager — отдаёт images с data:image/png URL", async () => {
-    const res = await documentReadTool(imgReg).handler(
+    const res = await documentReadTool(imgReg, coreImageResize).handler(
       visionCtx({ capabilities: { vision: true }, contextManager: {} }),
       { path: "p.png" },
     );
@@ -168,7 +169,7 @@ describe("document_read: vision-путь растра (W4)", () => {
   });
 
   it("MIME data URL берётся из magic: .png с JPEG-байтами → data:image/jpeg", async () => {
-    const res = await documentReadTool(imgReg).handler(
+    const res = await documentReadTool(imgReg, coreImageResize).handler(
       visionCtx({ capabilities: { vision: true }, contextManager: {} }),
       { path: "j.png" },
     );
@@ -179,7 +180,7 @@ describe("document_read: vision-путь растра (W4)", () => {
 
   it("растр сверх MAX_VISION_BYTES — fail-open documents.image_too_large без images", async () => {
     const onDiagnostic = vi.fn();
-    const res = await documentReadTool(imgReg).handler(
+    const res = await documentReadTool(imgReg, coreImageResize).handler(
       visionCtx({ capabilities: { vision: true }, contextManager: {}, onDiagnostic }),
       { path: "big.png" },
     );

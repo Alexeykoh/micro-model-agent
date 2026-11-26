@@ -139,6 +139,19 @@ export async function runLlmPhase(
       source: reasoning.source,
     });
     contextManager.thinkingLevel = reasoning.level;
+  } else if (
+    config.reasoning &&
+    config.reasoning.mode !== "none" &&
+    !state.reasoningDegradationLogged
+  ) {
+    // LM-2: fail-open с записью причины — молчаливый откат неотличим от успеха.
+    state.reasoningDegradationLogged = true;
+    slog.logDiagnosticEvent?.("reasoning_degraded", {
+      source: "core",
+      operation: "reasoning.negotiate",
+      kind: "degraded",
+      cause: !host.probePassed ? "mechanism ignored" : "no granular levels",
+    });
   }
 
   // Аккумулятор создаётся до стрима: при обрыве по ошибке частичный текст

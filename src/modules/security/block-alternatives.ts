@@ -15,6 +15,7 @@ export type BlockReasonKind =
   | "blacklist"
   | "whitelist"
   | "dangerousFlag"
+  | "shellWrapper"
   | "unknown";
 
 /** Таблица соответствия причины и вида альтернативы (декларативные данные). */
@@ -26,6 +27,7 @@ const REASON_KINDS: Array<{ kind: BlockReasonKind; match: (reason: string) => bo
   { kind: "blacklist", match: (r) => r.includes(" is blacklisted") },
   { kind: "whitelist", match: (r) => r.includes(" is not in the whitelist") },
   { kind: "dangerousFlag", match: (r) => r.startsWith("Dangerous flag ") },
+  { kind: "shellWrapper", match: (r) => r.startsWith("Shell wrapper") },
 ];
 
 /** Команды, для которых известен самостоятельный тул с тем же результатом. */
@@ -58,6 +60,8 @@ export function blockAlternativeHint(reason: string): string {
       return t("bash.alt_blacklist");
     case "dangerousFlag":
       return t("bash.alt_dangerous_flag");
+    case "shellWrapper":
+      return t("bash.alt_shell_wrapper");
     case "whitelist":
       return t("bash.alt_whitelist");
     default:

@@ -12,29 +12,19 @@ import { verifySafely as runCriticVerify } from "./critic-verify";
 import type { LoopState } from "./loop-state";
 import { isRepeatedVerdict, renderIssues } from "./critic-issues";
 import { logCheck, logDegraded, logExhausted, logSkipped, logVerdict } from "./critic-gate-log";
+import { filterFileClaims } from "./critic-file-claim";
+import { isStaticFileTurn } from "./critic-static-fastpath";
 
 export type { CriticAction, CriticGateDeps, CriticGateOptions } from "./critic-contract";
 
 export { normalizedSignature } from "../../modules/critic/issue-key";
 
-/**
- * Жёсткий кап СОВЕТНЫХ кругов за ход (не конфиг — такой же внутренний
- * потолок, как `MAX_CRITIC_CHECKS`). Совет отдельён от ремонта, чтобы
- * `concern` не крал бюджет `critical` (maxRepairCycles).
- */
+/** Кап советных кругов: `concern` не крадёт бюджет `critical`. */
 const MAX_CRITIC_ADVICE_CYCLES = 1;
-
-/**
- * Кап «действуй, а не описывай» кругов за ход: один раз даём модели явную
- * команду вызвать тул. Второй раз — принимаем ответ честно (с записью).
- */
+/** Кап «действуй»: один явный вызов тула, затем честный fail-open. */
 const MAX_CRITIC_ACT_CYCLES = 1;
 
-/**
- * Вентиль критика: триггерит проверку по работе хода, инжектит вердикт в
- * контекст. Fail-open: сломанный/перебюджетный критик никогда не блокирует
- * агента.
- */
+/** Вентиль критика: проверка хода + инъекция вердикта, fail-open при сбое. */
 export class CriticGate {
   /** Счётчик советных кругов за ход (гейт живёт один ход). */
   private adviceCycles = 0;
@@ -46,10 +36,7 @@ export class CriticGate {
   private lastEvidenceKey: string | undefined;
   /** Прошлый не-ok вердикт: нужен для понуждения к действию и честной записи. */
   private lastVerdict: CriticVerdict | undefined;
-  /**
-   * Прошлый вердикт был не-ok, и все его жалобы уже показаны модели. Повторная
-   * проверка того же входа добавить нечего: тот же набор жалоб уже в наборе.
-   */
+  /** Прошлый не-ok вердикт уже показан модели — повтор бессмыслен. */
   private lastVerdictNonOk = false;
 
   constructor(private readonly opts: CriticGateOptions) {}
@@ -60,6 +47,8 @@ export class CriticGate {
    */
   async evaluate(deps: CriticGateDeps): Promise<CriticAction> {
     if (!this.shouldRun(deps)) return "pass";
+    // BCP-6: статический файловый ход не стоит LLM-вызова критика.
+    if (this.staticFastpath(deps)) return "pass";
 
     // Тот же вход и сказать больше нечего — платить LLM-вызов не за что (A15).
     const fingerprint = packFingerprint(deps);
@@ -115,7 +104,9 @@ export class CriticGate {
         deps,
         buildCriticReport(null, outcome.stages, outcome.durationMs, outcome.timedOut),
       );
-      return "pass";
+      // AQC-3: деградация не даёт зелёный свет, если в плане есть незакрытые
+      // шаги — там ответ без проверки危险的. Для чат-шагов fail-open сохраняется.
+      return deps.planPendingSteps && deps.planPendingSteps.length > 0 ? "degraded" : "pass";
     }
     // `critical` без улики в жалобах → `concern` (A6): repair не тратим.
     const provenance = withProvenance(outcome.verdict);
@@ -135,7 +126,21 @@ export class CriticGate {
 
     // Не-ok вердикт не теряется: issues могли не распарситься, но status +
     // summary — достаточное основание.
-    const issues = verdict.issues.length > 0 ? verdict.issues : [syntheticIssue(verdict)];
+    // BCP-1: не даём критику «видеть» отсутствующим файл, который существует.
+    const rawIssues = verdict.issues.length > 0 ? verdict.issues : [syntheticIssue(verdict)];
+    const checked = filterFileClaims(rawIssues, {
+      baseDir: deps.baseDir,
+      toolEvents: deps.toolEvents,
+    });
+    const dropped = rawIssues.length - checked.length;
+    if (dropped > 0) {
+      deps.slog.logCritic("critic_verdict", {
+        status: verdict.status,
+        droppedFileClaims: dropped,
+        source: "core",
+      });
+    }
+    const issues = checked.length > 0 ? checked : [syntheticIssue(verdict)];
     // Повтор уже виденной жалобы — считаем ДО takeFreshIssues (он пополняет набор).
     const isRepeat = isRepeatedVerdict(deps.state, issues);
     const fresh = this.takeFreshIssues(deps.state, issues);
@@ -206,6 +211,19 @@ export class CriticGate {
   /** Остался ли ещё один советный круг. */
   private canAdvise(): boolean {
     return this.adviceCycles < MAX_CRITIC_ADVICE_CYCLES;
+  }
+
+  /** BCP-6: дешёвый путь для чисто статических файловых ходов. */
+  private staticFastpath(deps: CriticGateDeps): boolean {
+    if (!isStaticFileTurn(deps)) return false;
+    deps.slog.logCritic("critic_verdict", {
+      status: "ok",
+      skipped: "static_fastpath",
+      tools: deps.toolEvents.map((e) => e.tool),
+      source: "core",
+    });
+    deps.logger.diagnostic("info", "Critic skipped: static file-only turn (BCP-6)");
+    return true;
   }
 
   private shouldRun(deps: CriticGateDeps): boolean {

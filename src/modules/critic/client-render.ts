@@ -31,6 +31,7 @@ export function renderPack(pack: EvidencePack): string {
     `CHANGED FILES: ${pack.changedFiles.join(", ") || "(none)"}`,
     `COMMANDS: ${cmdLines.join("; ") || "(none)"}`,
     renderWebGrounding(pack.webGrounding),
+    pack.webExcerpts?.length ? `WEB FETCH EXCERPTS:\n${pack.webExcerpts.join("\n")}` : "",
     "TOOL TRAIL:",
     pack.toolDigest || "(empty)",
     files.length > 0 ? `FILE CONTENTS:\n${files.join("\n")}` : "",

@@ -1,8 +1,9 @@
-// Свёрнутый блок проверки критика: одна строка в ленте, детали — под тогглом.
-// По умолчанию закрыт ВСЕГДА (quiet/normal/verbose): это материал проверки, а не
-// ответ модели. Хост — `onMeta kind: "critic"` → SSE `critic` (см. forward.ts).
+// Свёрнутый блок проверки критика: одна строка в ленте, всё остальное — под
+// тогглом. По умолчанию закрыт ВСЕГДА: это материал проверки, а не ответ модели.
+// Хост — `onMeta kind: "critic"` → SSE `critic` (см. forward.ts).
 import { el, setIcon } from "../dom.js";
 import { t } from "../i18n.js";
+import { formatDuration } from "../duration.js";
 import type { Dict } from "../core/store/types.js";
 import { activeFeed, appendTo, clearEmpty, feedForEvent, scroll } from "./core.js";
 import { clearBusy } from "./busy.js";
@@ -22,7 +23,7 @@ function statusLabel(status: string): string {
 }
 
 function durationLabel(ms: number): string {
-  return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
+  return formatDuration(ms);
 }
 
 function issueRow(issue: Dict): HTMLElement {
@@ -85,7 +86,7 @@ export function onCritic(report: Dict | undefined, sid?: string): void {
   setIcon(tog, "chevron-right", t("web.action.show"));
   head.appendChild(tog);
 
-  const body = el("div", "think-body hidden");
+  const body = el("div", "think-body critic-body hidden");
   if (str(report.summary)) body.appendChild(el("div", "critic-summary", str(report.summary)));
   body.appendChild(
     el(

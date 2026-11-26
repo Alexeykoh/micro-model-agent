@@ -3,7 +3,7 @@
 Дата: 2026-11-09. Ветка: `feat/execution-sandbox` (ветка 1/2:
 профиль + runner + preflight; cert-сценарии и Dockerfile приёмки — 2/2).
 Источник: `TODO.md §3 P0 Изоляция исполнения`,
-[`2026-09-28-production-readiness`](../archive/specs/2026/2026-09-28-production-readiness-design.md) §3.
+``2026-09-28-production-readiness`` (удалено вместе с архивом 2026-11-25) §3.
 
 ## Что неправильно
 

@@ -51,7 +51,7 @@ export function isFailoverError(err: unknown): boolean {
     return true;
   }
   // Сетевые падения по сообщению (fetch failed, таймауты, сбросы сокета).
-  return /fetch failed|unable to connect|network|econnrefused|enotfound|etimedout|socket hang up|connection refused|connection reset/i.test(
+  return /fetch failed|unable to connect|network|econnrefused|enotfound|etimedout|socket hang up|socket connection was closed|connection refused|connection reset/i.test(
     e?.message ?? "",
   );
 }

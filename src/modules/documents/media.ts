@@ -1,16 +1,15 @@
 /**
  * Медиа-хелперы потребителей документов (INV-D2/D7). Живут вне `handlers/`:
  * работают только с `DocumentIR` и байтами источника, не импортируют конкретный
- * обработчик. Data URL собирается через `node:buffer` — без `src/llm/*` (INV-D7).
+ * обработчик и `src/llm/*`. Подготовку изображения (ресайз + data URL) отдаёт
+ * core-шов `ImageResizePort` через `src/core/api/**`.
  */
-import { Buffer } from "node:buffer";
 import type { DocumentIR } from "./ir";
 
 /**
- * Потолок байтов растра, отправляемого в vision-контекст (INV-D4).
- * Модуль не умеет уменьшать изображение (INV-D7 запрещает `src/llm/*`), поэтому
- * всё, что больше, честно отклоняется (`documents.image_too_large`), а не
- * заваливает контекст гигантским payload'ом. См. DEBT(documents-vision-image-seam).
+ * Потолок байтов подготовленного растра для vision-контекста (INV-D4).
+ * Проверяется после core-шва: всё, что осталось больше лимита, честно
+ * отклоняется (`documents.image_too_large`), а не уходит гигантским payload'ом.
  */
 export const MAX_VISION_BYTES = 5 * 1024 * 1024;
 
@@ -25,7 +24,3 @@ export function rasterMime(ir: DocumentIR): string | null {
   return block.ref.mime;
 }
 
-/** Собирает `data:<mime>;base64,<...>` из байтов (INV-D7: без core-импортов). */
-export function buildDataUrl(bytes: Uint8Array, mime: string): string {
-  return `data:${mime};base64,${Buffer.from(bytes).toString("base64")}`;
-}

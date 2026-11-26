@@ -1,9 +1,9 @@
 # Аудит модулей MMA 0.3.3 — незакрытые дефекты
 
 **Дата:** 2026-10-12 · **Релиз:** `0.3.3` (`65ba2f68`, тег `v0.3.3`)
-**Источник:** документ [`docs/archive/plans/2026/2026-10-12-harness-runaway-followups.md`](../archive/plans/2026/2026-10-12-harness-runaway-followups.md)
+**Источник:** документ ``docs/archive/plans/2026/2026-10-12-harness-runaway-followups.md (удалён 2026-11-25)`` (удалено вместе с архивом 2026-11-25)
 (аудит живой сессии `ses_mv44qabg_s1przq`) и
-[`docs/archive/plans/2026/2026-10-11-harness-runaway-session-fixes.md`](../archive/plans/2026/2026-10-11-harness-runaway-session-fixes.md)
+``docs/archive/plans/2026/2026-10-11-harness-runaway-session-fixes.md (удалён 2026-11-25)`` (удалено вместе с архивом 2026-11-25)
 (5 закрытых харнесс-фиксов)
 
 **Метод.** Семь параллельных deep-read проходов по модулям (agent loop / web+skills /
@@ -319,8 +319,8 @@ ADS + регистр в protected paths (4.2, 4.3) · `mma serve` без авт�
 
 ## Связанные документы
 
-- [`docs/archive/plans/2026/2026-10-12-harness-runaway-followups.md`](../archive/plans/2026/2026-10-12-harness-runaway-followups.md) — незакрытые пункты исходного аудита
-- [`docs/archive/plans/2026/2026-10-11-harness-runaway-session-fixes.md`](../archive/plans/2026/2026-10-11-harness-runaway-session-fixes.md) — 5 закрытых харнесс-фиксов
-- [`docs/archive/specs/2026/2026-10-09-readonly-guard-finalize-design.md`](../archive/specs/2026/2026-10-09-readonly-guard-finalize-design.md) — откат широкого read-only бюджета (релевантно для п.7 рекомендаций плана)
-- [`docs/archive/specs/2026/2026-10-09-lsp-persistent-client-design.md`](../archive/specs/2026/2026-10-09-lsp-persistent-client-design.md) — заявленный idle-reap LSP, фактически не работает (8.1)
+- ``docs/archive/plans/2026/2026-10-12-harness-runaway-followups.md (удалён 2026-11-25)`` (удалено вместе с архивом 2026-11-25) — незакрытые пункты исходного аудита
+- ``docs/archive/plans/2026/2026-10-11-harness-runaway-session-fixes.md (удалён 2026-11-25)`` (удалено вместе с архивом 2026-11-25) — 5 закрытых харнесс-фиксов
+- ``docs/archive/specs/2026/2026-10-09-readonly-guard-finalize-design.md (удалён 2026-11-25)`` (удалено вместе с архивом 2026-11-25) — откат широкого read-only бюджета (релевантно для п.7 рекомендаций плана)
+- ``docs/archive/specs/2026/2026-10-09-lsp-persistent-client-design.md (удалён 2026-11-25)`` (удалено вместе с архивом 2026-11-25) — заявленный idle-reap LSP, фактически не работает (8.1)
 - [`docs/design/ui/STYLE.md`](../design/ui/STYLE.md) — канонический стиль чат-вывода

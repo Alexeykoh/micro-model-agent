@@ -1663,7 +1663,9 @@ describe("Agent", () => {
     let compactCalls = 0;
     let call = 0;
     const deps = createMockDeps({
-      config: { ...createMockDeps().config, maxToolIterations: 20 },
+      // BCP-3: мягкий бюджет = max(16, 0.75 * hard cap). При hard cap 27 он
+      // равен 20 — ровно желаемому числу вызовов в этом тесте.
+      config: { ...createMockDeps().config, maxToolIterations: 27 },
       llmProvider: {
         model: "test-model",
         contextWindow: 4096,

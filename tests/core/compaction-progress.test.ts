@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { ContextManager } from "../../src/core/context/manager";
 import { contextDegradedSink, createContextManager } from "../../src/core/bootstrap/context-factory";
 import type { ProgressDiagnostic } from "../../src/core/context/compaction-progress";
-import type { SessionManager } from "../../src/modules/session/index";
+import { fakeSessionManager } from "../helpers/fake-session-manager";
 import { DEFAULTS } from "../../src/config/defaults";
 import type { AppConfig } from "../../src/config/types";
 
@@ -122,12 +122,7 @@ describe("compaction without progress detector (INV-15)", () => {
   });
 
   it("wires context_degraded into the session via createContextManager", () => {
-    const entries: Array<Record<string, unknown>> = [];
-    const sessionManager = {
-      appendLog: (e: Record<string, unknown>) => {
-        entries.push(e);
-      },
-    } as unknown as SessionManager;
+    const { manager: sessionManager, entries } = fakeSessionManager();
     const cfg = structuredClone(DEFAULTS) as AppConfig;
     const mgr = createContextManager(cfg, dir, sessionManager);
 
@@ -141,12 +136,7 @@ describe("compaction without progress detector (INV-15)", () => {
   });
 
   it("writes a context_degraded session diagnostic via the wired sink", () => {
-    const entries: Array<Record<string, unknown>> = [];
-    const fake = {
-      appendLog: (e: Record<string, unknown>) => {
-        entries.push(e);
-      },
-    } as unknown as SessionManager;
+    const { manager: fake, entries } = fakeSessionManager();
 
     contextDegradedSink(fake)({ kind: "no-progress", compactions: 2 });
 

@@ -5,6 +5,7 @@ import { dirname, isAbsolute, join, relative, sep } from "path";
 import { projectMmaDir } from "../../config/paths";
 import { estimateTokens } from "../../llm/token-counter";
 import type { PromptBlock } from "../types";
+import { remoteInstructionBlock } from "./remote-instructions";
 
 /** Каталоги, в которые обход вложенных AGENTS.md не заходит. */
 const AGENTS_SKIP_DIRS = new Set(["node_modules", ".git", ".next", ".mma", "dist", ".cache"]);
@@ -121,7 +122,8 @@ export function agentsMdPaths(
 /**
  * Разрешает один законфигурированный источник: `~/`, абсолютный путь или glob.
  * Отсутствующие файлы молча пропускаются; пустые строки игнорируются.
- * HTTPS-источники пока не поддерживаются (синхронный загрузчик) — DEBT(ins-url-sources).
+ * HTTPS-источники грузятся асинхронно до сборки промпта (remote-instructions.ts)
+ * и читаются здесь из кеша — синхронность загрузчика сохранена.
  */
 function resolveSourcePattern(baseDir: string, raw: string): string[] {
   const source = raw.trim();
@@ -156,6 +158,12 @@ export function loadAgentsMdBlocks(
   if (skip) return [];
   const blocks: PromptBlock[] = [];
   const configured = extraSources.flatMap((raw) => resolveSourcePattern(baseDir, raw));
+  // HTTPS-источники грузятся асинхронно до сборки промпта и ждут в кеше.
+  const remote = extraSources
+    .filter((raw) => /^https:\/\//i.test(raw))
+    .map((raw) => remoteInstructionBlock(raw))
+    .filter((block): block is PromptBlock => block !== undefined);
+  blocks.push(...remote);
   const candidates = [...new Set([...agentsMdPaths(baseDir, dir, fallback), ...configured])];
   for (const p of candidates) {
     if (!existsSync(p)) continue;

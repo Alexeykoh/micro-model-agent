@@ -179,12 +179,20 @@ describe("attach_image tool", () => {
   });
 
   it("should return error for invalid URL", async () => {
-    const ctx = makeCtx();
-    const result = await attachImageTool.handler(ctx, {
-      source: "https://invalid.example.com/nonexistent.png",
-    });
-    expect(result.success).toBe(false);
-    expect(result.output).toContain("Failed to load");
+    // DNS-отказа https://invalid.example.com ждал до 5 с и флейлил при
+    // нагрузке: подменяем fetch, проверяя ту же ветку «не удалось загрузить».
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = ((() => Promise.reject(new Error("offline"))) as unknown) as typeof fetch;
+    try {
+      const ctx = makeCtx();
+      const result = await attachImageTool.handler(ctx, {
+        source: "https://invalid.example.com/nonexistent.png",
+      });
+      expect(result.success).toBe(false);
+      expect(result.output).toContain("Failed to load");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it("should have correct tool definition", () => {

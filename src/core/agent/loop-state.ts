@@ -122,37 +122,30 @@ export interface LoopState {
   totalBatches: number;
   /** Пакетов, целиком повторяющих уже сделанные вызовы (кумулятивно). */
   duplicateBatches: number;
+  /** Напрасные вызовы за ход: дубли + неудачи тулов (метрика в llm_usage). */
+  wastefulToolCalls: number;
   /** Уникальные канонические ключи вызовов — кумулятивная метрика новизны. */
   novelToolKeys: Set<string>;
-  /**
-   * Причина принудительного завершения без тулов, или null. `max_iters` сюда
-   * не попадает: он не приходит от батча, а выводится в цикле по дефолту.
-   */
+  /** Причина завершения без тулов; `max_iters` выводится в цикле, не здесь. */
   finalizeReason: Exclude<StopReason, "max_iters"> | null;
   /** Машиночитаемая причина остановки для результата/чата (после финала). */
   stopReason: StopReason | null;
   /** Подряд идущие успешные итерации с тулами — вход для reasoning policy. */
   consecutiveToolSuccesses: number;
   /**
-   * `finish_reason` последнего ответа провайдера ("stop" | "length" |
-   * "tool_calls"). Без него обрыв ответа неотличим от законченной мысли:
-   * в ses_mvpk4zjl финал оборвался на 1374 знаках, и понять, был ли это лимит
-   * токенов или сбой, по журналу нельзя.
+   * `finish_reason` провайдера: при `length` финальный ответ помечается как
+   * обрезанный по лимиту (truncated-answer.ts), а не выдаётся за полный.
    */
   lastFinishReason?: string;
   /** Счётчик повторных одинаковых тулов (exit-on-complete). */
   repeatedToolCount: number;
-  /** Общий счётчик неудач по каждому тулу + последняя ошибка и distinct
-   *  первые строки ошибок (не только подряд). Distinct-заголовки нужны
-   *  diagnoseRepeatedFailures: причина/решение по сигнатуре, а не boilerplate. */
+  /** Неудачи по тулу + distinct-заголовки для diagnoseRepeatedFailures. */
   toolFailureCounts: Map<string, { count: number; error: string; samples: string[] }>;
+  /** RCV-8: тулы, успешно отработавшие в этом ходе — их нельзя отключать. */
+  succeededToolsThisTurn: Set<string>;
   /** Тулы, по которым правило в память уже записано (дедупликация). */
   memoryRuleRecorded: Set<string>;
-  /**
-   * Тулы, отключённые на остаток хода: суммарно провалились больше
-   * `MAX_TOOL_FAILURES_PER_TURN` раз (не транзиентные). Не попадают в видимый
-   * модели набор тулов — иначе слабая модель бесконечно повторяет мёртвый тул.
-   */
+  /** Отключённые на ход тулы (не попадают в набор — слабая модель повторяла бы их). */
   disabledTools: Set<string>;
   /** Тулы, по которым директива «отключён» уже отправлена (1 раз на тул). */
   toolDisabledNudged: Set<string>;
@@ -212,11 +205,16 @@ export interface LoopState {
   auditRetries: number;
   /** Последняя сводка неудачного аудита — для сообщения об ошибке. */
   lastAuditSummary: string;
-
-  /** Вызовы критика за прогон. */
-  criticCalls: number;
-  /** Израсходованные циклы починки за прогон. */
-  criticRepairCycles: number;
+  criticCalls: number; // Вызовы критика за прогон.
+  criticRepairCycles: number; // Израсходованные циклы починки.
+  criticDegradedCycles: number; // AQC-3: деградации, после которых запрошен повтор.
+  blockedClaimCycles: number; // BCP-2: искажения каноничной подсказки блокировки.
+  toolCallsThisTurn: number; // BCP-3: всего вызовов тулов в текущем ходе.
+  softToolBudget: number; // Эффективный бюджет хода, выведенный из maxToolIterations.
+  /** LM-2: деградация reasoning-переговоров уже записана в этом ходе. */
+  reasoningDegradationLogged: boolean;
+  /** LM-4: совет по tool-call parser уже записан в этом ходе. */
+  toolcallHintLogged: boolean;
   /** Рабочие мутации с последнего вызова критика. */
   mutationsSinceCritic: number;
   /** Маркер seq на старте захода: критик видит только тул-события текущего захода. */
@@ -230,10 +228,7 @@ export interface LoopState {
   emptyResponseExhausted: boolean;
   /** Аудит провален после исчерпания повторов — итоговый результат success:false. */
   auditFailed: boolean;
-  /**
-   * Истинно, когда финальный ответ принят. Отменяет ошибку max_iters:
-   * ответ на последней разрешённой итерации — это успех, а не "кончились итерации".
-   */
+  /** Финальный ответ принят — отменяет ошибку max_iters на последней итерации. */
   finalAnswerAccepted: boolean;
   /**
    * Подавление повтора после отклонения аудитом: повторный ответ на
@@ -280,7 +275,10 @@ export function recordBatchProgress(
     state.novelToolKeys.add(key);
   }
   state.totalBatches++;
-  if (duplicateBatch) state.duplicateBatches++;
+  if (duplicateBatch) {
+    state.duplicateBatches++;
+    state.wastefulToolCalls++;
+  }
 }
 
 /**

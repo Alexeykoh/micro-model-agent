@@ -1,6 +1,6 @@
 {
   "name": "micro-models-agent",
-  "version": "0.26.0",
+  "version": "0.26.1",
   "description": "Micro Models Agent (MMA) — LLM agent harness for small models (Qwen3.5-9B, 32K-64K context) (beta)",
   "license": "MIT",
   "repository": {
@@ -40,8 +40,11 @@
     "build:documents": "bun run scripts/build-documents.ts",
     "dev": "bun --watch src/cli/main.ts",
     "web:dev": "bun --watch src/cli/main.ts web --no-open",
+    "storybook": "storybook dev -p 6006 --host 127.0.0.1 --no-open",
+    "build-storybook": "storybook build --output-dir storybook-static",
     "typecheck": "tsc --noEmit",
     "typecheck:frontend": "tsc -p tsconfig.frontend.json",
+    "typecheck:storybook": "tsc -p tsconfig.storybook.json",
     "test": "bun test",
     "test:coverage": "bun test --coverage",
     "evals:check": "bun scripts/evals-check.ts",
@@ -73,12 +76,14 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",
+    "@storybook/html-vite": "^10.6.8",
     "@types/bun": "^1.4.0",
     "@types/node": "^26.3.0",
     "@vitest/coverage-v8": "^4.1.11",
     "esbuild": "^0.28.1",
     "happy-dom": "^20.14.5",
     "prettier": "^3.9.6",
+    "storybook": "^10.6.8",
     "typescript": "^5.9.3",
     "vitest": "^4.1.11"
   }

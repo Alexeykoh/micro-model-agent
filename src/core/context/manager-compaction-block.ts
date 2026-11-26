@@ -3,9 +3,9 @@
  * `manager-compaction.ts` (правило 6): тот же текст блока, тот же pinning-набор
  * (задача, фидбек, план, факты, thinking, леджер, «пробовали и не вышло»).
  */
-import { extractTriedAndFailed } from "./message-analysis";
 import type { Message } from "./message";
 import type { ContextState } from "./manager-state";
+import { omitStaleErrorLines } from "./compaction-summary-sanitize";
 
 /**
  * Граница компакции. Не режет группу assistant(tool_calls): сохранённая
@@ -51,7 +51,7 @@ export function buildCompactionBlock(s: ContextState, oldTurns: Message[], llmSu
     s.facts.deletedLine(),
     s.facts.readLine(),
     s.facts.decisionsLine(),
-    s.facts.errorsLine(),
+    // BCP-4: ошибки из сжатых ходов не проносим — это прошлое состояние.
   ]) {
     if (line) parts.push(line);
   }
@@ -66,7 +66,7 @@ export function buildCompactionBlock(s: ContextState, oldTurns: Message[], llmSu
       if (notes) parts.push(notes);
     }
     if (s.toolLedger.length > 0) {
-      parts.push(`[Tool ledger]\n${s.toolLedger.join("\n")}`);
+      parts.push(`[Tool ledger]\n${omitStaleErrorLines(s.toolLedger).join("\n")}`);
     }
   }
 
@@ -76,13 +76,8 @@ export function buildCompactionBlock(s: ContextState, oldTurns: Message[], llmSu
     parts.push(`[LLM summary]\n${llmSummary.trim()}`);
   }
 
-  const triedAndFailed = extractTriedAndFailed(oldTurns);
-  if (triedAndFailed.length > 0) {
-    const lines = triedAndFailed.map(
-      (t) => `- ${t.tool}(${t.args}): ${t.error} (failed ${t.count}x)`,
-    );
-    parts.push(`[Already tried & failed — do NOT repeat:]\n${lines.join("\n")}`);
-  }
+  // BCP-4: старые "[Already tried & failed]" не проносим — они не отражают
+  // текущее состояние и в живом прогоне создали ложный «plan_step disabled».
 
   return parts.join(" ");
 }

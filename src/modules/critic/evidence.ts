@@ -50,6 +50,28 @@ const MAX_ANSWER_CHARS = 2000;
 const MIN_GROUNDING_CHARS = 200;
 /** Сетевые тулы, дающие веб-обоснование. */
 const GROUNDING_TOOLS = new Set(["web_fetch", "web_search", "web_browse"]);
+/** Сколько выдержек страниц приложить и какой длины. */
+const MAX_WEB_EXCERPTS = 3;
+const MAX_WEB_EXCERPT_CHARS = 1200;
+
+/** Выдержки успешно прочитанных страниц: критик проверяет числа по ним. */
+function computeWebExcerpts(events: EvidenceToolEvent[]): string[] | undefined {
+  const excerpts = events
+    .filter(
+      (ev) =>
+        ev.ok !== false &&
+        (ev.tool === "web_fetch" || ev.tool === "web_browse") &&
+        typeof ev.output === "string" &&
+        ev.output.length > 60,
+    )
+    .slice(-MAX_WEB_EXCERPTS)
+    .map((ev) => {
+      const url = typeof ev.args?.url === "string" ? ev.args.url : "(url unknown)";
+      const text = (ev.output ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_WEB_EXCERPT_CHARS);
+      return `${url}: ${text}`;
+    });
+  return excerpts.length > 0 ? excerpts : undefined;
+}
 
 /** Веб-обоснование по событиям тулов: сколько было сетевых чтений и дало ли хоть одно контент. */
 function computeWebGrounding(
@@ -106,6 +128,7 @@ export function buildEvidencePack(input: EvidenceInput): EvidencePack {
       ? redactContextSecrets(input.answerText).slice(0, MAX_ANSWER_CHARS)
       : undefined,
     webGrounding: computeWebGrounding(input.toolEvents, input.answerText),
+    webExcerpts: computeWebExcerpts(input.toolEvents),
   };
 }
 
@@ -150,6 +173,18 @@ function parsePorcelainLine(line: string): string | null {
 }
 
 /**
+ * Env без `GIT_*`: унаследованный `GIT_DIR`/`GIT_WORK_TREE` (хуки git, скрипты)
+ * привязывает дочерний `git` к ЧУЖОМУ репозиторию, и `cwd` перестаёт решать.
+ */
+function gitEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  for (const key of Object.keys(env)) {
+    if (key.startsWith("GIT_")) delete env[key];
+  }
+  return env;
+}
+
+/**
  * Фактически изменённые файлы из git (ses_mup6p61q): правки, внесённые мимо
  * файловых тулов (Bun-скрипты через bash, heredoc, внешние редакторы),
  * невидимы для changedFileOf — критик судил по пустому списку и выдал ложный
@@ -162,6 +197,7 @@ function gitChangedFiles(baseDir: string): string[] {
   try {
     out = execFileSync("git", ["status", "--porcelain"], {
       cwd: resolve(baseDir),
+      env: gitEnv(),
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"],
       timeout: 10_000,

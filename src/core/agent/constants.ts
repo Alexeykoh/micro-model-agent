@@ -14,6 +14,27 @@ export const TOOL_RESULT_ABSOLUTE_MAX_CHARS = 15000;
  */
 export const QUALITY_TRIGGER_THRESHOLD = 40;
 /**
+ * BCP-3: мягкий бюджет тулов на ход. После этого числа вызовов цикл один раз
+ * уходит в tool-less финал, даже если жёсткий `maxToolIterations` ещё не достигнут.
+ */
+export const SOFT_TOOL_BUDGET = 16;
+/**
+ * Доля жёсткого лимита `maxToolIterations`, доступная модели до мягкого
+ * tool-less финала. Независимая константа 16 обесценивала configurable hard cap
+ * (по умолчанию 200): длинная задача обрывалась через 16 вызовов, ответ
+ * отклонялся критиком, и пользователю приходилось подталкивать агент. Бюджет
+ * выводится из лимита хода, поэтому остаётся применимым к любой конфигурации.
+ */
+export const SOFT_TOOL_BUDGET_RATIO = 0.75;
+/**
+ * AQC-5: ранняя компакция для маленьких моделей (≤64K). В сессии ses_mwor4q49
+ * первое сжатие случилось только на 159-м сообщении — для 32K–64K это уже
+ * переполнение полезного контекста. Порог по сообщениям и по доле окна.
+ */
+export const EARLY_SMALL_WINDOW_CEILING = 65536;
+export const EARLY_SMALL_MESSAGE_COUNT = 60;
+export const EARLY_SMALL_CONTEXT_RATIO = 0.6;
+/**
  * Макс. символов аргументов тула в <system-summary>. Не допускает
  * дублирования `content` из write_file поверх role:"tool" сообщения,
  * которое уже несёт результат.
@@ -100,7 +121,7 @@ export const HARD_STOP_DUPLICATE_BATCHES = 12;
  * любым не-web тулом. Наблюдалось: 91 web-вызов подряд в сессии
  * ses_mv44qabg_s1przq без единого артефакта.
  */
-export const MAX_RESEARCH_BATCHES = 12;
+export const MAX_RESEARCH_BATCHES = 6;
 /**
  * Подряд идущие пакеты тулов БЕЗ текста ассистента (пустой `content`) до
  * директивы «скажи пользователю, что делаешь». Модель, ушедшая в молчаливые
@@ -158,12 +179,15 @@ export const MIN_REPEATED_TOOL_FAILURES = 3;
  * отсутствующего bridge-server.mjs, а рядом успешно шли web_search — пакеты
  * не были полностью провальными, honest-stop не срабатывал).
  *
- * ВЫШЕ `HARD_STOP_FAILED_BATCHES`: полностью провальные одиночные петли
- * по-прежнему завершает failed-batch терминал (он срабатывает раньше и
- * сохраняет контракт `stopReason: "failed_batches"`); отключение адресует
- * именно чередующиеся фейлы.
+ * AQC-4: порог снижен с 8 до 3. Раньше харнесс допускал 8 провалов тула, пока
+ * только писал «попробуй другой инструмент»; теперь после 3 провалов
+ * результат тула подменяется описанием сбоя (`retryable:false`), тул уходит из
+ * allowlist и пакет завершается (блок всегда спарен со стопом).
+ *
+ * Полностью провальные одиночные петли тоже завершаются failed-batch терминалом
+ * с тем же `stopReason: "failed_batches"`.
  */
-export const MAX_TOOL_FAILURES_PER_TURN = 8;
+export const MAX_TOOL_FAILURES_PER_TURN = 3;
 /** Макс. повторов финального аудита. */
 export const MAX_AUDIT_RETRIES = 3;
 /** Макс. повторов пустого ответа. */

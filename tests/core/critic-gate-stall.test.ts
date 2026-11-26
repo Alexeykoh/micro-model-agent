@@ -96,9 +96,11 @@ describe("critic: новые улики после не-ok вердикта", ()
     expect(await h.gate.evaluate(h.makeDeps({ answerText: "checking" }))).toBe("retry");
     const withWork = h.makeDeps({
       answerText: "fixed",
+      // BCP-6: два успешных файловых тула уходят в дешёвый static fastpath и
+      // не вызывают критика; для проверки «новая улика» нужен behavioral-тул.
       toolEvents: [
         { tool: "list_dir", ok: true, output: "files" },
-        { tool: "write_file", ok: true, output: "done" },
+        { tool: "bash", ok: true, output: "build passed" },
       ],
     });
     expect(await h.gate.evaluate(withWork)).toBe("retry");

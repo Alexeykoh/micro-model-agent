@@ -30,6 +30,8 @@ export class LspModule implements AgentModule {
   /** Здоровье серверов: падения, пауза восстановления, прогрев в фоне. */
   private healthState = new LspHealth();
   private logger: LspClientLogger | null = null;
+  /** Сессионный сток событий (подключается на границе хода). */
+  private sessionSink: ((op: string, msg: string, meta?: Record<string, unknown>) => void) | null = null;
   /** Корень проекта для фонового прогрева на старте сессии. */
   private readonly baseDir: string;
   /** Прогрев в фоне уже запущен (один на процесс/сессию). */
@@ -52,6 +54,16 @@ export class LspModule implements AgentModule {
   setLogger(logger: LspClientLogger | null): void {
     this.logger = logger;
     this.client.setLogger(logger);
+  }
+
+  /** Подключить запись событий в session.jsonl (INV-13); null — отключить. */
+  setSessionSink(sink: ((op: string, msg: string, meta?: Record<string, unknown>) => void) | null): void {
+    this.sessionSink = sink;
+  }
+
+  /** Одно событие LSP уходит и в app-лог, и в сессионный сток. */
+  emit(op: string, msg: string, meta?: Record<string, unknown>): void {
+    this.log(msg, { ...meta, op });
   }
 
   setEnabled(enabled: boolean): void {
@@ -214,14 +226,18 @@ export class LspModule implements AgentModule {
     };
   }
 
-  /** Структурная запись в app.jsonl (info): видно, что и сколько длилось. */
+  /** Структурная запись в app.jsonl и (при подключении) в session.jsonl. */
   private log(msg: string, meta?: Record<string, unknown>): void {
-    // DEBT(lsp-session-log-events): события LSP идут в app.jsonl, но не в
-    // session.jsonl (для сессионного журнала нужен отдельный тип события).
     try {
       this.logger?.info(msg, meta);
     } catch {
       /* логгер — не часть контракта */
+    }
+    if (!this.sessionSink) return;
+    try {
+      this.sessionSink(String(meta?.op ?? "lsp"), msg, meta);
+    } catch {
+      /* сессионный лог не должен ронить модуль */
     }
   }
 

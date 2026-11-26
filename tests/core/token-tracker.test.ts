@@ -17,6 +17,7 @@ describe("TokenTracker.logUsage provenance", () => {
     state.apiCompletionTokens = 20;
     state.totalBatches = 3;
     state.duplicateBatches = 1;
+    state.wastefulToolCalls = 2;
     state.novelToolKeys.add("read_file::a.ts");
 
     tracker.logUsage(
@@ -36,7 +37,7 @@ describe("TokenTracker.logUsage provenance", () => {
         provider: "live",
         model: "qwen/qwen3.5-9b",
         decodeMs: 400,
-        progress: { totalBatches: 3, novelTools: 1, duplicateBatches: 1 },
+        progress: { totalBatches: 3, novelTools: 1, duplicateBatches: 1, wastefulToolCalls: 2 },
       }),
     );
     expect(record).toHaveBeenCalledWith(100, 20, "live", undefined);

@@ -7,7 +7,7 @@ delegate tasks to the agent.
 
 - API reference (endpoints, envelope, errors, config): [agents/service-api.md](./agents/service-api.md)
 - Design spec: [specs/2026-10-08-agent-service-api-design.md](./specs/2026-10-08-agent-service-api-design.md)
-- Implementation plan: [plans/2026-10-08-agent-service-api.md](./plans/2026-10-08-agent-service-api.md)
+- Implementation plan: `plans/2026-10-08-agent-service-api.md` (удалён 2026-11-25)
 
 ## When to use it
 

@@ -122,6 +122,29 @@ describe("webui assets", () => {
     expect(js(a)).toMatch(/data\.diagnostic && verbosity\(\) !== "verbose"\)\s*return;/);
   });
 
+  it("folds agent steps into an expandable Lucide summary row", () => {
+    const a = loadAssets();
+    const src = js(a);
+    expect(src).toContain('icon("plus")');
+    expect(src).toContain('"chevron-down"');
+    expect(src).toContain("foldHistory(feed)");
+    expect(src).toContain('aria-expanded", "false"');
+    expect(src).toContain("collapseSteps()");
+    expect(src).toContain("ui.collapseSteps");
+    expect(a.css).toContain(".group-sum .parts");
+    expect(a.css).toContain("text-overflow: ellipsis");
+    expect(a.css).toContain(".group-detail.hidden");
+    expect(src).toContain('thoughts: "bulb"');
+    expect(src).toContain('reads: "eye"');
+    expect(src).toContain('failures: "circle-alert"');
+    expect(src).toContain('warnings: "triangle-alert"');
+    expect(src).toContain('"circle-alert":');
+    expect(src).toContain('"triangle-alert":');
+    expect(a.css).toContain("@keyframes groupIn");
+    expect(a.css).toContain("@keyframes groupBump");
+    expect(a.css).toContain("allow-discrete");
+  });
+
   it("renders file actions as quiet filerow lines with viewer link and icon copy", () => {
     const a = loadAssets();
     const src = js(a);
@@ -168,10 +191,15 @@ describe("webui assets", () => {
   it("marks the finished answer apart from the work process", () => {
     const a = loadAssets();
     expect(a.css).toContain(".feed > .md");
-    expect(a.css).toContain("border-left: 2px solid var(--accent)");
-    // The answer carries a muted, translucent accent backdrop so the dim
+    // No left rail on user messages or on any answer — final or intermediate.
+    expect(a.css).not.toMatch(/\.u \{[^}]*border-left/);
+    expect(a.css).not.toMatch(/\.feed > \.md[^{]*\{[^}]*border-left/);
+    // The final answer carries a muted, translucent accent backdrop so the dim
     // work process (think/tool/meta) stays visually secondary.
     expect(a.css).toMatch(/\.feed > \.md, \.feed > \.ans \{[^}]*background: var\(--ans-bg\)/);
+    // Intermediate drafts (still streaming or already closed by a tool) keep a
+    // neutral fill instead.
+    expect(a.css).toContain(".feed > .md.streaming, .feed > .md.interim {");
   });
 
   it("anchors the jump-to-latest pill to the composer, not a fixed offset", () => {
@@ -303,13 +331,16 @@ describe("webui assets", () => {
     expect(js(a)).toContain("window.MmaSetup");
   });
 
-  it("wires the Agent settings panel (experts + critic keys) and the collapsed critic block", () => {
+  it("wires the Agent settings panel (experts + critic keys) and the fully collapsed critic block", () => {
     const a = loadAssets();
-    // 2026-11-05: критик получил собственное SSE-событие и свёрнутый блок.
+    // 2026-11-23: критик получил SSE-событие; видна только шапка, тело — под тогглом.
     expect(js(a)).toContain('["critic"');
     expect(js(a)).toContain("onCritic");
     expect(js(a)).toContain("critic-block");
-    expect(js(a)).toContain('"think-body hidden"');
+    const critic = a.jsModules["js/feed/critic-block.js"] ?? "";
+    expect(critic).toContain('"think-h"');
+    expect(critic).toContain('"think-body critic-body hidden"');
+    expect(a.css).toContain(".critic-block .think-h .lab");
     expect(js(a)).toContain("critic.enabled");
     expect(js(a)).toContain("experts");
     // MoE removed 2026-10-12: no MoE keys or chips anywhere in the assets.

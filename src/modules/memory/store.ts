@@ -162,6 +162,30 @@ export class MemoryStore {
     return true;
   }
 
+  /**
+   * BCP-7: удаляет все записи категории, содержащие `marker` (по расшифрованному
+   * тексту). Возвращает число удалённых блоков.
+   */
+  deleteEntriesMatching(name: string, marker: string): number {
+    const path = join(this.memoryDir, `${name}.md`);
+    if (!existsSync(path) || !marker) return 0;
+    const lines = readFileSync(path, "utf-8").split(/\r?\n/);
+    const starts = lines
+      .map((l, i) => (l.startsWith("- ") ? i : -1))
+      .filter((i) => i >= 0);
+    let removed = 0;
+    for (let i = starts.length - 1; i >= 0; i--) {
+      const from = starts[i]!;
+      const to = i < starts.length - 1 ? starts[i + 1]! : lines.length;
+      const block = decryptMemoryText(lines.slice(from, to).join("\n"));
+      if (!block.includes(marker)) continue;
+      lines.splice(from, to - from);
+      removed++;
+    }
+    if (removed > 0) writeFileSync(path, lines.join("\n"), "utf-8");
+    return removed;
+  }
+
   /** Удаляет n-ю (с 1) append-only запись (весь её блок) из файла категории. */
   deleteEntry(name: string, n: number): boolean {
     const path = join(this.memoryDir, `${name}.md`);

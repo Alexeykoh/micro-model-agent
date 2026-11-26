@@ -20,7 +20,7 @@ CLI (main.ts → commands.ts / repl.ts)
 
 ### Output Architecture
 
-> **Spec/plan:** `docs/archive/plans/2026/superpowers/plans/2026-09-18-output-architecture-refactor.md`
+> **Spec/plan:** `docs/archive/plans/2026/superpowers/plans/2026-09-18-output-architecture-refactor.md (удалён 2026-11-25)`
 
 All terminal output flows through `src/output/` as events, so the mode of the
 terminal (streaming / modal / quiet) and every machine surface see the same data.
@@ -145,10 +145,23 @@ hook in `Agent.run()` (so REPL, web and one-shot all behave the same):
 - **Manual is sticky** — a session created with an explicit name or renamed by
   the user has `nameSource: "manual"` and is never overwritten.
 
+### File Rollback (change journal)
+
+> **Spec:** [file rollback design](../specs/2026-11-24-file-rollback-design.md) · Gate: `tests/arch/changes-coverage.test.ts`.
+
+Filesystem writes are snapshotted so they can be undone deterministically within a session:
+
+- **Port** — `ToolContext.fileChanges: FileChangesPort` (`src/tools/types.ts`) is built by both context builders (`src/core/bootstrap/tool-context.ts` and `src/core/bootstrap/session-runner-scope.ts`), one instance per context. `ToolExecutor.execute()` calls `captureBefore`/`captureAfter` around each tool call; `src/core/agent/turn-run.ts` calls `beginTurn()` on the turn boundary.
+- **Module** — `src/modules/changes/` (`capture.ts`, `store.ts`, `undo.ts`, `eviction.ts`, `index.ts`) owns the journal in `<sessionDir>/changes/` (`index.jsonl`, `state.json`, content-addressed `blobs/<sha>.gz`), encrypted with the session key when `security.sessionEncryption` is on.
+- **Tools** — `restore_file` and `list_file_changes` expose undo/list to the model through the normal registry; both go through the same `ChangeUndo` path as the CLI/slash surfaces.
+- **Surfaces** — `mma undo <path> [--steps N] [--force] | --turn [N] | --list [path]` (`src/cli/undo-command.ts`) and `/undo` (`SPEC_DEFS` in `src/core/commands/spec.ts`, handler in `repl-commands-session.ts`).
+- **Observability** — every successful restore appends a typed `change` entry to `session.jsonl` with `source: "module:changes"`, `module: "changes"`, `operation: "changes.undo"` and typed `path`/`op`/`targetId`/`tool` fields (INV-13); regression test `tests/changes/session-log.test.ts`.
+- **Coverage** — every fs-write tool with `pathArgs` must be snapshotted or listed with a reason in the module's `EXCLUDED` table; gated by `tests/arch/changes-coverage.test.ts`. Known v1 limits are in the [spec](../specs/2026-11-24-file-rollback-design.md#10-known-limitations-v1).
+
 ### Security Module
 
-> **Spec:** `docs/archive/specs/2025/2025-07-28-mma-v2-design.md#14-security-module` — Comprehensive security system for MMA v2.
-> **Status:** **Phase 1 implemented** (Bash command validation, path restrictions, network filtering, content scanning, subagent recursion control).
+> **Spec:** `docs/archive/specs/2025/2025-07-28-mma-v2-design.md#14-security-module (удалён 2026-11-25)` — Comprehensive security system for MMA v2.
+> **Status:** implemented (Bash command validation, path restrictions, network filtering, content scanning, subagent recursion control; extended features — below).
 
 The security module provides multiple layers of protection:
 
@@ -168,10 +181,10 @@ The security module provides multiple layers of protection:
   - Applied to all filesystem tools (`read_file`, `write_file`, `delete_file`, `edit_file`, `create_dir`, `move_file`, `list_dir`, `file_info`)
 
 - **Network Validation** (`src/modules/security/network-validator.ts`):
-  - Denied domains blacklist
-  - Allowed domains whitelist (optional)
-  - URL sanitization (removing sensitive query parameters)
-  - Applied to `web_fetch`, `web_search`, `web_browse`
+  - Scheme allowlist (`http`/`https`), denied domains blacklist, optional allowed-domains whitelist
+  - SSRF guard: private/reserved IPs (IPv4/IPv6, encoded forms), DNS resolution to private addresses, manual redirects re-validated on every hop
+  - Timeout/response-size caps; URL sanitization (removing sensitive query parameters) for logs
+  - Applied in `ToolExecutor` to every tool with `urlArgs` (`web_fetch`, `web_browse`, `download_file`, image tools), plus browser navigation, `web_search`, and framework-initiated calls (`src/modules/security/outbound-policy.ts`: audit webhooks, task callbacks, OTEL, `git push`)
 
 - **Content Scanning** (`src/modules/security/content-scanner.ts`):
   - Detection of dangerous patterns in file content (`eval(`, `child_process.exec(`, `rm -rf`, etc.)
@@ -235,15 +248,15 @@ tag narrowing: `PromptBlock.requiresTags` gates blocks (e.g. `browser`), and
 do not break the prefix cache. Blocks excluded by budget produce `omittedBlocksNote`
 (INV-6/17). Contract: `docs/specs/2026-10-31-system-prompt-v3-design.md`.
 
-#### Backward Compatibility
+#### Security defaults and opt-out
 
-Security is **disabled by default** (`SecurityConfig.enabled: false`):
+Security is **enabled by default** (`DEFAULT_SECURITY_CONFIG` in `src/config/security.ts`, merged into `DEFAULTS.security` in `src/config/defaults.ts`):
 
-- All validators (command, path, network, content scan) return `allowed: true` when `enabled` is `false`
-- The default `DEFAULT_SECURITY_CONFIG` has empty/benign defaults — blacklists exist as templates, not active rules
-- To enable security: set `security.enabled: true` and configure individual modules (bash, paths, network, contentScan)
-- Each sub-module also has its own `enabled` flag for granular control
-- Existing code continues to work without modifications
+- `security.enabled: true`, `security.bash.enabled: true`, `security.network.enabled: true`; path checks and content scanning are opt-in per sub-module (`security.paths.enabled: false`, `security.contentScan.enabled: false`).
+- Network defaults: only `http`/`https`, `deniedDomains: [localhost, 127.0.0.1, ::1]`, empty allowlist (any public domain), 15 s timeout, 15 KB response cap; `allowLoopback` and `allowPrivateOutbound` are `false`.
+- Validators (command, path, network, content scan) return `allowed: true` when their own `enabled` is `false`; `security.enabled: false` switches them all off. An explicitly stored opt-out is honored verbatim — stale defaults are not force-restored.
+- Two guards stay on regardless: protected-path confirmation for file-mutating tools (see above) and the framework's fail-closed outbound policy for webhooks/callbacks/OTEL/`git push` (`security.network.enabled` only covers model-initiated tool calls).
+- Each sub-module also has its own `enabled` flag for granular control.
 
 #### Phase 4: Extended Security Features
 
@@ -291,27 +304,10 @@ mma security audit-stats         # Show audit notification statistics
 
 ## Model Certification
 
-> **Spec:** `docs/specs/2026-08-05-model-certification-design.md` — offline harness that runs test scenarios through the real agent against a (model, provider) pair.
-
-**Status:** Implemented.
-
-Purpose: distinguish "this model works with MMA on this backend" from "untested". A certification is **not** a general endorsement — it states that on a specific provider URL the model ran the suite and passed N/M repetitions.
-
-- **Commands:** `mma model certify <name> [--provider-url <url>] [--tags core,security,image,network,browser,moe] [--scenarios <ids>] [--reps N] [--force] [--clean]`, `mma model cert-status <name>`, `mma model cert-list`, `mma model uncertify <name>`.
-- **Targeted re-run:** `--scenarios <ids>` (comma-separated, case-insensitive) runs only those scenarios and MERGES the fresh results into the existing certification entry — previous results for non-rerun scenarios are preserved verbatim (`mergePartialResults()` in `cli.ts`). A partial run does NOT require `--force` (it's an incremental update); a full-suite re-run still does. Unknown ids abort with the list of available scenarios.
-- **Per-rep timeout:** default 300s; override via CLI `--timeout <ms>` (run-level) or per-scenario `timeoutMs` (YAML + `CertScenario`, validated >= 1000). Priority: `scenario.timeoutMs` → `opts.timeoutMs` → 300_000. Scenario 3.5 ships with `timeoutMs: 600_000` — slow local reasoning models (~30-45s per LLM call, ~12 iterations) complete the task correctly but miss the old default (see docs/small-model-observations.md).
-- **Audit gate vs exit-on-complete:** the harness runs the agent with `--exit-on-complete`; its fast-exit on a hallucination-retry-flagged first response does NOT bypass the final audit gate when a plan is active (`agent.ts`) — otherwise a model that answers "done" without finishing the plan passes silently.
-- **Tags:** `core` (default, no external deps), `security` (requires config, applied per-scenario), `image`, `network`, `browser`, `moe`.
-- **Per-scenario config:** scenarios can declare `config:` overrides that are deep-merged into the base config and written to the sandbox as `<sandbox>/.mma/config.json`. The spawned process reads it via `MMA_CONFIG_DIR` env var. This enables security/MoE/LSP testing without requiring the user's global config to have those features enabled.
-- **Manifest:** **global** `~/.mma/certifications.json` — entries keyed by `(model, providerUrl)`, recording `mmaVersion`, suite summary, and per-scenario results. Certifications are machine-scoped (model+provider), not project-scoped: marks are visible from any working directory. A bundled copy ships with the package (`certification/certifications.json` in the repo → copied to `dist/certification/` by `scripts/copy-assets.ts`) and is synced into the global manifest at every startup (`syncGlobalManifest()` in `manifest.ts`, called from `bootstrap.ts`): on a package update the bundled entries overwrite their keys; user-local certifications for other keys are preserved. A snapshot file (`~/.mma/certifications.synced.json`) prevents rewrites between updates. Legacy per-project manifests (`<project>/certification/certifications.json`, git-tracked) are still read and merged into every display lookup (`readMergedManifest`); `uncertify` cleans both stores.
-- **Checkmarks:** `mma model list` and REPL `/model` show `✔` (certified on this provider, MMA version matches), `○` (certified on an older MMA version — re-run `--force`), `·` (not certified).
-- **Harness mechanics:** spawns `bun src/cli/main.ts` per scenario rep with `--no-agents-md --exit-on-complete -d <sandbox>`, injecting `(model, provider)` via the existing env overrides (`MMA_MODEL`, `MMA_PROVIDER_BASEURL`, `MMA_PROVIDER_APIKEY`, `MMA_CONTEXT_WINDOW`). Fact-checks: files, exit code, output substring (`outputContains` for security scenarios). M/N tally per scenario (default 2/3).
-- **Source:** `src/modules/certification/` (`types`, `scenarios`, `loader`, `fact-checker`, `runner`, `manifest`, `cli`). It is an offline tool independent of the agent loop — never part of the system prompt or context.
-- **Scenarios:** builtin in `scenarios.ts` (ported from `docs/testing/scenarios.md`); user-defined YAML in `<project>/.mma/certification/scenarios/*.yaml`. Image fixtures in `docs/testing/fixtures/`.
-
+Каноническое описание — [docs/agents/testing.md § Model Certification](./testing.md#model-certification): команды, теги (`core`, `security`, `image`, `network`, `browser`, `shell`, `research`), сценарии и манифест. Реализация — `src/modules/certification/`.
 ### Agent-Level MoE
 
-> **Spec:** `docs/archive/specs/2025/2025-07-30-agent-level-moe.md` — Router + Expert-Agent + Expert-Tools, hierarchical recursive decomposition.
+> **Spec:** `docs/archive/specs/2025/2025-07-30-agent-level-moe.md (удалён 2026-11-25)` — Router + Expert-Agent + Expert-Tools, hierarchical recursive decomposition.
 >
 > Status: **partially implemented (MVP)**. When `moe.enabled: true` is set in config and an orchestrator model is configured, the agent uses a Router → plan → validate → execute (parallel waves) → verify/merge flow. Falls back to single-agent when MoE fails or is disabled.
 >
@@ -339,7 +335,7 @@ Purpose: distinguish "this model works with MMA on this backend" from "untested"
 
 ## Counter-Agent (In-Loop Critic)
 
-> **Spec:** `docs/archive/specs/2026/2026-09-25-session-autoname-and-critic-design.md` §4.
+> **Spec:** `docs/archive/specs/2026/2026-09-25-session-autoname-and-critic-design.md (удалён 2026-11-25)` §4.
 
 An evidence-grounded, event-triggered LLM verifier ("counter-agent") that reviews the single agent's
 in-progress work. It is a loop gate like `AuditGate`/`HallucinationGate` — the MoE path is untouched.
@@ -461,7 +457,7 @@ const body = { model, messages, stream: false, max_tokens };
 3. Даже когда fallback вызвали (после фикса условия), он падал с 400 из-за нарушения Jinja-шаблона (system не первый, отсутствует `stream: false`)
 4. Non-streaming без tools работал, но с tools — падал с `400: System message must be at the beginning` или `No user query found in messages`
 
-**Все фиксы сделаны в:** `src/core/agent.ts`, `src/llm/openai-compat.ts`, `src/modules/context/manager.ts`, `src/modules/hallucination/confidence.ts`.
+**Все фиксы сделаны в:** `src/core/agent.ts`, `src/llm/openai-compat.ts`, `src/core/context/manager.ts`, `src/core/hallucination/confidence.ts`.
 
 ---
 

@@ -2,7 +2,7 @@
 import type { ToolResult, ToolContext } from "../../tools/types";
 import { t } from "../../i18n/index";
 import { PlanCreator } from "./planner";
-import { parseCheck } from "./plan-checks";
+import { inferDefaultEvidence, parseCheck } from "./plan-checks";
 import { checkPlanCoverage } from "./plan-coverage";
 import type { PlanToolDeps } from "./plan-tool";
 import { updatePlanStep } from "./step-update";
@@ -75,7 +75,7 @@ async function actionRePlan(deps: PlanToolDeps, _ctx: ToolContext, args: Record<
     args.title ? String(args.title) : undefined,
     checked.checks ?? [],
     baselines,
-    declared?.evidence ?? [],
+    declared?.evidence ?? inferDefaultEvidence(newSteps, checked.checks),
   );
   const keptCount = replanned.steps.length - newSteps.length;
   deps.setPlan(replanned);
@@ -163,7 +163,7 @@ async function actionCreate(deps: PlanToolDeps, ctx: ToolContext, args: Record<s
     parsed.kinds ?? [],
     checked.checks ?? [],
     baselines,
-    declared?.evidence ?? [],
+    declared?.evidence ?? inferDefaultEvidence(steps, checked.checks),
   );
   deps.setPlan(plan);
   const display = PlanCreator.toPromptBlock(plan, 0);

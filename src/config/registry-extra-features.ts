@@ -1,6 +1,6 @@
-// Дефы суб-агента, загрузки модели, веб-поиска (в т.ч. error-поиска) и
-// браузера. Вынесены из `registry-extra.ts` (правило 6); порядок внутри
-// группы — порядок `EXTRA_DEFS`.
+// Дефы суб-агента, загрузки модели, веб-поиска (в т.ч. error-поиска),
+// браузера и отката правок file-тулов. Вынесены из `registry-extra.ts`
+// (правило 6); порядок внутри группы — порядок `EXTRA_DEFS`.
 import type { ConfigKeyDef } from "./registry";
 import type { AppConfig } from "./types";
 import { DEFAULTS } from "./defaults";
@@ -188,4 +188,29 @@ export const FEATURE_DEFS: ConfigKeyDef[] = [
   int("browser.navigationTimeout", "browser", 1000, 120000, 1000, false,
     (c) => c.browser.navigationTimeout,
     (c, v) => { c.browser.navigationTimeout = v as number; }),
+
+  bool("changes.enabled", "changes", false,
+    (c) => c.changes?.enabled ?? DEFAULTS.changes!.enabled!,
+    (c, v) => {
+      c.changes = { ...structuredClone(DEFAULTS.changes!), ...c.changes };
+      c.changes.enabled = v as boolean;
+    }),
+  int("changes.maxFileBytes", "changes", 1024, 20_971_520, 1024, false,
+    (c) => c.changes?.maxFileBytes ?? DEFAULTS.changes!.maxFileBytes!,
+    (c, v) => {
+      c.changes = { ...structuredClone(DEFAULTS.changes!), ...c.changes };
+      c.changes.maxFileBytes = v as number;
+    }),
+  int("changes.maxTotalBytes", "changes", 1_048_576, 536_870_912, 1_048_576, false,
+    (c) => c.changes?.maxTotalBytes ?? DEFAULTS.changes!.maxTotalBytes!,
+    (c, v) => {
+      c.changes = { ...structuredClone(DEFAULTS.changes!), ...c.changes };
+      c.changes.maxTotalBytes = v as number;
+    }),
+  int("changes.maxRevisionsPerFile", "changes", 1, 200, 1, false,
+    (c) => c.changes?.maxRevisionsPerFile ?? DEFAULTS.changes!.maxRevisionsPerFile!,
+    (c, v) => {
+      c.changes = { ...structuredClone(DEFAULTS.changes!), ...c.changes };
+      c.changes.maxRevisionsPerFile = v as number;
+    }),
 ];

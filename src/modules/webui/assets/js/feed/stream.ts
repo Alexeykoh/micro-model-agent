@@ -4,6 +4,7 @@ import { msgs, el, setIcon } from "../dom.js";
 import { t } from "../i18n.js";
 import { streamStateFor } from "../store.js";
 import { verbosity } from "../format.js";
+import { formatDuration } from "../duration.js";
 import { mountMarkdown } from "../../md.js";
 import {
   activeFeed,
@@ -46,12 +47,17 @@ function scheduleText(feed: HTMLElement): void {
 }
 
 // Close the Markdown segment owned by `feed` (if any) and clear its text state.
-export function finishMd(feed?: HTMLElement | null): void {
+// `final` — ответ закрыт самым ходом (`onTurnEnd`): только ему положены рейка
+// и фон. Всё, что закрылось по ходу работы (инструмент, размышление, статус,
+// критик), — промежуточный ответ: он остаётся «голым», без белой полосы слева.
+// Класс `streaming` при этом снимается, чтобы не мигал курсор у готового текста.
+export function finishMd(feed?: HTMLElement | null, final = false): void {
   if (!feed) return;
   const st = streamStateFor(feed);
   flushText(feed);
   if (st.curMd) {
     st.curMd.root.classList.remove("streaming");
+    if (!final) st.curMd.root.classList.add("interim");
     st.curMd.end();
     st.curMd = null;
   }
@@ -86,7 +92,7 @@ export function onText(chunk: string, sid?: string): void {
 
 /** Header text for a think block: duration only (tok/s lives in the footer chip). */
 export function thinkDurText(startedAt: number, now = Date.now()): string {
-  return `· ${((now - startedAt) / 1000).toFixed(1)}s`;
+  return `· ${formatDuration(now - startedAt)}`;
 }
 
 function updateThinkHeader(feed: HTMLElement): void {
@@ -130,8 +136,10 @@ export function onReasoning(
   finishMd(feed);
   const st = streamStateFor(feed);
   if (!st.curThink) {
-    flushRun(feed);
+    // Thinking belongs INSIDE the step group: it folds together with the tools
+    // that follow, so no `flushRun` here (the group closes on text/turn end).
     const { wrap, head, body } = buildThinkBlock(true, undefined, info);
+    // `appendTo` fires `hooks.afterFeedAppend`, which folds the row immediately.
     appendTo(feed, wrap);
     const think: ThinkState = { wrap, head, body, startedAt: Date.now(), chars: 0, timer: undefined };
     st.curThink = think;
@@ -152,7 +160,10 @@ export function onReasoning(
 // always visible, one dim line per chunk, never collapsed. Tool bodies
 // (`kind: "tool"` — display/output/diff/failure-gist from ToolBatch) are
 // model-facing and hidden in quiet mode, mirroring the terminal renderer
-// (`writeInlineBody`); failures still surface once via `tool_end` ↳ cause.
+// (`BodyStream.write`). In non-quiet modes THIS is the only place the body is
+// drawn: `tool_end` closes the action line with its status and never opens a
+// second `.toolout` box (the old onMeta + toolout duplication in normal/verbose).
+// Failures still surface once in quiet via `tool_end` ↳ first output line.
 export function onMeta(chunk: string, sid?: string, kind?: string): void {
   if (kind === "tool" && verbosity() === "quiet") return;
   const feed = feedForEvent(sid);
@@ -259,12 +270,10 @@ export function onPhase(phase: string, sid?: string): void {
 }
 
 // Global `.think-h` toggle (depends on the wrap > [head, body] structure
-// built by `buildThinkBlock`). `?.` — как в feed/core: в тестовом процессе
-// модульный кэш общий и `#msgs` может отсутствовать на момент оценки.
-msgs?.addEventListener("click", (e) => {
-  const target = e.target as HTMLElement;
-  const head = target.closest(".think-h");
-  if (!head) return;
+// built by `buildThinkBlock`). Экспортирован отдельно от слушателя: в тестовом
+// процессе общий модульный кэш, а `document`/`#msgs` подменяются между файлами,
+// поэтому delegated-клику нельзя доверять в DOM-тестах — зовём логику напрямую.
+export function toggleThinkHead(head: HTMLElement): void {
   const body = head.nextElementSibling;
   if (!body) return;
   const hidden = body.classList.toggle("hidden");
@@ -276,4 +285,11 @@ msgs?.addEventListener("click", (e) => {
       hidden ? "chevron-right" : "chevron-down",
       t(hidden ? "web.action.show" : "web.action.hide"),
     );
+}
+
+// `?.` — как в feed/core: `#msgs` может отсутствовать на момент оценки.
+msgs?.addEventListener("click", (e) => {
+  const target = e.target as HTMLElement;
+  const head = target.closest(".think-h");
+  if (head) toggleThinkHead(head as HTMLElement);
 });

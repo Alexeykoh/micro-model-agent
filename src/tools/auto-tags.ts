@@ -11,15 +11,18 @@
  * alwaysOn), а research/browser/memory-задача сразу видит нужные тулы.
  * Без LLM-вызова и затрат контекста.
  *
- * Правила — keyword-эвристики (en+ru): `research` со сдвигом в recall
- * (пропуск веб-намерения стоит лишний enable_tools round-trip), `browser`/
- * `shell`/`memory`/`vision` — в precision (простые ходы остаются узкими).
- * Неизвестный текст — дефолты без изменений.
+ * Правила — keyword-эвристики (en+ru): `web` для обычного веб-вопроса и
+ * `research` только для явной работы с большим текстом/MCP/историей сессий.
+ * Раньше любое веб-намерение добавляло `research` и открывало тяжёлые тулы
+ * (`chunk_query`, `mcp_call`, `scan_corpus`) — сессия GYM24 получила 44 тула
+ * в схеме (~7.5k токенов) и ушла в 196-секундный chunk_query.
+ * `browser`/`shell`/`memory`/`vision` — в precision. Неизвестный текст — дефолты.
  */
 /** Известные теги тулов. */
 export const KNOWN_TOOL_TAGS = [
   "file",
   "code",
+  "web",
   "document",
   "shell",
   "research",
@@ -33,8 +36,12 @@ export const KNOWN_TOOL_TAGS = [
 /** Тег из KNOWN_TOOL_TAGS. */
 export type KnownToolTag = (typeof KNOWN_TOOL_TAGS)[number];
 
-const RESEARCH_RE =
+const WEB_RE =
   /search|google|найди|найти|поиск|погод|новост|интернет|сайт|документ|стать|цен|стоим|курс|билет|рейтинг|обзор|рецепт|http|www\.|url|\bsite\b|\bweb\b|fetch|download|скача|загруз|stackoverflow|github\.com|wikipedia|википеди/i;
+
+/** Признак тяжёлой research-задачи: большие тексты, MCP, история сессий. */
+const HEAVY_RESEARCH_RE =
+  /chunk|чанк|corpus|корпус|scan_corpus|search_history|\bmcp\b|истори[яи]\s+(?:поиск|сесси)|больш(?:ой|ое)\s+текст|large text/i;
 
 const BROWSER_RE =
   /screenshot|скриншот|playwright|browser|браузер|кликни|click\b|открой.*стран|automation|автоматизац.*браузер|селектор|selector/i;
@@ -62,7 +69,8 @@ const CODE_RE =
 export function inferExtraToolTags(input: string): KnownToolTag[] {
   if (!input || !input.trim()) return [];
   const extra = new Set<KnownToolTag>();
-  if (RESEARCH_RE.test(input)) extra.add("research");
+  if (WEB_RE.test(input)) extra.add("web");
+  if (HEAVY_RESEARCH_RE.test(input)) extra.add("research");
   if (BROWSER_RE.test(input)) {
     extra.add("browser");
     extra.add("vision");

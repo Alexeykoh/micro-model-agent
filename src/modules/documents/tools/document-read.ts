@@ -8,8 +8,9 @@
  * (`documents.needs_vision`), а не пустой успех.
  */
 import { t } from "../../../i18n/index";
+import type { ImageResizePort } from "../../../core/api/index";
 import type { ToolDefinition, ToolResult } from "../../../tools/types";
-import { buildDataUrl, MAX_VISION_BYTES, rasterMime } from "../media";
+import { MAX_VISION_BYTES, rasterMime } from "../media";
 import { parseSelector, renderDocumentRead, selectorDisplay, type ReadOutcome } from "../read";
 import { parseCtx, type DocumentRegistry } from "../registry";
 import { fileSource } from "../source";
@@ -27,7 +28,10 @@ function failureMessage(outcome: Extract<ReadOutcome, { ok: false }>): string {
 }
 
 /** Тул `document_read`: срез по селектору (all/section/blocks) либо vision-растр. */
-export function documentReadTool(registry: DocumentRegistry): ToolDefinition {
+export function documentReadTool(
+  registry: DocumentRegistry,
+  imageResize: ImageResizePort,
+): ToolDefinition {
   return {
     name: "document_read",
     security: { caps: [{ fs: "read" }], pathArgs: ["path"] },
@@ -56,7 +60,10 @@ export function documentReadTool(registry: DocumentRegistry): ToolDefinition {
           // передаётся целиком, срезы по разделам/блокам к ней неприменимы.
           if (ctx.capabilities?.vision === true && ctx.contextManager) {
             const bytes = await source.bytes();
-            if (bytes.length > MAX_VISION_BYTES) {
+            // Core-шов (INV-D7): ресайз + data URL отдаёт ядро, модуль не
+            // дублирует MIME-карту и не тянет src/llm/*
+            const prepared = await imageResize.prepare(bytes, mime);
+            if (prepared.bytes > MAX_VISION_BYTES) {
               const limit = `${Math.round(MAX_VISION_BYTES / (1024 * 1024))} MiB`;
               return rejectResult(
                 ctx,
@@ -68,7 +75,7 @@ export function documentReadTool(registry: DocumentRegistry): ToolDefinition {
             return {
               success: true,
               output: t("documents.image_attached"),
-              images: [{ type: "image_url", image_url: { url: buildDataUrl(bytes, mime) } }],
+              images: [{ type: "image_url", image_url: { url: prepared.dataUrl } }],
             };
           }
           return rejectResult(

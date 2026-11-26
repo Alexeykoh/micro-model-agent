@@ -238,4 +238,35 @@ describe("GET /api/models?provider=", () => {
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(body()).toMatchObject({ models: [], loading: true, error: false });
   });
+
+  it("re-fetches a ready list on an explicit ?refresh=1 request", () => {
+    const { res, body } = resStub();
+    const refresh = vi.fn(async () => {});
+    const req = { url: "/api/models?refresh=1" } as IncomingMessage;
+    handleModelsGet(req, res, {
+      knownModels: () => ["local-a"],
+      knownModelsState: () => ({ models: ["local-a"], loading: false }),
+      knownModelsRefresh: refresh,
+      config: config(),
+      clients: new Set(),
+    } as never);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    // A ready list must stay visible while the background refresh runs: an
+    // empty "loading" panel was the bug fixed in 5ff9911b.
+    expect(body()).toMatchObject({ models: ["local-a"], loading: false });
+  });
+
+  it("does not hit the provider on a plain GET of a ready list", () => {
+    const { res } = resStub();
+    const refresh = vi.fn(async () => {});
+    const req = { url: "/api/models" } as IncomingMessage;
+    handleModelsGet(req, res, {
+      knownModels: () => ["local-a"],
+      knownModelsState: () => ({ models: ["local-a"], loading: false }),
+      knownModelsRefresh: refresh,
+      config: config(),
+      clients: new Set(),
+    } as never);
+    expect(refresh).not.toHaveBeenCalled();
+  });
 });

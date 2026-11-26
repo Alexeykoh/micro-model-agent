@@ -8,9 +8,10 @@ import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { settings } from "../store.js";
 import type { Dict } from "../core/store/types.js";
-import { setIndicator } from "../dialog.js";
+import { openConfirm, setIndicator } from "../dialog.js";
 import { loadConfig } from "./write.js";
-import { pfield, providerInput, providerSelect } from "./form.js";
+import { pfield, providerInput } from "./form.js";
+import { providerTypeField } from "./provider-type-field.js";
 import { openSubDialog, closeSubDialog } from "./subdialog.js";
 import {
   providerBaseField,
@@ -144,11 +145,13 @@ function providerForm(): HTMLElement {
   if (presetNode) box.appendChild(presetNode);
 
   const grid = el("div", "pform-grid");
-  const fType = providerSelect(PROVIDER_TYPES, editing.type);
+  const fType = providerTypeField(PROVIDER_TYPES, editing.type);
   const fLabel = providerInput(editing.label, "text", "my-provider");
   const fBase = providerBaseField(editing.baseUrl);
   const fKey = providerInput("", "password", editing.hasApiKey ? t("web.settings.provider_key_keep") : "");
-  grid.appendChild(pfield("web.settings.provider_type", fType));
+  const typeField = pfield("web.settings.provider_type", fType.node);
+  fType.setAttribute("aria-label", t("web.settings.provider_type"));
+  grid.appendChild(typeField);
   grid.appendChild(pfield("web.settings.provider_label_field", fLabel));
   grid.appendChild(pfield("web.settings.provider_baseurl", fBase.node));
   grid.appendChild(pfield("web.settings.provider_apikey", fKey));
@@ -199,11 +202,23 @@ async function deleteProvider(name: string): Promise<void> {
   setIndicator(err === "active-provider" ? t("web.settings.provider_active_guard") : String(err), true);
 }
 
+// Deleting a provider writes config and reconfigures the runtime — ask first.
+// Lives here (not in the panel) so the panel stays a dumb list renderer.
+function confirmDeleteProvider(name: string): void {
+  openConfirm({
+    title: t("web.settings.provider_delete_confirm_title"),
+    body: t("web.settings.provider_delete_confirm_body", { name }),
+    acceptLabel: t("web.settings.delete"),
+    cancelLabel: t("web.settings.cancel"),
+    onAccept: () => void deleteProvider(name),
+  });
+}
+
 initModelPanel({
   entries: providerEntries,
   providerName,
   providerMeta,
   openForm: openProviderForm,
-  deleteProvider,
+  deleteProvider: confirmDeleteProvider,
 });
 export { renderModelPanel };

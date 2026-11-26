@@ -1,8 +1,5 @@
-// Record editor (`json` table) — вынесено из `editors.ts` (правило ≤300).
-// Rows are held locally and the whole record is validated client-side before
-// posting, so a half-filled new row never round-trips to the server. Nothing is
-// posted until the record satisfies the required columns.
-import { el } from "../dom.js";
+// Record editor (`json` table): validate locally before posting the whole key.
+import { el, makeToggle } from "../dom.js";
 import { t } from "../i18n.js";
 import type { Dict } from "../core/store/types.js";
 
@@ -23,8 +20,7 @@ export function tableEditor(value: unknown, ctx: Dict, editor: Dict): HTMLElemen
   const columns: Dict[] = editor.columns || [];
   const keyCol = columns[0];
   const rest = columns.slice(1);
-  // Wide records (experts: name/provider/model/tags/attempts/description) do
-  // not fit the settings column as a grid; stack their fields vertically.
+  // Wide records stack their fields instead of squeezing into the grid.
   const stacked = editor.layout === "stack";
   const source: Dict =
     value && typeof value === "object" && !Array.isArray(value) ? (value as Dict) : {};
@@ -34,8 +30,7 @@ export function tableEditor(value: unknown, ctx: Dict, editor: Dict): HTMLElemen
     error: "",
   }));
   const wrap = el("div", "tablectl ctl-block" + (stacked ? " table-stack" : ""));
-  // Одна автоматическая догрузка моделей на провайдера за жизнь редактора:
-  // без этого «список ещё грузится» зацикливал бы перерисовку.
+  // One model auto-load per provider avoids a repaint loop while loading.
   const autoLoadTried = new Set<string>();
   const fieldWrap = (label: string, control: HTMLElement): HTMLElement => {
     const field = el("label", "table-field");
@@ -45,8 +40,7 @@ export function tableEditor(value: unknown, ctx: Dict, editor: Dict): HTMLElemen
   };
 
   const head = el("div", "table-head");
-  // One explicit track per column: `repeat(auto-fit, …)` left extra columns to
-  // implicit (content-sized) tracks, which clipped model/provider values.
+  // Explicit tracks prevent implicit columns from clipping long values.
   const trackTemplate = [
     "minmax(150px, 1.3fr)",
     ...rest.map(() => "minmax(120px, 1fr)"),
@@ -122,8 +116,19 @@ export function tableEditor(value: unknown, ctx: Dict, editor: Dict): HTMLElemen
     }
   };
 
-  const inputFor = (row: TableRow, col: Dict): HTMLInputElement | HTMLSelectElement => {
+  const inputFor = (row: TableRow, col: Dict): HTMLElement => {
     const v = row.val[col.key];
+    // Booleans use the shared MMA switch, never a native checkbox: the rest of
+    // the settings surface speaks in toggles.
+    if (col.type === "bool") {
+      const sw = makeToggle(v === true, (next) => {
+        if (next) row.val[col.key] = true;
+        else delete row.val[col.key];
+        return sync();
+      });
+      sw.setAttribute("aria-label", `${row.name}: ${ctx.fieldLabel(col.key)}`);
+      return sw;
+    }
     // Column whose value is a reference to a live list (models/providers):
     // render a dropdown so the user picks an id instead of typing it.
     if (col.optionsSource) {
@@ -180,11 +185,31 @@ export function tableEditor(value: unknown, ctx: Dict, editor: Dict): HTMLElemen
       });
       return sel;
     }
+    // Static option list (e.g. reasoningStrategy): no network, no live source.
+    if (Array.isArray(col.options) && !col.optionsSource) {
+      const cur = v == null ? "" : String(v);
+      const sel = el("select");
+      const none = el("option", "", "—");
+      none.value = "";
+      sel.appendChild(none);
+      const opts = [...(col.options as string[])];
+      if (cur && !opts.includes(cur)) opts.push(cur);
+      for (const opt of opts) {
+        const op = el("option", "", opt);
+        op.value = opt;
+        sel.appendChild(op);
+      }
+      sel.value = cur;
+      sel.setAttribute("aria-label", `${row.name}: ${ctx.fieldLabel(col.key)}`);
+      sel.addEventListener("change", () => {
+        if (sel.value) row.val[col.key] = sel.value;
+        else delete row.val[col.key];
+        sync();
+      });
+      return sel;
+    }
     const input = el("input");
-    if (col.type === "bool") {
-      input.type = "checkbox";
-      input.checked = v === true;
-    } else if (col.type === "number") {
+    if (col.type === "number") {
       input.type = "number";
       input.value = v == null ? "" : String(v);
     } else {

@@ -5,27 +5,14 @@ import type { Logger } from "../../logger/app-logger";
 import type { SessionLogger } from "../session-logger";
 import type { LoopState } from "./loop-state";
 import { FORCED_COMPACTION_COOLDOWN, QUALITY_TRIGGER_THRESHOLD } from "./constants";
+import { computeMinReduction, earlySmallReason } from "./compaction-early";
+
+export { computeMinReduction } from "./compaction-early";
 
 /**
- * Порог значимости компакции. Больше из двух: 2% бюджета истории и 3% текущего
- * (калиброванного) контекста. Привязка к контексту не даёт «сжатию впустую»
- * (напр. −1.2% на 24K) считаться успехом и короткозамкнуть эскалацию стадий —
- * такой результат уходит на aggressive/hard-drop.
- */
-export function computeMinReduction(budgetHistory: number, contextTokens: number): number {
-  return Math.max(Math.floor(budgetHistory * 0.02), Math.floor(contextTokens * 0.03));
-}
-
-/**
- * Единая точка компакции контекста. В agent.ts логика дублировалась в 4 местах:
- * 1) интервал (needsCompaction) в начале итерации;
- * 2) принудительно по низкому качеству (< QUALITY_TRIGGER_THRESHOLD) с cooldown;
- * 3) принудительно по переполнению бюджета истории;
- * 4) после добавления результата тула.
- *
- * Политика `legacy` воспроизводит поведение 2.18.2 (все четыре триггера
- * независимо). Политика `v2` (дефолт) добавляет канонический порог по истории,
- * cooldown переполнения, гарантию прогресса и один триггер на итерацию.
+ * Единая точка компакции: интервал, качество, переполнение, after-tool.
+ * `legacy` воспроизводит 2.18.2; `v2` (дефолт) добавляет канонический порог
+ * по истории, cooldown, гарантию прогресса и один триггер на итерацию.
  */
 export class CompactionService {
   constructor(
@@ -99,11 +86,24 @@ export class CompactionService {
     //    quality с независимыми клоками чередовались через итерацию (интервал 1
     //    при кулдауне 3) — тот же разбег, что у after-tool до C2 (W4).
     if (state.iteration - state.lastCompactionIteration < FORCED_COMPACTION_COOLDOWN) return;
+    // 0a) AQC-5: маленькие модели компактим заранее — по числу сообщений или
+    //     доле окна, а не только по переполнению истории.
+    if (await this.tryEarlySmall(state)) return;
     // 1) Overflow — канонический порог по истории (калиброванная оценка),
     //    cooldown и safety-clamp от неправдоподобного скачка.
     if ((await this.tryOverflowV2(state)) !== "") return;
     // 2) Один из оставшихся триггеров: pending (после тула), качество, интервал.
     await this.tryFallbackV2(state);
+  }
+
+  /** AQC-5: ранний триггер для окон ≤64K (сообщения или доля контекста). */
+  private async tryEarlySmall(state: LoopState): Promise<boolean> {
+    const reason = earlySmallReason(this.deps.contextManager);
+    if (!reason) return false;
+    state.lastCompactionIteration = state.iteration;
+    state.lastForcedCompactionIteration = state.iteration;
+    await this.compactV2(state, reason);
+    return true;
   }
 
   /**
@@ -184,10 +184,10 @@ export class CompactionService {
 
   /** Quality-триггер с cooldown. */
   private qualityFallbackDue(state: LoopState, quality: number): boolean {
-    const { contextManager } = this.deps;
     return (
       quality < QUALITY_TRIGGER_THRESHOLD &&
-      contextManager.getCompactionCount() > 0 &&
+      // AQC-5: раньше требовалась уже состоявшаяся компакция — quality-триггер
+      // был мёртв до первой компакции по другим причинам.
       state.iteration - state.lastForcedCompactionIteration >= FORCED_COMPACTION_COOLDOWN
     );
   }

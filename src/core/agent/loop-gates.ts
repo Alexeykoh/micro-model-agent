@@ -17,7 +17,11 @@ import { gatherTurnToolEvents } from "./critic-events";
 import { resolveArtifactStates } from "./artifact-resolve";
 import { resolveVerbosity } from "../../ui/theme";
 import { MAX_EMPTY_RESPONSE_RETRIES } from "./constants";
+
+/** AQC-3: сколько раз просим повторить проверку после её деградации. */
+const MAX_CRITIC_DEGRADED_RETRIES = 1;
 import { t } from "../../i18n/index";
+import { checkBlockedClaim, collectBlockedResults } from "./blocked-claim-gate";
 
 /** Итог гейтов: сигнал для петли. */
 export type GatesOutcome =
@@ -167,6 +171,7 @@ export async function runFinalGates(host: AgentDeps, inp: GatesInput): Promise<G
     contextManager,
     slog,
     task: input,
+    baseDir: host.baseDir,
     planSummary: host.planSummary?.() ?? undefined,
     planPendingSteps: host.planPendingSteps?.() ?? undefined,
     toolEvents: gatherTurnToolEvents(contextManager, state.criticHistoryMark),
@@ -183,7 +188,42 @@ export async function runFinalGates(host: AgentDeps, inp: GatesInput): Promise<G
     inp.draft?.discard();
     return { kind: "break" };
   }
+  // AQC-3: деградированная проверка на шаге с check не равна «ок». Один раз
+  // просим модель повторить шаг с проверкой; дальше — честный fail-open с
+  // записью в лог, чтобы не уйти в бесконечный retry.
+  if (criticAction === "degraded") {
+    if (state.criticDegradedCycles < MAX_CRITIC_DEGRADED_RETRIES) {
+      state.criticDegradedCycles++;
+      contextManager.addMessage({
+        role: "user",
+        content: `<system-summary>${t("critic.degraded_retry")}</system-summary>`,
+      });
+      state.suppressRepetitionRetry = true;
+      inp.draft?.discard();
+      return { kind: "continue" };
+    }
+    logger.diagnostic(
+      "warn",
+      "Critic degraded retries exhausted — accepting answer without verification",
+    );
+  }
   if (criticAction === "retry") {
+    state.suppressRepetitionRetry = true;
+    inp.draft?.discard();
+    return { kind: "continue" };
+  }
+
+  // BCP-2: один раз заставляем процитировать каноничную подсказку блокировки.
+  const blocked = checkBlockedClaim(
+    textContent,
+    collectBlockedResults(contextManager.getActiveHistory()),
+  );
+  if (blocked.reanswer && state.blockedClaimCycles < 1 && blocked.canonical) {
+    state.blockedClaimCycles++;
+    contextManager.addMessage({
+      role: "user",
+      content: `<system-summary>${t("blocked.claim_reanswer", { canonical: blocked.canonical })}</system-summary>`,
+    });
     state.suppressRepetitionRetry = true;
     inp.draft?.discard();
     return { kind: "continue" };

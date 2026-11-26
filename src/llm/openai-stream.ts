@@ -17,6 +17,13 @@ import { parseStreamLine, type ToolCallAcc } from "./openai-sse";
 import { classifyProviderError } from "./openai-errors";
 import { finalizeStream } from "./openai-stream-final";
 
+/** AQC-7: сетевые причины, которые безопасно повторить до первого чанка. */
+export function isTransientNetworkFailure(message: string): boolean {
+  return /unable to connect|socket connection was closed|socket hang up|fetch failed|connection reset|connection refused|econnreset|econnrefused|etimedout|enotfound|network/i.test(
+    message,
+  );
+}
+
 export interface BodyInput {
   stream: boolean;
   maxTokens: number;
@@ -166,6 +173,19 @@ async function* streamOnce(
       throw err;
     }
     const wrapped = err instanceof Error ? err : new Error(String(err));
+    // AQC-7: сетевой обрыв до первого чанка — transient. Помечать его
+    // terminal-ом было ошибкой: `maxStreamRetries` не применялся, и обрыв
+    // превращался в «Ошибка LLM» после первой же попытки.
+    if (isTransientNetworkFailure(wrapped.message)) {
+      // HTTP-слой уже исчерпал maxRetries: terminal, чтобы не умножить число
+      // запросов на maxStreamRetries. recoverable — чтобы агент вернул причину
+      // модели и попытался продолжить, а не умер «Ошибка LLM».
+      throw new LlmError(wrapped.message, {
+        terminal: true,
+        recoverable: true,
+        kind: "network",
+      });
+    }
     if (wrapped instanceof LlmError) {
       wrapped.markTerminal();
       throw wrapped;

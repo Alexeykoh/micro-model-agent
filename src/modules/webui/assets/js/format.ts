@@ -2,6 +2,7 @@
 
 import { t } from "./i18n.js";
 import { settings } from "./store.js";
+import { formatDuration } from "./duration.js";
 
 export const CATEGORIES: Record<string, string[]> = {
   recon: [
@@ -164,9 +165,9 @@ export function readRangeText(name: string, args: unknown): string {
   return "";
 }
 
+/** Обратная совместимость: все старые вызовы теперь идут через единый формат. */
 export function formatMs(ms: number | null | undefined): string {
-  if (typeof ms !== "number" || !isFinite(ms)) return "";
-  return ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : Math.round(ms) + "ms";
+  return formatDuration(ms);
 }
 
 // Effective chat verbosity, mirroring `resolveVerbosity` in src/ui/theme.ts:
@@ -176,6 +177,13 @@ export function verbosity(): string {
   const ui = (settings.config && settings.config.ui) || {};
   if (ui.verbosity) return ui.verbosity;
   return ui.verbose ? "verbose" : "quiet";
+}
+
+/** Step folding in the feed (option `ui.collapseSteps`, default on). Verbose
+ *  always keeps the full detail, regardless of the toggle. */
+export function collapseSteps(): boolean {
+  const ui = (settings.config && settings.config.ui) || {};
+  return ui.collapseSteps !== false && verbosity() !== "verbose";
 }
 
 // First non-empty line of a tool result — the calm one-line cause shown in

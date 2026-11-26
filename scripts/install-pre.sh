@@ -12,7 +12,7 @@
 #   all other MMA_* vars are passed through to install.sh unchanged
 set -eu
 
-PRE_TAG="v0.26.0-pre.1"
+PRE_TAG="v0.26.1-pre.1"
 MMA_REPO="Alexeykoh/micro-model-agent"
 RAW="https://raw.githubusercontent.com/${MMA_REPO}/pre/scripts"
 
