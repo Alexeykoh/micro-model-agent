@@ -133,10 +133,8 @@ export interface LoopState {
   /** Подряд идущие успешные итерации с тулами — вход для reasoning policy. */
   consecutiveToolSuccesses: number;
   /**
-   * `finish_reason` провайдера: без него обрыв ответа неотличим от мысли.
-   * DEBT(answer-truncated-on-audit-fail): при провале финального аудита ответ
-   * всё ещё может оборваться посреди фразы; причина сохраняется, но дочитывание
-   * или явная пометка «обрезано по лимиту» пока не реализованы.
+   * `finish_reason` провайдера: при `length` финальный ответ помечается как
+   * обрезанный по лимиту (truncated-answer.ts), а не выдаётся за полный.
    */
   lastFinishReason?: string;
   /** Счётчик повторных одинаковых тулов (exit-on-complete). */

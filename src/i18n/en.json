@@ -42,6 +42,7 @@
   "error.max_iters": "Max iterations ({max}) reached",
   "error.empty_response": "Model returned an empty response after retries",
   "error.audit_failed": "Task could not be verified as complete: {summary}",
+  "error.answer_truncated": "[TRUNCATED: provider token limit reached]",
   "error.retry_loop_stopped": "Stopped after {count} consecutive failed tool batches — the agent kept retrying a failing action instead of finishing",
   "error.stall_loop_stopped": "Stopped: {count} failed tool batches in one turn — the agent was not converging",
   "error.silent_loop_stopped": "Stopped after {count} tool steps in a row without a word to the user — the agent called tools in silence",
