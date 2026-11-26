@@ -14,7 +14,7 @@
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
-$PreTag = "v0.26.1-pre.1"
+$PreTag = "v0.26.2-pre.1"
 $MmaRepo = "Alexeykoh/micro-model-agent"
 $Raw = "https://raw.githubusercontent.com/$MmaRepo/pre/scripts"
 

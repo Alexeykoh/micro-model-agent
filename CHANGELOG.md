@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+## [0.26.2] - 2026-11-26
+
+- Opened 0.26.2 for the stale-prompt investigation (task 8VJYKE, session ses_mwxu5mg2_nxrbxpxslqxhwbso); fix in progress.
+
 ## [0.26.1] - 2026-11-26
 
 ### Added
