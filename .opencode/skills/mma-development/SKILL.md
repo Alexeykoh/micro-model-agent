@@ -18,7 +18,11 @@ AGENTS.md wins; report the conflict.
    follow that instruction — the user's branch point wins over the default.
 2. If the change touches a **contract** (data path, module boundary, enforcement
    point, event format, config schema) — write the spec first in
-   `docs/specs/<YYYY-MM-DD>-<topic>-design.md`, commit it in the same branch.
+   `docs/specs/<YYYY-MM-DD>-<topic>-design.md`, commit it in the same branch and
+   list it in `docs/specs/README.md` (the normative index of live specs). When a
+   contract is replaced or a feature ships, the spec/plan is **deleted**, not
+   archived — history stays in git (rules in `docs/README.md`). Docs gates:
+   `tests/docs-link-check.test.ts`, `tests/docs-consistency.test.ts`.
 3. If it touches `src/core/`, `src/tools/executor.ts`, `src/modules/security/`,
    `src/config/` — read §1 of `docs/specs/2026-10-12-architecture-v2-design.md` first.
 4. Split: a task that edits core + module + web + config is **four waves**, each with
@@ -36,7 +40,8 @@ bun run quality                             # typecheck + frontend + check:arch 
 - Behavior change → a test that **would fail** without your change.
 - UI/CLI change → a live run (`bun run mma "<prompt>"`), evidence in `session.jsonl`/log.
 - Text visible to the model/user → evidence in `session.jsonl` or a log entry.
-- Docs-only → `bun test tests/docs-link-check.test.ts` (links must resolve).
+- Docs-only → `bun test tests/docs-link-check.test.ts tests/docs-consistency.test.ts`
+  (links resolve; single-source descriptions don't drift).
 - Check all three dimensions: user UX · model ergonomics · adjacent modules.
 - CI is stricter: coverage 87% funcs / 90% lines, `bun run evals:check`,
   `bun test tests/replay`, POSIX `bun run quality:posix`. Local green ≠ CI green.
@@ -48,15 +53,26 @@ bun run quality                             # typecheck + frontend + check:arch 
 `src/tools/index.ts`. `ToolDefinition` must declare
 `security: { caps, pathArgs?, urlArgs?, manual? }` (compile error without it);
 enforcement happens in `ToolExecutor.execute()`, **never** in the handler. Set
-`tags`, `alwaysOn`, `timeoutMs`, `boundedOutput` deliberately.
+`tags`, `alwaysOn`, `timeoutMs`, `boundedOutput` deliberately. A file-writing tool
+with `pathArgs` must be in `OP_BY_TOOL` (or `EXCLUDED_TOOLS` with a reason) in
+`src/modules/changes/capture.ts` — `tests/arch/changes-coverage.test.ts` guards it,
+and `/undo` rollback depends on the snapshot.
 
-**New config key** — default only in `src/config/registry-extra.ts` groups
-(`registry.ts` is grandfathered). Types: string/int/share/bool/enum/json/list.
-`set` returns effects (`context.resize`, `provider.rebuild`…), not booleans.
+**New config key** — declare the key in a `src/config/registry-extra-*.ts` group
+(aggregated by `registry-extra.ts`; `registry.ts` is grandfathered) but put the
+**value in `DEFAULTS`** in `src/config/defaults.ts` — bootstrap/agent must not
+fabricate config sections from literals (`tests/arch/default-single-source.test.ts`).
+Types: string/int/share/bool/enum/json/list. `set` returns effects
+(`context.resize`, `provider.rebuild`…), not booleans. A user-facing key also needs
+a `PANEL_SECTIONS` entry in `src/modules/webui/assets/js/settings/controls.ts` and
+i18n keys in both dictionaries; a new domain goes in `src/config/domains.ts`.
 
-**New slash command** — declare in `src/core/commands/spec.ts` (catalog), bind the
-handler in `src/cli/repl-commands*.ts` via the handler map. Never a chain of `if`.
-Add i18n keys to **both** `en.json` and `ru.json` (`tests/i18n.test.ts` enforces parity).
+**New slash command** — add a `SPEC_DEFS` entry in `src/core/commands/spec.ts`
+(types and registry live in `catalog.ts`), bind the handler in
+`src/cli/repl-commands*.ts` via the handler map. Never a chain of `if`. Set
+`surfaces` only where a real handler exists (`web` requires a web or client-side
+handler) — `tests/core/command-catalog.test.ts`. Add i18n keys to **both**
+`en.json` and `ru.json` (`tests/i18n.test.ts` enforces parity).
 
 **New built-in skill** — `src/modules/skills/builtin/<file>.md`, frontmatter
 `name` (required), `description`, `keywords`, `mma_version: 2`. Copied to
@@ -89,6 +105,8 @@ and `src/core/session-log-telemetry.ts` plus the emitting site.
 - No `as any`. No boxed panels in chat output; tool names never shown to the user
   (only `tool.friendly.*`); one action glyph `◇` — canon in `docs/design/ui/STYLE.md`.
 - i18n: every user-visible string through `t()`.
+- No inline `<script>` in web UI HTML; scripts live in `theme.js`/ESM modules —
+  `tests/webui-csp-inline-script.test.ts`.
 - Versions are `0.x.y` only (beta); `1.0.0` fails `tests/version-beta.test.ts`.
 - Protected paths (`.git/`, `.env*`, keys, `.npmrc`, `.netrc`) are always-on.
 
@@ -105,7 +123,9 @@ and `src/core/session-log-telemetry.ts` plus the emitting site.
 
 ## Live mma web via `browse` (verified selectors)
 
-Ask for the port; the live stand uses `http://localhost:4319/`. Open a **new**
+Ask for the port; the local/dev stand uses `http://localhost:4319/`
+(`docs/agents/testing.md`); the docker stand is `http://<host>:7334/?token=…`
+(see AGENTS.md). Open a **new**
 tab with `browse.navigate({ url, id: "..." })` and keep the returned `tab` id
 for every call; close it with `browse.tabs({ action: "close", tab })` when done.
 Do not take over tabs the user lent you.
