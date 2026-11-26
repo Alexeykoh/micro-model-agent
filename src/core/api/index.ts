@@ -25,3 +25,6 @@ export type { CalibrationState } from "../agent/context-calibration";
 export type { Agent } from "../agent";
 // Мягкий reload источников (`/reload` на проводных поверхностях): тип отчёта.
 export type { ReloadSourcesResult } from "../sources-reload";
+// Vision-порт для модуля документов (INV-D7): ресайз + data URL из ядра.
+export type { ImageResizePort, PreparedVisionImage } from "./image-resize";
+export { coreImageResize } from "../vision-image";

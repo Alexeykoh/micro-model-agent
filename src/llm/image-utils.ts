@@ -64,6 +64,32 @@ export function imageDimensionsFromDataUrl(
   return undefined;
 }
 
+/** Приблизительный размер декодированных байт по base64-части data URL. */
+export function dataUrlBytes(dataUrl: string): number {
+  const comma = dataUrl.indexOf(",");
+  if (comma < 0) return dataUrl.length;
+  return Math.floor((dataUrl.length - comma - 1) * 3 / 4);
+}
+
+/**
+ * Подготовка растра для vision: ресайз в JPEG, при неудаче — исходный data URL.
+ * `resized` честно сообщает, удалось ли уменьшить изображение (fail-open).
+ */
+export async function prepareVisionImage(
+  bytes: Uint8Array,
+  mime: string,
+): Promise<{ dataUrl: string; mime: string; bytes: number; resized: boolean }> {
+  const buf = Buffer.from(bytes);
+  const jpeg = await resizeToJpegDataUrl(buf);
+  const dataUrl = jpeg ?? rawRasterDataUrl(buf, mime);
+  return {
+    dataUrl,
+    mime: jpeg ? "image/jpeg" : mime,
+    bytes: dataUrlBytes(dataUrl),
+    resized: jpeg !== null,
+  };
+}
+
 /**
  * Оценка токенов картинки по data URL: по пикселям, если размеры известны,
  * иначе — консервативно по размеру файла (0.75 байта на пиксель).

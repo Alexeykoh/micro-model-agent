@@ -5,6 +5,7 @@
  * жёсткий бюджет спеки для маленьких моделей: карта, чтение, индекс, поиск.
  */
 import type { ModuleDef } from "../../core/module-host";
+import { coreImageResize, type ImageResizePort } from "../../core/api/index";
 import { buildRegistry, DOCUMENTS_ENABLED } from "./registry";
 import { documentFindTool } from "./tools/document-find";
 import { documentIndexTool } from "./tools/document-index";
@@ -12,7 +13,7 @@ import { documentMapTool } from "./tools/document-map";
 import { documentReadTool } from "./tools/document-read";
 
 /** Определение модуля `documents` (INV-D3/D5/D7): некритичен, без настроек. */
-export function documentsModuleDef(): ModuleDef {
+export function documentsModuleDef(imageResize: ImageResizePort = coreImageResize): ModuleDef {
   const registry = buildRegistry();
   return {
     name: "documents",
@@ -26,7 +27,7 @@ export function documentsModuleDef(): ModuleDef {
       DOCUMENTS_ENABLED
         ? [
             documentMapTool(registry),
-            documentReadTool(registry),
+            documentReadTool(registry, imageResize),
             documentIndexTool(registry),
             documentFindTool(registry),
           ]

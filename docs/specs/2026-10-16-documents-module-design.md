@@ -280,14 +280,11 @@ W0.3): список внешних пакетов выводится из `packa
 деп, реально импортируемая `src/**`, отсутствует во входах `dist/main.js`. Покрыто
 `tests/documents/inline-check.test.ts` (прежде был долг `documents-inline-unverified`).
 
-**Честный пробел vision-изображений — `DEBT(documents-vision-image-seam)`.** Vision-путь
-`document_read` (W4) отправляет в `ToolResult.images` полный base64 оригинала и **не
-уменьшает** картинку (в отличие от `attach_image`); всё больше `MAX_VISION_BYTES` честно
-отклоняется (`documents.image_too_large`), а не заваливает контекст. Ресайз модуль выполнить
-не может: INV-D7 запрещает импорт `src/llm/*`, а MIME-карта и `buildDataUrl` в `media.ts`
-дублируют `src/llm/image-utils.ts`. Критерий выхода — core-шов, отдающий ресайз + data-URL
-для `ToolResult.images`; триггер — следующее изменение ядра/vision-пути. Запись — в
-[debt.md](../agents/debt.md).
+**Vision-изображения (долг оплачен 2026-11-26).** `document_read` запрашивает
+подготовку растра у core-шва `ImageResizePort` ([спека](./2026-11-26-vision-image-core-seam-design.md)):
+ядро отдаёт ресайз + data URL, дублирования `buildDataUrl` в `media.ts` больше нет. Всё,
+что осталось больше `MAX_VISION_BYTES` после ресайза, честно отклоняется
+(`documents.image_too_large`). Запись об оплате — в [debt.md](../agents/debt.md).
 
 ### 4.7 Тулы для модели
 
@@ -323,7 +320,7 @@ export function documentsModuleDef(deps: DocumentsDeps): ModuleDef {
     setup: () => { registry.warm(); },            // прогрев/валидация зависимостей
     teardown: () => { registry.dispose(); },      // закрыть кэш индекса/документов
     health: () => registry.health(),              // { status, reason?: "pdfjs не загрузился" }
-    tools: () => [documentMapTool(registry), documentReadTool(registry), /* W5 */],
+    tools: () => [documentMapTool(registry), documentReadTool(registry, imageResize), /* W5 */],
     // configKeys() НЕ объявляется — настроек нет (INV-D3)
   };
 }
