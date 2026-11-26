@@ -7,8 +7,9 @@
  *
  * Вынесено из `executor.ts` (правило 6: файл на потолке гейта).
  *
- * Остаток долга (DEBT(file-content-bypass-non-path-tools)): плагины и
- * переменные/подстановки в `bash` — эвристика по токенам их не видит.
+ * Плагин с `fs:read`, но без `pathArgs` не даёт знать, какой путь он прочитал:
+ * его вывод помечается file-content целиком (fail-closed). Переменные и
+ * подстановки в `bash` проверяются по токенам команды.
  */
 import type { ToolContext, ToolCall, ToolResult } from "./types";
 import type { RegisteredTool } from "./registry";
@@ -47,6 +48,30 @@ export function tagBlockedFileContent(
     }
   }
   return result;
+}
+
+/**
+ * Плагин, объявивший чтение файлов, но не назвавший аргументы-пути, не даёт
+ * движку проверить прочитанный путь. Тегировать весь его вывод — консервативно:
+ * для локального провайдера метка снимается, для внешнего 내용 режется.
+ */
+export function tagUndeclaredPluginRead(
+  tool: RegisteredTool,
+  result: ToolResult,
+  ctx: ToolContext,
+): ToolResult {
+  if (!result.success || typeof result.output !== "string" || result.output.length === 0) {
+    return result;
+  }
+  if (!tool.tags?.some((tag) => tag.startsWith("plugin:"))) return result;
+  if (tool.security?.pathArgs?.length) return result;
+  const reads = (tool.security?.caps ?? []).some(
+    (cap) => "fs" in cap && (cap.fs === "read" || cap.fs === "any"),
+  );
+  if (!reads) return result;
+  const dp = ctx.config.security?.dataPolicy;
+  if (dp?.enabled === false) return result;
+  return { ...result, output: tagFileContent(result.output) };
 }
 
 /** Токены команды, похожие на путь: не флаги, есть `/`, `\` или `.`. */
