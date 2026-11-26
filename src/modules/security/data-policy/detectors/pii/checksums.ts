@@ -1,7 +1,9 @@
 /**
  * Контрольные суммы идентификаторов (РФ/РБ). Только чистые функции — их
- * вызывают детекторы PII, чтобы отсеять случайные числа. УНП РБ и личный
- * номер РБ — без контрольной суммы (пониженный confidence, см. DEBT-регистр).
+ * вызывают детекторы PII, чтобы отсеять случайные числа.
+ *
+ * РБ: УНП — МНС №127 от 31.12.2003 (веса 29/23/19/17/13/7/5/3, mod 11),
+ * личный номер — МВД №345 от 18.10.2011 (веса 731 по модулю 10, A..Z = 10..35).
  */
 
 /** Алгоритм Луна: длина 13–19 цифр, сумма по модулю 10. */
@@ -78,6 +80,51 @@ export function ogrnValid(digits: string): boolean {
     return Number(base % 10n) === Number(digits[14]);
   }
   return false;
+}
+
+/** Кириллические гомоглифы латинских букв, встречающиеся в scanned-тексте. */
+const CYRILLIC_TO_LATIN: Record<string, string> = {
+  А: "A", В: "B", С: "C", Е: "E", Н: "H", К: "K", М: "M", О: "O", Р: "P", Т: "T",
+};
+
+function latinUpper(raw: string): string {
+  return raw
+    .trim()
+    .toUpperCase()
+    .replace(/[АВСЕНКМОРТ]/g, (ch) => CYRILLIC_TO_LATIN[ch] ?? ch);
+}
+
+const UNP_FIRST: Record<string, number> = { A: 10, B: 11, C: 12, E: 14, H: 17, K: 20, M: 22 };
+const UNP_SECOND: Record<string, number> = {
+  A: 0, B: 1, C: 2, E: 3, H: 4, K: 5, M: 6, O: 7, P: 8, T: 9,
+};
+const UNP_WEIGHTS = [29, 23, 19, 17, 13, 7, 5, 3];
+
+/** УНП РБ: 9 знаков, восемь взвешенных + контрольная цифра по mod 11 (МНС №127). */
+export function unpValid(raw: string): boolean {
+  const s = latinUpper(raw);
+  if (s.length !== 9 || !/^\d{7}$/.test(s.slice(2))) return false;
+  const first = /^\d$/.test(s[0]) ? Number(s[0]) : UNP_FIRST[s[0]];
+  const second = /^\d$/.test(s[1]) ? Number(s[1]) : UNP_SECOND[s[1]];
+  if (first === undefined || second === undefined) return false;
+  const values = [first, second, ...s.slice(2, 8).split("").map(Number)];
+  const check = values.reduce((sum, value, i) => sum + value * UNP_WEIGHTS[i], 0) % 11;
+  // Контрольная цифра 10 не используется — порядковый номер увеличивается.
+  return check < 10 && check === Number(s[8]);
+}
+
+/** Личный номер РБ: 7 цифр + A + 3 цифры + PB + цифра, веса 731 по mod 10 (МВД №345). */
+export function byIdValid(raw: string): boolean {
+  const s = latinUpper(raw);
+  if (!/^\d{7}A\d{3}PB\d$/.test(s)) return false;
+  const weights = [7, 3, 1];
+  let sum = 0;
+  for (let i = 0; i < 13; i++) {
+    const ch = s[i];
+    const value = /^\d$/.test(ch) ? Number(ch) : ch.charCodeAt(0) - 55;
+    sum += value * weights[i % weights.length];
+  }
+  return sum % 10 === Number(s[13]);
 }
 
 function checkDigit(digits: string, coef: number[], pos: number): boolean {

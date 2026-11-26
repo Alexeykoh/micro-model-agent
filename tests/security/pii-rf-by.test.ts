@@ -64,7 +64,7 @@ describe("PII детекторы — РБ", () => {
     expect(r.some((f) => f.kind === "by-phone")).toBe(true);
   });
 
-  it("УНП — пониженный confidence (без контрольной суммы)", () => {
+  it("УНП с неверной контрольной цифрой — пониженный confidence", () => {
     const r = detectByPii("УНП 190123456", []);
     const unp = r.find((f) => f.kind === "unp");
     expect(unp).toBeDefined();
