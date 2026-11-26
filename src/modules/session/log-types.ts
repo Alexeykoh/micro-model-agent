@@ -52,6 +52,7 @@ export interface SessionLogEntry {
     | "llm_request"
     | "subagent"
     | "command"
+    | "lsp"
     | "instructions_updated"
     | "change"
     | OnboardingEvent;
