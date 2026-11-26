@@ -40,7 +40,25 @@ export function findDocumentHandlerImports(files: ScanFile[]): string[] {
   return offenders;
 }
 
+/** INV-D7: модуль документов не импортирует `src/llm/*` — только `src/core/api/**`. */
+export function findDocumentLlmImports(files: ScanFile[]): string[] {
+  const graph = buildImportGraph(files);
+  const offenders: string[] = [];
+  for (const [from, edges] of graph) {
+    if (!from.startsWith("src/modules/documents/")) continue;
+    for (const e of edges) {
+      if (e.target.startsWith("src/llm/")) offenders.push(`${from}:${e.line}: ${e.specifier}`);
+    }
+  }
+  return offenders;
+}
+
 describe("architecture: documents boundaries (INV-D2)", () => {
+  it("модуль документов не импортирует src/llm/* (INV-D7)", () => {
+    const files = collectFiles(SRC_DIR, REPO_ROOT, [".ts"], { skipTests: true });
+    expect(findDocumentLlmImports(files)).toEqual([]);
+  });
+
   it("handlers/* импортируется извне только из registry.ts (внутри handlers/ — свободно)", () => {
     const files = collectFiles(SRC_DIR, REPO_ROOT, [".ts"], { skipTests: true });
     const offenders = findDocumentHandlerImports(files);
