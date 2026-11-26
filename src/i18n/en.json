@@ -228,7 +228,7 @@
   "documents.dir_unreadable": "Could not read the directory \"{path}\": it does not exist or is not accessible.",
   "documents.index_truncated_chunks": "Reached the total chunk budget ({max}); excess chunks were dropped.",
   "tool.truncated": "[Truncated: {tokens} tokens removed]",
-  "tool.output_admitted": "[output omitted: {tokens} tokens, {lines} lines — too large for context]\nSaved to: {artifact}\nSource: {source}\nPreview:\n{preview}\nInspect it with read_file (offset/limit) or chunk_query on the saved path.",
+  "tool.output_admitted": "[output omitted: {tokens} tokens, {lines} lines, {bytes} bytes — too large for context]\nSaved to: {artifact}\nHandle: {handle}\nDigest: sha256:{digest}\nSource: {source}\nPreview:\n{preview}\nInspect it with read_file (offset/limit) or chunk_query on the saved path.",
   "tool.output_admitted_display": "large output: {tokens} tokens, {lines} lines — saved to file",
   "tool.file_ops_budget": "[file operations left: {remaining}/{max}. Finish current edits; do not start new files.]",
   "critic.repair": "A verifier flagged critical problems; fix them before finishing:\n{issues}\nSummary: {summary}",
