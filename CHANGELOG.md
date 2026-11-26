@@ -1436,6 +1436,14 @@ subagents · plugins · mcp · map`. Subagents читает `GET /api/sessions/:
   не зависит от автозагрузки `Get-FileHash` через чужой `PSModulePath`.
   Гварды: `tests/install-retry.test.ts` (оба PowerShell 5.1/7 и `sh`, реальные
   обрывы/порча по локальному HTTP), `tests/arch/platform-skips.test.ts`.
+- **pre-push хук больше не может испортить сам репозиторий.** Git экспортирует
+  `GIT_DIR`/`GIT_WORK_TREE` в хуки, а `tests/critic-evidence.test.ts` запускает
+  `git init/add/commit` во временном каталоге: с унаследованным `GIT_DIR` эти
+  команды уходили в НАСТОЯЩИЙ репозиторий (`.git/config` становился `bare`, в
+  `master` попадал пустой коммит «init» — инцидент 2026-10-24). Хук чистит
+  repository-locating переменные до прогона гейта; `gitChangedFiles` в критике и
+  сам тест спавнят `git` с вычищенным env, поэтому `cwd` снова решает, какой
+  репозиторий читать. Гвард: `tests/arch/hook-git-env.test.ts`.
 
 ## [0.12.4] - 2026-10-24
 
