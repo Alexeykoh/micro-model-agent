@@ -16,6 +16,7 @@ import { ensureSessionStart } from "./session-start";import type { SystemPromptB
 import { refreshInstructionBlocks } from "../prompt-instructions";
 import { stopTurnProcesses } from "./turn-process-cleanup";
 import { getModule } from "./surface";
+import { preloadRemoteInstructions } from "../bootstrap/remote-instructions";
 
 /** Мутабельный вид `Agent`, которым владеет координатор хода. */
 export interface TurnRunHost {
@@ -99,6 +100,12 @@ export async function runTurn(
   // AGENTS.md — живой источник: перечитываем на ГРАНИЦЕ ХОДА, внутри хода
   // промпт имутабелен (KV-кеш). system заменяется на месте ниже, в
   // ensureSessionStart → refreshSystemPrompt, без новой записи в историю.
+  // Граница хода: обновляем HTTPS-источники до синхронной пересборки промпта.
+  await preloadRemoteInstructions(
+    config.instructions?.sources ?? [],
+    config.security?.network,
+  );
+
   const refreshed = refreshInstructionBlocks(
     deps.baseDir,
     deps.configDir,
