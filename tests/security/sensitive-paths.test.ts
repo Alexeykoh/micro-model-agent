@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -14,6 +14,15 @@ function tempDir(prefix: string): string {
   const dir = mkdtempSync(join(tmpdir(), prefix));
   dirs.push(dir);
   return dir;
+}
+
+/** Windows without developer mode cannot create file symlinks; junctions work. */
+function linkDir(target: string, link: string): void {
+  try {
+    symlinkSync(target, link, "dir");
+  } catch {
+    symlinkSync(target, link, "junction");
+  }
 }
 
 afterEach(() => {
@@ -72,5 +81,50 @@ describe("sensitive paths: config secrets and agent source", () => {
     expect(sensitiveCommandReason(`cat ${resolve("/app/src/config/env.ts")}`, workspace)).toContain(
       "source",
     );
+  });
+
+  it("blocks symlinks that point into private config paths", () => {
+    const cfg = tempDir("mma-cfg-");
+    const workspace = tempDir("mma-ws-");
+    process.env.MMA_CONFIG_DIR = cfg;
+
+    linkDir(cfg, join(workspace, "cfg-link"));
+    expect(sensitivePathReason(join(workspace, "cfg-link", ".encryption-key"), workspace)).toContain(
+      "key",
+    );
+    expect(
+      sensitivePathReason(join(workspace, "cfg-link", "sessions", "s1", "session.jsonl"), workspace),
+    ).toContain("private");
+
+    expect(
+      sensitiveCommandReason(
+        `cat ${join(workspace, "cfg-link", "sessions", "s1", "session.jsonl")}`,
+        workspace,
+      ),
+    ).toContain("private");
+  });
+
+  it("expands ${MMA_CONFIG_DIR} and unwraps sh -c commands", () => {
+    const cfg = tempDir("mma-cfg-");
+    const workspace = tempDir("mma-ws-");
+    process.env.MMA_CONFIG_DIR = cfg;
+
+    expect(sensitivePathReason("${MMA_CONFIG_DIR}/sessions/s1/session.jsonl", workspace)).toContain(
+      "private",
+    );
+    expect(
+      sensitiveCommandReason("sh -c 'cat ${MMA_CONFIG_DIR}/sessions/s1/session.jsonl'", workspace),
+    ).toContain("private");
+    expect(sensitivePathReason("${MMA_CONFIG_DIR}/config/provider.json", workspace)).toBeUndefined();
+  });
+
+  it("allows symlinks that stay inside the workspace", () => {
+    const cfg = tempDir("mma-cfg-");
+    const workspace = tempDir("mma-ws-");
+    process.env.MMA_CONFIG_DIR = cfg;
+
+    writeFileSync(join(workspace, "note.txt"), "ok");
+    linkDir(workspace, join(workspace, "self-link"));
+    expect(sensitivePathReason(join(workspace, "self-link", "note.txt"), workspace)).toBeUndefined();
   });
 });
