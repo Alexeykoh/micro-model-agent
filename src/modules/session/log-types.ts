@@ -81,6 +81,10 @@ export interface SessionLogEntry {
   }>;
   args?: Record<string, unknown>;
   content?: string;
+  /** `system`: длина полного промпта после redaction. */
+  chars?: number;
+  /** `system`: SHA-256 полного промпта после redaction (16 hex). */
+  sha256?: string;
   diff?: string;
   /** Причина окончания генерации: `stop` | `length` | `tool_calls` (ses_mvpk4zjl). */
   finish?: string;

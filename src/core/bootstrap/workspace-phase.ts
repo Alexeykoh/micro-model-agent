@@ -7,7 +7,7 @@
  */
 import { join, resolve } from "path";
 import { statSync } from "fs";
-import { buildSystemInfo, resolvePromptProfile, LARGE_WINDOW_THRESHOLD } from "../system-prompt";
+import { buildSystemInfo, resolvePromptProfile, isExplicitLargeProfile, LARGE_WINDOW_THRESHOLD } from "../system-prompt";
 import { collectPromptFacts } from "../prompt-facts";
 import { collectEnvironment, logEnvironment } from "../environment";
 import type { EnvironmentReport } from "../environment";
@@ -81,7 +81,8 @@ export interface WorkspacePhase {
  * Готовит workspace, окружение, индекс, скиллы и реестр тулов.
  * @param config живой конфиг; @param logger настроенный логгер;
  * @param dir каталог конфига; @param projectDir запрошенный workspace (опционально);
- * @param profile загруженный профиль пользователя (из фазы провайдера).
+ * @param profile загруженный профиль пользователя (из фазы провайдера);
+ * @param explicitKeys dotted-ключи, явно заданные в конфиге/env.
  * @returns каталог, отчёт окружения, индекс, скиллы, реестр, system-блок.
  */
 export async function setupWorkspacePhase(
@@ -90,6 +91,7 @@ export async function setupWorkspacePhase(
   dir: string,
   projectDir: string | undefined,
   profile: UserProfile,
+  explicitKeys: ReadonlySet<string>,
 ): Promise<WorkspacePhase> {
   const baseDir = resolveBaseDir(projectDir);
 
@@ -113,6 +115,7 @@ export async function setupWorkspacePhase(
     DEFAULTS.indexer.mapTokenBudget,
     config.contextWindow,
     LARGE_WINDOW_THRESHOLD,
+    explicitKeys.has("indexer.mapTokenBudget"),
   );
   const indexerModule = new IndexerModule({
     baseDir,
@@ -120,6 +123,7 @@ export async function setupWorkspacePhase(
     maxFiles: config.indexer?.maxFiles,
     respectGitignore: config.indexer?.respectGitignore,
     mapTokenBudget,
+    promptMapMode: isExplicitLargeProfile(config) ? "full" : "stub",
     logger: logger.child("indexer"),
   });
   try {

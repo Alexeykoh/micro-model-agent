@@ -112,9 +112,9 @@ export async function ensureSessionStart(
 
     const { prompt: systemPrompt, excluded } = input.buildSystemPrompt();
     contextManager.addMessage({ role: "system", content: systemPrompt });
-    slog.logSystem(systemPrompt.slice(0, 2000));
+    slog.logSystem(systemPrompt);
     if (excluded.length > 0) {
-      slog.logSystem(`[Excluded prompt blocks: ${excluded.length}]`);
+      slog.logSystem(`[Excluded prompt blocks: ${excluded.length}]`, false);
     }
     pluginManager.runOnSessionStart({
       logger,

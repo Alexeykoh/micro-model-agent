@@ -1,6 +1,7 @@
 // Чистые builders записей session-журнала для сообщений, вызовов тулов и
 // событий гейтов. Держат SessionLogger ≤300 (правило 6) и не дают формату
 // события расползтись по нескольким файлам.
+import { maskTokenIds, systemHash } from "../llm/request-snapshot";
 import type { SessionLogEntry } from "../modules/session/log-types";
 import type { ToolImageRef } from "../modules/session/image-store";
 import { redactContextSecrets } from "./agent/context-log";
@@ -15,9 +16,21 @@ export interface LogCaller {
   model?: string;
 }
 
-/** `system`: системное сообщение (секреты вырезаны). */
-export function systemEntry(content: string): LogEntry {
-  return { type: "system", content: redactContextSecrets(content) };
+/**
+ * `system`: системное сообщение (секреты и DLP-псевдонимы вырезаны).
+ * `full=false` — короткая служебная пометка (не полный промпт): без hash/длины.
+ * Пустой полный промпт не даёт события (`null`).
+ */
+export function systemEntry(content: string, full = true): LogEntry | null {
+  if (full && content.trim() === "") return null;
+  const redacted = maskTokenIds(redactContextSecrets(content));
+  if (!full) return { type: "system", content: redacted };
+  return {
+    type: "system",
+    content: redacted,
+    chars: redacted.length,
+    sha256: systemHash(redacted),
+  };
 }
 
 /** `instructions_updated`: версия инструкций и имена изменившихся источников. */

@@ -84,9 +84,16 @@ export class SessionLogger {
     this.session?.appendLog({ ts: new Date().toISOString(), source: "core", ...entry });
   }
 
-  /** Пишет системное сообщение в лог сессии. */
-  logSystem(content: string): void {
-    this.log(systemEntry(content));
+  /** Пишет system fail-open: сбой записи → session_degraded, вызов модели не падает. */
+  logSystem(content: string, full = true): void {
+    try {
+      const entry = systemEntry(content, full);
+      if (entry) this.log(entry);
+    } catch (err) {
+      const cause = err instanceof Error ? err.message : String(err);
+      try { this.logDiagnosticEvent("session_degraded", { source: "core", operation: "session.system_log", kind: "degraded", cause, recoverable: true }); }
+      catch { this.logger?.warn("system prompt log failed; diagnostic also unavailable"); }
+    }
   }
 
   /** Версия инструкций без содержимого файлов. */
@@ -103,21 +110,8 @@ export class SessionLogger {
   /**
    * Пишет ответ ассистента (+ reasoning и tool_calls при наличии).
    */
-  logAssistant(
-    content: string,
-    reasoning?: string,
-    toolCalls?: ToolCall[],
-    iteration?: number,
-    finish?: string,
-  ): void {
-    const entries = assistantEntries(
-      content,
-      reasoning,
-      toolCalls,
-      iteration,
-      finish,
-      this.getCaller?.(),
-    );
+  logAssistant(content: string, reasoning?: string, toolCalls?: ToolCall[], iteration?: number, finish?: string): void {
+    const entries = assistantEntries(content, reasoning, toolCalls, iteration, finish, this.getCaller?.());
     for (const entry of entries) this.log(entry);
   }
 

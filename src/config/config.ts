@@ -81,10 +81,37 @@ export interface LoadConfigOptions {
   projectConfigPath: string;
 }
 
+/**
+ * Dotted-ключи-листья сырого конфига (до слияния с DEFAULTS). Контейнеры и
+ * не-plain значения (RegExp/Date/массивы) записываются как листья.
+ */
+export function collectExplicitKeys(raw: unknown, prefix = "", out = new Set<string>()): Set<string> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const dotted = prefix ? `${prefix}.${key}` : key;
+    if (value && typeof value === "object") {
+      const proto = Object.getPrototypeOf(value);
+      // RegExp/Date/Map… и массивы — листья: рекурсия по ним теряет сам ключ.
+      if (proto === Object.prototype || proto === null) {
+        collectExplicitKeys(value, dotted, out);
+        continue;
+      }
+    }
+    out.add(dotted);
+  }
+  return out;
+}
+
 export interface LoadConfigResult {
   config: AppConfig;
   /** true, если использовался legacy config.json (файлов доменов нет). */
   legacyDetected: boolean;
+  /**
+   * Явно заданные ключи из всех слоёв и env. Файловые слои дают dotted-листья
+   * (`indexer.mapTokenBudget`), env — ключи оверрайдов как есть (`provider`).
+   * Контейнеры из файлов здесь НЕ фиксируются — проверяйте конкретный лист.
+   */
+  explicitKeys: ReadonlySet<string>;
 }
 
 /**
@@ -117,17 +144,20 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
   // которые рантайм-изменения конфига мутировать не должны.
   let config: AppConfig = structuredClone(DEFAULTS);
   let legacyDetected = false;
+  const explicitKeys = new Set<string>();
 
   // Шаг 2: legacy config.json (фолбэк). Если конфиг уже сконвертирован из v1,
   // сырые v1-поля НЕ мержатся (в них другие имена модели и плоский провайдер).
   const globalData = migrated ? null : loadJSON(globalPath);
   if (globalData) {
+    for (const k of collectExplicitKeys(globalData)) explicitKeys.add(k);
     applyCriticTimeoutMigration(globalData as Partial<AppConfig>);
     applyExpertModelMigration(globalData as Partial<AppConfig>);
     config = deepMerge(config, globalData as Partial<AppConfig>);
     legacyDetected = true;
   }
   if (migrated) {
+    for (const k of collectExplicitKeys(migrated)) explicitKeys.add(k);
     // Из сконвертированного v1 в рантайм идут провайдер и лимиты контекста.
     // Имя модели из v1 НЕ переносим: там были другие идентификаторы
     // (`qwen2.5-7b` против `qwen/qwen3.5-9b`), и подставить его — значит
@@ -143,6 +173,7 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
   // Шаг 3: файлы доменов (поверх legacy).
   const domainConfig = loadDomainFiles(options.configDir);
   if (domainConfig) {
+    for (const k of collectExplicitKeys(domainConfig)) explicitKeys.add(k);
     applyCriticTimeoutMigration(domainConfig);
     applyExpertModelMigration(domainConfig);
     config = deepMerge(config, domainConfig);
@@ -152,6 +183,7 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
   // Шаг 4: проектный .mmrc (поверх всего).
   const projectData = loadJSON(options.projectConfigPath);
   if (projectData) {
+    for (const k of collectExplicitKeys(projectData)) explicitKeys.add(k);
     applyCriticTimeoutMigration(projectData as Partial<AppConfig>);
     applyExpertModelMigration(projectData as Partial<AppConfig>);
     config = deepMerge(config, projectData as Partial<AppConfig>);
@@ -170,6 +202,7 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
 
   // Шаг 6: env-переменные.
   const { config: envConfig, overrides } = applyEnvVars(config);
+  for (const o of overrides) explicitKeys.add(o.key);
   config = envConfig;
 
   // Шаг 7: decrypt.
@@ -192,7 +225,7 @@ export function loadConfig(options: LoadConfigOptions): LoadConfigResult {
 
   if (overrides.length > 0) rememberEnvOverrides(config, overrides);
 
-  return { config, legacyDetected };
+  return { config, legacyDetected, explicitKeys };
 }
 
 /** Валидирует конфиг против известных тегов тулов. Ошибки — throw. */

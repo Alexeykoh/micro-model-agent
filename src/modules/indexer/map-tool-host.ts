@@ -13,6 +13,7 @@ export interface MapToolHostInput {
   buildIndex: () => Promise<IndexResult | null>;
   refresh: () => Promise<IndexResult | null>;
   getIndex: () => IndexResult | null;
+  getPromptMap: (focus?: string) => string | null;
   summarize: (result: IndexResult) => string;
   hasIndexedSymbols: (query: string) => boolean;
   getSymbolProvider: () => unknown;
@@ -29,6 +30,7 @@ export function buildMapToolHost(input: MapToolHostInput): MapToolHost {
     buildIndex: input.buildIndex,
     refresh: input.refresh,
     getIndex: input.getIndex,
+    getPromptMap: input.getPromptMap,
     summarize: input.summarize,
     hasIndexedSymbols: input.hasIndexedSymbols,
     getSymbolProvider: input.getSymbolProvider,
