@@ -8,6 +8,7 @@ import { resolveToolVisibility } from "../../src/core/bootstrap/tool-visibility"
 import { buildHiddenToolsBlock } from "../../src/tools/hidden-tools-block";
 import type { ToolDefinition } from "../../src/tools/types";
 import { DEFAULTS } from "../../src/config/defaults";
+import { IndexerModule } from "../../src/modules/indexer";
 
 const auto131k = { ...structuredClone(DEFAULTS), promptProfile: "auto", contextWindow: 131072 } as never;
 const large131k = { ...structuredClone(DEFAULTS), promptProfile: "large", contextWindow: 131072 } as never;
@@ -56,6 +57,14 @@ describe("tool visibility profile", () => {
     expect(block.length).toBeGreaterThan(0);
     expect(block).toContain("web_search");
     expect(buildHiddenToolsBlock(tools, [])).toBe("");
+  });
+
+  it("stub-режим карты короткий и помечен kind=project-map", () => {
+    const mod = new IndexerModule({ baseDir: process.cwd(), cacheDir: "<tmp>", promptMapMode: "stub" });
+    const block = mod.getSystemPromptBlock();
+    expect(block?.kind).toBe("project-map");
+    expect((block?.content.length ?? 0) < 400).toBe(true);
+    expect(block?.content).toContain("project_map");
   });
 
   it("session-phase берёт видимость из чистого seam, а не из resolvePromptProfile", () => {

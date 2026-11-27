@@ -154,6 +154,39 @@ export function selectByRank(
   return out;
 }
 
+/** Ранг «нет отношения к focus» (худший; в selectByRank идёт последним). */
+export const FOCUS_RANK_NONE = 99;
+
+/**
+ * Детерминированный ранг «карты вокруг файла»: сам файл, затем соседи по
+ * папке (только если файл есть в индексе), затем файлы одноимённой папки
+ * (`agent.ts` → `agent/`), затем файлы с общими экспортами; остальные —
+ * `FOCUS_RANK_NONE`.
+ */
+export function focusRanks(files: IndexedFile[], focus: string): Map<string, number> {
+  const norm = (p: string): string => p.replace(/\\/g, "/").toLowerCase();
+  const parent = (p: string): string => {
+    const i = p.lastIndexOf("/");
+    return i < 0 ? "" : p.slice(0, i);
+  };
+  const f = norm(focus).replace(/\/$/, "");
+  const stem = f.replace(/\.[a-z0-9]+$/, "");
+  const focusFile = files.find((x) => norm(x.path) === f);
+  const focusExports = new Set(focusFile?.exports.map((e) => e.toLowerCase()) ?? []);
+  const ranks = new Map<string, number>();
+  for (const item of files) {
+    const p = norm(item.path);
+    let rank = FOCUS_RANK_NONE;
+    if (p === f) rank = 0;
+    else if (focusFile && parent(p) === parent(f)) rank = 1;
+    else if (focusFile && p.startsWith(`${stem}/`)) rank = 2;
+    else if (item.exports.some((e) => focusExports.has(e.toLowerCase()))) rank = 3;
+    // Ключ как в computeRanks/selectByRank: прямые слеши, регистр сохранён.
+    ranks.set(item.path.replace(/\\/g, "/"), rank);
+  }
+  return ranks;
+}
+
 /** Находит файл для outline по пути/суффиксу/имени (null, если нет). */
 export function matchOutline(files: IndexedFile[], query: string): IndexedFile | null {
   const q = query.trim().replace(/\\/g, "/").toLowerCase();

@@ -7,7 +7,7 @@
  */
 import { join, resolve } from "path";
 import { statSync } from "fs";
-import { buildSystemInfo, resolvePromptProfile, LARGE_WINDOW_THRESHOLD } from "../system-prompt";
+import { buildSystemInfo, resolvePromptProfile, isExplicitLargeProfile, LARGE_WINDOW_THRESHOLD } from "../system-prompt";
 import { collectPromptFacts } from "../prompt-facts";
 import { collectEnvironment, logEnvironment } from "../environment";
 import type { EnvironmentReport } from "../environment";
@@ -123,6 +123,7 @@ export async function setupWorkspacePhase(
     maxFiles: config.indexer?.maxFiles,
     respectGitignore: config.indexer?.respectGitignore,
     mapTokenBudget,
+    promptMapMode: isExplicitLargeProfile(config) ? "full" : "stub",
     logger: logger.child("indexer"),
   });
   try {

@@ -8,10 +8,12 @@ import { estimateTokens } from "../../llm/token-counter";
 
 import { createProjectMapTool, type MapToolHost } from "./map-tool";
 import { buildMapToolHost } from "./map-tool-host";
-import { mapInfoOf, formatMapOf, type MapViewInput } from "./map-info";
+import { mapInfoOf, formatMapOf, stubMapPromptBlock, type MapViewInput } from "./map-info";
 import { findFiles, findText, hasIndexedSymbols, outlineText, symbolsText } from "./queries";
 import { IndexWatch } from "./watch";
 import type { SymbolProvider } from "./provider";
+
+export { LARGE_MAP_TOKEN_BUDGET, effectiveMapTokenBudget } from "./map-info";
 
 export type { SymbolLocationHit, SymbolProvider } from "./provider";
 
@@ -25,36 +27,13 @@ export interface IndexerModuleOptions {
   respectGitignore?: boolean;
   /** Токен-бюджет списка файлов карты (PageRank-отбор; см. selectByRank). */
   mapTokenBudget?: number;
+  /** Режим блока карты в системном промпте (по умолчанию — полная карта). */
+  promptMapMode?: "full" | "stub";
   logger?: import("../../logger/app-logger").Logger;
 }
 
 /** Дефолтный токен-бюджет списка файлов карты. */
 const MAP_TOKEN_BUDGET = 1500;
-
-/**
- * Бюджет карты на больших окнах (L2): 1500 токенов — это 1% окна 200K,
- * модель получает выжимку вместо карты. Явное значение конфига побеждает;
- * дефолт масштабируется (см. `effectiveMapTokenBudget` в workspace-фазе).
- */
-export const LARGE_MAP_TOKEN_BUDGET = 6000;
-
-/**
- * Эффективный бюджет карты (L2): явный конфиг — как есть; дефолт на большом
- * окне поднимается до `LARGE_MAP_TOKEN_BUDGET`. Чистая — тестируется отдельно.
- * `explicit` — ключ реально присутствовал в конфиге/env; значение, равное
- * дефолту, остаётся пользовательским.
- */
-export function effectiveMapTokenBudget(
-  configured: number | undefined,
-  defaultBudget: number,
-  contextWindow: number,
-  largeWindowThreshold: number,
-  explicit = false,
-): number {
-  if (explicit) return configured ?? defaultBudget;
-  if (configured !== undefined && configured !== defaultBudget) return configured;
-  return contextWindow >= largeWindowThreshold ? LARGE_MAP_TOKEN_BUDGET : defaultBudget;
-}
 
 /** Модуль индексатора: кэш, карта проекта для промпта, тул project_map, вотчер. */
 export class IndexerModule implements AgentModule {
@@ -65,6 +44,7 @@ export class IndexerModule implements AgentModule {
   private baseDir: string;
   private maxFiles: number;
   private mapTokenBudget: number;
+  private promptMapMode: "full" | "stub";
   private index: IndexResult | null = null;
   private symbolProvider: SymbolProvider | null = null;
   private mapCache: { index: IndexResult; value: ProjectMapInfo } | null = null;
@@ -76,6 +56,7 @@ export class IndexerModule implements AgentModule {
     this.baseDir = opts.baseDir;
     this.maxFiles = opts.maxFiles ?? DEFAULT_MAX_FILES;
     this.mapTokenBudget = opts.mapTokenBudget ?? MAP_TOKEN_BUDGET;
+    this.promptMapMode = opts.promptMapMode ?? "full";
     this.indexer = new Indexer(opts.baseDir, {
       maxFiles: this.maxFiles,
       respectGitignore: opts.respectGitignore,
@@ -183,9 +164,10 @@ export class IndexerModule implements AgentModule {
     return outlineText(this.index, query);
   }
 
-  /** Точный текст карты проекта для системного промпта (null без индекса). */
-  getPromptMap(): string | null {
-    return this.index ? this.formatMap(this.index) : null;
+  /** Точный текст карты (с ранжированием вокруг focus; null без индекса). */
+  getPromptMap(focus?: string): string | null {
+    if (!this.index) return null;
+    return formatMapOf(this.mapView(), this.index, focus);
   }
 
   /**
@@ -204,6 +186,7 @@ export class IndexerModule implements AgentModule {
 
   /** Блок системного промпта с картой проекта (null без индекса). */
   getSystemPromptBlock(): PromptBlock | null {
+    if (this.promptMapMode === "stub") return stubMapPromptBlock();
     if (!this.index) return null;
     const content = this.formatMap(this.index);
     return {
@@ -291,6 +274,7 @@ export class IndexerModule implements AgentModule {
       formatFind: (query) => this.formatFind(query),
       formatSymbols: (query) => this.formatSymbols(query),
       formatOutline: (query) => this.formatOutline(query),
+      getPromptMap: (focus) => this.getPromptMap(focus),
     });
   }
 

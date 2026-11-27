@@ -16,6 +16,7 @@ export interface MapToolHost {
   buildIndex(): Promise<IndexResult | null>;
   refresh(): Promise<IndexResult | null>;
   getIndex(): IndexResult | null;
+  getPromptMap(focus?: string): string | null;
   summarize(result: IndexResult): string;
   hasIndexedSymbols(query: string): boolean;
   getSymbolProvider(): SymbolProvider | null;
@@ -38,18 +39,27 @@ export function createProjectMapTool(host: MapToolHost): ToolDefinition {
       properties: {
         action: {
           type: "string",
-          enum: ["summary", "refresh", "find", "symbol", "outline"],
+          enum: ["summary", "refresh", "map", "find", "symbol", "outline"],
           description: t("indexer.project_map_action_desc"),
         },
         query: {
           type: "string",
           description: t("indexer.project_map_query_desc"),
         },
+        focus: {
+          type: "string",
+          description: t("indexer.project_map_focus_desc"),
+        },
       },
       required: ["action"],
     },
     handler: async (_ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> =>
-      runProjectMapAction(host, String(args.action || "summary"), String(args.query || "")),
+      runProjectMapAction(
+        host,
+        String(args.action || "summary"),
+        String(args.query ?? ""),
+        String(args.focus ?? ""),
+      ),
   };
 }
 
@@ -58,11 +68,15 @@ function runProjectMapAction(
   host: MapToolHost,
   action: string,
   rawQuery: string,
+  rawFocus: string,
 ): Promise<ToolResult> | ToolResult {
   const query = rawQuery.trim();
+  const focus = rawFocus.trim();
   switch (action) {
     case "refresh":
       return refreshMap(host);
+    case "map":
+      return mapResult(host, focus || query);
     case "find":
       return queryResult(host, query, () => host.formatFind(query));
     case "symbol":
@@ -81,6 +95,21 @@ async function refreshMap(host: MapToolHost): Promise<ToolResult> {
   const stackLine = result ? buildProjectProfileLine(host.baseDir) : null;
   const output = summary && stackLine ? `${summary}\n${stackLine}` : summary;
   return makeResult(t("indexer.refreshed", { summary: output }));
+}
+
+/** `map`: ранжированный список файлов, опционально вокруг `focus`. */
+function mapResult(host: MapToolHost, focus: string): ToolResult {
+  const index = host.getIndex();
+  if (!index) return { success: false, output: t("indexer.not_indexed") };
+  const normalized = focus.replace(/\\/g, "/");
+  if (
+    focus &&
+    !index.files.some((file) => file.path.replace(/\\/g, "/") === normalized)
+  ) {
+    return { success: false, output: t("indexer.focus_unknown", { path: focus }) };
+  }
+  const text = host.getPromptMap(focus) ?? t("indexer.not_indexed");
+  return makeResult(text);
 }
 
 /** `summary`: гарантирует индекс и отдаёт сводку + профиль стека. */
