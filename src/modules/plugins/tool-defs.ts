@@ -60,7 +60,7 @@ export function wrapPluginHandler(handler: ToolDefinition["handler"]): ToolDefin
   };
 }
 
-/** Тег плагина + `alwaysOn` по умолчанию: иначе `enable_tools` спрятал бы тул. */
+/** Тег плагина; по умолчанию тул скрыт и возвращается через `enable_tools plugin:<name>`. */
 export function withPluginMeta(plugin: string, name: string, def: ToolDefinition): ToolDefinition {
   const tag = pluginToolTag(plugin);
   const tags = [...(def.tags ?? [])];
@@ -70,7 +70,7 @@ export function withPluginMeta(plugin: string, name: string, def: ToolDefinition
     ...def,
     name,
     tags,
-    alwaysOn: def.alwaysOn ?? true,
+    alwaysOn: def.alwaysOn ?? false,
     handler: wrapPluginHandler(def.handler),
   };
 }

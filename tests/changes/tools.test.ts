@@ -71,10 +71,10 @@ describe("changes tools", () => {
   it("declares write capability and a path argument for restore, no alwaysOn", () => {
     expect(restoreFileTool.security).toEqual({ caps: [{ fs: "write" }], pathArgs: ["path"] });
     expect(restoreFileTool.alwaysOn).toBeUndefined();
-    expect(restoreFileTool.tags).toEqual(["file"]);
+    expect(restoreFileTool.tags).toEqual(["file-advanced"]);
     expect(listFileChangesTool.security.caps).toEqual([{ fs: "read" }]);
     expect(listFileChangesTool.alwaysOn).toBeUndefined();
-    expect(listFileChangesTool.tags).toEqual(["file"]);
+    expect(listFileChangesTool.tags).toEqual(["file-advanced"]);
   });
 
   it("returns a readable message when no session is attached", async () => {

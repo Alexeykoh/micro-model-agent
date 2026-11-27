@@ -15,7 +15,7 @@ export function documentMapTool(registry: DocumentRegistry): ToolDefinition {
     name: "document_map",
     security: { caps: [{ fs: "read" }], pathArgs: ["path"] },
     icon: "🗂️",
-    tags: ["document", "file"],
+    tags: ["document"],
     boundedOutput: true,
     cacheable: true,
     description: t("documents.map_desc"),

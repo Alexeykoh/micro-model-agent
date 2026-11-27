@@ -14,7 +14,7 @@ export const deleteFileTool: ToolDefinition = {
   security: { caps: [{ fs: "write" }], pathArgs: ["path"] },
   icon: "🗑️",
   description: "Delete a file from the filesystem.",
-  tags: ["file"],
+  tags: ["file-advanced"],
   parameters: {
     type: "object",
     properties: {

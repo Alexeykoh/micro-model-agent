@@ -30,7 +30,7 @@ export function documentFindTool(registry: DocumentRegistry, logger?: Logger): T
     name: "document_find",
     security: { caps: [{ fs: "read" }], pathArgs: ["dir"] },
     icon: "🔎",
-    tags: ["document", "file"],
+    tags: ["document"],
     boundedOutput: true,
     cacheable: false,
     description: t("documents.find_desc"),

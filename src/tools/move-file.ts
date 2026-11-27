@@ -15,7 +15,7 @@ export const moveFileTool: ToolDefinition = {
   security: { caps: [{ fs: "write" }], pathArgs: ["from", "to"] },
   icon: "📦",
   description: "Move or rename a file or directory.",
-  tags: ["file"],
+  tags: ["file-advanced"],
   parameters: {
     type: "object",
     properties: {

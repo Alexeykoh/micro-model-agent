@@ -28,11 +28,8 @@ describe("buildHiddenToolsBlock", () => {
       tool("plan", undefined, true),
     ];
     const block = buildHiddenToolsBlock(tools, ["file"]);
-    expect(block).toContain("web_search");
-    expect(block).toContain("browser");
-    expect(block).toContain("[research]");
-    expect(block).toContain("[browser]");
-    expect(block).toContain("[vision]");
+    expect(block).toContain("web_search [research]");
+    expect(block).toContain("browser [browser, vision]");
     // AlwaysOn + tag-matching tools are not hidden.
     expect(block).not.toContain("read_file");
     expect(block).not.toContain("plan");
@@ -56,16 +53,20 @@ describe("buildHiddenToolsBlock", () => {
     expect(buildHiddenToolsBlock(tools, [])).toBe("");
   });
 
-  it("groups hidden tools by their first tag and sorts names", () => {
+  it("lists each hidden tool once with all tags, sorted by name", () => {
     const tools = [
-      tool("web_fetch", ["research"]),
-      tool("web_search", ["research"]),
+      tool("web_search", ["web", "research"]),
+      tool("attach_image", ["image", "vision"]),
+      tool("web_fetch", ["web", "research"]),
       tool("remember", ["memory"]),
     ];
     const block = buildHiddenToolsBlock(tools, ["file"]);
-    const lines = block.split("\n");
-    const researchLine = lines.find((l) => l.startsWith("- [research]"));
-    expect(researchLine).toBe("- [research] web_fetch, web_search");
+    expect(block.split("\n").filter((l) => l.startsWith("- "))).toEqual([
+      "- attach_image [image, vision]",
+      "- remember [memory]",
+      "- web_fetch [web, research]",
+      "- web_search [web, research]",
+    ]);
   });
 });
 
@@ -184,8 +185,11 @@ describe("filterToolsWithOverrides", () => {
 });
 
 describe("memory tools", () => {
-  it("stay in the schema even when the active tags are narrow", () => {
-    const visible = filterToolsByTags([rememberTool, recallTool], ["file", "code"]);
-    expect(visible.map((t) => t.name)).toEqual(["remember", "recall"]);
+  it("are hidden by default and return with the memory tag", () => {
+    expect(filterToolsByTags([rememberTool, recallTool], ["file", "code"])).toEqual([]);
+    expect(filterToolsByTags([rememberTool, recallTool], ["memory"]).map((t) => t.name)).toEqual([
+      "remember",
+      "recall",
+    ]);
   });
 });

@@ -36,7 +36,7 @@ export function documentReadTool(
     name: "document_read",
     security: { caps: [{ fs: "read" }], pathArgs: ["path"] },
     icon: "📄",
-    tags: ["document", "file"],
+    tags: ["document"],
     boundedOutput: true,
     cacheable: true,
     description: t("documents.read_desc"),

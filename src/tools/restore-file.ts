@@ -99,7 +99,7 @@ export const restoreFileTool: ToolDefinition = {
     "file first or pass force.",
   security: { caps: [{ fs: "write" }], pathArgs: ["path"] },
   icon: "↩️",
-  tags: ["file"],
+  tags: ["file-advanced"],
   boundedOutput: true,
   parameters: {
     type: "object",

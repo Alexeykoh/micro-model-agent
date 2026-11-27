@@ -242,9 +242,11 @@ describe("plan_step tool", () => {
     return stepModule.getToolDefinitions().find((t) => t.name === "plan_step")!;
   }
 
-  it("is registered as alwaysOn with step/status schema", () => {
+  it("is on-demand via core tag with step/status schema", () => {
     const tool = stepTool();
     expect(tool).toBeDefined();
+    expect(tool!.tags).toContain("core");
+    expect(tool!.alwaysOn).toBeUndefined();
     const props = tool!.parameters.properties as Record<string, any>;
     expect(props.step).toBeDefined();
     expect(props.status.enum).toEqual(["done", "failed", "skipped"]);
