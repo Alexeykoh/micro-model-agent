@@ -21,6 +21,12 @@ export const SETTLE_EMPTY_MS = 250;
  */
 export const PROJECT_SETTLE_MS = 1000;
 
+/**
+ * Окно для versionless-пуша после didChange: ждём возможную замену, но не
+ * отбрасываем принятые диагностики, если сервер больше ничего не пришлёт.
+ */
+export const VERSIONLESS_SETTLE_MS = 250;
+
 type ReadRecord = () => DiagnosticRecord | undefined;
 
 /** Ждём запись диагностик нужной версии (опционально — отличную от прежней). */

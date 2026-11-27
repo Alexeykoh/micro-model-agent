@@ -10,7 +10,14 @@ import type {
   PublishDiagnosticsParams,
 } from "./connection-types";
 import { fatalError } from "./connection-errors";
-import { settleEmptyDiagnostics, waitForRecord, PROJECT_SETTLE_MS } from "./diagnostics-wait";
+import type { LspClientLogger } from "./client-logger";
+import {
+  settleEmptyDiagnostics,
+  waitForRecord,
+  PROJECT_SETTLE_MS,
+  VERSIONLESS_SETTLE_MS,
+} from "./diagnostics-wait";
+import { VersionlessTracker, type VersionlessCounters } from "./versionless-tracker";
 import type { LspDiagnostic } from "./types";
 import { canonicalUri, uriToPath } from "./uri";
 
@@ -35,6 +42,10 @@ export interface DocumentStoreDeps {
   notify: (method: string, params: unknown) => void;
   /** Отметить соединение использованным (idle/LRU). */
   touch: () => void;
+  /** Лог счётчиков versionless-пушей (только в app.jsonl). */
+  logger?: LspClientLogger | null;
+  /** Ключ соединения для меток в логе. */
+  key?: string;
 }
 
 export class DocumentStore {
@@ -42,14 +53,28 @@ export class DocumentStore {
   private readonly diagnostics = new Map<string, DiagnosticRecord>();
   /** Растёт на каждом фактическом `didOpen`/`didChange`. */
   private revision = 0;
+  private readonly versionless: VersionlessTracker;
 
-  constructor(private readonly deps: DocumentStoreDeps) {}
+  constructor(private readonly deps: DocumentStoreDeps) {
+    this.versionless = new VersionlessTracker({ logger: deps.logger, key: deps.key });
+  }
 
   /** Забыть все документы и диагностики (новое соединение или teardown). */
   clear(): void {
     this.documents.clear();
     this.diagnostics.clear();
     this.revision = 0;
+    this.versionless.clear();
+  }
+
+  /** Счётчики гонки versionless-пушей (для лога и диагностики). */
+  counters(): VersionlessCounters {
+    return this.versionless.snapshot();
+  }
+
+  private bumpRevision(uri: string): void {
+    this.revision++;
+    this.versionless.noteSync(uri, this.revision);
   }
 
   /** Открытые сейчас документы (для статуса UI). */
@@ -83,14 +108,14 @@ export class DocumentStore {
     }
     const diskStamp = diskStampOf(uri);
     if (!current?.open) {
-      this.revision++;
+      this.bumpRevision(uri);
       this.documents.set(uri, { uri, languageId, version: 1, text, open: true, diskStamp, draft });
       this.deps.notify("textDocument/didOpen", {
         textDocument: { uri, languageId, version: 1, text },
       });
       return;
     }
-    this.revision++;
+    this.bumpRevision(uri);
     const next: DocumentState = {
       ...current,
       version: current.version + 1,
@@ -176,15 +201,12 @@ export class DocumentStore {
     let diagnostics: LspDiagnostic[] | null;
     if (record && record.version === version) {
       if (record.validatedRevision < this.revision) {
-        // Запись посчитана до правки другого файла. Сервер переопубликует
-        // диагностику только затронутых файлов, поэтому ждём ограниченное окно:
-        // не дождались — файл не затронут, прежняя запись остаётся верной.
-        await waitForRecord(
-          () => this.diagnostics.get(uri),
-          version,
-          Math.min(timeoutMs, PROJECT_SETTLE_MS),
-          record,
-        );
+        // Запись посчитана до правки (своего или другого файла). Сервер
+        // переопубликует диагностику только затронутых файлов, поэтому ждём
+        // окно: не дождались — прежняя запись остаётся в силе. Для
+        // versionless-пуша окно короткое — это и есть двухфазный приём.
+        const window = record.provisional ? VERSIONLESS_SETTLE_MS : PROJECT_SETTLE_MS;
+        await waitForRecord(() => this.diagnostics.get(uri), version, Math.min(timeoutMs, window), record);
         this.validateAll();
       }
       diagnostics = this.diagnostics.get(uri)?.diagnostics ?? record.diagnostics;
@@ -200,7 +222,7 @@ export class DocumentStore {
   /** После окна ожидания все принятые записи подтверждены на текущей ревизии. */
   private validateAll(): void {
     for (const [uri, record] of this.diagnostics) {
-      this.diagnostics.set(uri, { ...record, validatedRevision: this.revision });
+      this.diagnostics.set(uri, { ...record, validatedRevision: this.revision, provisional: false });
     }
   }
 
@@ -219,16 +241,22 @@ export class DocumentStore {
     if (!doc?.open) return;
     // Пуш от старой версии документа — игнор (антиретро-правки).
     if (params.version !== undefined && params.version < doc.version) return;
-    // DEBT(lsp-versionless-push): typescript-language-server не присылает
-    // version, поэтому поздно пришедший пуш от старого текста нельзя отличить
-    // от нового — он помечается текущей версией (см. docs/agents/debt.md).
-    // Сохраняем ВЕРСИЮ, за которую сервер считал: текущая версия документа могла
-    // уехать вперёд, и тогда диагностики помечались бы как свежие (аудит §8.3).
+    // У versionless-пуша нет номера, по которому видно «старый текст». Если
+    // после предыдущего пуша был didChange, запись идёт в двухфазный приём:
+    // короткое окно на замену, но без выбрасывания, если замены не будет.
+    const prior = this.diagnostics.get(uri);
+    const verdict = this.versionless.notePush(
+      uri,
+      this.revision,
+      params.version !== undefined,
+      prior?.provisional === true,
+    );
     const version = params.version ?? doc.version;
     this.diagnostics.set(uri, {
       version,
       revision: this.revision,
-      validatedRevision: this.revision,
+      validatedRevision: verdict.validatedRevision,
+      provisional: verdict.provisional,
       diagnostics: params.diagnostics,
     });
     this.deps.touch();

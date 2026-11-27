@@ -69,6 +69,11 @@ export interface DiagnosticRecord {
   revision: number;
   /** Ревизия, на которой запись в последний раз подтверждена как актуальная. */
   validatedRevision: number;
+  /**
+   * versionless-пуш, пришедший после didChange: запись ждёт короткого окна
+   * на замену. Без замены остаётся в силе — диагностики не выбрасываются.
+   */
+  provisional?: boolean;
   diagnostics: import("./types").LspDiagnostic[];
 }
 
