@@ -26,6 +26,8 @@ const DEFAULT_SPILL_DIR = ".mma/context";
 const SPILL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** Кап файлов в одной сессии — защита от бесконечного роста при частых admission. */
 const SPILL_MAX_PER_SESSION = 50;
+/** Маркер обрезки, добавленный тулом/плагином ДО admission (вывод уже неполон). */
+const UPSTREAM_TRUNCATION_RE = /\r?\n\.\.\. truncated \((\d+) more chars\)\s*$/;
 
 /**
  * Стабильный идентификатор артефакта: путь от рабочего каталога с прямыми
@@ -152,7 +154,10 @@ export function admitToolResult(result: ToolResult, opts: AdmitOptions): ToolRes
       ? `${previewRaw.slice(0, PREVIEW_MAX_CHARS).trimEnd()}…`
       : previewRaw;
   const digest = createHash("sha256").update(output).digest("hex");
-  const descriptor = t("tool.output_admitted", {
+  // Вывод мог быть обрезан ещё до admission (например, плагином press-f-tasks).
+  // Спилл тогда содержит только фрагмент — обещать его «дочитать» нельзя.
+  const missing = UPSTREAM_TRUNCATION_RE.exec(output)?.[1];
+  const params = {
     tokens: String(tokens),
     lines: String(lines),
     bytes: String(Buffer.byteLength(output, "utf8")),
@@ -161,15 +166,20 @@ export function admitToolResult(result: ToolResult, opts: AdmitOptions): ToolRes
     digest,
     source: opts.source ?? "-",
     preview,
-  });
+    missing: missing ?? "0",
+  };
+  const descriptor = t(
+    missing ? "tool.output_admitted_partial" : "tool.output_admitted",
+    params,
+  );
   return {
     ...result,
     output: descriptor,
     artifactPath: artifact,
-    display: t("tool.output_admitted_display", {
-      tokens: String(tokens),
-      lines: String(lines),
-    }),
+    display: t(
+      missing ? "tool.output_admitted_partial_display" : "tool.output_admitted_display",
+      { tokens: params.tokens, lines: params.lines },
+    ),
   };
 }
 

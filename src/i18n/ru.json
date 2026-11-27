@@ -210,6 +210,8 @@
   "tool.truncated": "[Обрезано: удалено {tokens} токенов]",
   "tool.output_admitted": "[вывод скрыт: {tokens} токенов, {lines} строк, {bytes} байт — слишком большой для контекста]\nСохранено: {artifact}\nHandle: {handle}\nDigest: sha256:{digest}\nИсточник: {source}\nПревью:\n{preview}\nСмотри через read_file (offset/limit) или chunk_query по сохранённому пути.",
   "tool.output_admitted_display": "большой вывод: {tokens} токенов, {lines} строк — сохранён в файл",
+  "tool.output_admitted_partial": "[вывод обрезан до MMA: потеряно {missing} символов; фрагмент {tokens} токенов / {bytes} байт]\nСохранён фрагмент: {artifact}\nHandle: {handle}\nDigest: sha256:{digest} (только фрагмент)\nИсточник: {source}\nПревью:\n{preview}\nФайл неполный: чтение не восстановит потерянные данные. Повтори запрос с меньшим limit или без includeSubtasks.",
+  "tool.output_admitted_partial_display": "обрезанный вывод: {tokens} токенов, {lines} строк — сохранён неполный фрагмент",
   "tool.file_ops_budget": "[осталось файловых операций: {remaining}/{max}. Заверши текущие правки, новые файлы не создавай.]",
   "critic.repair": "Верификатор отметил критичные проблемы; исправь их до завершения:\n{issues}\nСводка: {summary}",
   "critic.advice": "Верификатор указал на проблемы, которые стоит проверить. Исправь их и ответь заново:\n{issues}",

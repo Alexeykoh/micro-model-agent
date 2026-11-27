@@ -230,6 +230,8 @@
   "tool.truncated": "[Truncated: {tokens} tokens removed]",
   "tool.output_admitted": "[output omitted: {tokens} tokens, {lines} lines, {bytes} bytes — too large for context]\nSaved to: {artifact}\nHandle: {handle}\nDigest: sha256:{digest}\nSource: {source}\nPreview:\n{preview}\nInspect it with read_file (offset/limit) or chunk_query on the saved path.",
   "tool.output_admitted_display": "large output: {tokens} tokens, {lines} lines — saved to file",
+  "tool.output_admitted_partial": "[output truncated upstream: {missing} chars were lost before MMA saw it; fragment {tokens} tokens / {bytes} bytes]\nSaved fragment: {artifact}\nHandle: {handle}\nDigest: sha256:{digest} (fragment only)\nSource: {source}\nPreview:\n{preview}\nThe saved file is incomplete: reading it will NOT recover the missing data. Re-run with a smaller limit or fewer fields (e.g. drop includeSubtasks).",
+  "tool.output_admitted_partial_display": "truncated output: {tokens} tokens, {lines} lines — saved partial fragment",
   "tool.file_ops_budget": "[file operations left: {remaining}/{max}. Finish current edits; do not start new files.]",
   "critic.repair": "A verifier flagged critical problems; fix them before finishing:\n{issues}\nSummary: {summary}",
   "critic.advice": "A verifier flagged issues worth checking. Address them and answer again:\n{issues}",
