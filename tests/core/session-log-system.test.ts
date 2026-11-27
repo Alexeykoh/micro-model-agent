@@ -40,6 +40,26 @@ describe("system event", () => {
     expect(note.chars).toBeUndefined();
   });
 
+  it("llm_request можно записать из CLI без webui-моста", () => {
+    const records: Array<Record<string, unknown>> = [];
+    const manager: SessionManager = Object.assign(Object.create(SessionManager.prototype), {
+      getActive: () => "ses_test",
+      getActiveMeta: () => null,
+      appendLog: (entry: Record<string, unknown>) => records.push(entry),
+    });
+    const logger: Logger = Object.assign(Object.create(Logger.prototype), { warn: () => {} });
+    const slog = new SessionLogger(manager, logger);
+    const snap = buildRequestSnapshot(
+      { messages: [{ role: "system", content: "S" }], tools: [] },
+      { model: "m", stream: false, sessionId: "ses_test" },
+    );
+
+    slog.logLlmRequest(snap);
+
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({ type: "llm_request", source: "core", llmRequest: snap });
+  });
+
   it("fail-open: сбой записи system не роняет вызов и пишет diagnostic", () => {
     const records: Array<Record<string, unknown>> = [];
     let attempts = 0;

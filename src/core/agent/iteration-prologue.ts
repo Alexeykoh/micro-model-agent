@@ -181,12 +181,15 @@ export async function runIterationPrologue(
     state.iteration,
   );
 
-  if (state.iteration === 1) {
-    const { blocks } = host.buildSystemPrompt();
-    host.logContextStat("start", state.iteration, slog, blocks);
-  } else {
-    host.logContextStat("iteration", state.iteration, slog);
-  }
+  // Разбивка system пишется на КАЖДОЙ итерации: по ней видно, какой именно
+  // блок вошёл/выпал по бюджету после enable_tools и компакции (W3).
+  const { blocks } = host.buildSystemPrompt();
+  host.logContextStat(
+    state.iteration === 1 ? "start" : "iteration",
+    state.iteration,
+    slog,
+    blocks,
+  );
 
   return { allToolsForBudget, boundedToolNames, toolTokenEstimate, history };
 }

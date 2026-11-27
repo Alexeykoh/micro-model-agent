@@ -1,14 +1,6 @@
 /**
- * Снимок **исходящего** запроса к провайдеру (U20): то, что реально уйдёт в
- * сеть — уже после DLP-проекции (`sanitizeChat`), но до `fetch`.
- *
- * Зачем: пользователь должен сам убедиться, что защита работает, и увидеть
- * точный состав промпта (`system → messages → tools`) и параметры вызова.
- * Снимок не содержит оригиналов по построению — их уже нет в теле запроса.
- *
- * Шов — процесс-глобальный sink (как `setEgressDiagnosticSink`): провайдер не
- * знает про сессии и журнал, а bootstrap связывает его с `session.jsonl` и SSE.
- * Fail-open: снимок не имеет права уронить вызов модели.
+ * Снимок исходящего запроса (U20): состав `system → messages → tools` после DLP,
+ * до `fetch`. Fail-open. bootstrap связывает sink с `session.jsonl` и SSE.
  */
 
 import { createHash } from "node:crypto";
@@ -41,11 +33,15 @@ export interface SnapshotMessage {
   clipped?: boolean;
 }
 
-/** Дефиниция тула в снимке: имя + (усечённое) описание. */
+/** Дефиниция тула в снимке: имя, описание и коррелятор JSON-схемы. */
 export interface SnapshotTool {
   name: string;
   description?: string;
   descriptionClipped?: boolean;
+  /** SHA-256 `JSON.stringify(parameters)`, 16 hex — какая схема реально ушла. */
+  parametersSha256?: string;
+  /** Длина полной схемы до сериализации описания. */
+  parametersChars?: number;
 }
 
 /** Параметры вызова, влияющие на поведение модели. */
@@ -89,6 +85,9 @@ export type RequestSnapshotSink = (snap: LlmRequestSnapshot) => void;
 
 const sinkSet = new Set<RequestSnapshotSink>();
 let seq = 0;
+// Webui-мост или ядро: кто пишет llm_request в session.jsonl. Иначе один и тот
+// же снимок попадает в журнал дважды (SSE при этом остаётся у webui).
+let persistenceOwner = false;
 
 /**
  * Подписаться на снимки запросов; возвращает отписку.
@@ -100,6 +99,16 @@ let seq = 0;
 export function subscribeRequestSnapshots(fn: RequestSnapshotSink): () => void {
   sinkSet.add(fn);
   return () => sinkSet.delete(fn);
+}
+
+/** Отметить, что webui уже пишет снимки в журнал (ядро не дублирует). */
+export function setSnapshotPersistenceOwner(owner: boolean): void {
+  persistenceOwner = owner;
+}
+
+/** true, когда журнал снимков ведёт webui-мост. */
+export function hasSnapshotPersistenceOwner(): boolean {
+  return persistenceOwner;
 }
 
 /** Включён ли сбор (проверка до построения снимка). */
@@ -136,14 +145,7 @@ function textOfPart(part: unknown): string {
   return "";
 }
 
-/**
- * Псевдоним DLP (`<PATH:7788799a4d82>`) → метка класса (`‹PATH›`).
- *
- * Снимок снимается после проекции, поэтому в тексте стоят псевдонимы с id. Но
- * id — ключ обратимости: с картой токенов он возвращает оригинал. В UI и
- * `session.jsonl` id попадать не должен (INV-DLP-1), поэтому снимок несёт
- * только метку класса.
- */
+/** Псевдоним DLP → метка класса: id обратим, в лог он не попадает (INV-DLP-1). */
 export function maskTokenIds(text: string): string {
   return text.replace(/<\s*([A-Za-z][A-Za-z-]*)\s*:[^>]*>/g, "‹$1›");
 }
@@ -216,10 +218,20 @@ export function buildRequestSnapshot(
           ? clip(maskTokenIds(rec.description), SNAPSHOT_LIMITS.toolDescription)
           : undefined;
       if (desc?.clipped) truncated = true;
+      const paramsText =
+        rec.parameters && typeof rec.parameters === "object"
+          ? JSON.stringify(rec.parameters)
+          : undefined;
       tools.push({
         name,
         ...(desc ? { description: desc.text } : {}),
         ...(desc?.clipped ? { descriptionClipped: true } : {}),
+        ...(paramsText
+          ? {
+              parametersSha256: systemHash(paramsText),
+              parametersChars: paramsText.length,
+            }
+          : {}),
       });
     }
   }
