@@ -32,6 +32,8 @@ export interface DynamicBlocksParams {
   activeTags: string[];
   /** Онбординг-allowlist: сужает набор, блок скрытых тулов не показываем. */
   toolAllowlist?: string[];
+  /** Per-session тумблеры: каталог и счётчики должны совпадать со схемой. */
+  toolOverrides?: { enabled?: string[]; disabled?: string[] };
   /** Блок возможностей плагинов — считает вызывающий (свой pluginManager). */
   capabilitiesBlock?: PromptBlock | null;
 }
@@ -59,9 +61,9 @@ export function assembleDynamicPromptBlocks(p: DynamicBlocksParams): PromptBlock
   if (p.capabilitiesBlock) blocks.push(p.capabilitiesBlock);
   const hiddenToolsBlock = p.toolAllowlist
     ? null
-    : buildHiddenToolsBlock(p.registry.getAll(), p.activeTags);
+    : buildHiddenToolsBlock(p.registry.getAll(), p.activeTags, p.toolOverrides);
   if (hiddenToolsBlock) {
-    const counts = hiddenToolCounts(p.registry.getAll(), p.activeTags);
+    const counts = hiddenToolCounts(p.registry.getAll(), p.activeTags, p.toolOverrides);
     const contract = buildToolContractBlock(counts);
     // Контракт essential: даже если каталог вылетит по бюджету, модель знает,
     // что вызывать можно только схемы и как включить недостающий capability.

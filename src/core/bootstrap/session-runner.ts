@@ -204,6 +204,7 @@ export function createSessionRunnerFactory(
       registry,
       runnerTags,
       toolAllowlist: toolCtx.toolAllowlist,
+      toolOverrides: toolCtx.toolOverrides,
       pluginManager: runnerPlugins,
     });
 

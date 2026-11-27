@@ -179,6 +179,7 @@ export function collectDynamicPromptBlocks(
     registry: input.toolRegistry,
     activeTags: input.activeToolTags,
     toolAllowlist: input.toolCtx.toolAllowlist,
+    toolOverrides: input.toolCtx.toolOverrides,
     capabilitiesBlock: capabilitiesBlock ? { source: "plugins", ...capabilitiesBlock } : null,
   });
 }

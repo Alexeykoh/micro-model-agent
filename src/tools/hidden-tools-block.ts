@@ -1,5 +1,6 @@
 /** Блоки системного промпта о доступности тулов: исполняемая схема vs знание. */
 import type { ToolDefinition } from "./types";
+import { filterToolsWithOverrides } from "./filter-tools";
 
 /** Счётчики доступности, согласованные с селектором схемы. */
 export interface ToolCounts {
@@ -8,23 +9,18 @@ export interface ToolCounts {
   total: number;
 }
 
-/**
- * Видимые тулы — те же, что попадают в схему при выборе по тегам
- * (`alwaysOn` ∪ активные теги). Имена уникальны: тул с несколькими тегами
- * считается один раз (иначе 9B модель считала его дважды).
- */
-function visibleToolNames(allTools: ToolDefinition[], activeTags: string[]): Set<string> {
-  const active = new Set(activeTags);
-  const visible = new Set<string>();
-  for (const tool of allTools) {
-    if (tool.alwaysOn || tool.tags?.some((tag) => active.has(tag))) visible.add(tool.name);
-  }
-  return visible;
-}
+/** Per-session переопределения тулов (mma web → Tools). */
+export type ToolOverrides = { enabled?: string[]; disabled?: string[] };
 
 /** Счётчики active/hidden/total для одного и того же набора тулов. */
-export function hiddenToolCounts(allTools: ToolDefinition[], activeTags: string[]): ToolCounts {
-  const visible = visibleToolNames(allTools, activeTags).size;
+export function hiddenToolCounts(
+  allTools: ToolDefinition[],
+  activeTags: string[],
+  overrides?: ToolOverrides,
+): ToolCounts {
+  const visible = new Set(
+    filterToolsWithOverrides(allTools, activeTags, overrides).map((t) => t.name),
+  ).size;
   return { active: visible, hidden: allTools.length - visible, total: allTools.length };
 }
 
@@ -56,10 +52,16 @@ export function buildToolContractBlock(counts: ToolCounts): string {
  * Имя тула встречается ровно один раз: дубли по тегам раньше давали
  * неверный счёт у 9B моделей. Пустые теги (legacy «все тулы») — блок не нужен.
  */
-export function buildHiddenToolsBlock(allTools: ToolDefinition[], activeTags: string[]): string {
+export function buildHiddenToolsBlock(
+  allTools: ToolDefinition[],
+  activeTags: string[],
+  overrides?: ToolOverrides,
+): string {
   if (!allTools.length || activeTags.length === 0) return "";
 
-  const visible = visibleToolNames(allTools, activeTags);
+  const visible = new Set(
+    filterToolsWithOverrides(allTools, activeTags, overrides).map((t) => t.name),
+  );
   const hidden = allTools.filter((tool) => !visible.has(tool.name));
   if (hidden.length === 0) return "";
 

@@ -235,6 +235,7 @@ export interface RunnerDynamicBlocksInput {
   registry: ToolRegistry;
   runnerTags: string[];
   toolAllowlist?: string[];
+  toolOverrides?: { enabled?: string[]; disabled?: string[] };
   /** Плагин-менеджер раннера — для блока возможностей (INV-16). */
   pluginManager: PluginManager;
 }
@@ -258,6 +259,7 @@ export function buildRunnerDynamicBlocks(input: RunnerDynamicBlocksInput): () =>
       registry: input.registry,
       activeTags: input.runnerTags,
       toolAllowlist: input.toolAllowlist,
+      toolOverrides: input.toolOverrides,
       capabilitiesBlock: capabilitiesBlock ? { source: "plugins", ...capabilitiesBlock } : null,
     });
   };

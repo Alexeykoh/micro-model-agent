@@ -1311,6 +1311,7 @@
   "tools.enable_already_active": "Tool tags already active: {tags}.",
   "tools.enable_added": "Enabled tool tags: {tags}. Available tools now: {tools}",
   "tools.enable_all_visible": "All tools are already visible in this session — nothing to enable.",
+  "tools.enable_unknown_tag": "Unknown tool tag: {tag}. Known tags: {known}. Nothing was enabled.",
   "tools.hidden_header": "Additional tools (enable on demand via enable_tools or route to subagent tool_tags):",
   "tool.friendly.enable_tools": "Enable tools",
   "tool.friendly.set_thinking": "Set reasoning level",
