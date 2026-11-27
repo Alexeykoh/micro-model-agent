@@ -26,6 +26,12 @@ describe("scale-aware budgets (L1/L2/L3)", () => {
     expect(effectiveMapTokenBudget(20000, 1500, 200000, 128000)).toBe(20000);
   });
 
+  it("L2: явное значение, равное дефолту, не scale-ится", () => {
+    expect(effectiveMapTokenBudget(1500, 1500, 200000, 128000, true)).toBe(1500);
+    expect(effectiveMapTokenBudget(1500, 1500, 200000, 128000, false)).toBe(6000);
+    expect(effectiveMapTokenBudget(500, 1500, 200000, 128000, true)).toBe(500);
+  });
+
   it("L2: catalog stays at 10 on small budgets, widens on large", () => {
     const skills = Array.from({ length: 30 }, (_, i) => skill(`s${i}`, 10));
     const small = buildCatalogBlock(skills, undefined, CATALOG_LIMIT)!;

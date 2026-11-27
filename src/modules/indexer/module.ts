@@ -41,13 +41,17 @@ export const LARGE_MAP_TOKEN_BUDGET = 6000;
 /**
  * Эффективный бюджет карты (L2): явный конфиг — как есть; дефолт на большом
  * окне поднимается до `LARGE_MAP_TOKEN_BUDGET`. Чистая — тестируется отдельно.
+ * `explicit` — ключ реально присутствовал в конфиге/env; значение, равное
+ * дефолту, остаётся пользовательским.
  */
 export function effectiveMapTokenBudget(
   configured: number | undefined,
   defaultBudget: number,
   contextWindow: number,
   largeWindowThreshold: number,
+  explicit = false,
 ): number {
+  if (explicit) return configured ?? defaultBudget;
   if (configured !== undefined && configured !== defaultBudget) return configured;
   return contextWindow >= largeWindowThreshold ? LARGE_MAP_TOKEN_BUDGET : defaultBudget;
 }

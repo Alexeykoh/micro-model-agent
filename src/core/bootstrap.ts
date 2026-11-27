@@ -97,7 +97,7 @@ export async function bootstrap(
   contextLog?: boolean,
 ): Promise<BootstrapResult> {
   // Фаза 1: пути, конфиг, локаль, логгер.
-  const { dir, config, legacyDetected, logger } = await initConfigPhase(
+  const { dir, config, legacyDetected, explicitKeys, logger } = await initConfigPhase(
     configDir,
     projectDir,
     reasoningLevel,
@@ -110,7 +110,9 @@ export async function bootstrap(
   const provider = await setupProviderPhase(config, logger, dir);
 
   // Фаза 3: workspace, окружение, индекс, скиллы, реестр тулов, system-блок.
-  const workspace = await setupWorkspacePhase(config, logger, dir, projectDir, provider.profile);
+  const workspace = await setupWorkspacePhase(
+    config, logger, dir, projectDir, provider.profile, explicitKeys,
+  );
 
   // Фаза 4: сессии, context-лог, менеджер контекста, живой toolCtx.
   const session = await setupSessionPhase({

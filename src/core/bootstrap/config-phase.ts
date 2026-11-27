@@ -46,6 +46,8 @@ export interface ConfigPhase {
   config: AppConfig;
   /** true при легаси config.json (доменных файлов нет). */
   legacyDetected: boolean;
+  /** Явно заданные ключи из всех слоёв конфига и env (до слияния с дефолтами). */
+  explicitKeys: ReadonlySet<string>;
   /** Настроенный логгер (logDir + i18n-репортер уже подключены). */
   logger: Logger;
 }
@@ -54,7 +56,7 @@ export interface ConfigPhase {
  * Грузит конфиг и готовит логгер.
  * @param configDir каталог конфига (опционально); @param projectDir workspace (опционально);
  * @param reasoningLevel CLI-override reasoning (опционально).
- * @returns каталог, конфиг, флаг легаси и логгер.
+ * @returns каталог, конфиг, флаг легаси, явные ключи и логгер.
  */
 export async function initConfigPhase(
   configDir?: string,
@@ -64,7 +66,7 @@ export async function initConfigPhase(
   const dir = configDir || globalMmaDir();
   const projectConfigPath = projectDir ? join(projectDir, ".mmrc") : join(process.cwd(), ".mmrc");
 
-  const { config, legacyDetected } = loadConfig({ configDir: dir, projectConfigPath });
+  const { config, legacyDetected, explicitKeys } = loadConfig({ configDir: dir, projectConfigPath });
   setLocale(config.locale);
 
   // CLI --reasoning перебивает режим конфига (приоритет: CLI > config > default)
@@ -117,5 +119,5 @@ export async function initConfigPhase(
     // Метки сертификации косметические — старт не блокируем никогда.
   }
 
-  return { dir, projectConfigPath, config, legacyDetected, logger };
+  return { dir, projectConfigPath, config, legacyDetected, explicitKeys, logger };
 }
