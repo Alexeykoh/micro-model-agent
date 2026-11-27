@@ -34,9 +34,10 @@ export function buildToolContractBlock(counts: ToolCounts): string {
   return [
     "TOOL AVAILABILITY — READ ONCE",
     "The only tools you can CALL are the JSON function schemas sent with this request.",
-    "The catalog below is KNOWLEDGE: locked names, not callable. Count only schemas.",
+    "Catalog below is KNOWLEDGE: locked, not callable. Count only schemas.",
     `IF asked "what tools do you have?" → "${counts.active} callable now; ${counts.hidden} on request via enable_tools".`,
     "Never list locked names as owned.",
+    "Categories from schemas only — never from the catalog.",
     "IF you need a locked capability → enable_tools with its tag;",
     "schema appears NEXT iteration (same turn).",
     'Example: "weather in Moscow" → enable_tools ["web"] →',
@@ -75,7 +76,7 @@ export function buildHiddenToolsBlock(
 
   const lines = ["LOCKED CATALOG (knowledge, not callable — enable with enable_tools first):"];
   for (const [tag, names] of [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
-    lines.push(`- ${tag}: ${[...names].sort().join(", ")}`);
+    lines.push(`- locked ${tag}: ${[...names].sort().join(", ")}`);
   }
   return lines.join("\n");
 }

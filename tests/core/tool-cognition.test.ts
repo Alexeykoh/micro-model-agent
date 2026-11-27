@@ -35,6 +35,7 @@ describe("tool cognition prompt", () => {
     expect(contract).toContain("KNOWLEDGE");
     expect(contract).toContain("IF asked");
     expect(contract).toContain("3 callable now");
+    expect(contract).toContain("Categories from schemas only");
     expect(contract).toContain('enable_tools ["web"]');
     expect(contract).not.toContain("Names below are NOT in your tool list");
     expect(estimateTokens(contract)).toBeLessThanOrEqual(180);
@@ -42,9 +43,9 @@ describe("tool cognition prompt", () => {
 
   it("groups locked names by tag instead of presenting a flat owned-tools list", () => {
     const catalog = buildHiddenToolsBlock(tools, ["file", "code"]);
-    expect(catalog).toContain("- web: web_fetch, web_search");
-    expect(catalog).toContain("- file-advanced: append_file");
-    expect(catalog).toContain("- memory: remember");
+    expect(catalog).toContain("- locked web: web_fetch, web_search");
+    expect(catalog).toContain("- locked file-advanced: append_file");
+    expect(catalog).toContain("- locked memory: remember");
     expect(catalog).not.toContain("read_file");
     expect(catalog).not.toContain("do not describe them as available");
   });
