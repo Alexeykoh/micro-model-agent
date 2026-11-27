@@ -55,7 +55,10 @@ export function earlyToolRejection(
   // активного набора тегов блокируется ДО хендлера. Критерий — тот же, что у
   // `filterToolsByTags` (alwaysOn переживает сужение); пустой набор тегов —
   // легаси «все тулы».
-  if (!forcedOn && filterToolsByTags([tool], ctx.activeToolTags ?? []).length === 0) {
+  // При жёстком allowlist схема строится только по именам (`selectForLLM`),
+  // поэтому tag-фильтр на исполнении должен быть отключён: иначе тул виден
+  // модели, но блокируется при вызове.
+  if (!allow && !forcedOn && filterToolsByTags([tool], ctx.activeToolTags ?? []).length === 0) {
     return {
       success: false,
       output: t("tool.tags_blocked", { name: call.name }),

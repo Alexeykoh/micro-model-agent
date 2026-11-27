@@ -40,8 +40,7 @@ export async function runSubagent(
     ? getSessionSecurityConfig(ctx.config, ctx.sessionContext)
     : ctx.config.security;
 
-  // Лимит глубины рекурсии. Глубину читаем из SHARED-контекста исполнителя
-  // (его видят вложенные субагенты) — `ctx.recursionDepth` снапшотился раз.
+  // Глубина из SHARED-контекста исполнителя (видна вложенным субагентам).
   const executor = ctx.toolExecutor;
   const parentDepth = executor?.getRecursionDepth?.() ?? ctx.recursionDepth ?? 0;
   const maxDepth = securityConfig?.maxRecursionDepth ?? 3;
@@ -84,9 +83,7 @@ export async function runSubagent(
     return { success: false, output: t("tool.subagent_cannot_run") };
   }
 
-  // Модель эксперта (если задан expert_tag) исполняется на выделенном
-  // провайдере поверх активного (или на записи `experts[tag].provider`);
-  // пустая модель эксперта — общий провайдер родителя (INV-E1/E2).
+  // Модель эксперта: выделенный провайдер или родительский (INV-E1/E2).
   const baseProvider = resolveExpertProvider(
     ctx.config,
     expertModel,
@@ -127,13 +124,13 @@ export async function runSubagent(
   // родителя навсегда.
   const parentScope = executor?.getScope?.() ?? ctx.scope;
   const appliedScope = resolveSubagentScope(scope, parentScope);
-  // Свой менеджер плагинов у ребёнка (A5): иначе застревание и счётчики
-  // флейлинга родителя видят падения ребёнка как свои; форк даёт и свой
-  // контекст для счётчиков bash.
+  // Свой PluginManager ребёнка (A5) — иначе состояние плагинов общее с родителем.
   const subPluginManager = new PluginManager();
   const scopeCollector = new ScopeDenialCollector();
   subPluginManager.register(scopeCollector.plugin, "builtin");
   const childExecutor = executor?.fork?.(subPluginManager);
+  // Свои tool_tags: схема и enforcement читают один массив, не родительский.
+  if (toolTags && toolTags.length > 0) childExecutor?.setActiveToolTags?.([...toolTags]);
   const restoreScope = () => {
     if (childExecutor && childExecutor.getScope?.() === appliedScope) childExecutor.setScope(parentScope);
   };

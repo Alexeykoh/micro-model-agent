@@ -45,6 +45,28 @@ export const enableToolsTool: ToolDefinition = {
         output: t("tools.enable_all_visible"),
       };
     }
+    // Неизвестный тег давал success:true без изменения схемы — модель получала
+    // ложное подтверждение и галлюцинировала вызов. Проверяем по реестру, когда
+    // он доступен (старые поверхности с мок-исполнителем сохраняют поведение).
+    const registry = ctx.toolExecutor?.getRegistry?.();
+    if (registry) {
+      const known = new Set<string>();
+      for (const def of registry.getAll()) {
+        for (const tag of def.tags ?? []) known.add(tag);
+      }
+      for (const tag of requested) {
+        if (!known.has(tag)) {
+          return {
+            success: false,
+            output: t("tools.enable_unknown_tag", {
+              tag,
+              known: [...known].sort().join(", "),
+            }),
+          };
+        }
+      }
+    }
+
     const active = rawActive ?? [];
     const added: string[] = [];
     for (const tag of requested) {

@@ -17,6 +17,7 @@ import { refreshInstructionBlocks } from "../prompt-instructions";
 import { stopTurnProcesses } from "./turn-process-cleanup";
 import { getModule } from "./surface";
 import { preloadRemoteInstructions } from "../bootstrap/remote-instructions";
+import { installTurnRequestLog } from "./request-log";
 
 /** Мутабельный вид `Agent`, которым владеет координатор хода. */
 export interface TurnRunHost {
@@ -73,8 +74,7 @@ export async function runTurn(
   host.pauseResolve = null;
   host.pauseWait = null;
   host.abortController = new AbortController();
-  // Снимок карты проекта обновляется НА ГРАНИЦЕ ХОДА: внутри хода системный
-  // промпт имутабелен, иначе KV-кеш рвётся на каждой записи файла (аудит §8.7).
+  // Карта — на границе хода: внутри хода system имутабелен ради KV-кеша.
   host.frozenMapBlock = null;
   host.setScope();
   // P5 автосужение: детерминированно пред-посеваем теги тулов из сырого
@@ -89,6 +89,7 @@ export async function runTurn(
   const { config, llmProvider, pluginManager, contextManager, logger, sessionManager } = deps;
 
   const slog = new SessionLoggerCtor(sessionManager, logger, () => host.callerProvenance());
+  const stopRequestLog = installTurnRequestLog(slog, sessionManager);
 
   // LSP-события жизненного цикла идут в session.jsonl с границы хода, когда
   // SessionLogger уже существует (модуль без реестра работает как раньше).
@@ -97,10 +98,7 @@ export async function runTurn(
   }>(deps.moduleRegistry, "lsp");
   lsp?.setSessionSink?.((op, msg, meta) => slog.logLsp(op, msg, meta));
 
-  // AGENTS.md — живой источник: перечитываем на ГРАНИЦЕ ХОДА, внутри хода
-  // промпт имутабелен (KV-кеш). system заменяется на месте ниже, в
-  // ensureSessionStart → refreshSystemPrompt, без новой записи в историю.
-  // Граница хода: обновляем HTTPS-источники до синхронной пересборки промпта.
+  // AGENTS.md и HTTPS-источники — на границе хода; system меняется на месте.
   await preloadRemoteInstructions(
     config.instructions?.sources ?? [],
     config.security?.network,
@@ -268,6 +266,7 @@ export async function runTurn(
     emitTurnEnd(null, err);
     throw err;
   } finally {
+    stopRequestLog();
     invalidateTurnCheckpoint(sessionManager, deps);
     stopTurnProcesses(sessionManager, deps, startedAt);
   }

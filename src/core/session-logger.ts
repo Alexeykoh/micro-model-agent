@@ -4,6 +4,7 @@ import type { SessionLogEntry } from "../modules/session/store";
 import type { Diagnostic, DiagnosticEvent } from "../output";
 import type { InstructionLogInfo, ToolCall, RetractInfo } from "./types";
 import type { Logger } from "../logger/app-logger";
+import type { LlmRequestSnapshot } from "../llm/request-snapshot";
 import { sanitizeLogMessageTargeted } from "../modules/security/data-sanitizer";
 import { redactContextSecrets } from "./agent/context-log";
 import { toolChannelEvent } from "./session-log-events";
@@ -75,11 +76,7 @@ export class SessionLogger {
     return !!this.session?.getActive();
   }
 
-  /**
-   * Единая точка записи событий ЯДРА: `ts` (время) и provenance (INV-13,
-   * `source`) проставляются здесь, методы несут только содержательные поля.
-   * Запись без источника стала невозможной не на словах, а по построению (W11).
-   */
+  /** Единая точка записи событий ядра: `ts` и `source` (INV-13, W11). */
   private log(entry: Omit<SessionLogEntry, "ts" | "source">): void {
     this.session?.appendLog({ ts: new Date().toISOString(), source: "core", ...entry });
   }
@@ -98,9 +95,7 @@ export class SessionLogger {
 
   /** Версия инструкций без содержимого файлов. */
   logInstructions(info: InstructionLogInfo): void { this.log(instructionsEntry(info)); }
-  /**
-   * Пишет сообщение пользователя (санитизированное) и историю сессии.
-   */
+  /** Пишет сообщение пользователя (санитизированное) и историю сессии. */
   logUser(content: string, imageRefs?: ToolImageRef[]): void {
     const sanitized = sanitizeLogMessageTargeted(content);
     this.session?.appendMessage(userMessage(sanitized));
@@ -187,12 +182,18 @@ export class SessionLogger {
     this.log(contextEntry(info));
   }
 
-  /**
-   * Пишет usage LLM-вызова (токены, источник, кеш, стабильность префикса).
-   * @param iteration номер итерации; @param usage токены и мета.
-   */
+  /** Пишет usage LLM-вызова (токены, кеш, стабильность префикса). */
   logLlmUsage(iteration: number, usage: LlmUsageLogInfo): void {
     this.log(llmUsageEntry(iteration, usage));
+  }
+
+  /** Пишет снимок реально отправленного запроса (CLI/one-shot без webui). */
+  logLlmRequest(request: LlmRequestSnapshot): void {
+    try {
+      this.log({ type: "llm_request", llmRequest: request });
+    } catch {
+      /* fail-open: логирование не имеет права уронить вызов модели */
+    }
   }
 
   /**

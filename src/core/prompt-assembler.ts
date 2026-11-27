@@ -9,7 +9,11 @@
 import type { PromptBlock } from "./types";
 import type { ToolRegistry } from "../tools/registry";
 import { buildModelBlock } from "./system-prompt";
-import { buildHiddenToolsBlock } from "../tools/hidden-tools-block";
+import {
+  buildHiddenToolsBlock,
+  buildToolContractBlock,
+  hiddenToolCounts,
+} from "../tools/hidden-tools-block";
 import { estimateTokens } from "../llm/token-counter";
 
 /** Входы сборки динамических блоков (main и раннер передают своё). */
@@ -28,6 +32,8 @@ export interface DynamicBlocksParams {
   activeTags: string[];
   /** Онбординг-allowlist: сужает набор, блок скрытых тулов не показываем. */
   toolAllowlist?: string[];
+  /** Per-session тумблеры: каталог и счётчики должны совпадать со схемой. */
+  toolOverrides?: { enabled?: string[]; disabled?: string[] };
   /** Блок возможностей плагинов — считает вызывающий (свой pluginManager). */
   capabilitiesBlock?: PromptBlock | null;
 }
@@ -55,11 +61,23 @@ export function assembleDynamicPromptBlocks(p: DynamicBlocksParams): PromptBlock
   if (p.capabilitiesBlock) blocks.push(p.capabilitiesBlock);
   const hiddenToolsBlock = p.toolAllowlist
     ? null
-    : buildHiddenToolsBlock(p.registry.getAll(), p.activeTags);
+    : buildHiddenToolsBlock(p.registry.getAll(), p.activeTags, p.toolOverrides);
   if (hiddenToolsBlock) {
+    const counts = hiddenToolCounts(p.registry.getAll(), p.activeTags, p.toolOverrides);
+    const contract = buildToolContractBlock(counts);
+    // Контракт essential: даже если каталог вылетит по бюджету, модель знает,
+    // что вызывать можно только схемы и как включить недостающий capability.
     blocks.push({
       source: "core",
-      label: "hidden tools",
+      label: "tool contract",
+      content: contract,
+      priority: "high",
+      essential: true,
+      estimatedTokens: estimateTokens(contract),
+    });
+    blocks.push({
+      source: "core",
+      label: "locked tool catalog",
       content: hiddenToolsBlock,
       priority: "low",
       essential: false,

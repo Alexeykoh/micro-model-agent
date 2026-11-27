@@ -10,6 +10,7 @@
  * Fail-open: снимок не имеет права уронить ход (INV-15).
  */
 import {
+  setSnapshotPersistenceOwner,
   subscribeRequestSnapshots,
   type LlmRequestSnapshot,
 } from "../../../llm/request-snapshot";
@@ -44,7 +45,8 @@ function persistSnapshot(
 
 /** Подписать webui на снимки запросов; возвращает отписку. */
 export function installRequestForwarding(state: RequestForwardState): () => void {
-  return subscribeRequestSnapshots((request) => {
+  setSnapshotPersistenceOwner(true);
+  const off = subscribeRequestSnapshots((request) => {
     const sessionId = request.sessionId;
     if (sessionId) persistSnapshot(state, sessionId, request);
     broadcast(
@@ -57,4 +59,8 @@ export function installRequestForwarding(state: RequestForwardState): () => void
       state,
     );
   });
+  return () => {
+    off();
+    setSnapshotPersistenceOwner(false);
+  };
 }

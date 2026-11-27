@@ -30,12 +30,7 @@ export class ToolExecutor {
     registry: ToolRegistry,
     ctx: ToolContext,
     pluginManager: PluginManager,
-    /**
-     * Общий с родителем мемо. `fork()` передаёт сюда родительскую Map, чтобы
-     * мутация в субагенте (write/bash) инвалидировала кеш чтений всего прогона
-     * — иначе параллельный субагент мог бы оставить родителю устаревший
-     * `read_file`. Обычные исполнители создают свой мемо.
-     */
+    /** Общий мемо форка: мутации субагента инвалидируют кеш чтений родителя. */
     memo: Map<string, { result: ToolResult; at: number }> = new Map(),
     /** Общий с родителем сериализатор плагин-хуков (см. AsyncLock). */
     hookLock: AsyncLock = new AsyncLock(),
@@ -203,10 +198,7 @@ export class ToolExecutor {
       this.ctx.fileChanges?.captureAfter(call.id, result.success);
       this.memo.update(tool, call, result, memoHit);
 
-      // После аборта работа тула отбрасывается (цикл агента завершается без
-      // рендера/логирования), поэтому медленные post-плагины (LSP, lint, tsc)
-      // пропускаются целиком. Аборт посреди плагина виден ему через signal
-      // в контексте хука — плагин убьёт свои дочерние процессы.
+      // После аборта post-плагины пропускаются целиком; signal виден хуку.
       const afterPlugins = plugins.some((p) => p.onAfterTool);
       if (signal?.aborted) {
         this.ctx.logger.debug(`Tool ${call.name}: abort, skipping onAfterTool plugins`);
@@ -257,6 +249,10 @@ export class ToolExecutor {
       this.ctx.toolOverrides,
     );
   }
+
+  /** Активные теги и их замена (изоляция субагента: форк делит ctx по ссылке). */
+  getActiveToolTags(): string[] { return [...(this.ctx.activeToolTags ?? [])]; }
+  setActiveToolTags(tags: string[]): void { this.ctx.activeToolTags = [...tags]; }
 
   /** Доступ к реестру. */
   getRegistry(): ToolRegistry {

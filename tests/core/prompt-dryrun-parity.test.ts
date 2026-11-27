@@ -65,7 +65,8 @@ describe("buildStartupAuditBlocks (B1: dry-run parity)", () => {
     expect(joined).toContain("SESSION-META-123");
     expect(joined).toContain("SKILL-CATALOG");
     expect(joined).toContain("PROJECT-MAP");
-    expect(joined).toContain("Additional tools");
+    expect(joined).toContain("TOOL AVAILABILITY");
+    expect(joined).toContain("LOCKED CATALOG");
     // Capabilities block (plugins) + onBuildPrompt hook content.
     expect(joined).toContain("[PLUGIN CAPABILITIES]");
     expect(joined).toContain("PLUGIN-HOOK-CONTENT");

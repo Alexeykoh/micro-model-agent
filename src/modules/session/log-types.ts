@@ -111,6 +111,8 @@ export interface SessionLogEntry {
   historyBudget?: number;
   systemTokens?: number;
   toolTokens?: number;
+  /** system + tools на старте (W4). */
+  startupTokens?: number;
   /** Сырая оценка контекста (аддитивное диагностическое поле). */
   estimatedTokensRaw?: number;
   /** Отношение actual/estimated калибратора (аддитивное поле context). */

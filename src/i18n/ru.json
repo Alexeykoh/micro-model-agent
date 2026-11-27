@@ -1311,6 +1311,7 @@
   "tools.enable_already_active": "Теги тулов уже активны: {tags}.",
   "tools.enable_added": "Включены теги тулов: {tags}. Теперь доступны тулы: {tools}",
   "tools.enable_all_visible": "Все тулы уже видны в этой сессии — включать нечего.",
+  "tools.enable_unknown_tag": "Неизвестный тег тулов: {tag}. Известные теги: {known}. Ничего не включено.",
   "tools.hidden_header": "Дополнительные тулы (включите по требованию через enable_tools или маршрутизируйте через subagent tool_tags):",
   "tool.friendly.enable_tools": "Включить тулы",
   "tool.friendly.set_thinking": "Уровень рассуждений",

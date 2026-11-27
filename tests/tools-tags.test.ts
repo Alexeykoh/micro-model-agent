@@ -28,8 +28,8 @@ describe("buildHiddenToolsBlock", () => {
       tool("plan", undefined, true),
     ];
     const block = buildHiddenToolsBlock(tools, ["file"]);
-    expect(block).toContain("web_search [research]");
-    expect(block).toContain("browser [browser, vision]");
+    expect(block).toContain("- locked research: web_search");
+    expect(block).toContain("- locked browser: browser");
     // AlwaysOn + tag-matching tools are not hidden.
     expect(block).not.toContain("read_file");
     expect(block).not.toContain("plan");
@@ -62,10 +62,9 @@ describe("buildHiddenToolsBlock", () => {
     ];
     const block = buildHiddenToolsBlock(tools, ["file"]);
     expect(block.split("\n").filter((l) => l.startsWith("- "))).toEqual([
-      "- attach_image [image, vision]",
-      "- remember [memory]",
-      "- web_fetch [web, research]",
-      "- web_search [web, research]",
+      "- locked image: attach_image",
+      "- locked memory: remember",
+      "- locked web: web_fetch, web_search",
     ]);
   });
 });

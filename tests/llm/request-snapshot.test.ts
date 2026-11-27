@@ -54,14 +54,17 @@ describe("снимок исходящего запроса (U20)", () => {
     expect(snap.truncated).toBe(false);
   });
 
-  it("несёт параметры вызова и имена тулов без схем", () => {
+  it("несёт параметры вызова, имена тулов и хеш их JSON-схемы", () => {
     const snap = buildRequestSnapshot(body, { model: "test-model", stream: true });
     expect(snap.params.maxTokens).toBe(1024);
     expect(snap.params.reasoningEffort).toBe("medium");
     expect(snap.params.reasoning).toBe("medium");
     expect(snap.params.toolChoice).toBe("auto");
     expect(snap.params.streamUsage).toBe(true);
-    expect(snap.tools).toEqual([{ name: "read_file", description: "reads a file" }]);
+    expect(snap.tools).toHaveLength(1);
+    expect(snap.tools[0]).toMatchObject({ name: "read_file", description: "reads a file" });
+    expect(snap.tools[0]!.parametersSha256).toMatch(/^[0-9a-f]{16}$/);
+    expect(snap.tools[0]!.parametersChars).toBeGreaterThan(0);
   });
 
   it("капает длинное сообщение и системный промпт", () => {
