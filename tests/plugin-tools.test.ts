@@ -54,8 +54,9 @@ describe("plugin tools — вклад в реестр", () => {
     expect(names).toEqual([pluginToolName("demo", "ping"), pluginToolName("demo", "pong")]);
     const ping = registry.get(pluginToolName("demo", "ping"));
     expect(ping?.tags).toContain(pluginToolTag("demo"));
-    // alwaysOn по умолчанию: иначе enable_tools спрятал бы тул плагина.
-    expect(ping?.alwaysOn).toBe(true);
+    // По умолчанию скрыт: тяжёлые схемы плагинов не должны попадать в стартовый
+    // контекст. Возвращается через enable_tools plugin:<name>.
+    expect(ping?.alwaysOn).toBe(false);
     // provides.tools заполняет ядро — оттуда его берут UI и `mma plugins show`.
     expect(manager.getRecords()[0].provides.tools).toEqual(names);
   });

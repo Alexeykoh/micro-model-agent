@@ -29,7 +29,7 @@ export const subagentStopTool: ToolDefinition = {
   icon: "🤖",
   description:
     "Stop one running sub-agent by runId (see subagent_list). The run is interrupted and its result returns as interrupted.",
-  tags: ["code"],
+  tags: ["agents"],
   parameters: {
     type: "object",
     properties: {

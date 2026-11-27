@@ -71,7 +71,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
       name: "plan",
       security: { caps: [] },
       icon: "📋",
-      alwaysOn: true,
+      tags: ["core"],
       description:
         'Create, update, show, abort, list, switch, delete, purge, or re-plan multi-step plans.\n\nActions:\n- create: Start a new plan. Previous active plan is auto-preserved: incomplete → draft, complete → archive.\n- update: Mark step status (done/failed/skipped). To change the plan\'s steps use "re-plan" (keeps completed steps) or "create".\n- show: Print current plan checklist.\n- abort: Archive the current plan (or the plan given by id) and clear the active slot.\n- list: Show all plans (active, drafts, archived) with progress.\n- switch: Make a different plan active (by plan id).\n- re-plan: Iterative replanning: keep completed steps, replace remaining with new steps.\n- delete: Permanently delete a plan by id (plan delete id=plan_xxx).\n- purge: Delete ALL plans (active, drafts, archived).\n\nFor a new project, install dependencies before writing source and initialize the framework before app code.\n\nWrite CONCRETE steps with exact file paths and commands:\n- Specify WHICH files to create with exact paths (e.g. "create src/components/Header.tsx with navigation and logo")\n- Specify WHICH packages to install (e.g. "run npm install react react-dom")\n- Specify WHICH CLI commands to run with exact arguments\n- Each step should include at least one file extension (.ts, .tsx, .json, etc.) or a command verb (install, create, build, run, add, init)\n- Good: "Создать src/components/Header.tsx с навигацией и логотипом"\n- Bad: "Настройка проекта" (too vague — what exactly needs to be configured?)\n- Steps that REMOVE files need no extra flag: create/delete intent is detected automatically from what the agent actually does.\n- Every step may carry a verification contract: pass "checks" aligned 1:1 with "steps". Also pass "evidence" aligned 1:1: "behavioral" for steps that change observable behavior/UI (static proof is rejected on done), "static" otherwise. Decide from what the step does, not from words in its description. Each check is "file-exists:<path>" (verified automatically on done), "file-modified:<path>" (verified automatically on done: content must differ from the snapshot at plan creation — use when editing an existing file), "command:<exact command>" (run it before done), "http:<url>[~marker]" or "browser:<url>[~marker]" (probe on done), "web-build:<dir>" (built CSS + non-empty index.html verified on done), or "manual:<what to check by eye>". Checks are RECOMMENDED, not required: omit them and each step self-certifies; a length mismatch is auto-repaired (missing steps get "manual:", extras are dropped). Example: steps ["Create src/a.ts with X"] + checks ["file-exists:src/a.ts"].',
       parameters: {
@@ -127,7 +127,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
       name: "plan_step",
       security: { caps: [] },
       icon: "📋",
-      alwaysOn: true,
+      tags: ["core"],
       description:
         'Mark ONE plan step done/failed/skipped: plan_step step=N status=done|failed|skipped (note="..." optional). Prefer this over "plan update" — no action parameter to confuse. The step\'s check contract is verified automatically on done ("file-exists:"/"file-modified:" hard-verified, "web-build:" reads the built CSS/HTML, "command:"/"manual:" self-certified).',
       parameters: {
@@ -153,7 +153,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
       name: "todo",
       security: { caps: [] },
       icon: "☑️",
-      alwaysOn: true,
+      tags: ["core"],
       description:
         "Manage sub-tasks within current plan step. Use to break down complex steps into smaller tasks. Mark done by subtask ids from todo list (ids=[...]) — reliable; matching by text is a fallback.",
       parameters: {
@@ -175,7 +175,7 @@ export function createPlanToolDefinitions(deps: PlanToolDeps): ToolDefinition[] 
       name: "verify",
       security: { caps: [] },
       icon: "✅",
-      alwaysOn: true,
+      tags: ["core"],
       description:
         "Run verification for the current step. Checks files mentioned in the step description.",
       parameters: {

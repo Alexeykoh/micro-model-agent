@@ -41,7 +41,7 @@ export const patchFileTool: ToolDefinition = {
   icon: "🩹",
   description:
     "Apply 1..N small exact-match edits to an EXISTING file in one call. Prefer this over rewriting the whole file. Syntax is validated once after all edits.",
-  tags: ["file", "code"],
+  tags: ["file-advanced"],
   parameters: {
     type: "object",
     properties: {

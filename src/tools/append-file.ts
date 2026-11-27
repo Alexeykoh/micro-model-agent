@@ -20,7 +20,7 @@ export const appendFileTool: ToolDefinition = {
   description:
     "Append content to a file (creating it and parent directories if needed). Prefer patch_file for existing code files. " +
     "When building a file in chunks, pass final:true on the LAST chunk to validate the whole file's syntax.",
-  tags: ["file", "code"],
+  tags: ["file-advanced"],
   parameters: {
     type: "object",
     properties: {

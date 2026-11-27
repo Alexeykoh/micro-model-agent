@@ -11,7 +11,7 @@ export const listFileChangesTool: ToolDefinition = {
   // поэтому pathArgs не нужен (проверка самих файлов — в точке чтения).
   security: { caps: [{ fs: "read" }] },
   icon: "🕘",
-  tags: ["file"],
+  tags: ["file-advanced"],
   boundedOutput: true,
   parameters: {
     type: "object",

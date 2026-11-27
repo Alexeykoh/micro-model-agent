@@ -19,7 +19,7 @@ export function documentIndexTool(registry: DocumentRegistry, logger?: Logger): 
     name: "document_index",
     security: { caps: [{ fs: "read" }], pathArgs: ["dir"] },
     icon: "🗂️",
-    tags: ["document", "file"],
+    tags: ["document"],
     boundedOutput: true,
     cacheable: false,
     description: t("documents.index_desc"),

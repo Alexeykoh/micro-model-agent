@@ -40,8 +40,8 @@ export const writeFileTool: ToolDefinition = {
   icon: "📝",
   description:
     "Create a new file, or fully overwrite it ONLY when intentionally replacing all content. " +
-    "For an EXISTING file use patch_file with small edits instead: it applies several exact-match hunks in one call and validates syntax once. " +
-    "Do not rewrite a 7 KB file line by line — chunking with append_file breaks syntax and is a last resort.",
+    "For an EXISTING file prefer small exact-match edits (enable_tools file-advanced): several hunks in one call, syntax validated once. " +
+    "Do not rewrite a 7 KB file line by line — chunked appends break syntax and are a last resort.",
   tags: ["file", "code"],
   parameters: {
     type: "object",

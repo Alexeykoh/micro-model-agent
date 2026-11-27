@@ -13,7 +13,7 @@ export const createDirTool: ToolDefinition = {
   security: { caps: [{ fs: "write" }], pathArgs: ["path"] },
   icon: "📁",
   description: "Create a directory (and any intermediate directories).",
-  tags: ["file"],
+  tags: ["file-advanced"],
   parameters: {
     type: "object",
     properties: {

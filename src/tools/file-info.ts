@@ -10,7 +10,7 @@ export const fileInfoTool: ToolDefinition = {
   security: { caps: [{ fs: "read" }], pathArgs: ["path"] },
   icon: "ℹ️",
   description: "Get metadata about a file or directory (size, creation date, modification date).",
-  tags: ["file"],
+  tags: ["file-advanced"],
   boundedOutput: true,
   cacheable: true,
   parameters: {

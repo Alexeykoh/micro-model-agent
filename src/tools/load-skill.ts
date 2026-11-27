@@ -52,8 +52,7 @@ export function createLoadSkillTool(skillsModule: SkillsModule): ToolDefinition 
     security: { caps: [] },
     icon: "🎯",
     tags: ["core"],
-    // Роутинг скиллов — вне сужения (P5): модель использует только видимый скилл.
-    alwaysOn: true,
+    // Автозагрузка релевантного скилла делает тул редким: `enable_tools core`.
     description:
       "Load a skill by name, or search available skills by query. Skills provide specialized instructions and workflows. When loaded, the skill content is injected into the system prompt (not conversation history) so it persists through context compaction. Load a skill whenever it matches the task — the [Available Skills] list in the system prompt is authoritative. If the skill is not listed, pass \"query\" to search by task.",
     parameters: {

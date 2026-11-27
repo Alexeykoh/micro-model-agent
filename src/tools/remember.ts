@@ -16,7 +16,6 @@ export const rememberTool: ToolDefinition = {
   description:
     "Remember durable information across sessions: the user's preferences, facts, conventions, decisions or errors. Call it proactively when the user states something worth keeping, even if they did not ask to save it.",
   tags: ["memory"],
-  alwaysOn: true,
   parameters: {
     type: "object",
     properties: {
