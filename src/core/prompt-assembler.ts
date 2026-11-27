@@ -9,7 +9,11 @@
 import type { PromptBlock } from "./types";
 import type { ToolRegistry } from "../tools/registry";
 import { buildModelBlock } from "./system-prompt";
-import { buildHiddenToolsBlock } from "../tools/hidden-tools-block";
+import {
+  buildHiddenToolsBlock,
+  buildToolContractBlock,
+  hiddenToolCounts,
+} from "../tools/hidden-tools-block";
 import { estimateTokens } from "../llm/token-counter";
 
 /** Входы сборки динамических блоков (main и раннер передают своё). */
@@ -57,9 +61,21 @@ export function assembleDynamicPromptBlocks(p: DynamicBlocksParams): PromptBlock
     ? null
     : buildHiddenToolsBlock(p.registry.getAll(), p.activeTags);
   if (hiddenToolsBlock) {
+    const counts = hiddenToolCounts(p.registry.getAll(), p.activeTags);
+    const contract = buildToolContractBlock(counts);
+    // Контракт essential: даже если каталог вылетит по бюджету, модель знает,
+    // что вызывать можно только схемы и как включить недостающий capability.
     blocks.push({
       source: "core",
-      label: "hidden tools",
+      label: "tool contract",
+      content: contract,
+      priority: "high",
+      essential: true,
+      estimatedTokens: estimateTokens(contract),
+    });
+    blocks.push({
+      source: "core",
+      label: "locked tool catalog",
       content: hiddenToolsBlock,
       priority: "low",
       essential: false,
