@@ -8,6 +8,7 @@ import type { SkillUsage } from "./usage";
 import { t } from "../../i18n/index";
 import { estimateTokens } from "../../llm/token-counter";
 import { checkLoadBudget, type LoadResult } from "./load-budget";
+import { autoLoadSkill } from "./auto-load";
 export { SKILLS_LOADED_TOKENS_CAP } from "./load-budget";
 export type { LoadResult } from "./load-budget";
 
@@ -240,13 +241,18 @@ export class SkillsModule implements AgentModule {
     return buildLoadedBlock([...this.loadedSkills.values()]);
   }
 
-  /** Плагин-заглушка: модуль работает через системный блок, хуки не нужны. */
+  /** Хуки: автозагрузка до первого LLM-вызова, bodies — через системный блок. */
   getPlugin(): AgentPlugin {
     return {
       name: "skills",
       description: "discovers and loads agent skills",
       onSessionStart: () => {},
-      onBeforeThink: () => {},
+      onBeforeThink: (ctx) =>
+        autoLoadSkill(ctx, {
+          available: () => this.availableSkills,
+          isLoaded: (name) => this.loadedSkills.has(name),
+          load: (name) => this.loadByName(name),
+        }),
     };
   }
 
