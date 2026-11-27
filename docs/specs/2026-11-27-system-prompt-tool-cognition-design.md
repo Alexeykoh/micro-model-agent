@@ -98,7 +98,7 @@ are enable paths, not separate tools.
 ### 3.3 Структура и стабильность
 
 - Блок `core: tool contract` — `essential: true`, ≤180 токенов, в стабильном префиксе до волатильных блоков: exposition + strategy + оба worked example в компактной форме.
-- Блок `core: tool catalog` — `priority:"low"`, `essential:false`, ≤400 токенов, имена сгруппированы по тегам; при нехватке бюджета выбрасывается **весь**, но contract остаётся.
+- Блок `core: tool catalog` — `priority:"low"`, `essential:false`, ≤450 токенов, имена сгруппированы по тегам, каждая строка помечена `locked`; при нехватке бюджета выбрасывается **весь**, но contract остаётся.
 - Внутри хода system заморожен (`frozenMapBlock`, `system-prompt-freeze.test.ts`); `enable_tools` меняет схему на следующей итерации, а не текст текущего system.
 - Модельный текст — английский (спека v3 §8); пользовательские строки — через `t()`.
 
@@ -127,12 +127,25 @@ are enable paths, not separate tools.
 | Видимых тулов при дефолте | 15 / 55 | ≤16, скрытые доступны по тегам | `tests/core/default-tool-budget.test.ts:34-96` |
 | toolTokens старта | 3127 (guard: ≤3000 на синтет. наборе) | ≤3300 в живом прогоне; расхождение гейда зафиксировать | `context` event; `default-tool-budget.test.ts:43` |
 | systemTokens старта | 1819 | ≤1950 | `context` event, `prompt-info.ts:35-72` |
-| `tool contract + catalog` | 374 (один hidden-блок) | ≤580 суммарно (≤180 + ≤400) | `blocks[].tokens`, snapshot-тест |
+| `tool contract + catalog` | 374 (один hidden-блок) | ≤630 суммарно (≤180 + ≤450), живой замер 599 | `blocks[].tokens`, snapshot-тест |
 | promptTokens первой итерации | 5710 | ≤6100 (+7% максимум) | `llm_usage` (`origin:"api"`) |
 | Корректность ответов о тулах | 0/3 живых ответа | 3/3 в живом прогоне (3 зонд-вопроса) | `session.jsonl`, ручная разметка ответов |
 | `enable_tools` по web-запросу | не проверено | правильный тег с первого вызова, ≤1 лишней итерации | `tool_defs`/`llm_request` до и после вызова |
 | Наблюдаемость запроса | `llm_request` только с webui-мостом, без JSON-схем | снимок в CLI + `parametersSha256` по каждому тулу | `llm_request`, `tests/llm/request-snapshot.test.ts` |
 | Расхождение версии | 0.26.1 в `session_start` при dev 0.26.2 | диагноз зафиксирован, код не меняется | §1.8 |
+
+### 5.1 Живой замер W5 (llama.cpp, `[heretic/38ts] ornith-1.5-9b-uncensored`)
+
+Изолированный `MMA_CONFIG_DIR=C:\Users\Alexe\AppData\Local\Temp\opencode\mma-frw4ag-config`, провайдер `openai-compat` на `localhost:8080/v1` (llama.cpp), workspace — репозиторий MMA.
+
+| Сессия | tool_defs | toolTokens | systemTokens | startupTokens | promptTokens | Суждение |
+|---|---:|---:|---:|---:|---:|---|
+| `ses_mwzfx0ur_uphhtstlysujbyzj` (до уточнения W5) | 19 | 3582 | 8826 | 12408 | 13047 | Счёт 19 верен, hidden названы locked; но в категориях перечислены `file-advanced`/`meta` как активные |
+| `ses_mwzg02vk_vkcrobjrvltswwrn` (после W5) | 19 | 3582 | 9839 | 13421 | 14008 | Категории названы только по схемам, hidden не выданы за свои, `enable_tools ["web"]` объяснён верно |
+
+Детали итогового старта: `core: system` 1019, `agents-md: instructions` 6619, `core: tool contract` 180, `core: locked tool catalog` 419, plugins 127, skills 95, остальные <60. Большой `systemTokens` объясняется essential-блоком `AGENTS.md` (6619), а не промпт-механизмом FRW4AG: в контрольной сессии `ses_mwz8ov32` его не было (1819). `llm_request` несёт 19 имен и 19 `parametersSha256` — схема, реально ушедшая модели, восстановима из лога без webui-моста.
+
+Вывод: целевая модель промпта достигнута по когнитивной метрике (3/3 зонда), но абсолютные цели токенов из §5 нужно читать с поправкой на загруженный `AGENTS.md`; отдельная работа по бюджету инструкций остаётся вне FRW4AG.
 
 ## 6. Контрактные изменения
 
