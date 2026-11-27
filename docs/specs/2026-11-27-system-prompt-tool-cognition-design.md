@@ -160,7 +160,48 @@ are enable paths, not separate tools.
 4. Валидация тегов `enable_tools` может сломать плагинные теги `plugin:<name>` — accepted-множество строить из реестра, а не из `KNOWN_TOOL_TAGS`.
 5. Версию в `session_start` не трогаем: это отдельный контракт сессий.
 
-## 9. Ссылки
+## 9. Находки по промптам (разбор со скиллами)
+
+Разбор сделан по трём рамкам: `karpathy-system-prompt-learning` (exposition / worked examples / strategy), `prompt-engineering-patterns` (system prompt design, few-shot, structured output, progressive disclosure, token efficiency) и `mma-development` (правило «одна правда», гейты, stream/line-length). Ниже — конкретные дефекты, а не общие пожелания.
+
+### 9.1 Системный промпт (`buildSystemInfo` и динамические блоки)
+
+| # | Находка | Доказательство | Принцип / гейт | Волна |
+|---:|---|---|---|---|
+| 1 | Промпт обещает тулы, которых нет в схеме: `LIVE DATA … call web_search/web_fetch first`, а у этих тулов теги `["web","research"]` и при `defaultTags=[file,code]` их в `tools[]` нет | `src/core/system-prompt-render.ts:89-90`, `src/config/defaults.ts:61`, `src/tools/web-search.ts:154` | «Промпт не обещает того, чего не делает» (v3 §2.3); `guidance-enforcement.test.ts` проверяет только bash-операторы | W1/W4 |
+| 2 | Три противоречащих правила про `list_dir`: «не осматривайся через list_dir», «при not found — list_dir рабочую папку и родителя», «SESSION START: list_dir (package.json/tests/config)». Для 9B оговорка «named path» не снимает противоречие | `system-prompt-render.ts:87,91,107` | Одно правило вместо трёх; semantic-guard вместо substring | W4 |
+| 3 | Политика безопасности продублирована в прозе и в описании `bash`; в прозе перечислено подмножество операторов `(| > >> ; &&)`, а валидатор знает ещё `||`, `&`, backtick, `$()` | `system-prompt-render.ts:197-226`, `bash-description.ts:12-15`, `guidance-enforcement.test.ts:27-34` | Single source of truth; гейт не проверяет prose-текст | W4 |
+| 4 | Счёт с многократными попытками дан в трёх формулировках (3 batch / 3rd time / 2+ approaches); константы из v3 §7.12–13 не заведены | `system-prompt-render.ts:112,114,120`, `docs/specs/2026-10-31-system-prompt-v3-design.md:252-253` | Одна константа = одно упоминание | W4 |
+| 5 | Plan reminder учит «проверить `plan show` … enable_tools core», но сам plan-блок удалён из сборки; состояние плана живёт только в `<system-summary>` | `bootstrap/modules-prompt.ts:66-74` vs `bootstrap/modules-phase.ts:96-98` | Текст описывает несуществующее состояние схемы | W4 |
+| 6 | Workflow браузера продублирован в двух канонах; важное ограничение «не использовать для поиска (CAPTCHA/429)» есть только в описании тула, а в блоке модуля его нет | `modules/browser/module.ts:33-37` vs `tools/browser.ts:96-104` | Два канона одного правила | W1/W4 |
+| 7 | Модельный текст не однороден: ядро EN, а LSP health-check строит заголовок через `t()` → локаль пользователя меняет системный промпт | `modules/lsp/startup-check.ts:62`, v3 §8 | «Модельный текст — английский» | W4 |
+| 8 | Ядро 907 токенов при потолке гейта 910; вариант с security (~996) вообще не покрыт снимком, потому что тест выключает security | `tests/core/system-prompt-compact.test.ts:25-41` | Нет места под новые директивы → нужны отдельные блоки с бюджетом, а не дописывание ядра | W1/W4 |
+| 9 | Hidden-каталог: отрицание в заголовке + 40 имён; blocked/active считается без overrides/disabled, блок `priority:low, essential:false` и может быть выброшен | `tools/hidden-tools-block.ts:9-71`, `core/prompt-assembler.ts:59-67` | См. §1.2, §3 | W1/W2 |
+
+### 9.2 Промпты инструментов (description и контракты)
+
+| # | Находка | Доказательство | Волна |
+|---:|---|---|---|
+| 1 | `write_file` в своём описании советует `enable_tools file-advanced` — путь лежит вне его схемы; модель тратит итерацию на включение, хотя гейт не проверяет такие упоминания | `tools/write-file.ts:41-44` | W2 |
+| 2 | `subagent` советует `enable_tools agents`, но `KNOWN_TOOL_TAGS` не содержит `agents` — preseed не может открыть группу, которую тул рекламирует | `tools/subagent.ts:13-14`, `tools/auto-tags.ts:24-36` | W2 |
+| 3 | `bash` обещает «process tools … enable_tools shell»; счётчики hidden-блока при этом не учитывают, что `process_*` реально включены через override | `tools/bash-description.ts:3-10`, `tools/hidden-tools-block.ts:38-46` | W2 |
+| 4 | `define_capability` → `enable_tools meta`, `load_skill` → `enable_tools core`, capabilities-блок → `enable_tools meta`: один и тот же паттерн размножен по четырём файлам без единого реестра путей | `tools/define-capability.ts:81`, `tools/load-skill.ts:55`, `modules/plugins/capabilities-block.ts:43` | W2 |
+| 5 | `enable_tools` отвечает `success:true` на любой тег, включая несуществующий: схема не меняется, но модель получает ложное подтверждение «Enabled tool tags: foo» | `tools/enable-tools.ts:32-55` | W2 |
+| 6 | Эвристики preseed имеют ложные срабатывания (`цен`, `курс`, `стать`, `документ` → `web`; любой `.json`/`.md` → `document`) и не знают `file-advanced`/`agents`/`meta`/`plugin:*`; теги аддитивны и не откатываются | `tools/auto-tags.ts:41-64,102-112` | W2 (метрика), отдельная волна при подтверждении |
+| 7 | Селектор схемы (`executor`) и исполнение (`executor-reject`) расходятся при `toolAllowlist`; у субагента схема читает свой массив тегов, а enforcement — родительский | `tools/executor.ts:234-259`, `tools/executor-reject.ts:24-31,58`, `tools/subagent-run.ts:175-189` | W2 |
+| 8 | Наблюдаемость: `tool_defs` логирует набор до фильтров, `llm_request` хранит только имена/описания и только при webui-мосте; `system event` ≠ реально отправленный system | `core/agent/iteration-prologue.ts:178-182`, `llm/request-snapshot.ts:44-49,205-225`, `modules/webui/session/request-forward.ts:26-43` | W3 |
+
+### 9.3 Что дала рамка трёх слоёв
+
+| Слой | Состояние сейчас | Разрыв |
+|---|---|---|
+| Exposition | Есть как список «делай/не делай» (~907 токенов) | Нет концепции «схемы = вызовы, текст = знание»; модель не понимает разницу между планами |
+| Worked examples | Один пример: `enable_tools ["web"] → web_search` | Нет образца ответа про свои инструменты, read-only и not-found; сценарии для 9B почти отсутствуют |
+| Strategy | Правила размазаны по ядру, описаниям тулов, hidden-блоку и модулям | Нет явных IF/THEN/BECAUSE, нет чек-листа проверки перед ответом; числа противоречат друг другу |
+
+Дополнительно по `prompt-engineering-patterns`: progressive disclosure нарушен (40 имён upfront вместо «возможность → тег»), structured output для самоотчёта отсутствует, а token efficiency страдает от дублирования одного правила в 3–4 местах — при этом экономия достигается не укорачиванием текста, а устранением дублей и переводом деталей в описания тулов.
+
+## 10. Ссылки
 
 - Код: `src/core/system-prompt-render.ts`, `src/core/prompt-assembler.ts`, `src/core/prompt-builder.ts`, `src/tools/hidden-tools-block.ts`, `src/tools/enable-tools.ts`, `src/tools/auto-tags.ts`, `src/tools/executor.ts`, `src/llm/request-snapshot.ts`, `src/core/agent/prompt-info.ts`.
 - Тесты: `tests/core/default-tool-budget.test.ts`, `tests/core/system-prompt-compact.test.ts`, `tests/core/system-prompt-freeze.test.ts`, `tests/llm/request-snapshot.test.ts`, `tests/tools-tags.test.ts`, `tests/arch/guidance-enforcement.test.ts`.
