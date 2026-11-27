@@ -164,15 +164,33 @@ describe("SkillsModule plugin", () => {
     },
   ];
 
-  it("should NOT auto-load matching skill on onBeforeThink", () => {
+  it("should auto-load matching skill on onBeforeThink", () => {
     const mod = new SkillsModule(makeSkills() as any, 1000);
     const plugin = mod.getPlugin();
+    const meta: string[] = [];
+    const directives: string[] = [];
 
     expect(mod.getLoaded()).toHaveLength(0);
 
     plugin.onBeforeThink!({
+      iteration: 1,
       lastUserMessage: "how to resolve git merge conflict?",
+      onMeta: (chunk: string) => meta.push(chunk),
+      sessionLog: {
+        directive: (_event: string, detail: string) => directives.push(detail),
+      },
     });
+
+    expect(mod.getLoaded().map((s) => s.name)).toEqual(["git-expert"]);
+    expect(meta[0]).toContain("git-expert");
+    expect(directives[0]).toBe(meta[0]);
+  });
+
+  it("should not auto-load on a single weak keyword", () => {
+    const mod = new SkillsModule(makeSkills() as any, 1000);
+    const plugin = mod.getPlugin();
+
+    plugin.onBeforeThink!({ lastUserMessage: "please help with my project" });
 
     expect(mod.getLoaded()).toHaveLength(0);
   });
