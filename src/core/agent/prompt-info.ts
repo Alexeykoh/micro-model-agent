@@ -5,6 +5,7 @@
  * в фазе; здесь только чтение и запись снапшотов.
  */
 import { estimateTokens } from "../../llm/token-counter";
+import { resolveSystemBudget } from "../prompt-budget";
 import { buildSystemPrompt } from "./prompt-phase";
 import type { PromptPhaseHost } from "./prompt-phase";
 import type { SessionLogger } from "../session-logger";
@@ -24,7 +25,7 @@ export interface SystemPromptInfo {
 export function getSystemPromptInfo(host: PromptPhaseHost): SystemPromptInfo {
   const { prompt, excluded, blocks } = buildSystemPrompt(host);
   const tokenCount = estimateTokens(prompt);
-  const budget = Math.floor(host.deps.config.contextWindow * host.deps.config.contextBudget.systemPrompt);
+  const budget = resolveSystemBudget(host.deps.config);
   return { text: prompt, tokenCount, budget, excluded, blocks };
 }
 
@@ -46,6 +47,10 @@ export function logContextStat(
   const diag = typeof cm.getEstimateDiagnostics === "function" ? cm.getEstimateDiagnostics() : undefined;
   const history = cm.getActiveHistory();
   const systemMsg = history.find((m) => m.role === "system");
+  const systemTokens =
+    kind === "start" && systemMsg && typeof systemMsg.content === "string"
+      ? estimateTokens(systemMsg.content)
+      : undefined;
   slog.logContext({
     kind,
     iteration,
@@ -53,10 +58,9 @@ export function logContextStat(
     systemBudget: snap.budget.systemPrompt,
     reserveBudget: snap.budget.responseReserve,
     historyBudget: snap.budget.history,
-    systemTokens:
-      kind === "start" && systemMsg && typeof systemMsg.content === "string"
-        ? estimateTokens(systemMsg.content)
-        : undefined,
+    systemTokens,
+    startupTokens:
+      kind === "start" ? (systemTokens ?? 0) + snap.toolTokens : undefined,
     toolTokens: snap.toolTokens,
     tokens: snap.tokens,
     estimatedTokensRaw: diag?.raw,

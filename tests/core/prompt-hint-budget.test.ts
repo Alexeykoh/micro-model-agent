@@ -55,6 +55,13 @@ describe("B4: hint blocks carry their real weight", () => {
     expect(tight!.estimatedTokens).toBeLessThanOrEqual(30);
   });
 
+  it("merges the overflow hint into one omitted note instead of two blocks", () => {
+    const excluded = [block({ source: "skills", label: "catalog", content: "x", estimatedTokens: 240 })];
+    const note = omittedBlocksNote(excluded, 500, "OVERFLOW: instructions compressed");
+    expect(note!.content).toContain("OVERFLOW: instructions compressed");
+    expect(note!.content).toContain("- skills: catalog");
+  });
+
   it("omitted note is dropped entirely when even the compact form does not fit", () => {
     const excluded = [block({ source: "skills", label: "catalog", content: "x", estimatedTokens: 240 })];
     expect(omittedBlocksNote(excluded, 2)).toBeNull();

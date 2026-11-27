@@ -15,6 +15,7 @@ import { t } from "../../i18n/index";
 import { assembleDynamicPromptBlocks } from "../prompt-assembler";
 import { dryRunOverflow, overflowHint } from "../prompt-overflow";
 import { filterBlocksForTags } from "../prompt-builder";
+import { resolveSystemBudget } from "../prompt-budget";
 import { loadAgentsMdBlocks } from "./state";
 import type { ModulesPhaseInput } from "./state";
 
@@ -124,7 +125,7 @@ export function dryRunStartupOverflow(
 ): void {
   const { config, logger, dir, activeToolTags } = input;
   const auditBlocks = buildStartupAuditBlocks(input, sessionModule);
-  const systemBudget = Math.floor(config.contextWindow * config.contextBudget.systemPrompt);
+  const systemBudget = resolveSystemBudget(config);
   // B12: тот же allowlist-aware гейт, что в первой сборке (иначе баннер
   // считал бы по другому набору, чем `buildSystemPrompt`).
   const visibleTags = input.toolRegistry.visibleTagsOf(activeToolTags, input.toolCtx.toolAllowlist);

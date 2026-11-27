@@ -102,9 +102,10 @@ function blockLabel(block: PromptBlock): string {
 export function omittedBlocksNote(
   excludedBlocks: PromptBlock[],
   remainingTokens?: number,
+  hint?: string,
 ): PromptBlock | null {
   const relevant = excludedBlocks.filter((block) => !block.kind);
-  if (relevant.length === 0) return null;
+  if (relevant.length === 0 && !hint) return null;
 
   const build = (lines: string[]): PromptBlock => {
     const content = lines.join("\n");
@@ -119,6 +120,7 @@ export function omittedBlocksNote(
   };
 
   const lines = [`[Prompt note] Omitted due to the system-prompt budget:`];
+  if (hint) lines.push(hint.slice(0, 120));
   for (const block of relevant.slice(0, 5)) {
     lines.push(`- ${blockLabel(block)}: ${block.estimatedTokens} tok`);
   }
@@ -129,6 +131,7 @@ export function omittedBlocksNote(
 
   // Не влезает: одна строка «сколько всего выброшено» вместо перечня.
   const compact = build([
+    ...(hint ? [hint.slice(0, 120)] : []),
     `[Prompt note] ${relevant.length} block(s) omitted due to the system-prompt budget.`,
   ]);
   return compact.estimatedTokens <= remainingTokens ? compact : null;

@@ -41,6 +41,8 @@ export interface ContextLogInfo {
   historyBudget?: number;
   systemTokens?: number;
   toolTokens?: number;
+  /** system + tools в одном стартовом замере (аддитивное поле, W4). */
+  startupTokens?: number;
   tokens: number;
   /** Сырая оценка контекста (аддитивное диагностическое поле). */
   estimatedTokensRaw?: number;
@@ -124,6 +126,7 @@ export function contextEntry(info: ContextLogInfo): LogEntry {
     historyBudget: info.historyBudget,
     systemTokens: info.systemTokens,
     toolTokens: info.toolTokens,
+    startupTokens: info.startupTokens,
     estimatedTokensRaw: info.estimatedTokensRaw ?? info.tokens,
     contextTokens: info.contextTokens ?? info.tokens,
     calibrationRatio: info.calibrationRatio,

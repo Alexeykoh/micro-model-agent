@@ -10,6 +10,7 @@
 import { join } from "path";
 import { projectMmaDir } from "../../config/paths";
 import { PromptBuilder, omittedBlocksNote } from "../prompt-builder";
+import { resolveSystemBudget } from "../prompt-budget";
 import { overflowHint } from "../prompt-overflow";
 import { HINT_BLOCK_TOKENS, resolvePromptOverflow } from "../prompt-overflow-resolve";
 import { buildServiceJobPrompt } from "../system-prompt";
@@ -88,9 +89,7 @@ export function buildSystemPrompt(host: PromptPhaseHost): SystemPromptBuild {
       fingerprint: "service-job",
     };
   }
-  const systemBudget = Math.floor(
-    deps.config.contextWindow * deps.config.contextBudget.systemPrompt,
-  );
+  const systemBudget = resolveSystemBudget(deps.config);
   const builder = new PromptBuilder(systemBudget);
   const staticRaws = deps.promptBlocks;
   const dynamicRaws = deps.getDynamicPromptBlocks?.() ?? [];
@@ -107,15 +106,18 @@ export function buildSystemPrompt(host: PromptPhaseHost): SystemPromptBuild {
   if (pluginBlocks.length > 0) {
     builder.addBlocks(pluginBlocks);
   }
-  if (host.overflowHintBlock) {
-    builder.addBlock(host.overflowHintBlock);
-  }
+  // hint и omitted-note — ОДНО essential-уведомление о деградации (W4),
+  // а не два блокирующих бюджет сообщения.
   const result = builder.build();
   // B4: остаток бюджета после первого прохода — заметка не должна его рвать.
   const usedTokens = result.blocks
     .filter((b) => b.included)
     .reduce((sum, b) => sum + b.tokens, 0);
-  const note = omittedBlocksNote(result.excludedBlocks, Math.max(0, systemBudget - usedTokens));
+  const note = omittedBlocksNote(
+    result.excludedBlocks,
+    Math.max(0, systemBudget - usedTokens),
+    host.overflowHintBlock?.content,
+  );
   if (!note) {
     return {
       prompt: result.prompt,
@@ -180,7 +182,7 @@ export async function resolvePromptOverflowOnce(host: PromptPhaseHost): Promise<
   // про essential специально, чтобы не дублировать баннер (kind-варнинги
   // там уже есть).
   if (dry.essentialOverBudget) {
-    const systemBudget = Math.floor(cfg.contextWindow * cfg.contextBudget.systemPrompt);
+    const systemBudget = resolveSystemBudget(cfg);
     deps.logger.warn(
       t("prompt.overflow.essential_over_budget", {
         essential: String(dry.essentialTokens),
@@ -192,7 +194,7 @@ export async function resolvePromptOverflowOnce(host: PromptPhaseHost): Promise<
   const overflow = dry.excludedBlocks.filter((b) => Boolean(b.kind));
   if (overflow.length === 0) return;
 
-  const systemBudget = Math.floor(cfg.contextWindow * cfg.contextBudget.systemPrompt);
+  const systemBudget = resolveSystemBudget(cfg);
   const res = await resolvePromptOverflow({
     overflow,
     includedTokens: dry.blocks.filter((b) => b.included).reduce((s, b) => s + b.tokens, 0),
