@@ -13,7 +13,7 @@
 import type { PromptBlock } from "./types";
 import { estimateTokens } from "../llm/token-counter";
 
-export { buildSystemInfo, LARGE_WINDOW_THRESHOLD, resolvePromptProfile } from "./system-prompt-render";
+export { buildSystemInfo, LARGE_WINDOW_THRESHOLD, resolvePromptProfile, isExplicitLargeProfile } from "./system-prompt-render";
 export { buildServiceJobPrompt } from "./system-prompt-service";
 export { applyClientTz, refreshSystemInfoBlock } from "./system-prompt-refresh";
 
