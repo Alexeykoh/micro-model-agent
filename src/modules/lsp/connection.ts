@@ -20,6 +20,7 @@ import { defaultSpawn, resolveLaunchPlan } from "./spawn";
 import { StderrRing } from "./stderr-ring";
 import { progressTextOf } from "./connection-intro";
 import { DocumentStore } from "./documents";
+import type { VersionlessCounters } from "./versionless-tracker";
 import { RpcChannel } from "./rpc";
 import { ServerLifecycle } from "./server-lifecycle";
 import type {
@@ -122,6 +123,8 @@ export class LspConnection {
       request: (method, params, timeoutMs) => this.rpc.request(method, params, timeoutMs),
       notify: (method, params) => this.rpc.notify(method, params),
       touch: () => this.touch(),
+      logger: this.logger,
+      key: this.key,
     });
     this.rpc = new RpcChannel({
       getProcess: () => this.lifecycle.processRef,
@@ -232,6 +235,11 @@ export class LspConnection {
   /** Актуальный список диагностик без ожидания (для быстрых путей). */
   peekDiagnostics(uri: string): DiagnosticRecord | null {
     return this.store.peek(uri);
+  }
+
+  /** Счётчики гонки versionless-пушей: после didChange / заменены. */
+  get versionlessCounters(): VersionlessCounters {
+    return this.store.counters();
   }
 
   request(method: string, params: unknown, timeoutMs: number): Promise<unknown> {
