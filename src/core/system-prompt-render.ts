@@ -21,6 +21,10 @@ function clip(value: string, max = 60): string {
  */
 export const LARGE_WINDOW_THRESHOLD = 128_000;
 
+/** Единственные числа для повторов/озвучки в промпте (v3 §7.12–13). */
+export const RETRY_GUIDANCE_ATTEMPTS = 2;
+export const NARRATION_DIRECTIVE_AFTER_SILENT_BATCHES = 3;
+
 /**
  * Широкий режим тулов/карты включается только явным `promptProfile: "large"`.
  * Auto-профиль на большом окне меняет текст промпта, но не расширяет тулы.
@@ -85,11 +89,12 @@ export function buildSystemInfo(
     `SCOPE: do ONLY what the user asked — no extra work.`,
     `Read-only requests ("расскажи", "покажи", "объясни", "check") mean inspect and answer, never modify.`,
     `Ambiguous task or target not found — STOP and ask via the "question" tool, do not guess.`,
-    `A "not found" result means the PATH was wrong: list_dir the workspace, then the parent; never scaffold.`,
+    `A "not found" result means the PATH was wrong — ask via the "question" tool, never scaffold.`,
     `GENERAL KNOWLEDGE (definition, concept, how-to — nothing in the workspace is needed): answer directly.`,
     `LIVE DATA (weather, prices, news) is not general knowledge: call web_search/web_fetch first;`,
     `page only: if it fails, say you could not get the data — never present a search plan as the answer.`,
-    `Do NOT use list_dir/glob/grep/read_file/bash to look around; workspace tools need a named file/path/project.`,
+    `WORKSPACE TOOLS need a named path: use list_dir only to locate it (workspace, then parent);`,
+    `never browse with glob/grep/read_file/bash.`,
     ``,
     `ARTIFACTS: CREATE a file ONLY when the user explicitly asks for a file ("write/save", "create a document",`,
     `or a path with an extension).`,
@@ -105,20 +110,21 @@ export function buildSystemInfo(
     `*.crt, *.secret, *.token, .npmrc, .netrc, .git-credentials, .gitconfig). Do not attempt the write:`,
     `explain the risk and ask the user to change the path or grant access. Do not use bash to work around it.`,
     ``,
-    `SESSION START: inspect a workspace task with list_dir (package.json/tests/config).`,
+    `SESSION START: inspect the named workspace task (package.json/tests/config) before acting.`,
     baselineLine,
     `Trivial chat/questions skip the baseline.`,
     ``,
-    `NARRATION: before tool batches write ONE short line — what you are doing and why.`,
-    `Never run more than 3 tool batches in a row silently; when you stop, give facts + verdict, not a list.`,
+    `NARRATION: before tool batches write ONE short line — what you are doing and why;`,
+    `silent batches <=${NARRATION_DIRECTIVE_AFTER_SILENT_BATCHES}; then give facts + verdict, not a list.`,
     ``,
-    `FORBIDDEN: done without proof; unrequested files; retrying a failing command a 3rd time;`,
+    `FORBIDDEN: done without proof; unrequested files; retrying the same failing command;`,
     `"fixed" from a fresh port.`,
     ``,
     `DONE CONDITIONS: plan steps are done; requested files exist with content; checks are clean;`,
     `then a short summary.`,
-    `STOP AND ASK THE USER WHEN: the task is ambiguous; you could not find the target after listing the parent;`,
-    `finishing would delete/overwrite important files; or you are stuck after 2+ approaches.`,
+    `STOP AND ASK THE USER WHEN: the task is ambiguous; the named path was not found after listing the parent;`,
+    `finishing would delete/overwrite important files; or ${RETRY_GUIDANCE_ATTEMPTS} different failed ` +
+      `approaches did not help.`,
     `Ask via the "question" tool.`,
   ];
   lines.push(``);
@@ -197,21 +203,13 @@ export function buildSystemInfo(
     const secLines: string[] = [
       `SECURITY RESTRICTIONS (enforced — blocked calls return "[SECURITY BLOCKED]", do not retry them):`,
     ];
-    if (sec.bash?.enabled && sec.bash.blacklist.length > 0) {
-      const cmds = sec.bash.blacklist.slice(0, 15).join(", ");
+    if (sec.bash?.enabled && (sec.bash.blacklist.length > 0 || sec.bash.whitelist.length > 0)) {
+      // Один источник списка — описание bash-тула и валидатор; здесь только
+      // факт, что политика enforcement'ится, без дублирования операторов.
       secLines.push(
-        `Forbidden bash commands: ${cmds}${sec.bash.blacklist.length > 15 ? ", …" : ""}.`,
+        `Bash restrictions are enforced: forbidden commands and operators live in the security config;`,
+        `see the bash tool description for the exact list — one plain command per call.`,
       );
-      if (sec.bash.whitelist.length > 0) {
-        secLines.push(
-          `Only whitelisted bash commands are allowed: ${sec.bash.whitelist.slice(0, 15).join(", ")}.`,
-        );
-      }
-      if (sec.bash.blockDangerousFlags) {
-        secLines.push(
-          `Pipes/redirects/chaining (| > >> ; &&) in bash are blocked — one plain command per call.`,
-        );
-      }
     }
     if (sec.paths?.enabled && sec.paths.denied.length > 0) {
       const paths = sec.paths.denied.slice(0, 10).join(", ");

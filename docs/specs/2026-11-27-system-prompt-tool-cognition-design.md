@@ -177,6 +177,8 @@ are enable paths, not separate tools.
 
 Разбор сделан по трём рамкам: `karpathy-system-prompt-learning` (exposition / worked examples / strategy), `prompt-engineering-patterns` (system prompt design, few-shot, structured output, progressive disclosure, token efficiency) и `mma-development` (правило «одна правда», гейты, stream/line-length). Ниже — конкретные дефекты, а не общие пожелания.
 
+**Статус 2026-11-28:** все шесть пунктов §9.1 исправлены задачей KL1HY2, долг `system-prompt-guidance-duplicates` оплачен и перенесён в раздел «Оплачено» [реестра долгов](../agents/debt.md). Гейт — `tests/system-prompt-guidance.test.ts`. Остатки §9.2 по tool-промптам частично закрыты W2 (валидация `enable_tools`, счётчики); полный реестр путей `enable_tools` в описаниях тулов остаётся отдельной работой.
+
 ### 9.1 Системный промпт (`buildSystemInfo` и динамические блоки)
 
 | # | Находка | Доказательство | Принцип / гейт | Волна |
