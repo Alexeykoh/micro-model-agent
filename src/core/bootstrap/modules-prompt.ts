@@ -68,7 +68,8 @@ export function buildStaticPromptBlocks(
       source: "core",
       label: "plan reminder",
       content:
-        "[Plan Reminder] An active plan may exist for this session. Before creating a new plan, check with `plan show`. If a plan is active, continue it — do NOT create a new plan. If plan tools are hidden, enable them with enable_tools core.",
+        "[Plan Reminder] Check <system-summary> for an active plan before creating a new one; " +
+        "continue it if present. Plan tools are hidden by default — enable_tools core when needed.",
       priority: "high",
       essential: false,
       estimatedTokens: 50,

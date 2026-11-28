@@ -22,9 +22,10 @@ describe("system prompt: знаниевый вопрос без обхода р�
     expect(text).toContain("GENERAL KNOWLEDGE");
     expect(text).toContain("answer directly");
     // Именно инструменты рабочей области, которые модель жгла вживую.
-    expect(text).toMatch(/list_dir\/glob\/grep\/read_file\/bash/);
+    expect(text).toMatch(/glob\/grep\/read_file\/bash/);
     // И условие, при котором они всё же нужны.
-    expect(text).toContain("named file/path/project");
+    expect(text).toContain("WORKSPACE TOOLS need a named path");
+    expect(text).toContain("list_dir only to locate it");
   });
 
   it("правило не дублируется", () => {

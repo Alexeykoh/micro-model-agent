@@ -340,7 +340,7 @@ describe("bootstrap", () => {
     const info = buildSystemInfo({ model: "test-model" } as any, "/tmp", "win32");
     expect(info).toContain("STOP AND ASK THE USER");
     expect(info.toLowerCase()).toContain("ambiguous");
-    expect(info.toLowerCase()).toContain("could not find");
+    expect(info.toLowerCase()).toContain("was not found");
   });
 
   it("creates files only on explicit file request (ses_mukulpsv_is271g)", () => {
@@ -381,7 +381,7 @@ describe("bootstrap", () => {
   it("has an always-on FORBIDDEN section (Wave 4, Task 6)", () => {
     const plain = buildSystemInfo({ model: "test-model", autoPlan: false } as any, "/tmp", "win32");
     expect(plain).toContain("FORBIDDEN");
-    expect(plain).toContain("3rd time");
+    expect(plain).toContain("different failed approaches");
     const planned = buildSystemInfo({ model: "test-model", autoPlan: true } as any, "/tmp", "win32");
     expect(planned).toContain("FORBIDDEN");
   });
@@ -395,7 +395,7 @@ describe("bootstrap", () => {
     };
     const withSec = buildSystemInfo({ model: "m", security: sec } as any, "/tmp", "win32");
     expect(withSec).toContain("SECURITY RESTRICTIONS");
-    expect(withSec).toContain("rm, dd");
+    expect(withSec).toContain("Bash restrictions are enforced");
     expect(withSec).toContain(".git/, .env");
     expect(withSec).toContain("evil.example.com");
     expect(withSec).toContain("[SECURITY BLOCKED]");

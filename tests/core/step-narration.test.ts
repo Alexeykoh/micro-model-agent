@@ -103,6 +103,6 @@ describe("правило нарратива в системном промпте
     const prompt = buildSystemInfo({ model: "test-model" } as never, "/tmp", "win32");
     expect(prompt).toContain("NARRATION");
     expect(prompt).toMatch(/what you are doing and why/i);
-    expect(prompt).toMatch(/3 tool batches in a row/i);
+    expect(prompt).toContain("silent batches <=3");
   });
 });

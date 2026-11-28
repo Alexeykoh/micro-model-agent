@@ -3,7 +3,6 @@ import { existsSync } from "fs";
 import { join } from "path";
 import { spawn } from "child_process";
 import { registerBackgroundChild } from "../processes/background-children";
-import { t } from "../../i18n/index";
 import type { PromptBlock } from "../../core/types";
 import type { LspConfig, LspDiagnostic } from "./types";
 import { isErrorDiagnostic } from "./types";
@@ -59,7 +58,10 @@ export async function runStartupHealthCheck(
     ]);
     if (!result || result.lines.length === 0) return null;
 
-    const content = `${t("lsp.startup_header")}\n${result.lines.join("\n")}`;
+    // Модельный текст — английский (спека v3 §8), без локали пользователя.
+    const header =
+      "LSP startup check — baseline errors are informational; do not fix unless asked.";
+    const content = `${header}\n${result.lines.join("\n")}`;
     return {
       content,
       priority: "high" as const,
